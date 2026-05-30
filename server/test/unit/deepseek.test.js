@@ -1,0 +1,290 @@
+import { gradeSubmission } from '../../src/services/deepseek.js';
+import { ABNORMAL_FEEDBACK } from '../../src/constants.js';
+
+// Mock 全局 fetch
+const originalFetch = global.fetch;
+
+afterEach(() => {
+  global.fetch = originalFetch;
+});
+
+function mockFetch(response) {
+  global.fetch = async () => response;
+}
+
+function mockJsonRes(body, status = 200) {
+  return {
+    status,
+    ok: status >= 200 && status < 300,
+    json: async () => body,
+  };
+}
+
+// ==================== 提示词构建测试（通过捕获 fetch 参数验证） ====================
+
+describe('gradeSubmission — 提示词构建', () => {
+  let lastFetchArgs = null;
+
+  function captureFetch() {
+    global.fetch = async (url, init) => {
+      lastFetchArgs = { url, init };
+      return mockJsonRes({
+        choices: [{ message: { content: '{"score":85,"feedback":"不错"}' } }],
+      });
+    };
+  }
+
+  beforeEach(() => {
+    lastFetchArgs = null;
+  });
+
+  // D1: 无材料时提示词不含材料
+  it('D1: 无材料时 userMessage 不含材料段', async () => {
+    captureFetch();
+    await gradeSubmission({
+      material: null,
+      subQuestionTitle: '题目1',
+      subQuestionContent: '<p>写个排序</p>',
+      referenceAnswer: 'sorted(arr)',
+      studentAnswer: 'arr.sort()',
+      maxScore: 30,
+    });
+    const userMsg = lastFetchArgs.init.body.match(/"role":"user","content":"([^"]+)"/)?.[1];
+    // 直接检查 body 中的 JSON 字符串
+    const body = JSON.parse(lastFetchArgs.init.body);
+    const userContent = body.messages[1].content;
+    expect(userContent).not.toContain('## 题目材料');
+    expect(userContent).toContain('## 题目1');
+  });
+
+  // D3: 有文本材料时包含
+  it('D3: 有文本材料时 userMessage 包含材料段', async () => {
+    captureFetch();
+    await gradeSubmission({
+      material: '<p>闭卷考试</p>',
+      subQuestionTitle: '题目1',
+      subQuestionContent: '<p>写个排序</p>',
+      referenceAnswer: 'sorted(arr)',
+      studentAnswer: 'arr.sort()',
+      maxScore: 30,
+    });
+    const body = JSON.parse(lastFetchArgs.init.body);
+    const userContent = body.messages[1].content;
+    expect(userContent).toContain('## 题目材料');
+    expect(userContent).toContain('闭卷考试');
+  });
+
+  // D2: 空 HTML 材料跳过
+  it('D2: 空HTML材料时 userMessage 不含材料段', async () => {
+    captureFetch();
+    await gradeSubmission({
+      material: '<p></p>',
+      subQuestionTitle: '题目1',
+      subQuestionContent: '<p>写个排序</p>',
+      referenceAnswer: 'sorted(arr)',
+      studentAnswer: 'arr.sort()',
+      maxScore: 30,
+    });
+    const body = JSON.parse(lastFetchArgs.init.body);
+    const userContent = body.messages[1].content;
+    expect(userContent).not.toContain('## 题目材料');
+  });
+
+  // D4: 默认评分标准
+  it('D4: 未指定 scoringCriteria 时 SystemPrompt 含默认三标准', async () => {
+    captureFetch();
+    await gradeSubmission({
+      material: null,
+      subQuestionTitle: '题目1',
+      subQuestionContent: '<p>写个排序</p>',
+      referenceAnswer: 'sorted(arr)',
+      studentAnswer: 'arr.sort()',
+      maxScore: 30,
+    });
+    const body = JSON.parse(lastFetchArgs.init.body);
+    const systemContent = body.messages[0].content;
+    expect(systemContent).toContain('代码正确性（60%）');
+    expect(systemContent).toContain('代码效率（20%）');
+    expect(systemContent).toContain('代码可读性（20%）');
+  });
+
+  // D5: 自定义评分标准
+  it('D5: 自定义 scoringCriteria 替换默认标准', async () => {
+    captureFetch();
+    await gradeSubmission({
+      material: null,
+      subQuestionTitle: '题目1',
+      subQuestionContent: '<p>写个排序</p>',
+      referenceAnswer: 'sorted(arr)',
+      studentAnswer: 'arr.sort()',
+      maxScore: 30,
+      scoringCriteria: '自定义评分标准：只看正确性',
+    });
+    const body = JSON.parse(lastFetchArgs.init.body);
+    const systemContent = body.messages[0].content;
+    expect(systemContent).toContain('自定义评分标准');
+    expect(systemContent).not.toContain('代码正确性（60%）');
+  });
+
+  // D6: 小题标题缺省
+  it('D6: 小题标题为空时显示默认标题', async () => {
+    captureFetch();
+    await gradeSubmission({
+      material: null,
+      subQuestionTitle: '',
+      subQuestionContent: '<p>写个排序</p>',
+      referenceAnswer: 'sorted(arr)',
+      studentAnswer: 'arr.sort()',
+      maxScore: 30,
+    });
+    const body = JSON.parse(lastFetchArgs.init.body);
+    const userContent = body.messages[1].content;
+    expect(userContent).toContain('## 题目');
+  });
+});
+
+// ==================== API 返回解析测试 ====================
+
+describe('gradeSubmission — API 返回解析', () => {
+  // D7: 正常评分返回
+  it('D7: 正常评分返回合法 JSON → {score, feedback}', async () => {
+    mockFetch(mockJsonRes({
+      choices: [{ message: { content: '{"score":85,"feedback":"代码正确，但可优化"}' } }],
+    }));
+    const result = await gradeSubmission({
+      material: null,
+      subQuestionTitle: '题',
+      subQuestionContent: '<p>内容</p>',
+      referenceAnswer: '答案',
+      studentAnswer: '学生答案',
+      maxScore: 100,
+    });
+    expect(result.score).toBe(85);
+    expect(result.feedback).toBe('代码正确，但可优化');
+  });
+
+  // D11: JSON 含多余文本
+  it('D11: JSON含多余文本 → 正确解析', async () => {
+    mockFetch(mockJsonRes({
+      choices: [{ message: { content: '得分：\n{"score":90,"feedback":"很好"}' } }],
+    }));
+    const result = await gradeSubmission({
+      material: null,
+      subQuestionTitle: '题',
+      subQuestionContent: '<p>内容</p>',
+      referenceAnswer: '答案',
+      studentAnswer: '学生答案',
+      maxScore: 100,
+    });
+    expect(result.score).toBe(90);
+    expect(result.feedback).toBe('很好');
+  });
+
+  // D12: 分数超上限
+  it('D12: 分数超上限 → clamp到maxScore', async () => {
+    mockFetch(mockJsonRes({
+      choices: [{ message: { content: '{"score":150,"feedback":"完美"}' } }],
+    }));
+    const result = await gradeSubmission({
+      material: null,
+      subQuestionTitle: '题',
+      subQuestionContent: '<p>内容</p>',
+      referenceAnswer: '答案',
+      studentAnswer: '学生答案',
+      maxScore: 100,
+    });
+    expect(result.score).toBe(100);
+  });
+
+  // D13: 负数分数
+  it('D13: 负数分数 → clamp到0', async () => {
+    mockFetch(mockJsonRes({
+      choices: [{ message: { content: '{"score":-5,"feedback":"完全错误"}' } }],
+    }));
+    const result = await gradeSubmission({
+      material: null,
+      subQuestionTitle: '题',
+      subQuestionContent: '<p>内容</p>',
+      referenceAnswer: '答案',
+      studentAnswer: '学生答案',
+      maxScore: 100,
+    });
+    expect(result.score).toBe(0);
+  });
+});
+
+// ==================== 重试与兜底测试 ====================
+
+describe('gradeSubmission — 重试与兜底', () => {
+  // D9: 429 限流后重试成功
+  it('D9: 429限流2次后第3次成功', async () => {
+    let callCount = 0;
+    global.fetch = async () => {
+      callCount++;
+      if (callCount < 3) {
+        return { status: 429, ok: false, json: async () => ({}) };
+      }
+      return mockJsonRes({
+        choices: [{ message: { content: '{"score":75,"feedback":"还行"}' } }],
+      });
+    };
+    const result = await gradeSubmission({
+      material: null,
+      subQuestionTitle: '题',
+      subQuestionContent: '<p>内容</p>',
+      referenceAnswer: '答案',
+      studentAnswer: '学生答案',
+      maxScore: 100,
+    });
+    expect(callCount).toBe(3);
+    expect(result.score).toBe(75);
+    expect(result.feedback).toBe('还行');
+  }, 35000);
+
+  // D8: API 返回无 JSON (3次重试后兜底)
+  it('D8: API返回纯文本无JSON → 3次重试后兜底', async () => {
+    let callCount = 0;
+    global.fetch = async () => {
+      callCount++;
+      return mockJsonRes({
+        choices: [{ message: { content: '这是一段纯文本评语，不含JSON' } }],
+      });
+    };
+    const result = await gradeSubmission({
+      material: null,
+      subQuestionTitle: '题',
+      subQuestionContent: '<p>内容</p>',
+      referenceAnswer: '答案',
+      studentAnswer: '学生答案',
+      maxScore: 100,
+    });
+    expect(callCount).toBe(3);
+    expect(result.score).toBe(0);
+    expect(result.feedback).toBe(ABNORMAL_FEEDBACK);
+  }, 15000);
+
+  // D10: API 超时 → 兜底
+  it('D10: API超时 → 3次重试后兜底', async () => {
+    let callCount = 0;
+    global.fetch = async () => {
+      callCount++;
+      // 模拟超时：通过 AbortController abort
+      const err = new Error('The operation was aborted');
+      err.name = 'AbortError';
+      throw err;
+    };
+    const result = await gradeSubmission({
+      material: null,
+      subQuestionTitle: '题',
+      subQuestionContent: '<p>内容</p>',
+      referenceAnswer: '答案',
+      studentAnswer: '学生答案',
+      maxScore: 100,
+    });
+    // 超时时，fetch 会在 60s 后超时，但每次都会 throw AbortError
+    // 重试 3 次后返回兜底
+    expect(callCount).toBeGreaterThanOrEqual(1);
+    expect(result.score).toBe(0);
+    expect(result.feedback).toBe(ABNORMAL_FEEDBACK);
+  }, 15000);
+});

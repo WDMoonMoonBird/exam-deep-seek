@@ -1,0 +1,312 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================
+// 1. users — 用户表
+// ============================
+model User {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  username   String    @db.VarChar(50)
+  password   String    @db.VarChar(255)
+  realName   String    @db.VarChar(50) @map("real_name")
+  role         UserRole
+  lastSchoolId Int?             @map("last_school_id") @db.UnsignedInt
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  // 关系
+  questions            Question[]         @relation("TeacherQuestions")
+  assignments          Assignment[]       @relation("TeacherAssignments")
+  teacherClasses       TeacherClass[]
+  teacherSchools       TeacherSchool[]
+  studentClasses       StudentClass[]
+  submissionsAsStudent Submission[]       @relation("StudentSubmissions")
+  teamsCreated         Team[]             @relation("TeamCreator")
+  teamMemberships      TeamTeacher[]
+
+  @@unique([username])
+  @@index([username, role])
+  @@map("users")
+}
+
+enum UserRole {
+  super_admin
+  teacher
+  student
+}
+
+// ============================
+// 2. schools — 学校表
+// ============================
+model School {
+  id           Int       @id @default(autoincrement()) @db.UnsignedInt
+  name         String    @db.VarChar(200)
+  officialCode String?   @unique @map("official_code") @db.VarChar(20)
+  province     String?   @db.VarChar(50)
+  city         String?   @db.VarChar(50)
+  level        String?   @db.VarChar(20)
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  classes        Class[]
+  teacherSchools TeacherSchool[]
+  teams          Team[]
+
+  @@map("schools")
+}
+
+// ============================
+// 3. classes — 班级表
+// ============================
+model Class {
+  id        Int       @id @default(autoincrement()) @db.UnsignedInt
+  name      String    @db.VarChar(100)
+  schoolId  Int       @map("school_id") @db.UnsignedInt
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  school             School              @relation(fields: [schoolId], references: [id])
+  teacherClasses     TeacherClass[]
+  studentClasses     StudentClass[]
+  assignmentClasses  AssignmentClass[]
+  teamClasses        TeamClass[]
+
+  @@index([schoolId])
+  @@map("classes")
+}
+
+// ============================
+// 4. teacher_classes — 教师-班级关联表
+// ============================
+model TeacherClass {
+  teacherId Int @map("teacher_id") @db.UnsignedInt
+  classId   Int @map("class_id") @db.UnsignedInt
+
+  teacher User  @relation(fields: [teacherId], references: [id])
+  class   Class @relation(fields: [classId], references: [id])
+
+  @@id([teacherId, classId])
+  @@index([teacherId])
+  @@index([classId])
+  @@map("teacher_classes")
+}
+
+// ============================
+// 5. student_classes — 学生-班级关联表
+// ============================
+model StudentClass {
+  studentId Int @map("student_id") @db.UnsignedInt
+  classId   Int @map("class_id") @db.UnsignedInt
+
+  student User  @relation(fields: [studentId], references: [id])
+  class   Class @relation(fields: [classId], references: [id])
+
+  @@id([studentId, classId])
+  @@index([studentId])
+  @@index([classId])
+  @@map("student_classes")
+}
+
+// ============================
+// 6. teacher_schools — 教师-学校关联表（M2M）
+// ============================
+model TeacherSchool {
+  teacherId Int @map("teacher_id") @db.UnsignedInt
+  schoolId  Int @map("school_id") @db.UnsignedInt
+
+  teacher User   @relation(fields: [teacherId], references: [id])
+  school  School @relation(fields: [schoolId], references: [id])
+
+  @@id([teacherId, schoolId])
+  @@index([teacherId])
+  @@index([schoolId])
+  @@map("teacher_schools")
+}
+
+// ============================
+// 7. questions — 题库表
+// ============================
+model Question {
+  id             Int        @id @default(autoincrement()) @db.UnsignedInt
+  teacherId      Int        @map("teacher_id") @db.UnsignedInt
+  title          String     @db.VarChar(200)
+  maxScore       Int        @default(100) @map("max_score")
+  difficulty     Difficulty
+  material       String?    @db.Text
+  attachmentUrl  String?    @map("attachment_url") @db.VarChar(500)
+  createdAt      DateTime   @default(now()) @map("created_at")
+  deletedAt      DateTime?  @map("deleted_at")
+
+  teacher             User                  @relation("TeacherQuestions", fields: [teacherId], references: [id])
+  subQuestions        SubQuestion[]
+  assignmentQuestions AssignmentQuestion[]
+  submissions         Submission[]
+
+  @@index([teacherId])
+  @@map("questions")
+}
+
+// ============================
+// 7.1 sub_questions — 小题表
+// ============================
+model SubQuestion {
+  id               Int      @id @default(autoincrement()) @db.UnsignedInt
+  questionId       Int      @map("question_id") @db.UnsignedInt
+  sortOrder        Int      @default(0) @map("sort_order")
+  title            String   @db.VarChar(200)
+  score            Int?
+  content          String   @db.Text
+  referenceAnswer  String   @map("reference_answer") @db.Text
+  language         String   @db.VarChar(30)
+  scoringCriteria  String?  @map("scoring_criteria") @db.Text
+
+  question     Question      @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  submissions  Submission[]
+
+  @@index([questionId])
+  @@map("sub_questions")
+}
+
+enum Difficulty {
+  easy
+  medium
+  hard
+}
+
+// ============================
+// 7. assignments — 作业表
+// ============================
+model Assignment {
+  id          Int       @id @default(autoincrement()) @db.UnsignedInt
+  teacherId   Int       @map("teacher_id") @db.UnsignedInt
+  title       String    @db.VarChar(200)
+  description      String?  @db.Text
+  startTime        DateTime @map("start_time")
+  endTime         DateTime  @map("end_time")
+  allowResubmit   Boolean   @default(false) @map("allow_resubmit")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  teacher            User                  @relation("TeacherAssignments", fields: [teacherId], references: [id])
+  assignmentQuestions AssignmentQuestion[]
+  assignmentClasses  AssignmentClass[]
+  submissions        Submission[]
+
+  @@index([teacherId])
+  @@map("assignments")
+}
+
+// ============================
+// 8. assignment_questions — 作业-题目关联表
+// ============================
+model AssignmentQuestion {
+  assignmentId Int @map("assignment_id") @db.UnsignedInt
+  questionId   Int @map("question_id") @db.UnsignedInt
+  sortOrder    Int @default(0) @map("sort_order")
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id])
+  question   Question   @relation(fields: [questionId], references: [id])
+
+  @@id([assignmentId, questionId])
+  @@index([assignmentId])
+  @@map("assignment_questions")
+}
+
+// ============================
+// 9. assignment_classes — 作业-班级关联表
+// ============================
+model AssignmentClass {
+  assignmentId Int @map("assignment_id") @db.UnsignedInt
+  classId      Int @map("class_id") @db.UnsignedInt
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id])
+  class      Class      @relation(fields: [classId], references: [id])
+
+  @@id([assignmentId, classId])
+  @@index([classId])
+  @@map("assignment_classes")
+}
+
+// ============================
+// 10. submissions — 提交/评分表
+// ============================
+model Submission {
+  id              Int              @id @default(autoincrement()) @db.UnsignedInt
+  assignmentId    Int              @map("assignment_id") @db.UnsignedInt
+  studentId       Int              @map("student_id") @db.UnsignedInt
+  questionId      Int              @map("question_id") @db.UnsignedInt
+  subQuestionId   Int?             @map("sub_question_id") @db.UnsignedInt
+  answer          String?          @db.Text
+  aiScore         Int?             @map("ai_score")
+  aiFeedback      String?          @map("ai_feedback") @db.Text
+  finalScore      Int?             @map("final_score")
+  teacherFeedback String?          @map("teacher_feedback") @db.Text
+  status          SubmissionStatus @default(draft)
+  submittedAt     DateTime?        @map("submitted_at")
+  reviewedAt      DateTime?        @map("reviewed_at")
+
+  assignment  Assignment   @relation(fields: [assignmentId], references: [id])
+  student     User         @relation("StudentSubmissions", fields: [studentId], references: [id])
+  question    Question     @relation(fields: [questionId], references: [id])
+  subQuestion SubQuestion? @relation(fields: [subQuestionId], references: [id])
+
+  @@unique([assignmentId, studentId, questionId, subQuestionId])
+  @@index([studentId])
+  @@index([assignmentId])
+  @@index([status])
+  @@index([assignmentId, status])
+  @@index([status, submittedAt])
+  @@index([subQuestionId])
+  @@map("submissions")
+}
+
+// ============================
+// 11. teams — 教学团队表
+// ============================
+model Team {
+  id        Int       @id @default(autoincrement()) @db.UnsignedInt
+  name      String    @db.VarChar(100)
+  schoolId  Int       @map("school_id") @db.UnsignedInt
+  createdBy Int       @map("created_by") @db.UnsignedInt
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  school   School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  creator  User            @relation("TeamCreator", fields: [createdBy], references: [id])
+  teachers TeamTeacher[]
+  classes  TeamClass[]
+
+  @@map("teams")
+}
+
+model TeamTeacher {
+  teamId    Int @map("team_id") @db.UnsignedInt
+  teacherId Int @map("teacher_id") @db.UnsignedInt
+
+  team    Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teacher User @relation(fields: [teacherId], references: [id])
+
+  @@id([teamId, teacherId])
+  @@map("team_teachers")
+}
+
+model TeamClass {
+  teamId  Int @map("team_id") @db.UnsignedInt
+  classId Int @map("class_id") @db.UnsignedInt
+
+  team  Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  class Class @relation(fields: [classId], references: [id])
+
+  @@id([teamId, classId])
+  @@map("team_classes")
+}
+
+enum SubmissionStatus {
+  draft
+  submitted
+  ai_graded
+  reviewed
+  published
+}

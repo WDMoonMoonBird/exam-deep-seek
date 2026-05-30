@@ -1,0 +1,104 @@
+/* ===== Apple-Inspired Design System ===== */
+:root {
+  /* Brand */
+  --blue: #0066cc;
+  --blue-focus: #0071e3;
+  --blue-on-dark: #2997ff;
+
+  /* Surface */
+  --canvas: #ffffff;
+  --canvas-parchment: #f5f5f7;
+  --surface-pearl: #fafafc;
+  --surface-dark: #272729;
+  --surface-dark-2: #2a2a2c;
+  --surface-black: #000000;
+
+  /* Text */
+  --ink: #1d1d1f;
+  --body-on-dark: #ffffff;
+  --body-muted: #cccccc;
+  --ink-muted: #7a7a7a;
+
+  /* Hairlines */
+  --divider-soft: rgba(0, 0, 0, 0.04);
+  --hairline: #e0e0e0;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 11px;
+  --radius-lg: 18px;
+  --radius-pill: 9999px;
+
+  /* Typography */
+  --font-display: 'SF Pro Display', system-ui, -apple-system, sans-serif;
+  --font-text: 'SF Pro Text', system-ui, -apple-system, sans-serif;
+}
+
+/* Global reset */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-text);
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1.47;
+  color: var(--ink);
+  background: var(--canvas-parchment);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Page centering — auto-adjusts when sidebar collapses */
+.page { margin-left: auto; margin-right: auto; }
+
+/* Headlines */
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; color: var(--ink); letter-spacing: -0.28px; }
+h1 { font-size: 40px; line-height: 1.1; }
+h2 { font-size: 28px; line-height: 1.14; }
+h3 { font-size: 21px; line-height: 1.19; }
+
+/* Page transition */
+.page-fade-enter-active, .page-fade-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
+.page-fade-enter-from { opacity: 0; transform: translateY(8px); }
+.page-fade-leave-to { opacity: 0; transform: translateY(-8px); }
+.tab-fade-enter-active, .tab-fade-leave-active { transition: opacity 0.15s ease; }
+.tab-fade-enter-from, .tab-fade-leave-to { opacity: 0; }
+
+/* Rich text content */
+.q-content h2 { font-size: 1.2em; margin: 0.5em 0; }
+.q-content h3 { font-size: 1.1em; margin: 0.4em 0; }
+.q-content p { margin: 0.4em 0; }
+.q-content code { background: #f5f5f5; padding: 1px 5px; border-radius: 3px; font-size: 0.9em; }
+.q-content pre { background: #282c34; color: #abb2bf; padding: 10px 14px; border-radius: 6px; overflow-x: auto; }
+.q-content blockquote { border-left: 3px solid #d9d9d9; padding-left: 14px; color: #666; margin: 0.4em 0; }
+.q-content ul, .q-content ol { padding-left: 22px; margin: 0.3em 0; }
+.q-content hr { border: none; border-top: 1px solid #eee; margin: 0.8em 0; }
+.q-content img { max-width: 100%; border-radius: 4px; margin: 0.5em 0; }
+.q-content table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
+.q-content th { background: #f5f5f5; border: 1px solid var(--hairline); padding: 8px 12px; font-weight: 600; }
+.q-content td { border: 1px solid var(--hairline); padding: 6px 12px; }
+
+/* AntDV fine-tune */
+.ant-card { border: 1px solid var(--hairline); box-shadow: none; }
+
+/* === Apple dark sidebar (only colors) === */
+.ant-layout-sider-dark { background: var(--surface-black) !important; }
+.ant-menu-dark { background: var(--surface-black) !important; }
+.ant-menu-dark .ant-menu-item { color: var(--body-muted); }
+.ant-menu-dark .ant-menu-item:hover { color: var(--body-on-dark); }
+.ant-menu-dark .ant-menu-item-selected { color: var(--body-on-dark); }
+.ant-menu-dark .ant-menu-item-selected::after { display: none; }
+
+.form-modal .ant-modal { max-width: 1040px; }
+
+/* === 移动端响应式 === */
+@media (max-width: 768px) {
+  /* 表格横向滚动 */
+  .ant-table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* 弹窗全屏 */
+  .ant-modal { max-width: calc(100vw - 24px) !important; margin: 12px auto; }
+
+  /* 按钮缩小 */
+  .ant-btn-lg { padding: 4px 12px; font-size: 14px; }
+}

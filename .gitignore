@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+*.log
+.DS_Store
+ssl.key
+ssl.crt
+ssl.pfx
+DEV_LOG.md
+server/test/e2e/.e2e-state.json
+server/test-results/

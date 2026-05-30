@@ -1,0 +1,496 @@
+import prisma from '../utils/prisma.js';
+import logger from '../utils/logger.js';
+import { gradeSubmission } from '../services/deepseek.js';
+import { ABNORMAL_FEEDBACK } from '../constants.js';
+import { getVisibleClassIds } from './teamController.js';
+
+/** 根据学校/班级/题目构建筛选条件 */
+async function buildFilter({ schoolId, classId, questionId, assignmentId, status }) {
+  const where = {};
+  if (status) where.status = status.includes(',') ? { in: status.split(',') } : status;
+  if (questionId) where.questionId = +questionId;
+  if (assignmentId) where.assignmentId = +assignmentId;
+
+  if (classId) {
+    const ids = (await prisma.studentClass.findMany({ where: { classId: +classId }, select: { studentId: true } })).map(s => s.studentId);
+    where.studentId = { in: ids };
+  } else if (schoolId) {
+    const classIds = (await prisma.class.findMany({ where: { schoolId: +schoolId }, select: { id: true } })).map(c => c.id);
+    const ids = (await prisma.studentClass.findMany({ where: { classId: { in: classIds } }, select: { studentId: true } })).map(s => s.studentId);
+    where.studentId = { in: ids };
+  }
+  return where;
+}
+
+/** 查学生及所在学校 */
+async function enrichWithSchool(list) {
+  const studentIds = [...new Set(list.map(s => s.student?.id).filter(Boolean))];
+  if (!studentIds.length) return list;
+  const scs = await prisma.studentClass.findMany({
+    where: { studentId: { in: studentIds } },
+    include: { class: { include: { school: { select: { id: true, name: true } } } } },
+  });
+  const map = {};
+  for (const sc of scs) {
+    if (!map[sc.studentId]) map[sc.studentId] = sc.class?.school?.name;
+  }
+  return list.map(s => ({ ...s, schoolName: map[s.student?.id] || '' }));
+}
+
+export const getSubmissions = async (req, res) => {
+  try {
+    const { schoolId, classId, questionId, status, page = 1, pageSize = 20 } = req.query;
+    const where = await buildFilter({ schoolId, classId, questionId, status });
+
+    const [list, total] = await Promise.all([
+      prisma.submission.findMany({
+        where,
+        select: {
+          id: true, status: true, aiScore: true, finalScore: true, submittedAt: true,
+          student: { select: { id: true, username: true, realName: true } },
+          question: { select: { id: true, title: true, maxScore: true } },
+          assignment: { select: { id: true, title: true } },
+        },
+        orderBy: { submittedAt: 'desc' },
+        skip: (+page - 1) * +pageSize,
+        take: +pageSize,
+      }),
+      prisma.submission.count({ where }),
+    ]);
+    const enriched = await enrichWithSchool(list);
+    res.json({ code: 0, message: 'ok', data: { list: enriched, total, page: +page, pageSize: +pageSize } });
+  } catch (err) {
+    logger.error({ err }, '获取提交列表失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+export const getReviewQuestions = async (req, res) => {
+  try {
+    const { classId } = req.query;
+    let where = {};
+    if (classId) {
+      const studentIds = (await prisma.studentClass.findMany({ where: { classId: +classId }, select: { studentId: true } })).map(s => s.studentId);
+      where = { studentId: { in: studentIds }, status: { not: 'draft' } };
+    }
+    const subs = await prisma.submission.findMany({
+      where,
+      select: { question: { select: { id: true, title: true } } },
+      distinct: ['questionId'],
+      orderBy: { questionId: 'asc' },
+    });
+    res.json({ code: 0, message: 'ok', data: subs.map(s => s.question) });
+  } catch (err) {
+    logger.error({ err }, '获取可审题目失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+export const getSubmissionDetail = async (req, res) => {
+  try {
+    const s = await prisma.submission.findUnique({
+      where: { id: +req.params.id },
+      include: {
+        student: { select: { id: true, username: true, realName: true } },
+        question: { include: { subQuestions: { orderBy: { sortOrder: 'asc' } } } },
+        subQuestion: true,
+        assignment: { select: { id: true, title: true } },
+      },
+    });
+    if (!s) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
+
+    const allSubs = await prisma.submission.findMany({
+      where: {
+        assignmentId: s.assignmentId,
+        studentId: s.studentId,
+        questionId: s.questionId,
+      },
+      include: { subQuestion: true },
+    });
+
+    res.json({ code: 0, message: 'ok', data: { ...s, allSubmissions: allSubs } });
+  } catch (err) {
+    logger.error({ err }, '获取提交详情失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+export const regradeSubmission = async (req, res) => {
+  try {
+    const sub = await prisma.submission.findUnique({
+      where: { id: +req.params.id },
+      include: {
+        question: { select: { material: true, subQuestions: { orderBy: { sortOrder: 'asc' } } } },
+        subQuestion: true,
+      },
+    });
+    if (!sub) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
+
+    const sq = sub.subQuestion || sub.question?.subQuestions?.[0] || {};
+    const { score, feedback } = await gradeSubmission({
+      material: sub.question?.material || null,
+      subQuestionTitle: sq.title || '',
+      subQuestionContent: sq.content || '',
+      referenceAnswer: sq.referenceAnswer || '',
+      studentAnswer: sub.answer || '',
+      maxScore: sq.score || 100,
+      scoringCriteria: sq.scoringCriteria || null,
+    });
+
+    await prisma.submission.update({
+      where: { id: sub.id },
+      data: { aiScore: score, aiFeedback: feedback, status: 'ai_graded' },
+    });
+
+    res.json({ code: 0, message: '重新评分完成', data: { aiScore: score, aiFeedback: feedback } });
+  } catch (err) {
+    logger.error({ err }, '重新评分失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+export const updateScore = async (req, res) => {
+  try {
+    const id = +req.params.id;
+    const { finalScore } = req.body;
+
+    const sub = await prisma.submission.findUnique({
+      where: { id },
+      select: { status: true, aiScore: true, aiFeedback: true, teacherFeedback: true },
+    });
+    if (!sub) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
+
+    const data = { finalScore: +finalScore };
+
+    if (sub.status === 'ai_graded') {
+      data.status = 'reviewed';
+      data.reviewedAt = new Date();
+      if (!sub.teacherFeedback) data.teacherFeedback = sub.aiFeedback || '';
+    }
+
+    if (sub.status === 'submitted') {
+      data.status = 'reviewed';
+      data.reviewedAt = new Date();
+    }
+
+    const updated = await prisma.submission.update({ where: { id }, data });
+    res.json({ code: 0, message: '分数已更新', data: { id, finalScore: updated.finalScore, status: updated.status, teacherFeedback: updated.teacherFeedback } });
+  } catch (err) {
+    logger.error({ err }, '修改分数失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+export const reviewSubmission = async (req, res) => {
+  try {
+    const { finalScore, teacherFeedback } = req.body;
+    const data = { status: 'reviewed', reviewedAt: new Date() };
+    if (finalScore !== undefined) data.finalScore = finalScore;
+    if (teacherFeedback !== undefined) data.teacherFeedback = teacherFeedback;
+    await prisma.submission.update({ where: { id: +req.params.id }, data });
+    res.json({ code: 0, message: '审核成功', data: null });
+  } catch (err) {
+    logger.error({ err }, '审核提交失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+export const batchReview = async (req, res) => {
+  try {
+    const { schoolId, classId, assignmentId } = req.body;
+    if (!schoolId) return res.status(400).json({ code: 1001, message: '请选择学校', data: null });
+
+    const classStudents = await prisma.studentClass.findMany({ where: { classId: +classId }, select: { studentId: true } });
+    const studentIds = classStudents.map(cs => cs.studentId);
+
+    const subs = await prisma.submission.findMany({
+      where: { assignmentId: +assignmentId, studentId: { in: studentIds } },
+      select: { id: true, studentId: true, status: true, aiScore: true, aiFeedback: true },
+    });
+    const studentSubs = new Map();
+    for (const s of subs) {
+      if (!studentSubs.has(s.studentId)) studentSubs.set(s.studentId, []);
+      studentSubs.get(s.studentId).push(s);
+    }
+    const toReview = [];
+    const reviewedStudentIds = new Set();
+    for (const [sid, ss] of studentSubs) {
+      if (ss.some(s => s.status === 'submitted')) continue;
+      if (ss.some(s => s.status === 'ai_graded')) {
+        toReview.push(...ss);
+        reviewedStudentIds.add(sid);
+      }
+    }
+    let count = 0;
+    if (toReview.length) {
+      for (const s of toReview) {
+        await prisma.submission.update({
+          where: { id: s.id },
+          data: { status: 'reviewed', reviewedAt: new Date(), finalScore: s.aiScore, teacherFeedback: s.aiFeedback || '' },
+        });
+        count++;
+      }
+    }
+    res.json({ code: 0, message: `已审核 ${reviewedStudentIds.size} 名学生`, data: { count: reviewedStudentIds.size } });
+  } catch (err) {
+    logger.error({ err }, '批量审核失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+export const batchPublish = async (req, res) => {
+  try {
+    const { schoolId, classId, assignmentId } = req.body;
+    if (!schoolId) return res.status(400).json({ code: 1001, message: '请选择学校', data: null });
+
+    const classStudents = await prisma.studentClass.findMany({ where: { classId: +classId }, select: { studentId: true } });
+    const studentIds = classStudents.map(cs => cs.studentId);
+
+    const subs = await prisma.submission.findMany({
+      where: { assignmentId: +assignmentId, studentId: { in: studentIds } },
+      select: { id: true, studentId: true, status: true },
+    });
+    const studentSubs = new Map();
+    for (const s of subs) {
+      if (!studentSubs.has(s.studentId)) studentSubs.set(s.studentId, []);
+      studentSubs.get(s.studentId).push(s);
+    }
+    const toPublishIds = [];
+    const publishedStudentIds = new Set();
+    for (const [sid, ss] of studentSubs) {
+      if (ss.every(s => s.status === 'reviewed')) {
+        toPublishIds.push(...ss.map(s => s.id));
+        publishedStudentIds.add(sid);
+      }
+    }
+    if (toPublishIds.length) {
+      await prisma.submission.updateMany({
+        where: { id: { in: toPublishIds } },
+        data: { status: 'published' },
+      });
+    }
+    res.json({ code: 0, message: `已发布 ${publishedStudentIds.size} 名学生`, data: { count: publishedStudentIds.size } });
+  } catch (err) {
+    logger.error({ err }, '批量发布失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+export const publishScores = async (req, res) => {
+  try {
+    const { submissionIds } = req.body;
+    if (!submissionIds?.length) return res.status(400).json({ code: 1001, message: '请选择提交', data: null });
+    await prisma.submission.updateMany({
+      where: { id: { in: submissionIds.map(Number) }, status: 'reviewed' },
+      data: { status: 'published' },
+    });
+    res.json({ code: 0, message: '发布成功', data: null });
+  } catch (err) {
+    logger.error({ err }, '发布成绩失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+export const getReviewSummary = async (req, res) => {
+  try {
+    const schoolId = req.query.schoolId ? +req.query.schoolId : null;
+    if (!schoolId) return res.json({ code: 0, data: [] });
+
+    const { classId } = req.query;
+    const visibleIds = await getVisibleClassIds(req.user.id, schoolId);
+    const classWhere = { schoolId, id: { in: visibleIds } };
+    if (classId) classWhere.id = +classId;
+
+    const classes = await prisma.class.findMany({
+      where: classWhere,
+      include: {
+        assignmentClasses: { include: { assignment: true } },
+        studentClasses: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    const rows = [];
+    for (const c of classes) {
+      const studentIds = c.studentClasses.map(sc => sc.studentId);
+      for (const ac of c.assignmentClasses) {
+        const a = ac.assignment;
+        if (a.deletedAt) continue;
+        const totalStudents = c.studentClasses.length;
+        const subs = await prisma.submission.findMany({
+          where: { assignmentId: a.id, studentId: { in: studentIds } },
+          select: { studentId: true, status: true, aiFeedback: true },
+        });
+        const studentSubMap = new Map();
+        for (const s of subs) {
+          if (!studentSubMap.has(s.studentId)) studentSubMap.set(s.studentId, []);
+          studentSubMap.get(s.studentId).push({ status: s.status, feedback: s.aiFeedback });
+        }
+        const submittedStudents = studentSubMap.size;
+        let aiPending = 0;
+        let reviewPending = 0;
+        let abnormal = 0;
+        for (const [, items] of studentSubMap) {
+          if (items.some(i => i.status === 'submitted')) aiPending++;
+          else if (items.some(i => i.feedback === ABNORMAL_FEEDBACK)) abnormal++;
+          else if (items.some(i => i.status === 'ai_graded')) reviewPending++;
+        }
+        const allAiDone = submittedStudents > 0 && aiPending === 0;
+        const allReviewed = submittedStudents > 0 && aiPending === 0 && reviewPending === 0 && abnormal === 0;
+        rows.push({
+          assignmentId: a.id, title: a.title, classId: c.id, className: c.name,
+          startTime: a.startTime, endTime: a.endTime,
+          totalStudents, submittedCount: submittedStudents,
+          aiPending, reviewPending, abnormal, allAiDone, allReviewed,
+        });
+      }
+    }
+    res.json({ code: 0, data: rows });
+  } catch (err) {
+    logger.error({ err }, '获取审核汇总失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+export const getReviewByClass = async (req, res) => {
+  try {
+    const classId = +req.params.classId;
+    const { assignmentId, keyword, page = 1, pageSize = 20, filter, sortField, sortOrder } = req.query;
+
+    const studentRecords = await prisma.studentClass.findMany({
+      where: { classId },
+      include: { student: true, class: true },
+      orderBy: { student: { username: 'asc' } },
+    });
+
+    let filtered = studentRecords;
+    if (keyword) filtered = filtered.filter(sc => sc.student.realName.includes(keyword));
+
+    const submissions = await prisma.submission.findMany({
+      where: { assignmentId: +assignmentId, studentId: { in: filtered.map(sc => sc.studentId) } },
+      include: {
+        question: { select: { title: true } },
+        subQuestion: { select: { id: true, score: true } },
+        assignment: { select: { title: true } },
+      },
+    });
+    const studentSubsMap = new Map();
+    for (const s of submissions) {
+      if (!studentSubsMap.has(s.studentId)) studentSubsMap.set(s.studentId, []);
+      studentSubsMap.get(s.studentId).push(s);
+    }
+
+    const statusOrder = { draft: 0, submitted: 1, ai_graded: 2, reviewed: 3, published: 4 };
+    let rows = filtered.map(sc => {
+      const subs = studentSubsMap.get(sc.studentId);
+      if (subs && subs.length) {
+        const aiTotal = subs.reduce((sum, s) => sum + (s.aiScore || 0), 0);
+        const finalTotal = subs.reduce((sum, s) => sum + (s.finalScore || 0), 0);
+        const hasAbnormal = subs.some(s => s.aiFeedback === ABNORMAL_FEEDBACK);
+        const worstStatus = hasAbnormal ? 'abnormal'
+          : subs.reduce((worst, s) =>
+              (statusOrder[s.status] ?? 0) < (statusOrder[worst] ?? 0) ? s.status : worst, subs[0].status);
+        return {
+          id: subs[0].id, studentId: sc.studentId,
+          studentName: sc.student.realName, studentNo: sc.student.username,
+          className: sc.class?.name || '', assignmentTitle: subs[0].assignment?.title || '',
+          aiScore: aiTotal, finalScore: finalTotal > 0 ? finalTotal : null,
+          status: worstStatus, submitted: true,
+        };
+      }
+      return {
+        id: `ns-${sc.studentId}`, studentId: sc.studentId,
+        studentName: sc.student.realName, studentNo: sc.student.username,
+        className: sc.class?.name || '', assignmentTitle: '',
+        aiScore: null, finalScore: null, status: 'not_submitted', submitted: false,
+      };
+    });
+
+    if (filter === 'submitted') rows = rows.filter(r => r.submitted);
+    else if (filter === 'not_submitted') rows = rows.filter(r => !r.submitted);
+    else if (filter === 'pending_review') rows = rows.filter(r => r.status === 'ai_graded');
+    else if (filter === 'abnormal') rows = rows.filter(r => r.status === 'abnormal');
+
+    if (sortField && sortOrder) {
+      const dir = sortOrder === 'ascend' ? 1 : -1;
+      rows.sort((a, b) => {
+        const va = a[sortField] != null ? a[sortField] : (typeof b[sortField] === 'string' ? '' : 0);
+        const vb = b[sortField] != null ? b[sortField] : (typeof a[sortField] === 'string' ? '' : 0);
+        if (typeof va === 'string') return va.localeCompare(vb) * dir;
+        return (va - vb) * dir;
+      });
+    }
+
+    const total = rows.length;
+    const start = (+page - 1) * +pageSize;
+    const paged = rows.slice(start, start + +pageSize);
+    res.json({ code: 0, data: { list: paged, total } });
+  } catch (err) {
+    logger.error({ err }, '获取班级提交列表失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+export const exportReviewData = async (req, res) => {
+  try {
+    const { classId, assignmentId } = req.query;
+    if (!classId || !assignmentId) return res.status(400).json({ code: 1001, message: '参数错误', data: null });
+
+    const students = await prisma.studentClass.findMany({
+      where: { classId: +classId },
+      include: { student: true, class: { include: { school: { select: { name: true } } } } },
+      orderBy: { student: { username: 'asc' } },
+    });
+
+    const submissions = await prisma.submission.findMany({
+      where: { assignmentId: +assignmentId, studentId: { in: students.map(s => s.studentId) } },
+      include: { subQuestion: true },
+    });
+
+    const subQuestions = await prisma.subQuestion.findMany({
+      where: { question: { assignmentQuestions: { some: { assignmentId: +assignmentId } } } },
+      orderBy: { sortOrder: 'asc' },
+    });
+
+    const subMap = new Map();
+    for (const s of submissions) {
+      const key = s.studentId;
+      if (!subMap.has(key)) subMap.set(key, {});
+      const sqKey = s.subQuestionId || s.questionId;
+      subMap.get(key)[sqKey] = {
+        score: s.finalScore ?? s.aiScore,
+        status: s.status,
+        aiScore: s.aiScore,
+        finalScore: s.finalScore,
+      };
+    }
+
+    const rows = students.map(sc => {
+      const subs = subMap.get(sc.studentId) || {};
+      const subScores = subQuestions.map(sq => {
+        const s = subs[sq.id] || {};
+        return {
+          title: sq.title,
+          maxScore: sq.score,
+          score: s.score ?? null,
+          submitted: !!s.status,
+        };
+      });
+      const totalScore = subScores.reduce((sum, s) => sum + (s.score || 0), 0);
+      return {
+        studentName: sc.student.realName,
+        studentNo: sc.student.username,
+        schoolName: sc.class.school?.name || '',
+        className: sc.class.name,
+        submitted: subScores.some(s => s.submitted),
+        subScores,
+        totalScore: subScores.every(s => !s.submitted) ? null : totalScore,
+      };
+    });
+
+    res.json({ code: 0, data: { rows, subQuestions: subQuestions.map(sq => ({ title: sq.title, score: sq.score })) } });
+  } catch (err) {
+    logger.error({ err }, '导出审核数据失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};

@@ -1,0 +1,149 @@
+import 'dotenv/config';
+import express from 'express';
+import http from 'http';
+import cors from 'cors';
+import helmet from 'helmet';
+import bcrypt from 'bcryptjs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import logger from './utils/logger.js';
+import prisma from './utils/prisma.js';
+import { initSocket, notifyGraded } from './socket.js';
+
+import authRoutes from './routes/auth.js';
+import adminRoutes from './routes/admin.js';
+import teacherRoutes from './routes/teacher.js';
+import studentRoutes from './routes/student.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// 关键配置校验
+if (!process.env.DEEPSEEK_API_KEY) logger.warn('DEEPSEEK_API_KEY 未配置，AI 评分将不可用');
+if (!process.env.JWT_SECRET) logger.warn('JWT_SECRET 未配置，使用默认密钥不安全');
+
+// 安全中间件
+app.use(helmet({ contentSecurityPolicy: false })); // CSP 由 Vite 处理
+app.use(cors({
+  origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ['http://localhost:5173'],
+  credentials: true,
+}));
+app.use(express.json({ limit: '10mb' }));
+
+// 登录失败限流（防暴力破解，不影响正常登录）
+const loginFailMap = new Map();
+const LOGIN_FAIL_MAX = 10;       // 同一 IP 最多连续失败次数
+const LOGIN_FAIL_WINDOW = 300000; // 5 分钟窗口
+app.use('/api/auth/login', (req, res, next) => {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const record = loginFailMap.get(ip);
+  if (record && record.count >= LOGIN_FAIL_MAX && (now - record.since) < LOGIN_FAIL_WINDOW) {
+    return res.status(429).json({ code: 1003, message: '登录失败次数过多，请 5 分钟后再试', data: null });
+  }
+  // 捕获响应，判断登录是否成功
+  const originalJson = res.json.bind(res);
+  res.json = function (body) {
+    if (res.statusCode === 200 && body?.code === 0) {
+      loginFailMap.delete(ip); // 登录成功，重置计数
+    } else if (res.statusCode === 400 || body?.code === 1001) {
+      const rec = loginFailMap.get(ip) || { count: 0, since: now };
+      rec.count++;
+      if (!loginFailMap.has(ip)) rec.since = now;
+      loginFailMap.set(ip, rec);
+    }
+    return originalJson(body);
+  };
+  next();
+});
+// 定期清理过期记录
+setInterval(() => {
+  const cutoff = Date.now() - LOGIN_FAIL_WINDOW * 2;
+  for (const [ip, rec] of loginFailMap) {
+    if (rec.since < cutoff) loginFailMap.delete(ip);
+  }
+}, 600000);
+
+// 请求日志
+app.use((req, _res, next) => {
+  logger.info({ method: req.method, url: req.url }, '→');
+  next();
+});
+
+// 健康检查
+app.get('/api/health', (_req, res) => {
+  res.json({ code: 0, message: 'ok', data: { status: 'running' } });
+});
+
+// Worker 评分完成回调（内部用，需要共享密钥）
+const INTERNAL_SECRET = process.env.INTERNAL_SECRET || '***REDACTED***';
+app.post('/api/internal/graded', (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || authHeader !== `Bearer ${INTERNAL_SECRET}`) {
+    return res.status(403).json({ code: 1003, message: '禁止访问', data: null });
+  }
+  const { schoolId, ...data } = req.body;
+  notifyGraded(schoolId, data);
+  res.json({ code: 0 });
+});
+
+// 路由
+app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/teacher', teacherRoutes);
+app.use('/api/student', studentRoutes);
+
+// 生产环境：服务前端静态文件
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+if (process.env.NODE_ENV === 'production') {
+  const distDir = path.join(__dirname, '../../client/dist');
+  app.use(express.static(distDir));
+  // SPA fallback（Express 5 兼容）
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(distDir, 'index.html'));
+  });
+}
+
+// 统一错误处理
+app.use((err, _req, res, _next) => {
+  logger.error({ err }, '服务器内部错误');
+  res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+});
+
+// 启动服务
+async function start() {
+  // 迁移明文密码 → bcrypt
+  const plainUsers = await prisma.user.findMany({
+    where: { password: { not: { startsWith: '$2' } } },
+  });
+  for (const u of plainUsers) {
+    await prisma.user.update({
+      where: { id: u.id },
+      data: { password: bcrypt.hashSync(u.password, 10) },
+    });
+  }
+  if (plainUsers.length > 0) logger.info({ count: plainUsers.length }, '已迁移明文密码 → bcrypt');
+
+  const admin = await prisma.user.upsert({
+    where: { username: 'admin' },
+    update: {},
+    create: { username: 'admin', password: bcrypt.hashSync('***REDACTED***', 10), realName: '超级管理员', role: 'super_admin' },
+  });
+  logger.info({ adminId: admin.id }, '超级管理员账号已就绪');
+
+  const server = http.createServer(app);
+  initSocket(server);
+  server.listen(PORT, () => {
+    logger.info({ port: PORT }, `HTTP 服务已启动 → http://localhost:${PORT}`);
+  });
+}
+
+start().catch((err) => {
+  logger.error({ err }, '启动失败');
+  process.exit(1);
+});
+
+export default app;
