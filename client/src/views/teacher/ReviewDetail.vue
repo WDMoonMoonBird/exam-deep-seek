@@ -45,20 +45,73 @@
         <!-- 右：学生代码 + 审核 -->
         <div class="lc-right">
           <div class="lc-editor-header">
-            <span class="lc-editor-label"><CodeOutlined /> 学生答案</span>
-            <Transition name="tag-switch" mode="out-in">
-              <a-tag color="blue" style="margin-left:6px;" :key="activeSq">第 {{ activeSq + 1 }} 小题</a-tag>
-            </Transition>
-            <div class="lc-editor-actions">
+            <span class="lc-editor-label">{{ reviewTypeLabel }}</span>
+            <a-tag color="blue" style="margin-left:6px;">第 {{ activeSq + 1 }} 小题</a-tag>
+            <div class="lc-editor-actions" v-if="currentSq.type === 'code' || !currentSq.type">
               <span style="font-size:13px;color:#888;">{{ currentSq.language || 'cpp' }}</span>
             </div>
           </div>
           <div class="lc-editor-wrap">
-            <Transition name="panel-switch" mode="out-in">
-              <div :key="activeSq" class="panel-wrap" style="height:100%;">
+            <div :key="activeSq" class="panel-wrap" style="height:100%;">
+
+              <!-- 编程题 -->
+              <template v-if="currentSq.type === 'code' || !currentSq.type">
                 <CodeEditor :modelValue="currentAnswer" :language="currentSq.language || 'cpp'" readOnly :height="0" />
+              </template>
+
+              <!-- 选择题 / 判断题 -->
+              <div v-else-if="currentSq.type === 'choice' || currentSq.type === 'judge'" style="padding:20px;overflow-y:auto;height:100%;">
+                <div class="review-answer-row">
+                  <span class="review-answer-label">学生答案</span>
+                  <span :class="currentAnswer === currentSq.referenceAnswer ? 'review-correct' : 'review-wrong'">
+                    {{ formatAnswer(currentSq.type, currentAnswer) }}
+                    {{ currentAnswer === currentSq.referenceAnswer ? '✓' : '✗' }}
+                  </span>
+                </div>
+                <div class="review-answer-row" style="margin-top:12px;">
+                  <span class="review-answer-label">正确答案</span>
+                  <span class="review-correct">{{ formatAnswer(currentSq.type, currentSq.referenceAnswer) }}</span>
+                </div>
               </div>
-            </Transition>
+
+              <!-- 填空题 -->
+              <div v-else-if="currentSq.type === 'fill'" style="padding:20px;overflow-y:auto;height:100%;">
+                <div class="review-answer-row">
+                  <span class="review-answer-label">学生答案</span>
+                  <span :class="isFillCorrect ? 'review-correct' : 'review-wrong'"
+                    :style="{ fontFamily: currentSq.fillStyle === 'code' ? 'monospace' : 'inherit' }">
+                    {{ currentAnswer || '（未作答）' }}
+                  </span>
+                </div>
+                <div class="review-answer-row" style="margin-top:12px;">
+                  <span class="review-answer-label">参考答案</span>
+                  <span class="review-correct" :style="{ fontFamily: currentSq.fillStyle === 'code' ? 'monospace' : 'inherit' }">{{ currentSq.referenceAnswer }}</span>
+                </div>
+              </div>
+
+              <!-- 客观题：小问列表 -->
+              <div v-else-if="currentSq.type === 'objective'" style="padding:16px;overflow-y:auto;height:100%;">
+                <div v-for="item in (currentSq.objectiveItems || [])" :key="item.key" style="margin-bottom:14px;padding:10px;border:1px solid #f0f0f0;border-radius:8px;">
+                  <div style="font-weight:600;font-size:13px;margin-bottom:6px;">
+                    {{ item.key + 1 }}. <a-tag size="small">{{ itemTypeLabel(item.type) }}</a-tag>
+                    <span v-if="getItemResult(item.key)" :style="{ marginLeft:'8px', color: getItemResult(item.key).correct ? '#52c41a' : '#ff4d4f', fontSize:'12px' }">
+                      {{ getItemResult(item.key).correct ? '✓ 正确' : '✗ 错误' }}
+                    </span>
+                    <span v-else style="margin-left:8px;font-size:12px;color:var(--ink-muted);">（未作答）</span>
+                  </div>
+                  <div style="font-size:13px;margin-bottom:6px;white-space:pre-wrap;">{{ item.stem }}</div>
+                  <div style="font-size:12px;">
+                    <span style="color:var(--ink-muted);">学生答案: </span>
+                    <span :style="{ color: getItemResult(item.key)?.correct ? '#52c41a' : '#ff4d4f', fontWeight:'600' }">{{ getItemResult(item.key)?.studentStr || '（未作答）' }}</span>
+                  </div>
+                  <div style="font-size:12px;margin-top:2px;">
+                    <span style="color:var(--ink-muted);">正确答案: </span>
+                    <span style="color:#52c41a;font-weight:600;">{{ getItemRefStr(item) }}</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
           </div>
           <div class="lc-footer">
             <div class="review-panel">
@@ -127,6 +180,81 @@ const aiTotal = computed(() => {
 });
 const currentSub = computed(() => subMap.value[currentSq.value.id] || null);
 const currentAnswer = computed(() => currentSub.value?.answer || '');
+const reviewTypeLabel = computed(() => {
+  const t = currentSq.value.type;
+  if (t === 'objective') return '客观题作答';
+  if (t === 'choice') return '选择题作答';
+  if (t === 'judge') return '判断题作答';
+  if (t === 'fill') return '填空题作答';
+  return '学生答案';
+});
+
+// 解析客观题答案 JSON
+const parsedObjectiveAnswers = computed(() => {
+  try { return JSON.parse(currentAnswer.value || '[]'); } catch { return []; }
+});
+
+function getItemResult(itemKey) {
+  const item = (currentSq.value.objectiveItems || []).find(i => i.key === itemKey);
+  if (!item) return null;
+  const studentAns = parsedObjectiveAnswers.value.find(a => a.key === itemKey);
+  if (!studentAns || !studentAns.answer) return { correct: false, studentStr: '未作答' };
+
+  let correct = false;
+  if (item.type === 'choice') {
+    correct = String(studentAns.answer).trim() === String(item.answer).trim();
+    const opt = (item.options || []).find(o => o.key === studentAns.answer);
+    return { correct, studentStr: studentAns.answer + (opt ? '. ' + opt.text : '') };
+  } else if (item.type === 'multi_choice') {
+    const sSet = new Set(String(studentAns.answer).split(',').map(s => s.trim()).filter(Boolean));
+    const aSet = new Set((Array.isArray(item.answer) ? item.answer : String(item.answer).split(',')).map(s => s.trim()));
+    correct = sSet.size === aSet.size && [...sSet].every(s => aSet.has(s));
+    const str = [...sSet].map(k => { const o = (item.options || []).find(op => op.key === k); return o ? `${k}. ${o.text}` : k; }).join(', ');
+    return { correct, studentStr: str || '未作答' };
+  } else if (item.type === 'judge') {
+    correct = String(studentAns.answer).trim() === String(item.answer).trim();
+    return { correct, studentStr: studentAns.answer === 'true' ? '正确' : studentAns.answer === 'false' ? '错误' : studentAns.answer };
+  } else if (item.type === 'fill') {
+    const sAns = String(studentAns.answer || '').trim();
+    const rAns = String(item.answer || '').trim();
+    correct = sAns.toLowerCase() === rAns.toLowerCase();
+    return { correct, studentStr: sAns || '未作答' };
+  }
+  return { correct: false, studentStr: String(studentAns.answer) };
+}
+
+function getItemRefStr(item) {
+  if (item.type === 'choice' || item.type === 'judge') {
+    if (item.type === 'judge') return item.answer === 'true' ? '正确' : '错误';
+    const opt = (item.options || []).find(o => o.key === item.answer);
+    return item.answer + (opt ? '. ' + opt.text : '');
+  } else if (item.type === 'multi_choice') {
+    const keys = (Array.isArray(item.answer) ? item.answer : String(item.answer).split(',')).map(s => s.trim());
+    return keys.map(k => { const o = (item.options || []).find(op => op.key === k); return o ? `${k}. ${o.text}` : k; }).join(', ');
+  }
+  return item.answer;
+}
+
+function itemTypeLabel(type) {
+  const map = { choice: '单选', multi_choice: '多选', judge: '判断', fill: '填空' };
+  return map[type] || type;
+}
+function formatAnswer(type, ans) {
+  if (!ans) return '（未作答）';
+  if (type === 'choice') {
+    const opt = (currentSq.value.options || []).find(o => o.key === ans);
+    return opt ? `${ans}. ${opt.text}` : ans;
+  }
+  if (type === 'judge') return ans === 'true' ? '✓ 正确' : ans === 'false' ? '✗ 错误' : ans;
+  return ans;
+}
+const isFillCorrect = computed(() => {
+  if (currentSq.value.type !== 'fill') return false;
+  const a = (currentAnswer.value || '').trim();
+  const r = (currentSq.value.referenceAnswer || '').trim();
+  const cs = currentSq.value.fillStyle === 'caseSensitive';
+  return cs ? a === r : a.toLowerCase() === r.toLowerCase();
+});
 
 const safeMaterial = computed(() => DOMPurify.sanitize(q.value.material || ''));
 const safeContent = computed(() => DOMPurify.sanitize((currentSq.value || {}).content || ''));
@@ -330,6 +458,10 @@ onMounted(fetch);
 .rp-feedback { font-size: 13px; color: #555; margin: 4px 0 0; line-height: 1.6; }
 .rp-row { display: flex; align-items: center; gap: 8px; }
 .rp-actions { display: flex; gap: 8px; margin-top: 8px; }
+.review-answer-row { display: flex; gap: 12px; align-items: flex-start; font-size: 15px; }
+.review-answer-label { color: var(--ink-muted); font-size: 13px; flex-shrink: 0; }
+.review-correct { color: #52c41a; font-weight: 600; }
+.review-wrong { color: #ff4d4f; font-weight: 600; }
 
 /* 动画 */
 .collapse-enter-active, .collapse-leave-active { transition: all 0.25s ease; }

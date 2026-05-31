@@ -78,7 +78,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
-import { message } from 'ant-design-vue';
+import { message, Modal } from 'ant-design-vue';
 import { io } from 'socket.io-client';
 import request from '../../api/request.js';
 import { useUserStore } from '../../stores/user.js';
@@ -211,11 +211,19 @@ async function batchReview () {
     } finally { reviewing.value = false; }
 }
 async function batchPublish () {
-    publishing.value = true;
-    try {
-        const r = await request.post('/teacher/submissions/batch-publish', { schoolId: userStore.currentSchool?.id, classId, assignmentId });
-        message.success(r.message); fetch();
-    } finally { publishing.value = false; }
+    Modal.confirm({
+        title: '确认一键发布全班？',
+        content: '发布后学生将能看到分数和评语。发布后仍可修改分数，修改后重新发布即可。',
+        okText: '确定发布',
+        cancelText: '取消',
+        onOk: async () => {
+            publishing.value = true;
+            try {
+                const r = await request.post('/teacher/submissions/batch-publish', { schoolId: userStore.currentSchool?.id, classId, assignmentId });
+                message.success(r.message); fetch();
+            } finally { publishing.value = false; }
+        },
+    });
 }
 async function exportXlsx () {
   const r = await request.get('/teacher/export-review', { params: { classId, assignmentId } });

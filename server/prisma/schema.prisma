@@ -130,15 +130,16 @@ model TeacherSchool {
 // 7. questions — 题库表
 // ============================
 model Question {
-  id             Int        @id @default(autoincrement()) @db.UnsignedInt
-  teacherId      Int        @map("teacher_id") @db.UnsignedInt
-  title          String     @db.VarChar(200)
-  maxScore       Int        @default(100) @map("max_score")
-  difficulty     Difficulty
-  material       String?    @db.Text
-  attachmentUrl  String?    @map("attachment_url") @db.VarChar(500)
-  createdAt      DateTime   @default(now()) @map("created_at")
-  deletedAt      DateTime?  @map("deleted_at")
+  id                Int        @id @default(autoincrement()) @db.UnsignedInt
+  teacherId         Int        @map("teacher_id") @db.UnsignedInt
+  title             String     @db.VarChar(200)
+  maxScore          Int        @default(100) @map("max_score")
+  difficulty        Difficulty
+  material          String?    @db.Text
+  attachmentUrl     String?    @map("attachment_url") @db.VarChar(500)
+  objectiveSettings Json?      @map("objective_settings")
+  createdAt         DateTime   @default(now()) @map("created_at")
+  deletedAt         DateTime?  @map("deleted_at")
 
   teacher             User                  @relation("TeacherQuestions", fields: [teacherId], references: [id])
   subQuestions        SubQuestion[]
@@ -157,10 +158,12 @@ model SubQuestion {
   questionId       Int      @map("question_id") @db.UnsignedInt
   sortOrder        Int      @default(0) @map("sort_order")
   title            String   @db.VarChar(200)
+  type             String   @default("code") @db.VarChar(20) // code | objective
   score            Int?
   content          String   @db.Text
   referenceAnswer  String   @map("reference_answer") @db.Text
   language         String   @db.VarChar(30)
+  objectiveItems   Json?                                    // 客观题小问数组
   scoringCriteria  String?  @map("scoring_criteria") @db.Text
 
   question     Question      @relation(fields: [questionId], references: [id], onDelete: Cascade)

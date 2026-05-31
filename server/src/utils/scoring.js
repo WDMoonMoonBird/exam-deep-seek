@@ -1,25 +1,15 @@
 /**
- * 解析并校验小题分值
- * 都不填 → 均分；有填 → 校验总和等于 maxScore
+ * 校验小题分值：每题 score 必须存在且 > 0
  * @param {Array} subQuestions - 小题列表 [{ score }]
- * @param {number} maxScore - 大题总分
- * @returns {Array} 处理后的小题列表
- * @throws {Error} 分值总和不等时抛出
+ * @returns {{ resolved: Array, totalScore: number }}
+ * @throws {Error} 分值无效时抛出
  */
-export function resolveSubQuestionScores(subQuestions, maxScore) {
-  const n = subQuestions.length;
-  const hasAny = subQuestions.some(sq => sq.score != null);
-  const resolved = subQuestions.map(sq => ({
-    ...sq,
-    score: hasAny ? (sq.score || 0) : Math.floor(maxScore / n),
-  }));
-  if (hasAny) {
-    const sum = resolved.reduce((s, sq) => s + sq.score, 0);
-    if (sum !== maxScore) {
-      throw new Error(`小题分值总和(${sum})不等于总分(${maxScore})`);
-    }
-  } else {
-    resolved[n - 1].score += maxScore - resolved.reduce((s, sq) => s + sq.score, 0);
-  }
-  return resolved;
+export function resolveSubQuestionScores(subQuestions) {
+  const resolved = subQuestions.map((sq, i) => {
+    if (sq.score == null) throw new Error(`第${i + 1}小题未设置分值`);
+    if (sq.score <= 0) throw new Error(`第${i + 1}小题分值必须大于 0`);
+    return { ...sq, score: sq.score };
+  });
+  const totalScore = resolved.reduce((sum, sq) => sum + sq.score, 0);
+  return { resolved, totalScore };
 }

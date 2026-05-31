@@ -4,6 +4,7 @@ import logger from '../utils/logger.js';
 import { DEFAULT_MAX_SCORE } from '../constants.js';
 import { resolveSubQuestionScores } from '../utils/scoring.js';
 import { getVisibleClassIds, getTeamTeacherIds } from './teamController.js';
+import { parseExamPaper, generateReferenceAnswer } from '../services/deepseek.js';
 
 /** 获取教师当前学校ID（从 query 参数） */
 function getSchoolId(req) { return req.query.schoolId ? +req.query.schoolId : null; }
@@ -65,14 +66,18 @@ export const getQuestion = async (req, res) => {
 
 export const createQuestion = async (req, res) => {
   try {
-    const { title, maxScore = 100, difficulty = 'medium', material, attachmentUrl, subQuestions } = req.body;
+    const { title, difficulty = 'medium', material, attachmentUrl, objectiveSettings, subQuestions } = req.body;
     if (!title || !subQuestions?.length) {
       return res.status(400).json({ code: 1001, message: '参数错误', data: null });
     }
+    if (title.length > 200) return res.status(400).json({ code: 1001, message: '标题不能超过200字', data: null });
+    if (material?.length > 50000) return res.status(400).json({ code: 1001, message: '题目材料过长', data: null });
 
-    let resolved;
+    let resolved, totalScore;
     try {
-      resolved = resolveSubQuestionScores(subQuestions, maxScore);
+      const result = resolveSubQuestionScores(subQuestions);
+      resolved = result.resolved;
+      totalScore = result.totalScore;
     } catch (e) {
       return res.status(400).json({ code: 1001, message: e.message, data: null });
     }
@@ -81,18 +86,21 @@ export const createQuestion = async (req, res) => {
       data: {
         teacherId: req.user.id,
         title,
-        maxScore,
+        maxScore: totalScore,
         difficulty,
         material,
         attachmentUrl,
+        objectiveSettings: objectiveSettings || undefined,
         subQuestions: {
           create: resolved.map((sq, i) => ({
             sortOrder: i + 1,
-            title: sq.title,
+            title: sq.title || '',
+            type: sq.type || 'code',
             score: sq.score,
-            content: sq.content,
-            referenceAnswer: sq.referenceAnswer,
-            language: sq.language,
+            content: sq.content || '',
+            referenceAnswer: sq.referenceAnswer || '',
+            language: sq.language || 'cpp',
+            objectiveItems: sq.objectiveItems || undefined,
             scoringCriteria: sq.scoringCriteria || null,
           })),
         },
@@ -113,9 +121,14 @@ export const updateQuestion = async (req, res) => {
     const existing = await prisma.question.findFirst({ where: { id, teacherId: req.user.id, deletedAt: null } });
     if (!existing) return res.status(404).json({ code: 1004, message: '题目不存在', data: null });
 
-    const { title, maxScore, difficulty = 'medium', material, attachmentUrl, subQuestions } = req.body;
+    const { title, difficulty = 'medium', material, attachmentUrl, objectiveSettings, subQuestions } = req.body;
+    if (title?.length > 200) return res.status(400).json({ code: 1001, message: '标题不能超过200字', data: null });
+    if (material?.length > 50000) return res.status(400).json({ code: 1001, message: '题目材料过长', data: null });
+    let resolved, totalScore;
     try {
-      resolved = resolveSubQuestionScores(subQuestions, maxScore);
+      const result = resolveSubQuestionScores(subQuestions);
+      resolved = result.resolved;
+      totalScore = result.totalScore;
     } catch (e) {
       return res.status(400).json({ code: 1001, message: e.message, data: null });
     }
@@ -125,15 +138,17 @@ export const updateQuestion = async (req, res) => {
       prisma.question.update({
         where: { id },
         data: {
-          title, maxScore, difficulty, material, attachmentUrl,
+          title, maxScore: totalScore, difficulty, material, attachmentUrl, objectiveSettings: objectiveSettings || undefined,
           subQuestions: {
             create: resolved.map((sq, i) => ({
               sortOrder: i + 1,
-              title: sq.title,
+              title: sq.title || '',
+              type: sq.type || 'code',
               score: sq.score,
-              content: sq.content,
-              referenceAnswer: sq.referenceAnswer,
-              language: sq.language,
+              content: sq.content || '',
+              referenceAnswer: sq.referenceAnswer || '',
+              language: sq.language || 'cpp',
+              objectiveItems: sq.objectiveItems || undefined,
               scoringCriteria: sq.scoringCriteria || null,
             })),
           },
@@ -158,6 +173,29 @@ export const deleteQuestion = async (req, res) => {
   } catch (err) {
     logger.error({ err }, '删除题目失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+// ===================== AI 试卷解析 =====================
+
+export const parseExam = async (req, res) => {
+  try {
+    const { content } = req.body;
+    console.log('[parseExam] 收到请求，字符数:', content?.length || 0);
+    if (!content?.trim()) return res.status(400).json({ code: 1001, message: '请提供试卷内容', data: null });
+
+    const limit = 80000;
+    const trimmed = content.length > limit ? content.slice(0, limit) : content;
+    if (content.length > limit) console.log('[parseExam] 内容截断:', content.length, '→', limit);
+
+    console.log('[parseExam] 开始调用 DeepSeek...');
+    const result = await parseExamPaper(trimmed);
+    console.log('[parseExam] DeepSeek 返回题目数:', result.questions?.length);
+
+    res.json({ code: 0, message: `解析完成，共提取 ${result.questions.length} 道题`, data: result });
+  } catch (err) {
+    console.error('[parseExam] 失败:', err.message);
+    res.status(500).json({ code: 2001, message: 'AI 解析失败: ' + (err.message || '未知错误'), data: null });
   }
 };
 
@@ -545,4 +583,20 @@ export const uploadMaterial = (req, res) => {
     const url = `/uploads/materials/${req.file.filename}`;
     res.json({ code: 0, message: '上传成功', data: { url, name: req.file.originalname } });
   });
+};
+
+// ===================== AI 生成参考答案 =====================
+
+export const generateReference = async (req, res) => {
+  try {
+    const { material, stem, scoringCriteria } = req.body;
+    if (!stem?.trim()) return res.status(400).json({ code: 1001, message: '请提供题目内容', data: null });
+    console.log('[generateReference] 开始生成参考答案...');
+    const answer = await generateReferenceAnswer({ material, stem, scoringCriteria });
+    console.log('[generateReference] 生成完成，长度:', answer.length);
+    res.json({ code: 0, message: '参考答案已生成', data: { answer } });
+  } catch (err) {
+    console.error('[generateReference] 失败:', err.message);
+    res.status(500).json({ code: 2001, message: 'AI 生成失败: ' + (err.message || '未知错误'), data: null });
+  }
 };

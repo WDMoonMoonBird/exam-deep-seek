@@ -24,6 +24,8 @@ router.get('/questions/:id', teacher.getQuestion);
 router.post('/questions', teacher.createQuestion);
 router.put('/questions/:id', teacher.updateQuestion);
 router.delete('/questions/:id', teacher.deleteQuestion);
+router.post('/parse-exam', teacher.parseExam);
+router.post('/generate-reference', teacher.generateReference);
 router.post('/upload-material', teacher.uploadMaterial);
 
 // 作业

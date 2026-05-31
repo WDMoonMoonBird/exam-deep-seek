@@ -48,16 +48,13 @@
           </div>
         </div>
 
-        <!-- 右：代码编辑器 -->
+        <!-- 右：根据题型动态切换 -->
         <div class="lc-right">
           <div class="lc-editor-header">
-            <span class="lc-editor-label"><CodeOutlined /> 代码</span>
-            <Transition name="tag-switch" mode="out-in">
-              <a-tag color="blue" style="margin-left:6px;" :key="activeSq">第 {{ activeSq + 1 }} 小题</a-tag>
-            </Transition>
-            <div class="lc-editor-actions">
-              <a-select :value="editorLang" @change="setLang" size="small" style="width:120px;"
-                :disabled="sqReadonly">
+            <span class="lc-editor-label">{{ sqTypeLabel }}</span>
+            <a-tag color="blue" style="margin-left:6px;">第 {{ activeSq + 1 }} 小题</a-tag>
+            <div class="lc-editor-actions" v-if="currentSq.type === 'code' || !currentSq.type">
+              <a-select :value="editorLang" @change="setLang" size="small" style="width:120px;" :disabled="sqReadonly">
                 <a-select-option v-for="l in langs" :key="l" :value="l">{{ l }}</a-select-option>
               </a-select>
               <a-button size="small" type="text" @click="formatCode" :disabled="sqReadonly" title="格式化代码">
@@ -66,21 +63,85 @@
             </div>
           </div>
           <div class="lc-editor-wrap">
-            <Transition name="panel-switch" mode="out-in">
-              <div :key="activeSq" class="panel-wrap" style="height:100%; display:flex; flex-direction:column;">
-                <CodeEditor ref="codeEditorRef" v-model="answers[subQId]" :language="editorLang"
-                  :readOnly="sqReadonly" :height="0" style="flex:1;" />
-                <div class="lc-footer">
-                  <a-button type="primary" size="large" :loading="submitting[subQId]"
-                    :disabled="sqReadonly" @click="submitCurrent">
-                    {{ isExpired ? '已过期' : sqStatus && allowResubmit ? '重新提交' : sqReadonly ? '已提交' : '提交代码' }}
-                  </a-button>
-                  <span v-if="sqReadonly && sqScore" class="lc-score">
-                    得分：<strong>{{ sqScore }} / {{ currentSq.score || 0 }}</strong>
-                  </span>
+            <div :key="activeSq" class="panel-wrap" style="height:100%; display:flex; flex-direction:column;">
+
+              <!-- 编程题 -->
+              <template v-if="currentSq.type==='code'||!currentSq.type">
+                <CodeEditor ref="codeEditorRef" v-model="answers[subQId]" :language="editorLang" :readOnly="sqReadonly" :height="0" style="flex:1;" />
+              </template>
+
+              <!-- 模式A：扁平单选 -->
+              <div v-else-if="currentSq.type==='choice'" style="flex:1;padding:16px;overflow-y:auto;">
+                <a-radio-group v-model:value="answers[subQId]" :disabled="sqReadonly" style="display:flex;flex-direction:column;gap:10px;">
+                  <a-radio v-for="opt in (currentSq.flatOptions||currentSq.options||[])" :key="opt.key" :value="opt.key">{{opt.key}}. {{opt.text}}</a-radio>
+                </a-radio-group>
+              </div>
+
+              <!-- 模式A：扁平多选 -->
+              <div v-else-if="currentSq.type==='multi_choice'" style="flex:1;padding:16px;overflow-y:auto;">
+                <a-checkbox-group v-model:value="multiFlatAnswer" :disabled="sqReadonly" style="display:flex;flex-direction:column;gap:10px;" @change="onMultiFlatChange">
+                  <a-checkbox v-for="opt in (currentSq.flatOptions||currentSq.options||[])" :key="opt.key" :value="opt.key">{{opt.key}}. {{opt.text}}</a-checkbox>
+                </a-checkbox-group>
+              </div>
+
+              <!-- 模式A：扁平判断 -->
+              <div v-else-if="currentSq.type==='judge'" style="flex:1;padding:20px;">
+                <a-radio-group v-model:value="answers[subQId]" :disabled="sqReadonly" style="display:flex;gap:24px;">
+                  <a-radio value="true" style="font-size:16px;">✓ 正确</a-radio>
+                  <a-radio value="false" style="font-size:16px;">✗ 错误</a-radio>
+                </a-radio-group>
+              </div>
+
+              <!-- 模式A：扁平填空 -->
+              <div v-else-if="currentSq.type==='fill'" style="flex:1;padding:16px;">
+                <a-textarea v-model:value="answers[subQId]" :disabled="sqReadonly" placeholder="请输入答案" :rows="3" />
+              </div>
+
+              <!-- 客观题：小问列表 -->
+              <div v-else-if="currentSq.type === 'objective'" style="flex:1;padding:16px;overflow-y:auto;">
+                <div v-for="item in (currentSq.objectiveItems || [])" :key="item.key" style="margin-bottom:20px;padding:12px;border:1px solid #f0f0f0;border-radius:8px;">
+                  <div style="font-weight:600;font-size:14px;margin-bottom:8px;">
+                    {{ item.key + 1 }}. <a-tag size="small">{{ itemTypeLabel(item.type) }}</a-tag>
+                    <span v-if="sqReadonly && itemAnswers[getItemKey(item.key)]?.correct !== undefined" style="margin-left:8px;font-size:12px;">
+                      <span v-if="itemAnswers[getItemKey(item.key)].correct" style="color:#52c41a;">✓ 正确</span>
+                      <span v-else style="color:#ff4d4f;">✗ 错误</span>
+                    </span>
+                  </div>
+                  <div class="preview-stem" :class="{ 'preview-stem-code': isCodeStem(item.stem) }" style="margin-bottom:8px;">{{ item.stem }}</div>
+
+                  <!-- 选项（单选/多选） -->
+                  <div v-if="item.type === 'choice' || item.type === 'multi_choice'">
+                    <a-radio-group v-if="item.type === 'choice'" v-model:value="itemAnswers[getItemKey(item.key)].answer" :disabled="sqReadonly" style="display:flex;flex-direction:column;gap:6px;">
+                      <a-radio v-for="opt in item.options" :key="opt.key" :value="opt.key">{{ opt.key }}. {{ opt.text }}</a-radio>
+                    </a-radio-group>
+                    <a-checkbox-group v-else v-model:value="multiAnswerBind[item.key]" :disabled="sqReadonly" style="display:flex;flex-direction:column;gap:6px;" @change="onMultiChange(item.key, $event)">
+                      <a-checkbox v-for="opt in item.options" :key="opt.key" :value="opt.key">{{ opt.key }}. {{ opt.text }}</a-checkbox>
+                    </a-checkbox-group>
+                  </div>
+
+                  <!-- 判断题 -->
+                  <a-radio-group v-else-if="item.type === 'judge'" v-model:value="itemAnswers[getItemKey(item.key)].answer" :disabled="sqReadonly" style="display:flex;gap:24px;">
+                    <a-radio value="true">✓ 正确</a-radio>
+                    <a-radio value="false">✗ 错误</a-radio>
+                  </a-radio-group>
+
+                  <!-- 填空题 -->
+                  <a-input v-else-if="item.type === 'fill'" v-model:value="itemAnswers[getItemKey(item.key)].answer" :disabled="sqReadonly" :placeholder="'请输入答案'" :style="{ fontFamily: 'monospace' }" />
+
+                  <div v-if="sqReadonly && item.score" style="font-size:11px;color:var(--ink-muted);margin-top:4px;">分值: {{ item.score }} 分</div>
                 </div>
               </div>
-            </Transition>
+
+              <div class="lc-footer">
+                <a-button type="primary" size="large" :loading="submitting[subQId]"
+                  :disabled="sqReadonly" @click="submitCurrent">
+                  {{ isExpired ? '已过期' : sqStatus && allowResubmit ? '重新提交' : sqReadonly ? '已提交' : submitBtnText }}
+                </a-button>
+                <span v-if="sqReadonly && sqScore != null" class="lc-score">
+                  得分：<strong>{{ sqScore }} / {{ currentSq.score || 0 }}</strong>
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -89,7 +150,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { message, Modal } from 'ant-design-vue';
 import { CodeOutlined, ArrowLeftOutlined } from '@ant-design/icons-vue';
@@ -127,6 +188,65 @@ const materialText = computed(() => {
 });
 const safeMaterial = computed(() => DOMPurify.sanitize(q.value.material || ''));
 const safeContent = computed(() => DOMPurify.sanitize((currentSq.value || {}).content || ''));
+
+const sqTypeLabel = computed(() => {
+  const t = currentSq.value.type;
+  if (t === 'objective') return '客观题';
+  return '代码';
+});
+const submitBtnText = computed(() => {
+  const t = currentSq.value.type;
+  if (t === 'objective') return '提交答案';
+  return '提交代码';
+});
+
+// 客观题：每个小问独立作答状态
+const itemAnswers = reactive({});  // key -> { answer: '', correct: true/false }
+const multiAnswerBind = reactive({}); // key -> string[] for checkboxes
+function getItemKey(itemKey) { return `${subQId.value}_${itemKey}`; }
+function isCodeStem(stem) {
+  if (!stem) return false;
+  return stem.includes('```') || stem.includes('{') || stem.includes('function') || stem.includes('class ') || stem.includes('def ');
+}
+const multiFlatAnswer = ref([]);
+function onMultiFlatChange(values) {
+  answers[subQId.value] = (values || []).join(',');
+}
+watch(multiFlatAnswer, (v) => { answers[subQId.value] = (v || []).join(','); });
+
+function onMultiChange(itemKey, values) {
+  itemAnswers[getItemKey(itemKey)].answer = (values || []).join(',');
+}
+function itemTypeLabel(type) {
+  const map = { choice: '单选', multi_choice: '多选', judge: '判断', fill: '填空' };
+  return map[type] || type;
+}
+
+// 初始化/恢复客观题答案
+function initObjectiveAnswers(items, existingSubmissions) {
+  for (const item of (items || [])) {
+    const k = getItemKey(item.key);
+    if (!itemAnswers[k]) {
+      itemAnswers[k] = { answer: item.type === 'judge' ? '' : '', correct: undefined };
+      if (item.type === 'multi_choice') multiAnswerBind[item.key] = [];
+    }
+  }
+  // 恢复已有提交
+  (existingSubmissions || []).forEach(s => {
+    try {
+      const ans = JSON.parse(s.answer || '[]');
+      for (const a of (ans || [])) {
+        const k = getItemKey(a.key);
+        if (a.key !== undefined && itemAnswers[k]) {
+          itemAnswers[k].answer = a.answer || '';
+          if (multiAnswerBind[a.key] !== undefined) {
+            multiAnswerBind[a.key] = String(a.answer || '').split(',').map(s => s.trim()).filter(Boolean);
+          }
+        }
+      }
+    } catch { /* ignore */ }
+  });
+}
 
 const sqStatus = computed(() => subStatuses[subQId.value]);
 const isExpired = computed(() => endTime.value ? Date.now() > new Date(endTime.value).getTime() : false);
@@ -193,13 +313,22 @@ async function fetch() {
 
   (r.data.submissions || []).forEach(s => {
     const key = s.subQuestionId || s.questionId;
-    answers[key] = s.answer || '';
+    const sq = subQuestions.value.find(sq => sq.id === key);
+    if (sq?.type === 'objective') {
+      initObjectiveAnswers(sq.objectiveItems || [], [s]);
+    } else if (sq?.type === 'multi_choice') {
+      answers[key] = s.answer || '';
+      multiFlatAnswer.value = (s.answer || '').split(',').filter(Boolean);
+    } else {
+      answers[key] = s.answer || '';
+    }
     subStatuses[key] = s.status;
     if (s.status === 'published') subScores[key] = s.finalScore ?? s.aiScore;
     if (s.status === 'published') subFeedbacks[key] = { aiFeedback: s.aiFeedback, teacherFeedback: s.teacherFeedback };
   });
   subQuestions.value.forEach(sq => {
     if (!answers[sq.id]) answers[sq.id] = '';
+    if (sq.type === 'objective') initObjectiveAnswers(sq.objectiveItems || [], []);
   });
 
   // 设置截止时间强制提交定时器
@@ -212,13 +341,31 @@ async function fetch() {
   }
 }
 
+function buildObjectiveAnswer(sq) {
+  const arr = [];
+  for (const item of (sq.objectiveItems || [])) {
+    const k = getItemKey(item.key);
+    arr.push({ key: item.key, answer: itemAnswers[k]?.answer || '' });
+  }
+  return JSON.stringify(arr);
+}
+
+function hasObjectiveAnswer(sq) {
+  for (const item of (sq.objectiveItems || [])) {
+    if ((itemAnswers[getItemKey(item.key)]?.answer || '').trim()) return true;
+  }
+  return false;
+}
+
 async function forceSubmitAll() {
   for (const sq of subQuestions.value) {
     const key = sq.id;
-    if (answers[key]?.trim() && subStatuses[key] !== 'submitted' && subStatuses[key] !== 'published') {
+    const hasAnswer = sq.type === 'objective' ? hasObjectiveAnswer(sq) : (answers[key]?.trim());
+    if (hasAnswer && subStatuses[key] !== 'submitted' && subStatuses[key] !== 'published') {
       try {
+        const answer = sq.type === 'objective' ? buildObjectiveAnswer(sq) : answers[key];
         await request.post(`/student/assignments/${route.params.id}/submit`, {
-          questionId: q.value.id, subQuestionId: key, answer: answers[key], force: true,
+          questionId: q.value.id, subQuestionId: key, answer, force: true,
         });
         subStatuses[key] = 'submitted';
       } catch {/* ignore */}
@@ -230,7 +377,9 @@ async function forceSubmitAll() {
 async function submitCurrent() {
   const sq = currentSq.value;
   const key = sq.id;
-  if (!answers[key]?.trim()) return message.warn('请先编写代码');
+  const isObjective = sq.type === 'objective';
+  const hasAnswer = isObjective ? hasObjectiveAnswer(sq) : (answers[key]?.trim());
+  if (!hasAnswer) return message.warn(isObjective ? '请先作答' : '请先编写代码');
 
   const confirmMsg = allowResubmit.value
     ? '允许补交，确定提交当前答案？'
@@ -243,8 +392,9 @@ async function submitCurrent() {
     onOk: async () => {
       submitting[key] = true;
       try {
+        const answer = isObjective ? buildObjectiveAnswer(sq) : answers[key];
         await request.post(`/student/assignments/${route.params.id}/submit`, {
-          questionId: q.value.id, subQuestionId: sq.id, answer: answers[key],
+          questionId: q.value.id, subQuestionId: sq.id, answer,
         });
         message.success('提交成功');
         subStatuses[key] = 'submitted';
