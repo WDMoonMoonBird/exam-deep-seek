@@ -1,147 +1,164 @@
 <template>
-  <div class="doc-layout">
-    <!-- 顶栏 -->
-    <header class="doc-header">
-      <div class="doc-header-inner">
-        <img src="../assets/logo.svg" class="doc-logo" alt="logo" />
-        <span class="doc-title"><span class="doc-title-main">Deadpan 判题</span><span class="doc-title-sep"> · </span><span class="doc-title-sub">教师使用文档</span></span>
-        <a-button type="link" href="/exam/login" class="doc-login-btn">前往登录</a-button>
-      </div>
-    </header>
-
-    <div class="doc-body">
-      <!-- 左侧导航（桌面端） -->
-      <aside class="doc-sidebar">
-        <a-anchor :items="anchors" :targetOffset="80" :bounds="20" @click="e => e.preventDefault()" />
-      </aside>
-
-      <!-- 主内容 -->
-      <main class="doc-main" ref="mainRef" @click="onMainClick">
-        <!-- 1. 系统简介（交互式步骤条） -->
-        <section id="intro" class="doc-section">
-          <h2 class="section-title">1. 系统简介</h2>
-          <div class="section-body">
-            <p>Deadpan 判题是一套面向高校编程类课程的<b>AI 智能评分平台</b>，支持教师创建题目、布置作业、AI 自动评分、教师审核发布、学生在线答题的完整教学闭环。</p>
-            <a-steps :current="introStep" :items="introStepItems" size="small" style="margin:20px 0;" @change="introStep = $event" />
-            <div class="steps-content">{{ introSteps[introStep].content }}</div>
-            <div class="steps-action">
-              <a-button v-if="introStep > 0" @click="introStep--">上一步</a-button>
-              <a-button v-if="introStep < introSteps.length - 1" type="primary" @click="introStep++">下一步</a-button>
-              <a-button v-if="introStep === introSteps.length - 1" type="primary" @click="introStep = 0">重新浏览</a-button>
+    <div class="doc-layout">
+        <!-- 顶栏 -->
+        <header class="doc-header">
+            <div class="doc-header-inner">
+                <img src="../assets/logo.svg" class="doc-logo" alt="logo" />
+                <span class="doc-title"><span class="doc-title-main">Deadpan 判题</span><span class="doc-title-sep"> ·
+                    </span><span class="doc-title-sub">教师使用文档</span></span>
+                <a-button type="link" href="/exam/login" class="doc-login-btn">前往登录</a-button>
             </div>
-            <p style="margin-top:20px;">系统支持三种角色：<b>超级管理员</b>（管理学校/教师/班级）、<b>教师</b>（题库/作业/审核）、<b>学生</b>（答题/查看成绩）。本文档面向教师用户。</p>
-          </div>
-        </section>
+        </header>
 
-        <!-- 2~5 静态章节 -->
-        <section v-for="sec in sections2to5" :key="sec.id" :id="sec.id" class="doc-section">
-          <h2 class="section-title">{{ sec.title }}</h2>
-          <div class="section-body" v-html="sec.content" />
-        </section>
+        <div class="doc-body">
+            <!-- 左侧导航（桌面端） -->
+            <aside class="doc-sidebar">
+                <a-anchor :items="anchors" :targetOffset="80" :bounds="20" @click="e => e.preventDefault()" />
+            </aside>
 
-        <!-- 6. 题库管理（交互式步骤条） -->
-        <section id="questions" class="doc-section">
-          <h2 class="section-title">6. 题库管理</h2>
-          <div class="section-body">
-            <h3>6.1 题目结构</h3>
-            <p>每道题目为「<b>大题 + N 道小题</b>」的结构。大题包含标题、难度、总分（= 各小题分值之和）；每道小题可独立设置语言、分值和参考答案。</p>
-            <img class="doc-img" :src="'/exam/doc-img/08-questions.png'" alt="题库列表" />
+            <!-- 主内容 -->
+            <main class="doc-main" ref="mainRef" @click="onMainClick">
+                <!-- 1. 系统简介（交互式步骤条） -->
+                <section id="intro" class="doc-section">
+                    <h2 class="section-title">1. 系统简介</h2>
+                    <div class="section-body">
+                        <p>Deadpan 判题是一套面向高校编程类课程的<b>AI 智能评分平台</b>，支持教师创建题目、布置作业、AI 自动评分、教师审核发布、学生在线答题的完整教学闭环。</p>
+                        <a-steps :current="introStep" :items="introStepItems" size="small" style="margin:20px 0;"
+                            @change="introStep = $event" />
+                        <div class="steps-content">{{ introSteps[introStep].content }}</div>
+                        <div class="steps-action">
+                            <a-button v-if="introStep > 0" @click="introStep--">上一步</a-button>
+                            <a-button v-if="introStep < introSteps.length - 1" type="primary"
+                                @click="introStep++">下一步</a-button>
+                            <a-button v-if="introStep === introSteps.length - 1" type="primary"
+                                @click="introStep = 0">重新浏览</a-button>
+                        </div>
+                        <p style="margin-top:20px;">
+                            系统支持三种角色：<b>超级管理员</b>（管理学校/教师/班级）、<b>教师</b>（题库/作业/审核）、<b>学生</b>（答题/查看成绩）。本文档面向教师用户。</p>
+                    </div>
+                </section>
 
-            <h3>6.2 新建题目流程</h3>
-            <p>点击「新增题目」进入编辑页，通过 <b>AI 解析试卷文档</b> 快速创建题目：</p>
-            <a-steps :current="qStep" :items="qStepItems" size="small" style="margin:20px 0;" @change="qStep = $event" />
-            <div class="steps-content">{{ qSteps[qStep].content }}</div>
-            <div class="steps-action">
-              <a-button v-if="qStep > 0" @click="qStep--">上一步</a-button>
-              <a-button v-if="qStep < qSteps.length - 1" type="primary" @click="qStep++">下一步</a-button>
-              <a-button v-if="qStep === qSteps.length - 1" type="primary" @click="qStep = 0">重新浏览</a-button>
-            </div>
+                <!-- 2~5 静态章节 -->
+                <section v-for="sec in sections2to5" :key="sec.id" :id="sec.id" class="doc-section">
+                    <h2 class="section-title">{{ sec.title }}</h2>
+                    <div class="section-body" v-html="sec.content" />
+                </section>
 
-            <h3>6.3 编辑题目</h3>
-            <p>在题库列表中点击「编辑」可修改已有题目。编辑页展示完整题目结构：左侧导航列出所有小题（彩色方形色块），右侧为各小题的详细编辑区。</p>
-            <img class="doc-img" :src="'/exam/doc-img/09-question-edit.png'" alt="题目编辑页" />
+                <!-- 6. 题库管理（交互式步骤条） -->
+                <section id="questions" class="doc-section">
+                    <h2 class="section-title">6. 题库管理</h2>
+                    <div class="section-body">
+                        <h3>6.1 题目结构</h3>
+                        <p>每道题目为「<b>大题 + N 道小题</b>」的结构。大题包含标题、难度、总分（= 各小题分值之和）；每道小题可独立设置语言、分值和参考答案。</p>
+                        <img class="doc-img" :src="'/exam/doc-img/08-questions.png'" alt="题库列表" />
 
-            <h3>6.4 分值系统</h3>
-            <ul>
-              <li><b>总分自动计算：</b>大题总分 = 所有小题分值之和，顶部只读显示</li>
-              <li><b>小题分值联动：</b>客观题小问增减后分值自动重算</li>
-              <li><b>保存拦截：</b>若任何小题分值为空/0，系统阻止保存并提示具体题号</li>
-            </ul>
+                        <h3>6.2 新建题目流程</h3>
+                        <p>点击「新增题目」进入编辑页，通过 <b>AI 解析试卷文档</b> 快速创建题目：</p>
+                        <a-steps :current="qStep" :items="qStepItems" size="small" style="margin:20px 0;"
+                            @change="qStep = $event" />
+                        <div class="steps-content">{{ qSteps[qStep].content }}</div>
+                        <div class="steps-action">
+                            <a-button v-if="qStep > 0" @click="qStep--">上一步</a-button>
+                            <a-button v-if="qStep < qSteps.length - 1" type="primary" @click="qStep++">下一步</a-button>
+                            <a-button v-if="qStep === qSteps.length - 1" type="primary"
+                                @click="qStep = 0">重新浏览</a-button>
+                        </div>
 
-            <h3>6.5 一键生成标答</h3>
-            <p>点击编辑页中编程题的「AI 生成」按钮，DeepSeek 自动根据题目描述生成参考答案代码，大幅减少教师书写时间。</p>
+                        <img class="doc-img" :src="'/exam/doc-img/09-parse-modal.png'" alt="AI解析试卷模态框" />
+                        <p style="text-align:center;color:#888;font-size:13px;margin-top:-12px;">▲ AI 解析试卷弹窗：上传 Word
+                            文档，DeepSeek 自动识别题目</p>
 
-            <h3>6.6 编辑 / 删除</h3>
-            <p>在题库列表中可「编辑」或「删除」已有题目。删除前请确认该题目未被作业引用。</p>
-          </div>
-        </section>
+                        <h3>6.3 编辑题目</h3>
+                        <p>在题库列表中点击「编辑」可修改已有题目。编辑页展示完整题目结构：左侧导航列出所有小题（彩色方形色块），右侧为各小题的详细编辑区。</p>
+                        <img class="doc-img" :src="'/exam/doc-img/09-question-edit.png'" alt="题目编辑页" />
 
-        <!-- 7. 静态章节 -->
-        <section v-for="sec in sections7" :key="sec.id" :id="sec.id" class="doc-section">
-          <h2 class="section-title">{{ sec.title }}</h2>
-          <div class="section-body" v-html="sec.content" />
-        </section>
+                        <h3>6.4 分值系统</h3>
+                        <ul>
+                            <li><b>总分自动计算：</b>大题总分 = 所有小题分值之和，顶部只读显示</li>
+                            <li><b>小题分值联动：</b>客观题小问增减后分值自动重算</li>
+                            <li><b>保存拦截：</b>若任何小题分值为空/0，系统阻止保存并提示具体题号</li>
+                        </ul>
 
-        <!-- 8. AI 评分流程（交互式步骤条） -->
-        <section id="aiflow" class="doc-section">
-          <h2 class="section-title">8. AI 评分流程</h2>
-          <div class="section-body">
-            <h3>8.1 评分流程</h3>
-            <p>学生提交代码后，评分流程自动触发：</p>
-            <a-steps :current="flowStep" :items="flowStepItems" size="small" style="margin:20px 0;" @change="flowStep = $event" />
-            <div class="steps-content">{{ flowSteps[flowStep].content }}</div>
-            <div class="steps-action">
-              <a-button v-if="flowStep > 0" @click="flowStep--">上一步</a-button>
-              <a-button v-if="flowStep < flowSteps.length - 1" type="primary" @click="flowStep++">下一步</a-button>
-              <a-button v-if="flowStep === flowSteps.length - 1" type="primary" @click="flowStep = 0">重新浏览</a-button>
-            </div>
-            <h3 style="margin-top:24px;">8.2 评分标准</h3>
-            <p>AI 评分时会参考教师自定义的评分标准（如已设置），或使用默认标准。AI 返回 JSON 格式的分数和评语，后台自动存入数据库。</p>
-            <h3>8.3 实时推送</h3>
-            <p>评分完成后，系统通过 <b>WebSocket</b> 实时推送给审核页面，教师无需手动刷新即可看到最新的评分状态变化。</p>
-          </div>
-        </section>
+                        <h3>6.5 一键生成标答</h3>
+                        <p>点击编辑页中编程题的「AI 生成」按钮，DeepSeek 自动根据题目描述生成参考答案代码，大幅减少教师书写时间。</p>
 
-        <!-- 9. 性能优势 -->
-        <section id="performance" class="doc-section">
-          <h2 class="section-title">9. 性能优势</h2>
-          <div class="section-body">
-            <div class="a-alert a-alert-info">⚡ 本系统采用<b>多并发 AI 评分架构</b>，专为大规模考试场景设计。</div>
-            <h3>高并发批改能力</h3>
-            <p>评分 Worker 以<b>多线程并发</b>方式并行调用 AI 接口，单次可同时处理多份学生提交。<b>500 人同时交卷，10 分钟内即可完成全部 AI 评分</b>，极大缩短考试出分周期。</p>
-            <h3>实时推送</h3>
-            <p>评分结果通过 <b>WebSocket</b> 实时推送到教师端，无需手动刷新页面。教师可在学生交卷后立即看到 AI 评分结果，实现边交卷边审核。</p>
-            <h3>数据库优化</h3>
-            <p>核心查询路径均建立复合索引，Worker 轮询查询走索引覆盖，避免全表扫描。即使在高并发提交场景下，数据库响应依然保持稳定。</p>
-          </div>
-        </section>
+                        <h3>6.6 编辑 / 删除</h3>
+                        <p>在题库列表中可「编辑」或「删除」已有题目。删除前请确认该题目未被作业引用。</p>
+                    </div>
+                </section>
 
-        <!-- 10~11 静态章节 -->
-        <section v-for="sec in sections9to10" :key="sec.id" :id="sec.id" class="doc-section">
-          <h2 class="section-title">{{ sec.title }}</h2>
-          <div class="section-body" v-html="sec.content" />
-        </section>
-      </main>
-    </div>
+                <!-- 7. 静态章节 -->
+                <section v-for="sec in sections7" :key="sec.id" :id="sec.id" class="doc-section">
+                    <h2 class="section-title">{{ sec.title }}</h2>
+                    <div class="section-body" v-html="sec.content" />
+                </section>
 
-    <!-- 移动端浮动目录按钮 -->
-    <a-float-button v-if="showMobileToc" shape="square" @click="mobileTocOpen = true">
-      <template #icon><BarsOutlined /></template>
-    </a-float-button>
-    <a-drawer v-model:open="mobileTocOpen" title="目录" placement="right" :width="280">
-      <a-anchor :items="anchors" @click="mobileTocOpen = false" />
-    </a-drawer>
+                <!-- 8. AI 评分流程（交互式步骤条） -->
+                <section id="aiflow" class="doc-section">
+                    <h2 class="section-title">8. AI 评分流程</h2>
+                    <div class="section-body">
+                        <h3>8.1 评分流程</h3>
+                        <p>学生提交代码后，评分流程自动触发：</p>
+                        <a-steps :current="flowStep" :items="flowStepItems" size="small" style="margin:20px 0;"
+                            @change="flowStep = $event" />
+                        <div class="steps-content">{{ flowSteps[flowStep].content }}</div>
+                        <div class="steps-action">
+                            <a-button v-if="flowStep > 0" @click="flowStep--">上一步</a-button>
+                            <a-button v-if="flowStep < flowSteps.length - 1" type="primary"
+                                @click="flowStep++">下一步</a-button>
+                            <a-button v-if="flowStep === flowSteps.length - 1" type="primary"
+                                @click="flowStep = 0">重新浏览</a-button>
+                        </div>
+                        <h3 style="margin-top:24px;">8.2 评分标准</h3>
+                        <p>AI 评分时会参考教师自定义的评分标准（如已设置），或使用默认标准。AI 返回 JSON 格式的分数和评语，后台自动存入数据库。</p>
+                        <h3>8.3 实时推送</h3>
+                        <p>评分完成后，系统通过 <b>WebSocket</b> 实时推送给审核页面，教师无需手动刷新即可看到最新的评分状态变化。</p>
+                    </div>
+                </section>
 
-    <!-- 图片灯箱 -->
-    <Teleport to="body">
-      <Transition name="lightbox-fade">
-        <div v-if="lightboxOpen" class="lightbox-mask" @click="lightboxOpen = false">
-          <div class="lightbox-close" @click="lightboxOpen = false">✕</div>
-          <img :src="lightboxSrc" class="lightbox-img" @click.stop />
+                <!-- 9. 性能优势 -->
+                <section id="performance" class="doc-section">
+                    <h2 class="section-title">9. 性能优势</h2>
+                    <div class="section-body">
+                        <div class="a-alert a-alert-info">⚡ 本系统采用<b>多并发 AI 评分架构</b>，专为大规模考试场景设计。</div>
+                        <h3>高并发批改能力</h3>
+                        <p>评分 Worker 以<b>多线程并发</b>方式并行调用 AI 接口，单次可同时处理多份学生提交。<b>500 人同时交卷，10 分钟内即可完成全部 AI
+                                评分</b>，极大缩短考试出分周期。</p>
+                        <h3>实时推送</h3>
+                        <p>评分结果通过 <b>WebSocket</b> 实时推送到教师端，无需手动刷新页面。教师可在学生交卷后立即看到 AI 评分结果，实现边交卷边审核。</p>
+                        <h3>数据库优化</h3>
+                        <p>核心查询路径均建立复合索引，Worker 轮询查询走索引覆盖，避免全表扫描。即使在高并发提交场景下，数据库响应依然保持稳定。</p>
+                    </div>
+                </section>
+
+                <!-- 10~11 静态章节 -->
+                <section v-for="sec in sections9to10" :key="sec.id" :id="sec.id" class="doc-section">
+                    <h2 class="section-title">{{ sec.title }}</h2>
+                    <div class="section-body" v-html="sec.content" />
+                </section>
+            </main>
         </div>
-      </Transition>
-    </Teleport>
-  </div>
+
+        <!-- 移动端浮动目录按钮 -->
+        <a-float-button v-if="showMobileToc" shape="square" @click="mobileTocOpen = true">
+            <template #icon>
+                <BarsOutlined />
+            </template>
+        </a-float-button>
+        <a-drawer v-model:open="mobileTocOpen" title="目录" placement="right" :width="280">
+            <a-anchor :items="anchors" @click="mobileTocOpen = false" />
+        </a-drawer>
+
+        <!-- 图片灯箱 -->
+        <Teleport to="body">
+            <Transition name="lightbox-fade">
+                <div v-if="lightboxOpen" class="lightbox-mask" @click="lightboxOpen = false">
+                    <div class="lightbox-close" @click="lightboxOpen = false">✕</div>
+                    <img :src="lightboxSrc" class="lightbox-img" @click.stop />
+                </div>
+            </Transition>
+        </Teleport>
+    </div>
 </template>
 
 <script setup>
@@ -154,47 +171,47 @@ const mobileTocOpen = ref(false);
 // 图片灯箱
 const lightboxOpen = ref(false);
 const lightboxSrc = ref('');
-function onMainClick(e) {
-  const img = e.target.closest('.doc-img');
-  if (img) {
-    lightboxSrc.value = img.src;
-    lightboxOpen.value = true;
-  }
+function onMainClick (e) {
+    const img = e.target.closest('.doc-img');
+    if (img) {
+        lightboxSrc.value = img.src;
+        lightboxOpen.value = true;
+    }
 }
 
 // 系统简介步骤条
 const introStep = ref(0);
 const introSteps = [
-  { title: '建题', content: '教师创建编程题目，设置参考答案和评分标准。每道题包含大题和若干小题，支持多种编程语言。' },
-  { title: '布置', content: '选择题目、选择班级、设定作业起止时间，一键布置。可设置是否允许补交。' },
-  { title: '提交', content: '学生在截止时间前登录系统，在线编写代码并提交。系统支持草稿自动保存和截止时间强制提交。' },
-  { title: 'AI 评分', content: '后台评分 Worker 每 2 秒轮询数据库，获取待评分提交后调用 DeepSeek 大模型进行 AI 评分，返回分数和详细评语。' },
-  { title: '审核发布', content: '教师查看 AI 评分结果，可修改分数并填写评语。「审核」保存评分，「发布」后学生才能看到成绩。发布后仍可修改分数并重新发布。' },
-  { title: '出分', content: '学生登录后在「查看成绩」页面查看已发布的分数和教师评语，支持按作业查看各小题得分。' },
+    { title: '建题', content: '教师创建编程题目，设置参考答案和评分标准。每道题包含大题和若干小题，支持多种编程语言。' },
+    { title: '布置', content: '选择题目、选择班级、设定作业起止时间，一键布置。可设置是否允许补交。' },
+    { title: '提交', content: '学生在截止时间前登录系统，在线编写代码并提交。系统支持草稿自动保存和截止时间强制提交。' },
+    { title: 'AI 评分', content: '后台评分 Worker 每 2 秒轮询数据库，获取待评分提交后调用 DeepSeek 大模型进行 AI 评分，返回分数和详细评语。' },
+    { title: '审核发布', content: '教师查看 AI 评分结果，可修改分数并填写评语。「审核」保存评分，「发布」后学生才能看到成绩。发布后仍可修改分数并重新发布。' },
+    { title: '出分', content: '学生登录后在「查看成绩」页面查看已发布的分数和教师评语，支持按作业查看各小题得分。' },
 ];
 const introStepItems = introSteps.map(s => ({ title: s.title }));
 
 // AI 评分流程步骤条
 const flowStep = ref(0);
 const flowSteps = [
-  { title: '学生提交', content: '学生在答题页面选择编程语言、编写代码后点击「提交代码」。提交后该小题状态变为「待评分」，不可再修改（除非作业开启了补交）。' },
-  { title: 'Worker 获取', content: '评分 Worker 每 2 秒轮询数据库，批量获取最多 8 条状态为「待评分」的提交记录，以 8 并发方式并行调用 AI 接口。' },
-  { title: '构建提示词', content: '系统根据题目要求、参考答案、教师自定义评分标准和学生提交的代码，自动构建完整的 AI 提示词，确保评分公正、意见具体。' },
-  { title: 'AI 评分', content: 'DeepSeek 大模型返回 JSON 格式的评分结果：包含分数（score）和详细评语（feedback）。系统解析后存入数据库，状态变为「AI 已评分」。' },
-  { title: '实时推送', content: '评分完成后通过内部 HTTP 回调通知主进程，主进程通过 WebSocket 实时推送给教师的审核页面，无需手动刷新。' },
-  { title: '教师审核', content: '教师可在审核页面查看 AI 评分详情，支持修改最终分数并填写教师评语。审核后点击「发布」，学生即可查看成绩。' },
+    { title: '学生提交', content: '学生在答题页面选择编程语言、编写代码后点击「提交代码」。提交后该小题状态变为「待评分」，不可再修改（除非作业开启了补交）。' },
+    { title: 'Worker 获取', content: '评分 Worker 每 2 秒轮询数据库，批量获取最多 8 条状态为「待评分」的提交记录，以 8 并发方式并行调用 AI 接口。' },
+    { title: '构建提示词', content: '系统根据题目要求、参考答案、教师自定义评分标准和学生提交的代码，自动构建完整的 AI 提示词，确保评分公正、意见具体。' },
+    { title: 'AI 评分', content: 'DeepSeek 大模型返回 JSON 格式的评分结果：包含分数（score）和详细评语（feedback）。系统解析后存入数据库，状态变为「AI 已评分」。' },
+    { title: '实时推送', content: '评分完成后通过内部 HTTP 回调通知主进程，主进程通过 WebSocket 实时推送给教师的审核页面，无需手动刷新。' },
+    { title: '教师审核', content: '教师可在审核页面查看 AI 评分详情，支持修改最终分数并填写教师评语。审核后点击「发布」，学生即可查看成绩。' },
 ];
 const flowStepItems = flowSteps.map(s => ({ title: s.title }));
 
 // 新建题目步骤条
 const qStep = ref(0);
 const qSteps = [
-  { title: '准备试卷', content: '准备试卷 Word 文档（.docx），确保包含题目序号、题干、选项和答案。也可直接粘贴纯文本内容。文档内容越规范，AI 解析准确率越高。' },
-  { title: '填写基本信息', content: '输入大题标题（如"Java 程序设计期末考试"）、选择难度（简单/中等/困难）。点击题目材料区右上角的「AI 解析」按钮。' },
-  { title: 'AI 解析', content: '将 Word 文档内容粘贴到解析框中（或上传 .docx 文件由系统自动提取文本），点击「解析」，DeepSeek AI 自动识别题目类型、题干、选项和答案，几秒内完成。' },
-  { title: '检查确认', content: '解析完成后，左侧导航列显示所有小题（彩色方形色块区分题目类型）。逐题检查：选择题选项是否完整、判断题答案是否正确、编程题题面是否清晰。可在编辑器随时修改。' },
-  { title: '设置分值', content: '为每道小题设置分值。客观题每小问独立设分，编程题单独设分。总分自动计算显示在顶部。点击「AI 生成」可为编程题自动生成参考答案代码。' },
-  { title: '保存', content: '检查完毕，点击「保存」按钮。若任何小题分值为空或 0，系统会阻止保存并提示具体题号。保存后题目进入题库，可布置为作业。' },
+    { title: '准备试卷', content: '准备试卷 Word 文档（.docx），确保包含题目序号、题干、选项和答案。也可直接粘贴纯文本内容。文档内容越规范，AI 解析准确率越高。' },
+    { title: '填写基本信息', content: '输入大题标题（如"Java 程序设计期末考试"）、选择难度（简单/中等/困难）。点击题目材料区右上角的「AI 解析」按钮。' },
+    { title: 'AI 解析', content: '将 Word 文档内容粘贴到解析框中（或上传 .docx 文件由系统自动提取文本），点击「解析」，DeepSeek AI 自动识别题目类型、题干、选项和答案，几秒内完成。' },
+    { title: '检查确认', content: '解析完成后，左侧导航列显示所有小题（彩色方形色块区分题目类型）。逐题检查：选择题选项是否完整、判断题答案是否正确、编程题题面是否清晰。可在编辑器随时修改。' },
+    { title: '设置分值', content: '为每道小题设置分值。客观题每小问独立设分，编程题单独设分。总分自动计算显示在顶部。点击「AI 生成」可为编程题自动生成参考答案代码。' },
+    { title: '保存', content: '检查完毕，点击「保存」按钮。若任何小题分值为空或 0，系统会阻止保存并提示具体题号。保存后题目进入题库，可布置为作业。' },
 ];
 const qStepItems = qSteps.map(s => ({ title: s.title }));
 
@@ -202,14 +219,15 @@ const qStepItems = qSteps.map(s => ({ title: s.title }));
 const sections2to5 = computed(() => sections2to7.slice(0, 4));
 const sections7 = computed(() => [sections2to7[5]]);
 
-function checkMobile() {
-  showMobileToc.value = window.innerWidth < 992;
+function checkMobile () {
+    showMobileToc.value = window.innerWidth < 992;
 }
 onMounted(() => { checkMobile(); window.addEventListener('resize', checkMobile); });
 onUnmounted(() => window.removeEventListener('resize', checkMobile));
 
 const sections2to7 = [
-  { id: 'quickstart', title: '2. 快速入门', content: `
+    {
+        id: 'quickstart', title: '2. 快速入门', content: `
     <h3>2.1 登录系统</h3>
     <p>使用学校分配的<b>工号</b>和<b>密码</b>登录。打开系统地址后，在登录页输入工号和密码，点击「登录」按钮进入系统。</p>
     <img class="doc-img" src="/exam/doc-img/01-login.png" alt="登录页面" />
@@ -233,7 +251,8 @@ const sections2to7 = [
     <img class="doc-img" src="/exam/doc-img/14-profile.png" alt="个人信息弹窗" />
   `},
 
-  { id: 'classes', title: '3. 班级管理', content: `
+    {
+        id: 'classes', title: '3. 班级管理', content: `
     <h3>3.1 创建班级</h3>
     <p>点击「新增班级」按钮，在弹出的模态框中填写<b>班级名称</b>，可选择性地将班级加入已有的<b>教学团队</b>（留空则不加入任何团队）。点击「确定」完成创建。</p>
     <img class="doc-img" src="/exam/doc-img/03-class-add.png" alt="新增班级模态框" />
@@ -247,7 +266,8 @@ const sections2to7 = [
     <img class="doc-img" src="/exam/doc-img/02-classes.png" alt="团队共享班级标签" />
   `},
 
-  { id: 'students', title: '4. 学生管理', content: `
+    {
+        id: 'students', title: '4. 学生管理', content: `
     <h3>4.1 选择班级</h3>
     <p>进入学生管理页后，须先在顶部下拉框中选择一个班级。选择后页面显示该班学生列表。团队共享的班级选项旁会显示<span class="doc-tag doc-tag-purple">团队</span> 标签。</p>
 
@@ -280,7 +300,8 @@ const sections2to7 = [
     </ul>
   `},
 
-  { id: 'teams', title: '5. 教学团队', content: `
+    {
+        id: 'teams', title: '5. 教学团队', content: `
     <h3>5.1 创建团队</h3>
     <p>进入「教学团队」页面，点击「创建团队」按钮，输入团队名称即可创建。创建者自动成为团队成员，角色标注为「创建者」。</p>
     <img class="doc-img" src="/exam/doc-img/06-teams.png" alt="团队列表页" />
@@ -319,7 +340,8 @@ const sections2to7 = [
     </ul>
   `},
 
-  { id: 'questions', title: '6. 题库管理', content: `
+    {
+        id: 'questions', title: '6. 题库管理', content: `
     <h3>6.1 题目结构</h3>
     <p>每道题目为「<b>大题 + N 道小题</b>」的结构。大题包含标题、难度、满分、题目材料；每道小题包含内容描述、分值、参考答案、评分标准、编程语言。</p>
     <img class="doc-img" src="/exam/doc-img/08-questions.png" alt="题库列表页" />
@@ -341,7 +363,8 @@ const sections2to7 = [
     <p>在题库列表中可「编辑」或「删除」已有题目。删除前请确认该题目未被作业引用。</p>
   `},
 
-  { id: 'assignments', title: '7. 作业管理', content: `
+    {
+        id: 'assignments', title: '7. 作业管理', content: `
     <h3>7.1 布置作业</h3>
     <p>点击「布置作业」进入三步向导：</p>
     <div class="a-alert a-alert-info">💡 本系统每份作业只包含<b>一道题目</b>（可含多道小题）。如需布置多道题目，请分别创建多份作业。</div>
@@ -364,7 +387,8 @@ const sections2to7 = [
 ];
 
 const sections9to10 = [
-  { id: 'review', title: '10. 评分审核', content: `
+    {
+        id: 'review', title: '10. 评分审核', content: `
     <h3>9.1 审核列表</h3>
     <p>进入「评分审核」页面，选择班级后查看所有作业的审核状态。</p>
     <table class="doc-table">
@@ -377,31 +401,31 @@ const sections9to10 = [
 
     <div class="a-alert a-alert-info">💡 <b>审核 vs 发布：</b>「审核」仅保存教师的最终分数和评语，学生此时<b>看不到成绩</b>。教师需要点击「发布」按钮，学生端才会显示分数和评语。发布后如需修改分数，修改后重新点击「发布」即可覆盖更新。</div>
 
-    <h3>9.2 逐人审核</h3>
-    <p>点击「审核」按钮进入审核详情页：</p>
-    <ul>
-      <li><b>左侧：</b>题目内容（材料、各小题描述）+ 切换小题的标签</li>
-      <li><b>右侧：</b>学生代码（只读）+ AI 评分面板（分数和评语）</li>
-      <li>教师可在「最终分数」处修改分数，在评语框中填写教师评语</li>
-      <li>点击「审核」保存教师评分，点击「发布」将成绩推送给学生</li>
-    </ul>
-    <img class="doc-img" src="/exam/doc-img/15-review-detail.png" alt="审核详情页" />
+    <h3>9.2 班级审核</h3>
+    <p>在审核列表点击「审核」进入班级审核页，查看全班学生的评分状态和成绩：</p>
+    <img class="doc-img" src="/exam/doc-img/13-review-class.png" alt="全班审核表格" />
 
-    <h3>9.3 一键操作</h3>
+    <h3>9.3 逐人审核</h3>
+    <p>在班级审核页点击某个学生的「审核」按钮，进入逐题审核详情页。左侧为题目标题导航，右侧展示学生代码与AI评分面板：</p>
+    <img class="doc-img" src="/exam/doc-img/13-review-detail-1.png" alt="逐题审核-编程题详情" />
+    <img class="doc-img" src="/exam/doc-img/13-review-detail-2.png" alt="逐题审核-客观题详情" />
+
+    <h3>9.4 一键操作</h3>
     <p>在班级审核页面（审核列表点击「审核」后的列表页），可使用：</p>
     <ul>
       <li><b>一键审核全班：</b>将所有 AI 已评分的提交自动审核通过</li>
       <li><b>一键发布全班：</b>将所有已审核的提交全部发布</li>
     </ul>
 
-    <h3>9.4 重新评分</h3>
+    <h3>9.5 重新评分</h3>
     <p>在审核详情页，可对单道小题点击「重新评分」按钮，系统将重新调用 AI 对该小题进行评分。</p>
 
-    <h3>9.5 导出 Excel</h3>
+    <h3>9.6 导出 Excel</h3>
     <p>在审核列表和班级审核页均可使用「导出」功能，导出包含每道小题分数的 Excel 报表。Excel 中动态生成各小题得分列，方便成绩统计。</p>
   `},
 
-  { id: 'faq', title: '11. 常见问题', content: `
+    {
+        id: 'faq', title: '11. 常见问题', content: `
     <h3>Q: 学生说看不到作业？</h3>
     <p>请检查：① 作业起止时间——若当前时间早于开始时间，学生端显示 <span class="doc-tag doc-tag-orange">未开始</span>；② 是否选对了班级——作业只对布置时选中的班级学生可见。</p>
 
@@ -424,7 +448,8 @@ const sections9to10 = [
     <p>取决于作业的「允许补交」设置：关闭则提交后不可修改；开启则可多次重新提交。截止时间后提交的状态取决于补交开关。</p>
   `},
 
-  { id: 'opensource', title: '12. 开源', content: `
+    {
+        id: 'opensource', title: '12. 开源', content: `
     <p>本项目完全开源，代码托管在 <a href="https://gitee.com/WD_MoonMoonBird/exam-deep-seek" target="_blank">Gitee</a>，欢迎 Star、Fork 和 PR。</p>
     <div style="text-align:center;padding:32px 20px;margin:24px 0;background:linear-gradient(135deg,#f9f0ff,#e6f4ff);border-radius:12px;">
       <p style="font-size:18px;font-weight:600;color:#333;margin-bottom:8px;">"From each according to his ability, to each according to his needs."</p>
@@ -436,221 +461,555 @@ const sections9to10 = [
 ];
 
 const allSections = [
-  { id: 'intro', title: '1. 系统简介' },
-  ...sections2to5.value,
-  { id: 'questions', title: '6. 题库管理' },
-  ...sections7.value,
-  { id: 'aiflow', title: '8. AI 评分流程' },
-  { id: 'performance', title: '9. 性能优势' },
-  ...sections9to10,
+    { id: 'intro', title: '1. 系统简介' },
+    ...sections2to5.value,
+    { id: 'questions', title: '6. 题库管理' },
+    ...sections7.value,
+    { id: 'aiflow', title: '8. AI 评分流程' },
+    { id: 'performance', title: '9. 性能优势' },
+    ...sections9to10,
 ];
 const anchors = allSections.map(s => ({
-  key: s.id,
-  href: `#${s.id}`,
-  title: s.title,
+    key: s.id,
+    href: `#${s.id}`,
+    title: s.title,
 }));
 </script>
 
 <style scoped>
 .doc-layout {
-  min-height: 100vh;
-  background: #f5f5f5;
+    min-height: 100vh;
+    background: #f5f5f5;
 }
+
 .doc-header {
-  position: sticky; top: 0; z-index: 100;
-  background: #fff; border-bottom: 1px solid #e8e8e8;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.10);
-  height: 56px; display: flex; align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #fff;
+    border-bottom: 1px solid #e8e8e8;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.10);
+    height: 56px;
+    display: flex;
+    align-items: center;
 }
+
 .doc-header-inner {
-  max-width: 1200px; width: 100%; margin: 0 auto;
-  display: flex; align-items: center; gap: 12px;
-  padding: 0 24px;
+    max-width: 1200px;
+    width: 100%;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 24px;
 }
-.doc-logo { width: 28px; height: 28px; flex-shrink: 0; }
-.doc-title { font-size: 18px; font-weight: 600; flex: 1; }
-.doc-login-btn { flex-shrink: 0; }
+
+.doc-logo {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+}
+
+.doc-title {
+    font-size: 18px;
+    font-weight: 600;
+    flex: 1;
+}
+
+.doc-login-btn {
+    flex-shrink: 0;
+}
 
 .doc-body {
-  max-width: 1200px; margin: 0 auto; padding: 32px 24px 80px;
-  display: flex; gap: 40px; align-items: flex-start;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 32px 24px 80px;
+    display: flex;
+    gap: 40px;
+    align-items: flex-start;
 }
 
 .doc-sidebar {
-  position: sticky; top: 88px;
-  width: 200px; flex-shrink: 0;
-  background: #fff; border-radius: 8px;
-  padding: 16px; border: 1px solid #e8e8e8;
-  max-height: calc(100vh - 120px); overflow-y: auto;
+    position: sticky;
+    top: 88px;
+    width: 200px;
+    flex-shrink: 0;
+    background: #fff;
+    border-radius: 8px;
+    padding: 16px;
+    border: 1px solid #e8e8e8;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
 }
 
 .doc-main {
-  flex: 1; min-width: 0; overflow: hidden;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .doc-section {
-  background: #fff; border-radius: 12px;
-  padding: 32px 40px; margin-bottom: 24px;
-  border: 1px solid #e8e8e8;
+    background: #fff;
+    border-radius: 12px;
+    padding: 32px 40px;
+    margin-bottom: 24px;
+    border: 1px solid #e8e8e8;
 }
+
 .section-title {
-  font-size: 24px; font-weight: 700; margin: 0 0 20px 0;
-  padding-bottom: 12px; border-bottom: 2px solid #1677ff;
+    font-size: 24px;
+    font-weight: 700;
+    margin: 0 0 20px 0;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #1677ff;
 }
-.section-body { font-size: 15px; line-height: 1.9; color: #333; }
-.section-body :deep(h3) { font-size: 18px; font-weight: 600; margin: 28px 0 12px; }
-.section-body :deep(h3:first-child) { margin-top: 0; }
-.section-body :deep(p) { margin: 8px 0 16px; }
-.section-body :deep(ul), .section-body :deep(ol) { margin: 8px 0 16px; padding-left: 24px; }
-.section-body :deep(li) { margin: 4px 0; }
-.section-body :deep(b) { color: #1a1a1a; }
+
+.section-body {
+    font-size: 15px;
+    line-height: 1.9;
+    color: #333;
+}
+
+.section-body :deep(h3) {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 28px 0 12px;
+}
+
+.section-body :deep(h3:first-child) {
+    margin-top: 0;
+}
+
+.section-body :deep(p) {
+    margin: 8px 0 16px;
+}
+
+.section-body :deep(ul),
+.section-body :deep(ol) {
+    margin: 8px 0 16px;
+    padding-left: 24px;
+}
+
+.section-body :deep(li) {
+    margin: 4px 0;
+}
+
+.section-body :deep(b) {
+    color: #1a1a1a;
+}
 
 /* 流程图 */
 .flow-overview {
-  display: flex; align-items: flex-start; gap: 6px;
-  margin: 20px 0; overflow-x: auto;
-  padding: 16px; background: #fafafa; border-radius: 8px;
-  flex-wrap: wrap;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin: 20px 0;
+    overflow-x: auto;
+    padding: 16px;
+    background: #fafafa;
+    border-radius: 8px;
+    flex-wrap: wrap;
 }
+
 .flow-step {
-  display: flex; align-items: center; gap: 8px;
-  background: #fff; border: 1px solid #e8e8e8; border-radius: 8px;
-  padding: 10px 14px; white-space: nowrap; flex-shrink: 0;
-  font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+    border: 1px solid #e8e8e8;
+    border-radius: 8px;
+    padding: 10px 14px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    font-size: 14px;
 }
+
 .flow-num {
-  width: 24px; height: 24px; border-radius: 50%;
-  background: #1677ff; color: #fff; font-size: 13px; font-weight: 700;
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #1677ff;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
 }
-.flow-arrow { font-size: 18px; color: #bbb; flex-shrink: 0; align-self: center; }
+
+.flow-arrow {
+    font-size: 18px;
+    color: #bbb;
+    flex-shrink: 0;
+    align-self: center;
+}
 
 
 /* 截图占位（未截图时的兜底） */
 .img-placeholder {
-  background: #fafafa; border: 2px dashed #d9d9d9; border-radius: 8px;
-  padding: 40px 20px; text-align: center; color: #999; font-size: 15px;
-  margin: 20px 0;
+    background: #fafafa;
+    border: 2px dashed #d9d9d9;
+    border-radius: 8px;
+    padding: 40px 20px;
+    text-align: center;
+    color: #999;
+    font-size: 15px;
+    margin: 20px 0;
 }
 
 /* 滚动偏移 */
-:target { scroll-margin-top: 80px; }
+:target {
+    scroll-margin-top: 80px;
+}
 
 /* 响应式 */
 @media (max-width: 992px) {
-  .doc-header { box-shadow: 0 2px 12px rgba(0,0,0,0.10), 0 4px 24px rgba(0,0,0,0.08); }
-  .doc-title-sep { display: none; }
-  .doc-title-sub { display: block; font-size: 14px; font-weight: 400; color: var(--ink-muted); }
-  .doc-sidebar { display: none; }
-  .doc-body { padding: 16px 12px 60px; }
-  .doc-section { padding: 20px 16px; }
-  .section-title { font-size: 20px; }
-  .doc-table { font-size: 13px; }
-  .doc-table th, .doc-table td { padding: 6px 8px; }
-  .flow-overview { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .flow-arrow { display: inline; }
-  .flow-step { padding: 8px 10px; font-size: 13px; }
+    .doc-header {
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.10), 0 4px 24px rgba(0, 0, 0, 0.08);
+    }
+
+    .doc-title-sep {
+        display: none;
+    }
+
+    .doc-title-sub {
+        display: block;
+        font-size: 14px;
+        font-weight: 400;
+        color: var(--ink-muted);
+    }
+
+    .doc-sidebar {
+        display: none;
+    }
+
+    .doc-body {
+        padding: 16px 12px 60px;
+    }
+
+    .doc-section {
+        padding: 20px 16px;
+    }
+
+    .section-title {
+        font-size: 20px;
+    }
+
+    .doc-table {
+        font-size: 13px;
+    }
+
+    .doc-table th,
+    .doc-table td {
+        padding: 6px 8px;
+    }
+
+    .flow-overview {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .flow-arrow {
+        display: inline;
+    }
+
+    .flow-step {
+        padding: 8px 10px;
+        font-size: 13px;
+    }
 }
 </style>
 <style>
 .doc-table {
-  width: 100%; border-collapse: separate; border-spacing: 0;
-  margin: 16px 0; font-size: 14px;
-  border: 1px solid #e8e8e8; border-radius: 10px; overflow: hidden;
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin: 16px 0;
+    font-size: 14px;
+    border: 1px solid #e8e8e8;
+    border-radius: 10px;
+    overflow: hidden;
 }
-.doc-table th, .doc-table td {
-  padding: 10px 14px; text-align: left;
-  border-bottom: 1px solid #f0f0f0;
-  border-right: 1px solid #f0f0f0;
+
+.doc-table th,
+.doc-table td {
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid #f0f0f0;
+    border-right: 1px solid #f0f0f0;
 }
-.doc-table th:last-child, .doc-table td:last-child { border-right: none; }
-.doc-table tr:last-child td { border-bottom: none; }
-.doc-table th { background: #fafafa; font-weight: 600; font-size: 13px; color: #666; }
-.doc-table td { color: #333; }
-.a-alert { padding: 12px 16px; border-radius: 8px; margin: 16px 0; font-size: 14px; line-height: 1.7; }
-.a-alert-info { background: #e6f4ff; border: 1px solid #91caff; color: #0958d9; }
+
+.doc-table th:last-child,
+.doc-table td:last-child {
+    border-right: none;
+}
+
+.doc-table tr:last-child td {
+    border-bottom: none;
+}
+
+.doc-table th {
+    background: #fafafa;
+    font-weight: 600;
+    font-size: 13px;
+    color: #666;
+}
+
+.doc-table td {
+    color: #333;
+}
+
+.a-alert {
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin: 16px 0;
+    font-size: 14px;
+    line-height: 1.7;
+}
+
+.a-alert-info {
+    background: #e6f4ff;
+    border: 1px solid #91caff;
+    color: #0958d9;
+}
+
 .doc-tag {
-  display: inline-block; padding: 0 7px; font-size: 12px; line-height: 20px;
-  border-radius: 999px; margin: 0 2px; vertical-align: middle; font-weight: 500;
+    display: inline-block;
+    padding: 0 7px;
+    font-size: 12px;
+    line-height: 20px;
+    border-radius: 999px;
+    margin: 0 2px;
+    vertical-align: middle;
+    font-weight: 500;
 }
-.doc-tag-blue { color: #1677ff; background: #e6f4ff; border: 1px solid #91caff; }
-.doc-tag-green { color: #52c41a; background: #f6ffed; border: 1px solid #b7eb8f; }
-.doc-tag-red { color: #ff4d4f; background: #fff2f0; border: 1px solid #ffccc7; }
-.doc-tag-orange { color: #fa8c16; background: #fff7e6; border: 1px solid #ffd591; }
-.doc-tag-purple { color: #722ed1; background: #f9f0ff; border: 1px solid #d3adf7; }
-.doc-tag-default { color: #666; background: #fafafa; border: 1px solid #d9d9d9; }
-@keyframes doc-spin { to { transform: rotate(360deg); } }
+
+.doc-tag-blue {
+    color: #1677ff;
+    background: #e6f4ff;
+    border: 1px solid #91caff;
+}
+
+.doc-tag-green {
+    color: #52c41a;
+    background: #f6ffed;
+    border: 1px solid #b7eb8f;
+}
+
+.doc-tag-red {
+    color: #ff4d4f;
+    background: #fff2f0;
+    border: 1px solid #ffccc7;
+}
+
+.doc-tag-orange {
+    color: #fa8c16;
+    background: #fff7e6;
+    border: 1px solid #ffd591;
+}
+
+.doc-tag-purple {
+    color: #722ed1;
+    background: #f9f0ff;
+    border: 1px solid #d3adf7;
+}
+
+.doc-tag-default {
+    color: #666;
+    background: #fafafa;
+    border: 1px solid #d9d9d9;
+}
+
+@keyframes doc-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 .doc-spinner {
-  display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: middle;
-  border: 2px solid #91caff; border-top-color: #1677ff; border-radius: 50%;
-  animation: doc-spin 0.8s linear infinite;
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 4px;
+    vertical-align: middle;
+    border: 2px solid #91caff;
+    border-top-color: #1677ff;
+    border-radius: 50%;
+    animation: doc-spin 0.8s linear infinite;
 }
+
 .doc-steps {
-  display: flex; gap: 0; margin: 24px 0; flex-wrap: wrap;
+    display: flex;
+    gap: 0;
+    margin: 24px 0;
+    flex-wrap: wrap;
 }
+
 .doc-step {
-  flex: 1; min-width: 150px; position: relative;
-  padding: 20px 16px 16px 40px; background: #fff;
-  border: 1px solid #e8e8e8; border-radius: 8px; margin-right: -1px;
+    flex: 1;
+    min-width: 150px;
+    position: relative;
+    padding: 20px 16px 16px 40px;
+    background: #fff;
+    border: 1px solid #e8e8e8;
+    border-radius: 8px;
+    margin-right: -1px;
 }
-.doc-step:first-child { border-radius: 8px 0 0 8px; }
-.doc-step:last-child { border-radius: 0 8px 8px 0; margin-right: 0; }
+
+.doc-step:first-child {
+    border-radius: 8px 0 0 8px;
+}
+
+.doc-step:last-child {
+    border-radius: 0 8px 8px 0;
+    margin-right: 0;
+}
+
 .doc-step-num {
-  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
-  width: 22px; height: 22px; border-radius: 50%; background: #1677ff;
-  color: #fff; font-size: 12px; font-weight: 700; text-align: center; line-height: 22px;
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #1677ff;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+    line-height: 22px;
 }
-.doc-step b { display: block; font-size: 14px; margin-bottom: 2px; }
-.doc-step span { font-size: 12px; color: #666; line-height: 1.5; }
+
+.doc-step b {
+    display: block;
+    font-size: 14px;
+    margin-bottom: 2px;
+}
+
+.doc-step span {
+    font-size: 12px;
+    color: #666;
+    line-height: 1.5;
+}
+
 .doc-step-arrow {
-  position: absolute; right: -8px; top: 50%; transform: translateY(-50%);
-  color: #d9d9d9; font-size: 16px; z-index: 1;
+    position: absolute;
+    right: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #d9d9d9;
+    font-size: 16px;
+    z-index: 1;
 }
-.doc-step:last-child .doc-step-arrow { display: none; }
+
+.doc-step:last-child .doc-step-arrow {
+    display: none;
+}
+
 .steps-content {
-  min-height: 60px; padding: 20px 24px; margin-top: 4px;
-  border: 1px dashed #d9d9d9; border-radius: 8px;
-  background: #fafafa; font-size: 14px; color: #555; line-height: 1.8;
+    min-height: 60px;
+    padding: 20px 24px;
+    margin-top: 4px;
+    border: 1px dashed #d9d9d9;
+    border-radius: 8px;
+    background: #fafafa;
+    font-size: 14px;
+    color: #555;
+    line-height: 1.8;
 }
-.steps-action { margin-top: 16px; display: flex; gap: 8px; }
+
+.steps-action {
+    margin-top: 16px;
+    display: flex;
+    gap: 8px;
+}
 
 .doc-img {
-  width: 100% !important;
-  max-width: 100% !important;
-  height: auto !important;
-  border-radius: 8px;
-  border: 1px solid #e8e8e8;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-  margin: 20px 0;
-  display: block;
-  object-fit: contain; cursor: zoom-in;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    border-radius: 8px;
+    border: 1px solid #e8e8e8;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    margin: 20px 0;
+    display: block;
+    object-fit: contain;
+    cursor: zoom-in;
 }
 
 .lightbox-mask {
-  position: fixed; inset: 0; z-index: 9999;
-  background: rgba(0,0,0,0.85); display: flex;
-  align-items: center; justify-content: center;
-  cursor: zoom-out; -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: zoom-out;
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
 }
+
 .lightbox-close {
-  position: absolute; top: 16px; right: 24px;
-  color: #fff; font-size: 32px; cursor: pointer; z-index: 1;
-  width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
-  border-radius: 50%; background: rgba(255,255,255,0.15);
+    position: absolute;
+    top: 16px;
+    right: 24px;
+    color: #fff;
+    font-size: 32px;
+    cursor: pointer;
+    z-index: 1;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15);
 }
-.lightbox-close:hover { background: rgba(255,255,255,0.3); }
+
+.lightbox-close:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
 .lightbox-img {
-  max-width: 95vw; max-height: 95vh; object-fit: contain;
-  border-radius: 8px; cursor: default;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    max-width: 95vw;
+    max-height: 95vh;
+    object-fit: contain;
+    border-radius: 8px;
+    cursor: default;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
-.lightbox-fade-enter-active, .lightbox-fade-leave-active { transition: opacity 0.2s; }
-.lightbox-fade-enter-from, .lightbox-fade-leave-to { opacity: 0; }
+
+.lightbox-fade-enter-active,
+.lightbox-fade-leave-active {
+    transition: opacity 0.2s;
+}
+
+.lightbox-fade-enter-from,
+.lightbox-fade-leave-to {
+    opacity: 0;
+}
 
 @media (max-width: 768px) {
-  .doc-steps { flex-direction: column; }
-  .doc-step { margin-right: 0; margin-bottom: -1px; border-radius: 0 !important; }
-  .doc-step:first-child { border-radius: 8px 8px 0 0 !important; }
-  .doc-step:last-child { border-radius: 0 0 8px 8px !important; }
+    .doc-steps {
+        flex-direction: column;
+    }
+
+    .doc-step {
+        margin-right: 0;
+        margin-bottom: -1px;
+        border-radius: 0 !important;
+    }
+
+    .doc-step:first-child {
+        border-radius: 8px 8px 0 0 !important;
+    }
+
+    .doc-step:last-child {
+        border-radius: 0 0 8px 8px !important;
+    }
 }
 </style>
