@@ -152,6 +152,13 @@ export const saveDraft = async (req, res) => {
     const assignmentId = +req.params.id;
     const { questionId, subQuestionId, answer } = req.body;
 
+    // 检查作业是否过期
+    const assignment = await prisma.assignment.findUnique({ where: { id: assignmentId }, select: { endTime: true } });
+    if (!assignment) return res.status(404).json({ code: 1004, message: '作业不存在', data: null });
+    if (new Date() > new Date(assignment.endTime)) {
+      return res.json({ code: 0, message: '已过截止时间，跳过草稿', data: null });
+    }
+
     const where = { assignmentId, studentId: req.user.id, questionId: +questionId };
     if (subQuestionId) where.subQuestionId = +subQuestionId;
     let submission = await prisma.submission.findFirst({ where });

@@ -452,43 +452,126 @@ export const exportReviewData = async (req, res) => {
       orderBy: { sortOrder: 'asc' },
     });
 
+    // 构建学生提交映射：studentId → { sqId: { score, status, answer } }
     const subMap = new Map();
     for (const s of submissions) {
-      const key = s.studentId;
-      if (!subMap.has(key)) subMap.set(key, {});
+      const sid = s.studentId;
+      if (!subMap.has(sid)) subMap.set(sid, {});
       const sqKey = s.subQuestionId || s.questionId;
-      subMap.get(key)[sqKey] = {
+      subMap.get(sid)[sqKey] = {
         score: s.finalScore ?? s.aiScore,
         status: s.status,
-        aiScore: s.aiScore,
-        finalScore: s.finalScore,
+        answer: s.answer,
       };
     }
 
+    // 为每个小题生成表头单元（扁平列表）
+    // 客观题：每个小问一列；主观题：每个小题一列
+    const headerCells = [];
+    for (const sq of subQuestions) {
+      if (sq.type === 'objective') {
+        const items = sq.objectiveItems || [];
+        for (const item of items) {
+          headerCells.push({
+            sqId: sq.id,
+            itemKey: item.key,
+            label: (item.stem || `第${item.key + 1}问`).replace(/<[^>]*>/g, '').slice(0, 60),
+            maxScore: item.score || 0,
+            type: item.type,
+            answer: item.answer,
+            options: item.options,
+          });
+        }
+      } else {
+        const label = (sq.content || sq.title || '').replace(/<[^>]*>/g, '').slice(0, 60);
+        headerCells.push({
+          sqId: sq.id,
+          itemKey: null,
+          label: label || `第${sq.sortOrder}小题`,
+          maxScore: sq.score || 0,
+          type: 'code',
+        });
+      }
+    }
+
+    // 计算每道客观小问的学生得分
+    function scoreItem(item, studentAnswer) {
+      const answers = (() => { try { return JSON.parse(studentAnswer || '[]'); } catch { return []; } })();
+      const a = answers.find(x => x.key === item.itemKey) || {};
+      const sAns = (a.answer || '').trim();
+      if (!sAns) return 0;
+
+      const refAnswer = item.answer;
+      if (item.type === 'choice') {
+        return sAns === String(refAnswer).trim() ? item.maxScore : 0;
+      } else if (item.type === 'multi_choice') {
+        const sSet = new Set(sAns.split(',').map(s => s.trim()).filter(Boolean));
+        const aSet = new Set((Array.isArray(refAnswer) ? refAnswer : String(refAnswer).split(',')).map(s => s.trim()));
+        const ok = [...sSet].filter(s => aSet.has(s)).length;
+        return ok === aSet.size && sSet.size === aSet.size ? item.maxScore : 0;
+      } else if (item.type === 'judge') {
+        return sAns === String(refAnswer).trim() ? item.maxScore : 0;
+      } else if (item.type === 'fill') {
+        const ra = String(refAnswer || '').split(',').map(s => s.trim());
+        const sa = String(sAns).split(',').map(s => s.trim());
+        const correct = ra.every((r, bi) => String(sa[bi] || '').toLowerCase() === r.toLowerCase());
+        return correct ? item.maxScore : 0;
+      }
+      return 0;
+    }
+
     const rows = students.map(sc => {
-      const subs = subMap.get(sc.studentId) || {};
-      const subScores = subQuestions.map(sq => {
-        const s = subs[sq.id] || {};
-        return {
-          title: sq.title,
-          maxScore: sq.score,
-          score: s.score ?? null,
-          submitted: !!s.status,
-        };
+      const studentSubs = subMap.get(sc.studentId) || {};
+      let totalScore = 0;
+
+      const cellScores = headerCells.map(h => {
+        if (h.itemKey == null) {
+          // 主观题：取整题分
+          const s = studentSubs[h.sqId];
+          const sc = s?.score ?? null;
+          if (sc != null) totalScore += sc;
+          return {
+            label: h.label,
+            maxScore: h.maxScore,
+            score: sc,
+            submitted: !!s?.status,
+          };
+        } else {
+          // 客观题小问：从答案比对算分
+          const sqSub = studentSubs[h.sqId];
+          const submitted = !!sqSub?.status;
+          let itemScore = null;
+          if (submitted) {
+            itemScore = scoreItem(h, sqSub.answer || '');
+            if (itemScore != null) totalScore += itemScore;
+          }
+          return {
+            label: h.label,
+            maxScore: h.maxScore,
+            score: itemScore,
+            submitted,
+          };
+        }
       });
-      const totalScore = subScores.reduce((sum, s) => sum + (s.score || 0), 0);
+
       return {
         studentName: sc.student.realName,
         studentNo: sc.student.username,
         schoolName: sc.class.school?.name || '',
         className: sc.class.name,
-        submitted: subScores.some(s => s.submitted),
-        subScores,
-        totalScore: subScores.every(s => !s.submitted) ? null : totalScore,
+        submitted: cellScores.some(c => c.submitted),
+        cellScores,
+        totalScore: cellScores.every(c => !c.submitted) ? null : totalScore,
       };
     });
 
-    res.json({ code: 0, data: { rows, subQuestions: subQuestions.map(sq => ({ title: sq.title, score: sq.score })) } });
+    res.json({
+      code: 0,
+      data: {
+        rows,
+        headerCells: headerCells.map(h => ({ label: h.label, maxScore: h.maxScore })),
+      },
+    });
   } catch (err) {
     logger.error({ err }, '导出审核数据失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });

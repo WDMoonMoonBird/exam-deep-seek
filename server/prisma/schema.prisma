@@ -133,7 +133,7 @@ model Question {
   id                Int        @id @default(autoincrement()) @db.UnsignedInt
   teacherId         Int        @map("teacher_id") @db.UnsignedInt
   title             String     @db.VarChar(200)
-  maxScore          Int        @default(100) @map("max_score")
+  maxScore          Float      @default(100) @map("max_score")
   difficulty        Difficulty
   material          String?    @db.Text
   attachmentUrl     String?    @map("attachment_url") @db.VarChar(500)
@@ -159,7 +159,7 @@ model SubQuestion {
   sortOrder        Int      @default(0) @map("sort_order")
   title            String   @db.VarChar(200)
   type             String   @default("code") @db.VarChar(20) // code | objective
-  score            Int?
+  score            Float?
   content          String   @db.Text
   referenceAnswer  String   @map("reference_answer") @db.Text
   language         String   @db.VarChar(30)

@@ -28,6 +28,16 @@ async function gradeOne(sub) {
       : sub.question?.subQuestions?.[0];
     const sqData = sq || {};
 
+    // 找不到小题 → 直接 0 分
+    if (!sq) {
+      logger.warn({ submissionId: sub.id, subQuestionId: sub.subQuestionId }, '找不到对应小题，给 0 分');
+      await prisma.submission.update({
+        where: { id: sub.id },
+        data: { aiScore: 0, aiFeedback: '系统错误：找不到题目信息', status: 'ai_graded' },
+      });
+      return;
+    }
+
     let score, feedback;
 
     // 客观题：逐小问比对答案
