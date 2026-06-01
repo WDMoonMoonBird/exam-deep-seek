@@ -4,13 +4,23 @@
       <h2>作业管理</h2>
       <a-button type="primary" @click="openAdd">布置作业</a-button>
     </div>
-    <a-card class="page-card">
-      <a-table :columns="columns" :dataSource="list" rowKey="id" :loading="loading" :scroll="{ x: 'max-content' }" :pagination="pagination" @change="onTableChange">
-        <template #qCount="{ record }">{{ record._count?.assignmentQuestions || 0 }}</template>
-        <template #sCount="{ record }">{{ record._count?.submissions || 0 }}</template>
-        <template #time="{ record }">{{ record.startTime }} ~ {{ record.endTime }}</template>
-      </a-table>
-    </a-card>
+
+    <DataTable
+      :columns="columns"
+      :dataSource="list"
+      rowKey="id"
+      :loading="loading"
+      v-model:current="pagination.current"
+      :pageSize="pagination.pageSize"
+      :total="pagination.total"
+      @page-change="onPageChange"
+    >
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'qCount'">{{ record._count?.assignmentQuestions || 0 }}</template>
+        <template v-if="column.key === 'sCount'">{{ record._count?.submissions || 0 }}</template>
+        <template v-if="column.key === 'time'">{{ record.startTime }} ~ {{ record.endTime }}</template>
+      </template>
+    </DataTable>
 
     <a-modal title="布置作业" :open="visible" @cancel="visible = false" :width="1040" :footer="null" :destroyOnClose="true" wrap-class-name="assign-modal">
       <a-steps :current="step" class="steps">
@@ -75,16 +85,22 @@ import 'dayjs/locale/zh-cn';
 import dateLocale from 'ant-design-vue/es/date-picker/locale/zh_CN';
 import request from '../../api/request.js';
 import { useUserStore } from '../../stores/user.js';
+import DataTable from '../../components/DataTable.vue';
 
 dayjs.locale('zh-cn');
 
 const userStore = useUserStore();
-const currentSchool = computed(() => userStore.currentSchool);
-
-const loading = ref(false); const list = ref([]); const pagination = reactive({ current: 1, pageSize: 20, total: 0 });
-const visible = ref(false); const step = ref(0); const submitting = ref(false);
-const questions = ref([]); const qKeyword = ref(''); const selectedQIds = ref([]);
-const avalClasses = ref([]); const selectedCIds = ref([]);
+const loading = ref(false);
+const list = ref([]);
+const pagination = reactive({ current: 1, pageSize: 20, total: 0 });
+const visible = ref(false);
+const step = ref(0);
+const submitting = ref(false);
+const questions = ref([]);
+const qKeyword = ref('');
+const selectedQIds = ref([]);
+const avalClasses = ref([]);
+const selectedCIds = ref([]);
 const classSearch = ref('');
 const filteredClasses = computed(() => {
   if (!classSearch.value) return avalClasses.value;
@@ -101,6 +117,7 @@ const classTeamMap = computed(() => {
   avalClasses.value.forEach(c => { if (c.isTeamClass) m[c.id] = c.ownerTeacherName; });
   return m;
 });
+
 function toggleClass(id) {
   const idx = selectedCIds.value.indexOf(id);
   if (idx >= 0) selectedCIds.value.splice(idx, 1);
@@ -108,37 +125,93 @@ function toggleClass(id) {
 }
 const timeForm = reactive({ title: '', description: '', timeRange: [], allowResubmit: false });
 
-const qCols = [{ title: '标题', dataIndex: 'title', width: 250, ellipsis: true },{ title: '难度', dataIndex: 'difficulty', width: 80 }];
+const qCols = [
+  { title: '标题', dataIndex: 'title', width: 250, ellipsis: true },
+  { title: '难度', dataIndex: 'difficulty', width: 80 },
+];
 const columns = [
-  { title: '标题', dataIndex: 'title', width: 220, ellipsis: true },{ title: '题目数', slots: { customRender: 'qCount' }, width: 80 },
-  { title: '提交数', slots: { customRender: 'sCount' }, width: 80 },{ title: '时间', slots: { customRender: 'time' }, width: 220, ellipsis: true },
+  { title: '标题', dataIndex: 'title', width: 220, ellipsis: true },
+  { title: '题目数', key: 'qCount', width: 80 },
+  { title: '提交数', key: 'sCount', width: 80 },
+  { title: '时间', key: 'time', width: 220, ellipsis: true },
   { title: '创建时间', dataIndex: 'createdAt', width: 170 },
 ];
 
-async function fetch() { loading.value = true; const r = await request.get('/teacher/assignments', { params: { page: pagination.current, pageSize: pagination.pageSize } }); list.value = r.data.list; pagination.total = r.data.total; loading.value = false; }
-function onTableChange(p) { pagination.current = p.current; fetch(); }
-async function openAdd() { step.value = 0; submitting.value = false; selectedQIds.value = []; selectedCIds.value = []; Object.assign(timeForm, { title: '', description: '', timeRange: [], allowResubmit: false }); await Promise.all([searchQuestions(), loadClasses()]); visible.value = true; }
-async function searchQuestions() { const r = await request.get('/teacher/questions', { params: { keyword: qKeyword.value, pageSize: 100 } }); questions.value = r.data.list; }
+async function fetch() {
+  loading.value = true;
+  const r = await request.get('/teacher/assignments', { params: { page: pagination.current, pageSize: pagination.pageSize } });
+  list.value = r.data.list;
+  pagination.total = r.data.total;
+  loading.value = false;
+}
+
+function onPageChange(page) {
+  pagination.current = page;
+  fetch();
+}
+
+async function openAdd() {
+  step.value = 0;
+  submitting.value = false;
+  selectedQIds.value = [];
+  selectedCIds.value = [];
+  Object.assign(timeForm, { title: '', description: '', timeRange: [], allowResubmit: false });
+  await Promise.all([searchQuestions(), loadClasses()]);
+  visible.value = true;
+}
+
+async function searchQuestions() {
+  const r = await request.get('/teacher/questions', { params: { keyword: qKeyword.value, pageSize: 100 } });
+  questions.value = r.data.list;
+}
+
 function onQSelect(keys) { selectedQIds.value = keys; }
 async function loadClasses() { const r = await request.get('/teacher/classes'); avalClasses.value = r.data; }
-function nextStep() { if (step.value === 0 && !selectedQIds.value.length) return message.warn('请选题'); if (step.value === 1 && !selectedCIds.value.length) return message.warn('请选班'); step.value++; }
+
+function nextStep() {
+  if (step.value === 0 && !selectedQIds.value.length) return message.warn('请选题');
+  if (step.value === 1 && !selectedCIds.value.length) return message.warn('请选班');
+  step.value++;
+}
+
 async function submit() {
   if (!timeForm.title || !timeForm.timeRange.length) return message.warn('请填写完整');
   submitting.value = true;
   try {
-    await request.post('/teacher/assignments', { title: timeForm.title, description: timeForm.description, startTime: timeForm.timeRange[0].toISOString(), endTime: timeForm.timeRange[1].toISOString(), allowResubmit: timeForm.allowResubmit, questionIds: selectedQIds.value, classIds: selectedCIds.value });
+    await request.post('/teacher/assignments', {
+      title: timeForm.title, description: timeForm.description,
+      startTime: timeForm.timeRange[0].toISOString(), endTime: timeForm.timeRange[1].toISOString(),
+      allowResubmit: timeForm.allowResubmit,
+      questionIds: selectedQIds.value, classIds: selectedCIds.value,
+    });
     message.success('布置成功');
-    visible.value = false; fetch();
+    visible.value = false;
+    fetch();
   } finally { submitting.value = false; }
 }
+
 onMounted(fetch);
 </script>
 
 <style scoped>
-.page { max-width: 1400px; }
-.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
-.page-header h2 { font-size: 28px; }
-.page-card { border: 1px solid var(--hairline); }
+.page {
+  max-width: 1400px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+.page-header h2 {
+  font-size: 28px;
+  margin: 0;
+}
 .steps { margin-bottom: 32px; }
 .mb20 { margin-bottom: 20px; }
 .step-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 32px; }

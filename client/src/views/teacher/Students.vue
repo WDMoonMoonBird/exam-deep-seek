@@ -7,18 +7,30 @@
         <a-button :disabled="!filterClass || isTeamClass" @click="openUploadModal">批量导入</a-button>
       </a-space>
     </div>
-    <a-card class="page-card">
-      <div class="page-toolbar">
-        <a-select v-model:value="filterClass" placeholder="选择班级（必选）" allowClear @change="onClassChange" style="width: 260px;">
-          <a-select-option v-for="c in teacherClasses" :key="c.id" :value="c.id">
-            {{ c.name }}
-            <a-tag v-if="c.isTeamClass" color="purple" size="small" style="margin-left:4px">团队</a-tag>
-          </a-select-option>
-        </a-select>
-        <a-input v-model:value="keyword" placeholder="搜索学生姓名" allowClear style="width: 220px;" />
-        <a-tag v-if="isTeamClass" color="purple">团队共享班级 · 只读</a-tag>
-      </div>
-      <a-table :columns="columns" :dataSource="list" rowKey="id" :loading="loading" :scroll="{ x: 'max-content' }" :pagination="false" v-if="filterClass">
+
+    <div class="page-toolbar">
+      <a-select v-model:value="filterClass" placeholder="选择班级（必选）" allowClear @change="onClassChange" style="width: 260px;">
+        <a-select-option v-for="c in teacherClasses" :key="c.id" :value="c.id">
+          {{ c.name }}
+          <a-tag v-if="c.isTeamClass" color="purple" size="small" style="margin-left:4px">团队</a-tag>
+        </a-select-option>
+      </a-select>
+      <a-input v-model:value="keyword" placeholder="搜索学生姓名" allowClear style="width: 220px;" :disabled="!filterClass" />
+      <a-tag v-if="isTeamClass" color="purple">团队共享班级 · 只读</a-tag>
+    </div>
+
+    <template v-if="filterClass">
+      <DataTable
+        :columns="columns"
+        :dataSource="list"
+        rowKey="id"
+        :loading="loading"
+        v-model:current="page.current"
+        :clientPagination="true"
+        :pageSize="20"
+        :scrollOffset="50"
+      >
+
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'school'">{{ record.studentClasses?.[0]?.class?.school?.name || '—' }}</template>
           <template v-if="column.key === 'classes'">
@@ -33,15 +45,16 @@
             </a-space>
           </template>
         </template>
-      </a-table>
-      <a-empty v-else description="请先选择班级" />
-    </a-card>
+      </DataTable>
+    </template>
+
+    <a-empty v-else description="请先选择班级" style="flex:1;display:flex;align-items:center;justify-content:center;" />
 
     <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" ok-text="确定" cancel-text="取消">
       <a-form :model="form">
         <a-form-item label="学号"><a-input v-model:value="form.username" :disabled="isEdit" /></a-form-item>
         <a-form-item label="姓名"><a-input v-model:value="form.realName" /></a-form-item>
-        <a-form-item label="班级" v-if="!isEdit || true">
+        <a-form-item label="班级">
           <a-select v-model:value="form.classId" placeholder="选择班级">
             <a-select-option v-for="c in teacherClasses" :key="c.id" :value="c.id">{{ c.name }}</a-select-option>
           </a-select>
@@ -51,9 +64,7 @@
 
     <a-modal v-model:open="uploadModalOpen" title="批量导入学生" :footer="null" :width="520" :destroyOnClose="true" @cancel="uploadFileList = []">
       <a-alert type="info" show-icon style="margin-bottom:16px;">
-        <template #message>
-          <div>上传格式要求</div>
-        </template>
+        <template #message><div>上传格式要求</div></template>
         <template #description>
           <ul style="margin:4px 0;padding-left:20px;font-size:13px;">
             <li>仅支持 <b>Excel 文件</b>（.xlsx / .xls）</li>
@@ -108,10 +119,21 @@ import { message } from 'ant-design-vue';
 import { InboxOutlined, CheckCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons-vue';
 import * as XLSX from 'xlsx';
 import request from '../../api/request.js';
-const loading = ref(false); const list = ref([]); const teacherClasses = ref([]); const filterClass = ref(undefined); const keyword = ref('');
-const visible = ref(false); const modalTitle = ref(''); const isEdit = ref(false); const editId = ref(null);
+import DataTable from '../../components/DataTable.vue';
+
+const page = reactive({ current: 1, pageSize: 20 });
+const loading = ref(false);
+const list = ref([]);
+const teacherClasses = ref([]);
+const filterClass = ref(undefined);
+const keyword = ref('');
+const visible = ref(false);
+const modalTitle = ref('');
+const isEdit = ref(false);
+const editId = ref(null);
 const isTeamClass = ref(false);
 const form = reactive({ username: '', realName: '', classId: undefined });
+
 const columns = [
   { title: '学号', dataIndex: 'username', width: 130, ellipsis: true, sorter: (a, b) => a.username.localeCompare(b.username) },
   { title: '姓名', dataIndex: 'realName', width: 120, ellipsis: true },
@@ -120,6 +142,7 @@ const columns = [
   { title: '创建时间', dataIndex: 'createdAt', width: 170, ellipsis: true },
   { title: '操作', key: 'action', width: 160 },
 ];
+
 const uploadModalOpen = ref(false);
 const uploadFileList = ref([]);
 const uploadResultOpen = ref(false);
@@ -127,14 +150,35 @@ const uploadResult = reactive({ success: 0, errors: [] });
 
 let timer = null;
 watch(keyword, () => { clearTimeout(timer); timer = setTimeout(fetch, 300); });
+
 function onClassChange(val) {
   isTeamClass.value = !!teacherClasses.value.find(c => c.id === val)?.isTeamClass;
   fetch();
 }
-async function fetch() { if (!filterClass.value) { list.value = []; return; } loading.value = true; const r = await request.get('/teacher/students', { params: { classId: filterClass.value, keyword: keyword.value || undefined } }); list.value = r.data; loading.value = false; }
+
+async function fetch() {
+  if (!filterClass.value) { list.value = []; return; }
+  loading.value = true;
+  const r = await request.get('/teacher/students', { params: { classId: filterClass.value, keyword: keyword.value || undefined } });
+  list.value = r.data;
+  loading.value = false;
+}
+
 async function loadClasses() { const r = await request.get('/teacher/classes'); teacherClasses.value = r.data || []; }
-function openAdd() { isEdit.value = false; modalTitle.value = '新增学生'; form.username = ''; form.realName = ''; form.classId = filterClass.value || undefined; visible.value = true; }
-function openEdit(row) { isEdit.value = true; modalTitle.value = '编辑学生'; editId.value = row.id; form.username = row.username; form.realName = row.realName; form.classId = row.studentClasses?.[0]?.classId; visible.value = true; }
+
+function openAdd() {
+  isEdit.value = false; modalTitle.value = '新增学生';
+  form.username = ''; form.realName = ''; form.classId = filterClass.value || undefined;
+  visible.value = true;
+}
+
+function openEdit(row) {
+  isEdit.value = true; modalTitle.value = '编辑学生'; editId.value = row.id;
+  form.username = row.username; form.realName = row.realName;
+  form.classId = row.studentClasses?.[0]?.classId;
+  visible.value = true;
+}
+
 async function handleOk() {
   if (isEdit.value) {
     await request.put(`/teacher/students/${editId.value}`, { realName: form.realName, classId: form.classId });
@@ -145,11 +189,10 @@ async function handleOk() {
   }
   visible.value = false; fetch();
 }
+
 async function del(id) { await request.delete(`/teacher/students/${id}`); message.success('删除成功'); fetch(); }
-function openUploadModal() {
-  uploadFileList.value = [];
-  uploadModalOpen.value = true;
-}
+
+function openUploadModal() { uploadFileList.value = []; uploadModalOpen.value = true; }
 
 function downloadTemplate() {
   const wb = XLSX.utils.book_new();
@@ -164,7 +207,6 @@ function downloadTemplate() {
 function validateStudents(rows) {
   const errors = [];
   const validStudents = [];
-  // 检查表头
   const firstRow = rows[0] || {};
   const keys = Object.keys(firstRow);
   const hasUsername = keys.some(k => k === '学号' || k === 'username');
@@ -180,24 +222,14 @@ function validateStudents(rows) {
     const row = rows[i];
     const username = String(row[usernameKey] ?? '').trim();
     const realName = String(row[nameKey] ?? '').trim();
-    // 跳过完全空行
     if (!username && !realName) continue;
-    const rowNum = i + 2; // Excel 行号（1 表头 + 1-indexed）
-
-    if (!username && !realName) {
-      continue;
-    } else if (!username) {
-      errors.push(`第 ${rowNum} 行：姓名"${realName}"缺少学号`);
-    } else if (!realName) {
-      errors.push(`第 ${rowNum} 行：学号 ${username} 缺少姓名`);
-    } else {
-      validStudents.push({ username, realName });
-    }
+    const rowNum = i + 2;
+    if (!username) { errors.push(`第 ${rowNum} 行：姓名"${realName}"缺少学号`); }
+    else if (!realName) { errors.push(`第 ${rowNum} 行：学号 ${username} 缺少姓名`); }
+    else { validStudents.push({ username, realName }); }
   }
 
-  if (!validStudents.length && !errors.length) {
-    errors.push('未解析到任何有效数据');
-  }
+  if (!validStudents.length && !errors.length) errors.push('未解析到任何有效数据');
   return { validStudents, errors };
 }
 
@@ -212,7 +244,6 @@ async function handleUploadFile(file) {
       uploadResultOpen.value = true;
       return false;
     }
-
     const data = await file.arrayBuffer();
     const wb = XLSX.read(data);
     const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
@@ -222,23 +253,16 @@ async function handleUploadFile(file) {
       uploadResultOpen.value = true;
       return false;
     }
-
     const { validStudents, errors } = validateStudents(raw);
-
     if (errors.length) {
       uploadModalOpen.value = false;
       uploadResult.errors = errors;
       uploadResultOpen.value = true;
       if (!validStudents.length) return false;
     }
-
     if (validStudents.length) {
-      const r = await request.post('/teacher/students/batch', {
-        classId: filterClass.value,
-        students: validStudents,
-      });
+      const r = await request.post('/teacher/students/batch', { classId: filterClass.value, students: validStudents });
       uploadResult.success = r.data?.success ?? validStudents.length;
-      // 合并后端返回的错误
       if (r.data?.errors?.length) {
         uploadResult.errors.push(...r.data.errors.map(e => `学号 ${e.username}：${e.reason}`));
       }
@@ -253,13 +277,34 @@ async function handleUploadFile(file) {
   }
   return false;
 }
+
 onMounted(() => { loadClasses(); fetch(); });
 </script>
 
 <style scoped>
-.page { max-width: 1400px; }
-.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
-.page-header h2 { font-size: 28px; }
-.page-toolbar { margin-bottom: 20px; display: flex; gap: 12px; align-items: center; }
-.page-card { border: 1px solid var(--hairline); }
+.page {
+  max-width: 1400px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+.page-header h2 {
+  font-size: 28px;
+  margin: 0;
+}
+.page-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
 </style>

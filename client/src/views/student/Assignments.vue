@@ -1,33 +1,32 @@
 <template>
-  <div class="list-page">
+  <div class="page">
     <h2 class="page-title">作业列表</h2>
 
-    <div class="toolbar">
-      <a-input-search
-        v-model:value="keyword"
-        placeholder="搜索作业标题"
-        allow-clear
-        style="width: 280px;"
-        @search="fetch"
-        @change="onSearchChange"
-      />
-      <div class="filters">
-        <a-radio-group v-model:value="activeFilter" button-style="solid" size="small" @change="onFilterChange">
-          <a-radio-button v-for="f in filters" :key="f.key" :value="f.key">{{ f.label }}</a-radio-button>
-        </a-radio-group>
-      </div>
-    </div>
-
-    <a-table
+    <DataTable
       :columns="columns"
       :dataSource="filteredList"
       rowKey="id"
       :loading="loading"
-      :pagination="{ pageSize: 20, showTotal: t => `共 ${t} 项` }"
-      :scroll="{ x: 'max-content' }"
+      v-model:current="listPage.current"
+      :pageSize="listPage.pageSize"
+      :clientPagination="true"
+      :showTotal="(t) => `共 ${t} 项`"
       :customRow="(r) => ({ onClick: () => goDetail(r), style: { cursor: canEnter(r) ? 'pointer' : 'not-allowed' } })"
-      class="hw-table"
     >
+      <template #toolbar-left>
+        <a-input-search
+          v-model:value="keyword"
+          placeholder="搜索作业标题"
+          allow-clear
+          style="width: 280px;"
+          @search="fetch"
+          @change="onSearchChange"
+        />
+        <a-radio-group v-model:value="activeFilter" button-style="solid" size="small" @change="onFilterChange">
+          <a-radio-button v-for="f in filters" :key="f.key" :value="f.key">{{ f.label }}</a-radio-button>
+        </a-radio-group>
+      </template>
+
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'title'">
           <span class="hw-link">{{ record.title }}</span>
@@ -57,18 +56,20 @@
           </div>
         </template>
       </template>
-    </a-table>
+    </DataTable>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import request from '../../api/request.js';
 import { FieldTimeOutlined } from '@ant-design/icons-vue';
+import DataTable from '../../components/DataTable.vue';
 
 const router = useRouter();
 const list = ref([]);
+const listPage = reactive({ current: 1, pageSize: 20 });
 const loading = ref(false);
 const keyword = ref('');
 const activeFilter = ref('all');
@@ -92,9 +93,7 @@ const columns = [
 
 function isNotStarted(a) { return now.value < new Date(a.startTime).getTime(); }
 function isExpired(a) { return now.value > new Date(a.endTime).getTime(); }
-function hasRealSubmit(a) {
-  return (a.submissions || []).some(s => s.status !== 'draft');
-}
+function hasRealSubmit(a) { return (a.submissions || []).some(s => s.status !== 'draft'); }
 
 function statusColor(a) {
   if (isNotStarted(a) && !hasRealSubmit(a)) return 'orange';
@@ -105,6 +104,7 @@ function statusColor(a) {
   if (s === 'draft') return 'default';
   return 'default';
 }
+
 function statusText(a) {
   if (isNotStarted(a) && !hasRealSubmit(a)) return '未开始';
   const s = a.submissions?.[0]?.status;
@@ -114,16 +114,14 @@ function statusText(a) {
   if (s === 'draft') return '草稿';
   return '未提交';
 }
+
 function canEnter(a) { return !isNotStarted(a) && !(isExpired(a) && !hasRealSubmit(a)); }
 function formatDate(d) { return d ? new Date(d).toLocaleDateString('zh-CN') : ''; }
 function formatTime(d) { return d ? new Date(d).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : ''; }
 
 let timer = null;
-function onSearchChange() {
-  clearTimeout(timer);
-  timer = setTimeout(fetch, 300);
-}
-function onFilterChange() { fetch(); }
+function onSearchChange() { listPage.current = 1; clearTimeout(timer); timer = setTimeout(fetch, 300); }
+function onFilterChange() { listPage.current = 1; fetch(); }
 
 const filteredList = computed(() => {
   let result = list.value;
@@ -159,13 +157,21 @@ onUnmounted(() => { clearInterval(nowTimer); });
 </script>
 
 <style scoped>
-.list-page { max-width: 1400px; margin: 0 auto; }
-.page-title { font-size: 28px; margin-bottom: 24px; }
-.toolbar { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
-.filters { flex-shrink: 0; }
-.hw-table { cursor: pointer; }
+.page {
+  max-width: 1400px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin: 0 auto;
+}
+.page-title {
+  font-size: 28px;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
 .hw-link { color: var(--blue); }
-.time-cell { display: flex; align-items: center; gap: 6px; }
+.time-cell { display: flex; align-items: center; gap: 6px; justify-content: center; }
 .time-icon { font-size: 16px; color: var(--ink-muted); flex-shrink: 0; }
 .time-text { line-height: 1.4; }
 .time-sub { font-size: 12px; color: var(--ink-muted); }
