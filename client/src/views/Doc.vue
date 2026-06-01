@@ -33,8 +33,51 @@
           </div>
         </section>
 
-        <!-- 2~7 静态章节 -->
-        <section v-for="sec in sections2to7" :key="sec.id" :id="sec.id" class="doc-section">
+        <!-- 2~5 静态章节 -->
+        <section v-for="sec in sections2to5" :key="sec.id" :id="sec.id" class="doc-section">
+          <h2 class="section-title">{{ sec.title }}</h2>
+          <div class="section-body" v-html="sec.content" />
+        </section>
+
+        <!-- 6. 题库管理（交互式步骤条） -->
+        <section id="questions" class="doc-section">
+          <h2 class="section-title">6. 题库管理</h2>
+          <div class="section-body">
+            <h3>6.1 题目结构</h3>
+            <p>每道题目为「<b>大题 + N 道小题</b>」的结构。大题包含标题、难度、总分（= 各小题分值之和）；每道小题可独立设置语言、分值和参考答案。</p>
+            <img class="doc-img" :src="'/exam/doc-img/08-questions.png'" alt="题库列表" />
+
+            <h3>6.2 新建题目流程</h3>
+            <p>点击「新增题目」进入编辑页，通过 <b>AI 解析试卷文档</b> 快速创建题目：</p>
+            <a-steps :current="qStep" :items="qStepItems" size="small" style="margin:20px 0;" @change="qStep = $event" />
+            <div class="steps-content">{{ qSteps[qStep].content }}</div>
+            <div class="steps-action">
+              <a-button v-if="qStep > 0" @click="qStep--">上一步</a-button>
+              <a-button v-if="qStep < qSteps.length - 1" type="primary" @click="qStep++">下一步</a-button>
+              <a-button v-if="qStep === qSteps.length - 1" type="primary" @click="qStep = 0">重新浏览</a-button>
+            </div>
+
+            <h3>6.3 编辑题目</h3>
+            <p>在题库列表中点击「编辑」可修改已有题目。编辑页展示完整题目结构：左侧导航列出所有小题（彩色方形色块），右侧为各小题的详细编辑区。</p>
+            <img class="doc-img" :src="'/exam/doc-img/09-question-edit.png'" alt="题目编辑页" />
+
+            <h3>6.4 分值系统</h3>
+            <ul>
+              <li><b>总分自动计算：</b>大题总分 = 所有小题分值之和，顶部只读显示</li>
+              <li><b>小题分值联动：</b>客观题小问增减后分值自动重算</li>
+              <li><b>保存拦截：</b>若任何小题分值为空/0，系统阻止保存并提示具体题号</li>
+            </ul>
+
+            <h3>6.5 一键生成标答</h3>
+            <p>点击编辑页中编程题的「AI 生成」按钮，DeepSeek 自动根据题目描述生成参考答案代码，大幅减少教师书写时间。</p>
+
+            <h3>6.6 编辑 / 删除</h3>
+            <p>在题库列表中可「编辑」或「删除」已有题目。删除前请确认该题目未被作业引用。</p>
+          </div>
+        </section>
+
+        <!-- 7. 静态章节 -->
+        <section v-for="sec in sections7" :key="sec.id" :id="sec.id" class="doc-section">
           <h2 class="section-title">{{ sec.title }}</h2>
           <div class="section-body" v-html="sec.content" />
         </section>
@@ -102,7 +145,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { BarsOutlined } from '@ant-design/icons-vue';
 
 const showMobileToc = ref(false);
@@ -142,6 +185,22 @@ const flowSteps = [
   { title: '教师审核', content: '教师可在审核页面查看 AI 评分详情，支持修改最终分数并填写教师评语。审核后点击「发布」，学生即可查看成绩。' },
 ];
 const flowStepItems = flowSteps.map(s => ({ title: s.title }));
+
+// 新建题目步骤条
+const qStep = ref(0);
+const qSteps = [
+  { title: '准备试卷', content: '准备试卷 Word 文档（.docx），确保包含题目序号、题干、选项和答案。也可直接粘贴纯文本内容。文档内容越规范，AI 解析准确率越高。' },
+  { title: '填写基本信息', content: '输入大题标题（如"Java 程序设计期末考试"）、选择难度（简单/中等/困难）。点击题目材料区右上角的「AI 解析」按钮。' },
+  { title: 'AI 解析', content: '将 Word 文档内容粘贴到解析框中（或上传 .docx 文件由系统自动提取文本），点击「解析」，DeepSeek AI 自动识别题目类型、题干、选项和答案，几秒内完成。' },
+  { title: '检查确认', content: '解析完成后，左侧导航列显示所有小题（彩色方形色块区分题目类型）。逐题检查：选择题选项是否完整、判断题答案是否正确、编程题题面是否清晰。可在编辑器随时修改。' },
+  { title: '设置分值', content: '为每道小题设置分值。客观题每小问独立设分，编程题单独设分。总分自动计算显示在顶部。点击「AI 生成」可为编程题自动生成参考答案代码。' },
+  { title: '保存', content: '检查完毕，点击「保存」按钮。若任何小题分值为空或 0，系统会阻止保存并提示具体题号。保存后题目进入题库，可布置为作业。' },
+];
+const qStepItems = qSteps.map(s => ({ title: s.title }));
+
+// 从原 sections2to7 数组拆分：前 4 个（2~5）和第 6 个（7.作业管理）
+const sections2to5 = computed(() => sections2to7.slice(0, 4));
+const sections7 = computed(() => [sections2to7[5]]);
 
 function checkMobile() {
   showMobileToc.value = window.innerWidth < 992;
@@ -378,7 +437,9 @@ const sections9to10 = [
 
 const allSections = [
   { id: 'intro', title: '1. 系统简介' },
-  ...sections2to7,
+  ...sections2to5.value,
+  { id: 'questions', title: '6. 题库管理' },
+  ...sections7.value,
   { id: 'aiflow', title: '8. AI 评分流程' },
   { id: 'performance', title: '9. 性能优势' },
   ...sections9to10,

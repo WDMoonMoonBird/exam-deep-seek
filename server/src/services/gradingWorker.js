@@ -142,6 +142,12 @@ async function gradeOne(sub) {
         scoringCriteria: sqData.scoringCriteria || null,
       });
       score = result.score;
+      // 安全网：AI 有时返回 0-100 分制，按百分制缩放到满分
+      const max = sqData.score || 10;
+      if (score > max * 2 && max < 100) {
+        score = Math.round(score * max / 100);
+        logger.info({ submissionId: sub.id, rawScore: result.score, normalized: score, max }, 'AI 分数已归一化');
+      }
       feedback = result.feedback;
       logger.info({ submissionId: sub.id, score, elapsed: `${Date.now() - start}ms` }, 'AI 评分完成');
     }

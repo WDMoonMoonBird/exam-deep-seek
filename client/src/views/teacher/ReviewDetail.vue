@@ -88,9 +88,11 @@
             <div class="sq-answer-label">
               <span class="label-text">学生答案</span>
               <span style="font-size:12px;color:#888;">{{ sq.language || 'cpp' }}</span>
+              <a-button size="small" style="margin-left:8px;" @click="formatCode(sq.id)">格式化</a-button>
             </div>
             <div class="sq-editor-wrap">
               <CodeEditor
+                :ref="(el) => setEditorRef(sq.id, el)"
                 :modelValue="getSub(sq.id)?.answer || ''"
                 :language="sq.language || 'cpp'"
                 readOnly
@@ -392,6 +394,16 @@ function subStatusText(sub) {
 }
 
 // ===================== 审核操作 =====================
+// 格式化代码
+const editorRefs = {};
+function setEditorRef(sqId, el) {
+  if (el) editorRefs[sqId] = el;
+}
+function formatCode(sqId) {
+  const ed = editorRefs[sqId];
+  if (ed?.format) ed.format();
+}
+
 function useAiFeedback(sqId) {
   const sub = subMap.value[sqId];
   if (!sub?.aiFeedback) return message.warn('暂无 AI 评语');

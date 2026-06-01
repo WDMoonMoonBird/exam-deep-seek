@@ -61,21 +61,28 @@ watch(() => props.modelValue, (val) => {
 
 function format() {
   if (!editor) return;
-  const lang = editor.getModel()?.getLanguageId();
-  // Prettier 支持的语言
-  if (['javascript', 'typescript', 'json', 'css', 'html', 'markdown'].includes(lang)) {
-    editor.getAction('editor.action.formatDocument')?.run();
-    return;
+  const wasReadOnly = props.readOnly;
+  if (wasReadOnly) editor.updateOptions({ readOnly: false });
+
+  try {
+    const lang = editor.getModel()?.getLanguageId();
+    // Prettier 支持的语言
+    if (['javascript', 'typescript', 'json', 'css', 'html', 'markdown'].includes(lang)) {
+      editor.getAction('editor.action.formatDocument')?.run();
+      return;
+    }
+    // C 系语言：简单括号缩进格式化
+    if (['c', 'cpp', 'csharp', 'java'].includes(lang)) {
+      const code = editor.getValue();
+      editor.setValue(braceFormat(code));
+      return;
+    }
+    // 其他语言：全选后 reindent
+    editor.setSelection(editor.getModel().getFullModelRange());
+    editor.trigger('format', 'editor.action.reindentSelectedLines');
+  } finally {
+    if (wasReadOnly) editor.updateOptions({ readOnly: true });
   }
-  // C 系语言：简单括号缩进格式化
-  if (['c', 'cpp', 'csharp', 'java'].includes(lang)) {
-    const code = editor.getValue();
-    editor.setValue(braceFormat(code));
-    return;
-  }
-  // 其他语言：全选后 reindent
-  editor.setSelection(editor.getModel().getFullModelRange());
-  editor.trigger('format', 'editor.action.reindentSelectedLines');
 }
 
 function braceFormat(code) {

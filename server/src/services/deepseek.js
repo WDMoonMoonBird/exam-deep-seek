@@ -13,7 +13,7 @@ const DEFAULT_CRITERIA = `评分标准：
 
 const ROLE = '你是一名高校教师。你需要根据题目要求、参考答案和学生提交的答案，给出公正的评分和具体的改进意见。评分前先判断题目类型（编程题/理论题/混合题），选择适合的评分标准。';
 
-const OUTPUT_FORMAT = '请严格按以下 JSON 格式返回，不要包含任何其他文字：\n{"score": 85, "feedback": "具体的评价和改进意见..."}';
+const OUTPUT_FORMAT = '请严格按以下 JSON 格式返回，score 必须在 0 到满分之间，不要包含任何其他文字：\n{"score": <实际得分>, "feedback": "具体的评价和改进意见..."}';
 
 function buildSystemPrompt(scoringCriteria) {
   const criteria = scoringCriteria || DEFAULT_CRITERIA;
