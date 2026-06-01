@@ -163,7 +163,7 @@ model SubQuestion {
   content          String   @db.Text
   referenceAnswer  String   @map("reference_answer") @db.Text
   language         String   @db.VarChar(30)
-  objectiveItems   Json?                                    // 客观题小问数组
+  objectiveItems   Json?     @map("objective_items")                               // 客观题小问数组
   scoringCriteria  String?  @map("scoring_criteria") @db.Text
 
   question     Question      @relation(fields: [questionId], references: [id], onDelete: Cascade)
