@@ -345,6 +345,8 @@ export const getReviewSummary = async (req, res) => {
         });
       }
     }
+    // 最新作业排在最前面
+    rows.sort((a, b) => b.assignmentId - a.assignmentId);
     res.json({ code: 0, data: rows });
   } catch (err) {
     logger.error({ err }, '获取审核汇总失败');

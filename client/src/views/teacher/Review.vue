@@ -7,7 +7,9 @@
       :dataSource="list"
       rowKey="key"
       :loading="loading"
-      :showPagination="false"
+      v-model:current="page.current"
+      :clientPagination="true"
+      :pageSize="20"
       :centerContent="false"
     >
       <template #toolbar-left>
@@ -75,7 +77,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 import { TeamOutlined } from '@ant-design/icons-vue';
 import { io } from 'socket.io-client';
 import request from '../../api/request.js';
@@ -88,6 +90,7 @@ const userStore = useUserStore();
 const loading = ref(false);
 const list = ref([]);
 const selectedClass = ref('');
+const page = reactive({ current: 1, pageSize: 20 });
 
 const classes = ref([]);
 const classOptions = computed(() => [{ label: '所有班级', value: '' }, ...classes.value.map(c => ({ label: c.name, value: c.id }))]);
@@ -114,6 +117,7 @@ async function fetch() {
   loading.value = true;
   const params = { schoolId };
   if (selectedClass.value) params.classId = selectedClass.value;
+  page.current = 1;
   const r = await request.get('/teacher/review-summary', { params });
   list.value = (r.data || []).map(item => ({ ...item, key: `${item.assignmentId}-${item.classId}` }));
   loading.value = false;
