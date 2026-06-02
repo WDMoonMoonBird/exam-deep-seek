@@ -22,6 +22,33 @@
       </a-row>
     </a-card>
 
+    <!-- AI 配置 -->
+    <a-card title="🤖 AI 配置" size="small" class="monitor-card">
+      <a-form layout="inline" style="flex-wrap:wrap;gap:12px;">
+        <a-form-item label="API Key">
+          <a-input-password
+            v-model:value="aiForm.apiKey"
+            placeholder="输入 DeepSeek API Key"
+            style="width:320px;"
+            :visibilityToggle="true"
+          />
+        </a-form-item>
+        <a-form-item label="模型">
+          <a-select
+            v-model:value="aiForm.model"
+            style="width:200px;"
+            :options="modelOptions"
+          />
+        </a-form-item>
+        <a-form-item label="Base URL">
+          <a-input v-model:value="aiForm.baseUrl" placeholder="https://api.deepseek.com" style="width:280px;" />
+        </a-form-item>
+        <a-form-item>
+          <a-button type="primary" :loading="savingAi" @click="saveAiConfig">保存配置</a-button>
+        </a-form-item>
+      </a-form>
+    </a-card>
+
     <!-- PM2 进程 -->
     <a-card title="📦 PM2 进程" size="small" class="monitor-card">
       <a-table
@@ -53,6 +80,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
+import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
 
 const loading = ref(false);
@@ -66,6 +94,41 @@ const isMemLow = computed(() => {
   const total = parseFloat(data.system.totalMem);
   return free && total && free / total < 0.15;
 });
+
+// AI 配置
+const savingAi = ref(false);
+const aiForm = reactive({ apiKey: '', model: '', baseUrl: '' });
+const modelOptions = [
+  { label: 'deepseek-v4-flash（推荐，快速）', value: 'deepseek-v4-flash' },
+  { label: 'deepseek-chat', value: 'deepseek-chat' },
+  { label: 'deepseek-reasoner', value: 'deepseek-reasoner' },
+];
+
+async function loadAiConfig() {
+  try {
+    const r = await request.get('/admin/settings');
+    const d = r.data;
+    aiForm.apiKey = d.deepseek_api_key || '';
+    aiForm.model = d.deepseek_model || 'deepseek-v4-flash';
+    aiForm.baseUrl = d.deepseek_base_url || 'https://api.deepseek.com';
+  } catch { /* ignore */ }
+}
+
+async function saveAiConfig() {
+  savingAi.value = true;
+  try {
+    await request.put('/admin/settings', {
+      deepseek_api_key: aiForm.apiKey || undefined,
+      deepseek_model: aiForm.model,
+      deepseek_base_url: aiForm.baseUrl,
+    });
+    message.success('AI 配置已保存，1分钟内生效');
+    await loadAiConfig(); // 重新加载脱敏后的值
+  } catch {
+    message.error('保存失败');
+  }
+  savingAi.value = false;
+}
 
 const procCols = [
   { title: '进程名', dataIndex: 'name', width: 140 },
@@ -92,6 +155,7 @@ async function fetch() {
 
 onMounted(() => {
   fetch();
+  loadAiConfig();
   timer = setInterval(() => { if (autoRefresh.value) fetch(); }, 30000);
 });
 
@@ -99,12 +163,11 @@ onUnmounted(() => { clearInterval(timer); });
 </script>
 
 <style scoped>
-.page { max-width: 1400px; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+.page { max-width: 1400px; }
 .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-shrink: 0; }
 .page-header h2 { font-size: 28px; margin: 0; }
 
 .monitor-card { margin-bottom: 16px; }
-.monitor-card:last-child { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .monitor-card:last-child :deep(.ant-card-body) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 .label { display: block; font-size: 12px; color: #999; margin-bottom: 2px; }
@@ -112,7 +175,7 @@ onUnmounted(() => { clearInterval(timer); });
 .mem-low { color: #ff4d4f; font-weight: 700; }
 
 .log-viewer {
-  flex: 1; min-height: 0; overflow: auto;
+  max-height: 500px; overflow: auto;
   background: #1e1e1e; border-radius: 8px; padding: 16px;
 }
 .log-viewer pre {

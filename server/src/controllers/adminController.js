@@ -345,6 +345,77 @@ export const getMonitor = async (_req, res) => {
   }
 };
 
+// ===================== AI 配置管理 =====================
+import { clearConfigCache } from '../services/deepseek.js';
+
+export const getSettings = async (_req, res) => {
+  try {
+    const rows = await prisma.systemConfig.findMany({
+      where: { key: { in: ['deepseek_api_key', 'deepseek_model', 'deepseek_base_url'] } },
+    });
+    const map = Object.fromEntries(rows.map(r => [r.key, r.value]));
+
+    // API Key 脱敏：只显示前4后4
+    let maskedKey = '';
+    const rawKey = map.deepseek_api_key || process.env.DEEPSEEK_API_KEY || '';
+    if (rawKey.length > 8) {
+      maskedKey = rawKey.slice(0, 4) + '****' + rawKey.slice(-4);
+    } else if (rawKey) {
+      maskedKey = rawKey.slice(0, 2) + '****';
+    }
+
+    res.json({
+      code: 0,
+      data: {
+        deepseek_api_key: maskedKey,
+        deepseek_model: map.deepseek_model || process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash',
+        deepseek_base_url: map.deepseek_base_url || process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
+        has_key: !!rawKey,
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, '获取AI配置失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+export const updateSettings = async (req, res) => {
+  try {
+    const { deepseek_api_key, deepseek_model, deepseek_base_url } = req.body;
+
+    const items = [];
+    if (deepseek_api_key !== undefined && deepseek_api_key !== '') {
+      // 如果不是脱敏值（不含****），说明用户输入了新Key
+      if (!deepseek_api_key.includes('****')) {
+        items.push({ key: 'deepseek_api_key', value: deepseek_api_key });
+      }
+    }
+    if (deepseek_model) {
+      items.push({ key: 'deepseek_model', value: deepseek_model });
+    }
+    if (deepseek_base_url) {
+      items.push({ key: 'deepseek_base_url', value: deepseek_base_url });
+    }
+
+    for (const item of items) {
+      await prisma.systemConfig.upsert({
+        where: { key: item.key },
+        update: { value: item.value },
+        create: item,
+      });
+    }
+
+    // 清缓存，下次调用立即生效
+    clearConfigCache();
+
+    logger.info({ keys: items.map(i => i.key) }, 'AI 配置已更新');
+    res.json({ code: 0, message: '配置已保存，1分钟内生效', data: null });
+  } catch (err) {
+    logger.error({ err }, '保存AI配置失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
 function formatUptime(ms) {
   if (ms < 60000) return Math.floor(ms / 1000) + 's';
   if (ms < 3600000) return Math.floor(ms / 60000) + 'm';

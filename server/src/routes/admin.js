@@ -27,4 +27,8 @@ router.post('/students', admin.createStudent);
 // 服务器监控
 router.get('/monitor', admin.getMonitor);
 
+// AI 配置
+router.get('/settings', admin.getSettings);
+router.put('/settings', admin.updateSettings);
+
 export default router;

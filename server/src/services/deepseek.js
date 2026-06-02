@@ -1,9 +1,38 @@
 import logger from '../utils/logger.js';
 import { ABNORMAL_FEEDBACK, DEFAULT_MAX_SCORE } from '../constants.js';
+import prisma from '../utils/prisma.js';
 
-const API_KEY = process.env.DEEPSEEK_API_KEY;
-const BASE_URL = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com';
-const MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash';
+// ===================== 配置读取（优先 DB → 回退 ENV） =====================
+let configCache = null;
+let configCacheTime = 0;
+const CACHE_TTL = 60_000; // 1分钟缓存
+
+async function loadConfig() {
+  if (configCache && Date.now() - configCacheTime < CACHE_TTL) return configCache;
+  try {
+    const rows = await prisma.systemConfig.findMany();
+    configCache = {};
+    for (const r of rows) configCache[r.key] = r.value;
+    configCacheTime = Date.now();
+  } catch {
+    if (!configCache) configCache = {};
+  }
+  return configCache;
+}
+
+export function clearConfigCache() {
+  configCache = null;
+  configCacheTime = 0;
+}
+
+async function getConfig(key, envFallback) {
+  const cfg = await loadConfig();
+  return cfg[key] || envFallback;
+}
+
+async function getApiKey()    { return await getConfig('deepseek_api_key',  process.env.DEEPSEEK_API_KEY); }
+async function getBaseUrl()   { return await getConfig('deepseek_base_url', process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com'); }
+async function getModel()     { return await getConfig('deepseek_model',    process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash'); }
 
 const DEFAULT_CRITERIA = `评分标准：
 代码题：代码正确性（60%）+ 代码效率（20%）+ 代码可读性（20%）
@@ -58,6 +87,7 @@ ${studentAnswer}
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 60000);
 
+      const [BASE_URL, API_KEY, MODEL] = await Promise.all([getBaseUrl(), getApiKey(), getModel()]);
       const res = await fetch(`${BASE_URL}/v1/chat/completions`, {
         method: 'POST',
         headers: {
@@ -205,6 +235,7 @@ export async function parseExamPaper(paperText) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 120000);
 
+      const [BASE_URL, API_KEY, MODEL] = await Promise.all([getBaseUrl(), getApiKey(), getModel()]);
       const res = await fetch(`${BASE_URL}/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
@@ -287,6 +318,7 @@ export async function generateReferenceAnswer({ material, stem, scoringCriteria 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 90000);
 
+      const [BASE_URL, API_KEY, MODEL] = await Promise.all([getBaseUrl(), getApiKey(), getModel()]);
       const res = await fetch(`${BASE_URL}/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
