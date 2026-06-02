@@ -304,13 +304,15 @@ export const getMonitor = async (_req, res) => {
       result.errors.push('PM2 不可用: ' + (pm2.error || '未知错误'));
     }
 
-    // 最近错误日志（读取 PM2 日志文件）
+    // 读取 PM2 日志（错误 + 输出）
     const logDir = path.join(os.homedir(), '.pm2', 'logs');
     try {
       if (fs.existsSync(logDir)) {
-        const files = fs.readdirSync(logDir).filter(f => f.endsWith('.log') && f.includes('error'));
+        const allFiles = fs.readdirSync(logDir).filter(f => f.endsWith('.log'));
         const logLines = [];
-        for (const file of files.slice(0, 4)) {
+        // 先读错误日志
+        const errFiles = allFiles.filter(f => f.includes('error'));
+        for (const file of errFiles.slice(0, 3)) {
           try {
             const content = fs.readFileSync(path.join(logDir, file), 'utf-8');
             const lines = content.split('\n').filter(l => l.trim()).slice(-30);
@@ -318,7 +320,17 @@ export const getMonitor = async (_req, res) => {
             logLines.push(...lines);
           } catch {}
         }
-        result.logs = logLines.join('\n');
+        // 再读输出日志
+        const outFiles = allFiles.filter(f => f.includes('out'));
+        for (const file of outFiles.slice(0, 3)) {
+          try {
+            const content = fs.readFileSync(path.join(logDir, file), 'utf-8');
+            const lines = content.split('\n').filter(l => l.trim()).slice(-20);
+            logLines.push(`--- ${file} (最近 ${lines.length} 行) ---`);
+            logLines.push(...lines);
+          } catch {}
+        }
+        result.logs = logLines.join('\n') || '(日志为空)';
       } else {
         result.logs = '(日志目录不存在)';
       }
