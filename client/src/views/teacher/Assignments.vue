@@ -18,6 +18,9 @@
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'qCount'">{{ record._count?.assignmentQuestions || 0 }}</template>
         <template v-if="column.key === 'sCount'">{{ record._count?.submissions || 0 }}</template>
+        <template v-if="column.key === 'classes'">
+          <a-tag v-for="ac in record.assignmentClasses" :key="ac.classId" size="small">{{ ac.class?.name }}</a-tag>
+        </template>
         <template v-if="column.key === 'time'">{{ record.startTime }} ~ {{ record.endTime }}</template>
       </template>
     </DataTable>
@@ -131,6 +134,7 @@ const qCols = [
 ];
 const columns = [
   { title: '标题', dataIndex: 'title', width: 220, ellipsis: true },
+  { title: '班级', key: 'classes', width: 160 },
   { title: '题目数', key: 'qCount', width: 80 },
   { title: '提交数', key: 'sCount', width: 80 },
   { title: '时间', key: 'time', width: 220, ellipsis: true },

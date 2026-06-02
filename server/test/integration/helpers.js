@@ -18,6 +18,14 @@ export async function loginAsStudent(username = 'test_stu_01') {
   const res = await request()
     .post('/api/auth/login')
     .send({ username, password: username });
+  // 如果返回多学校选择（code=1002），自动选第一个
+  if (res.body.code === 1002) {
+    const schoolCode = res.body.data.schools[0]?.officialCode;
+    const res2 = await request()
+      .post('/api/auth/login')
+      .send({ username, password: username, schoolCode });
+    return res2.body.data.token;
+  }
   return res.body.data.token;
 }
 

@@ -5,18 +5,50 @@ import logger from '../utils/logger.js';
 
 export const login = async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { username, password, schoolCode } = req.body;
     if (!username || !password) {
       return res.status(400).json({ code: 1001, message: '参数错误', data: null });
     }
 
-    const user = await prisma.user.findUnique({ where: { username } });
+    // schoolCode 存在时，用户已选择学校 → 精确匹配
+    const lookupUsername = schoolCode ? `${username}@${schoolCode}` : username;
+
+    let user = await prisma.user.findUnique({ where: { username: lookupUsername } });
+
     if (!user) {
-      return res.status(400).json({ code: 1001, message: '用户名或密码错误', data: null });
+      // 精确匹配不到，尝试多学校学生查询
+      if (!schoolCode && !username.includes('@')) {
+        const students = await prisma.user.findMany({
+          where: { username: { startsWith: username + '@' }, role: 'student' },
+        });
+
+        if (students.length === 0) {
+          return res.status(400).json({ code: 1001, message: '用户名或密码错误', data: null });
+        }
+
+        if (students.length === 1) {
+          user = students[0];
+        } else {
+          // 多个学校有相同学号 → 返回学校列表让用户选择
+          const codes = [...new Set(students.map(s => s.username.split('@')[1]))];
+          const schools = await prisma.school.findMany({
+            where: { officialCode: { in: codes } },
+            select: { name: true, officialCode: true },
+          });
+          return res.json({
+            code: 1002,
+            message: '该学号存在多个学校，请选择所在学校',
+            data: { schools },
+          });
+        }
+      } else {
+        return res.status(400).json({ code: 1001, message: '用户名或密码错误', data: null });
+      }
     }
 
     const isMatch = bcrypt.compareSync(password, user.password);
     if (!isMatch) {
+      // 如果选了学校 or 学生多学校查询唯一命中时，密码错误也统一提示
       return res.status(400).json({ code: 1001, message: '用户名或密码错误', data: null });
     }
 
@@ -37,7 +69,6 @@ export const login = async (req, res) => {
         include: { school: true },
       });
       teacherSchools = tss.map(ts => ts.school);
-      // 恢复上次学校，或选第一个
       const lastId = user.lastSchoolId;
       if (lastId && teacherSchools.find(s => s.id === lastId)) {
         currentSchool = teacherSchools.find(s => s.id === lastId);

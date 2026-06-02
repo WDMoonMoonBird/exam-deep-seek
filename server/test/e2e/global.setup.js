@@ -32,6 +32,15 @@ export default async function () {
     const s = await post('/admin/schools', { name: 'E2E测试大学' }, adminToken);
     schoolId = s.data?.id;
   }
+  // 确保学校有 officialCode
+  const school = schools.data?.find(s => s.id === schoolId);
+  if (school && !school.officialCode) {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+    await prisma.school.update({ where: { id: schoolId }, data: { officialCode: '20001' } });
+    await prisma.$disconnect();
+    console.log('E2E setup: school officialCode set to 20001');
+  }
 
   // 3. 确保教师存在
   let teacherToken;

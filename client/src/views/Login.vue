@@ -4,7 +4,31 @@
             <img src="../assets/logo.svg" class="login-logo" alt="logo" />
             <h1 class="login-title">Deadpan 判题</h1>
             <p class="login-desc">请登录以继续</p>
-            <a-form layout="vertical" class="login-form">
+
+            <!-- 多学校选择 -->
+            <template v-if="schoolOptions.length">
+              <p class="login-desc" style="font-size:15px;color:var(--ink-muted);margin-bottom:16px;">
+                学号「{{ username }}」存在于多个学校，请选择您的学校
+              </p>
+              <a-form layout="vertical" class="login-form">
+                <a-form-item>
+                  <a-select v-model:value="selectedCode" placeholder="请选择学校" size="large">
+                    <a-select-option v-for="s in schoolOptions" :key="s.officialCode" :value="s.officialCode">
+                      {{ s.name }}
+                    </a-select-option>
+                  </a-select>
+                </a-form-item>
+                <a-form-item>
+                  <a-button type="primary" :loading="loading" block size="large" @click="handleSelectSchool">确认登录</a-button>
+                </a-form-item>
+                <a-form-item>
+                  <a-button type="link" block @click="schoolOptions = []">返回重新输入</a-button>
+                </a-form-item>
+              </a-form>
+            </template>
+
+            <!-- 正常登录表单 -->
+            <a-form v-else layout="vertical" class="login-form">
                 <a-form-item>
                     <a-input v-model:value="username" placeholder="用户名（工号/学号）" size="large" @pressEnter="handleLogin" />
                 </a-form-item>
@@ -33,6 +57,8 @@ const username = ref('');
 const password = ref('');
 const loading = ref(false);
 const errorMsg = ref('');
+const schoolOptions = ref([]);
+const selectedCode = ref('');
 
 async function handleLogin () {
     if (!username.value || !password.value) { errorMsg.value = '请输入用户名和密码'; return; }
@@ -40,6 +66,31 @@ async function handleLogin () {
     loading.value = true;
     try {
         const res = await request.post('/auth/login', { username: username.value, password: password.value });
+        if (res.code === 1002) {
+            // 多学校 → 显示选择页
+            schoolOptions.value = res.data.schools;
+            selectedCode.value = res.data.schools[0]?.officialCode || '';
+            return;
+        }
+        userStore.setAuth(res.data.token, res.data.user);
+        router.push(res.data.user.role === 'super_admin' ? '/admin' : `/${res.data.user.role}`);
+    } catch (err) {
+        errorMsg.value = err?.response?.data?.message || '登录失败';
+    } finally {
+        loading.value = false;
+    }
+}
+
+async function handleSelectSchool() {
+    if (!selectedCode.value) { errorMsg.value = '请选择学校'; return; }
+    errorMsg.value = '';
+    loading.value = true;
+    try {
+        const res = await request.post('/auth/login', {
+            username: username.value,
+            password: password.value,
+            schoolCode: selectedCode.value,
+        });
         userStore.setAuth(res.data.token, res.data.user);
         router.push(res.data.user.role === 'super_admin' ? '/admin' : `/${res.data.user.role}`);
     } catch (err) {

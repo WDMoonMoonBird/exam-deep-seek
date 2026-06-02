@@ -63,6 +63,7 @@ router.get('/students', teacher.getMyStudents);
 router.post('/students', teacher.addStudent);
 router.post('/students/batch', teacher.batchAddStudents);
 router.put('/students/:id', teacher.updateStudent);
+router.put('/students/:id/reset-password', teacher.resetStudentPassword);
 router.delete('/students/:id', teacher.deleteStudent);
 
 export default router;

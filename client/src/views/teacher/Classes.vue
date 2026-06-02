@@ -20,6 +20,7 @@
           <a-tag v-if="record.isTeamClass" color="purple" size="small" style="margin-left:4px">团队共享 · {{ record.ownerTeacherName }}</a-tag>
         </template>
         <template v-if="column.key === 'school'">{{ record.school?.name }}</template>
+        <template v-if="column.key === 'count'">{{ record._count?.studentClasses ?? 0 }}</template>
         <template v-if="column.key === 'action'">
           <a-space>
             <a-button type="link" @click="openEdit(record)" :disabled="record.isTeamClass">编辑</a-button>
@@ -63,6 +64,7 @@ const form = reactive({ name: '', teamIds: [] });
 const columns = [
   { title: '班级名称', key: 'name', width: 200, ellipsis: true },
   { title: '所属学校', key: 'school', width: 200, ellipsis: true },
+  { title: '人数', key: 'count', width: 70 },
   { title: '创建时间', dataIndex: 'createdAt', width: 170, ellipsis: true },
   { title: '操作', key: 'action', width: 160 },
 ];

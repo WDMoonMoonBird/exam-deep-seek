@@ -213,6 +213,7 @@ export const getAssignments = async (req, res) => {
         select: {
           id: true, title: true, startTime: true, endTime: true, createdAt: true,
           teacher: { select: { realName: true } },
+          assignmentClasses: { include: { class: { select: { id: true, name: true } } } },
           _count: { select: { assignmentQuestions: true, submissions: true } },
         },
         orderBy: { createdAt: 'desc' },
@@ -319,7 +320,7 @@ export const getAllClasses = async (req, res) => {
     const directIds = (await prisma.teacherClass.findMany({ where: { teacherId: req.user.id }, select: { classId: true } })).map(d => d.classId);
     const list = await prisma.class.findMany({
       where: { id: { in: visibleIds }, schoolId },
-      include: { school: true, teacherClasses: { include: { teacher: { select: { id: true, username: true, realName: true } } } }, teamClasses: { select: { teamId: true } } },
+      include: { school: true, teacherClasses: { include: { teacher: { select: { id: true, username: true, realName: true } } } }, teamClasses: { select: { teamId: true } }, _count: { select: { studentClasses: true } } },
       orderBy: { createdAt: 'desc' },
     });
     // 标记团队班级和归属教师
@@ -445,9 +446,38 @@ export const getMyClasses = async (req, res) => {
 export const updateStudent = async (req, res) => {
   try {
     const { id } = req.params;
-    const { realName, classId } = req.body;
+    const { realName, classId, newUsername } = req.body;
+
+    // 先查当前学生
+    const student = await prisma.user.findFirst({ where: { id: +id, role: 'student' } });
+    if (!student) return res.status(404).json({ code: 1004, message: '学生不存在', data: null });
+
     const data = {};
     if (realName !== undefined) data.realName = realName;
+
+    // 补全临时学号：如果当前用户名含 tmp_，且传入了新学号
+    if (newUsername && student.username.startsWith('tmp_')) {
+      const code = student.username.split('@')[1]; // 保留原学校代码
+      const fullNew = newUsername.includes('@') ? newUsername : `${newUsername}@${code}`;
+
+      // 显式查重，避免修改到已存在的学号
+      const existing = await prisma.user.findUnique({ where: { username: fullNew } });
+      if (existing && existing.id !== +id) {
+        return res.status(400).json({ code: 1001, message: '该学号已被使用，无法保存', data: null });
+      }
+
+      data.username = fullNew;
+      data.password = bcrypt.hashSync(newUsername.includes('@') ? newUsername.split('@')[0] : newUsername, 10);
+    }
+
+    // 如果姓名从"(待补全)"变为真实姓名，重置密码
+    if (realName && student.realName === '(待补全)' && realName !== '(待补全)') {
+      const sid = (data.username || student.username).split('@')[0];
+      if (!sid.startsWith('tmp_')) {
+        data.password = bcrypt.hashSync(sid, 10);
+      }
+    }
+
     await prisma.user.update({ where: { id: +id, role: 'student' }, data });
     // 更新班级
     if (classId) {
@@ -456,6 +486,7 @@ export const updateStudent = async (req, res) => {
     }
     res.json({ code: 0, message: '更新成功', data: null });
   } catch (err) {
+    if (err.code === 'P2002') return res.status(400).json({ code: 1001, message: '学号已存在', data: null });
     logger.error({ err }, '更新学生失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
   }
@@ -477,6 +508,28 @@ export const deleteStudent = async (req, res) => {
   }
 };
 
+export const resetStudentPassword = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const student = await prisma.user.findFirst({ where: { id: +id, role: 'student' } });
+    if (!student) return res.status(404).json({ code: 1004, message: '学生不存在', data: null });
+
+    // 密码重置为学号（去掉@学校代码部分）
+    const sid = student.username.split('@')[0];
+    if (sid.startsWith('tmp_')) {
+      return res.status(400).json({ code: 1001, message: '该学生信息尚未补全，请先补全学号', data: null });
+    }
+
+    const newPassword = bcrypt.hashSync(sid, 10);
+    await prisma.user.update({ where: { id: +id }, data: { password: newPassword } });
+    logger.info({ studentId: id }, '学生密码已重置');
+    res.json({ code: 0, message: `密码已重置为学号（${sid}）`, data: null });
+  } catch (err) {
+    logger.error({ err }, '重置学生密码失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
 export const addStudent = async (req, res) => {
   try {
     const { username, realName, classId } = req.body;
@@ -484,9 +537,15 @@ export const addStudent = async (req, res) => {
       return res.status(400).json({ code: 1001, message: '参数错误', data: null });
     }
 
+    // 获取学校院校代码，拼接完整用户名
+    const cls = await prisma.class.findUnique({ where: { id: +classId }, include: { school: true } });
+    if (!cls) return res.status(400).json({ code: 1001, message: '班级不存在', data: null });
+    const code = cls.school.officialCode || `school${cls.school.id}`;
+    const fullUsername = username.includes('@') ? username : `${username}@${code}`;
+
     const student = await prisma.user.create({
       data: {
-        username, realName, password: bcrypt.hashSync(username, 10), role: 'student',
+        username: fullUsername, realName, password: bcrypt.hashSync(username, 10), role: 'student',
         studentClasses: { create: { classId: +classId } },
       },
       select: { id: true, username: true, realName: true, role: true, createdAt: true },
@@ -507,27 +566,71 @@ export const batchAddStudents = async (req, res) => {
       return res.status(400).json({ code: 1001, message: '参数错误', data: null });
     }
 
+    // 获取学校院校代码
+    const cls = await prisma.class.findUnique({ where: { id: +classId }, include: { school: true } });
+    if (!cls) return res.status(400).json({ code: 1001, message: '班级不存在', data: null });
+    const code = cls.school.officialCode || `school${cls.school.id}`;
+
     let success = 0;
     let errors = [];
 
     for (const s of students) {
       try {
-        const username = String(s.username ?? '').trim();
-        const realName = String(s.realName ?? '').trim();
-        if (!username && !realName) continue; // 跳过空行
-        if (!username) { errors.push({ username: '(空)', reason: '缺少学号' }); continue; }
-        if (!realName) { errors.push({ username, reason: '缺少姓名' }); continue; }
+        const sid = String(s.username ?? '').trim();
+        const name = String(s.realName ?? '').trim();
+        if (!sid && !name) continue; // 跳过空行
+
+        // 只有姓名、缺学号 → 生成临时学号
+        if (!sid && name) {
+          const tmpId = `tmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+          const fullUsername = `${tmpId}@${code}`;
+          const user = await prisma.user.create({
+            data: {
+              username: fullUsername,
+              realName: name,
+              password: bcrypt.hashSync('', 10), // 空密码hash，无法登录
+              role: 'student',
+            },
+          });
+          await prisma.studentClass.create({ data: { studentId: user.id, classId: +classId } });
+          success++;
+          continue;
+        }
+
+        // 只有学号、缺姓名 → 正常创建但姓名为"待补全"
+        if (sid && !name) {
+          const fullUsername = sid.includes('@') ? sid : `${sid}@${code}`;
+          const user = await prisma.user.upsert({
+            where: { username: fullUsername },
+            update: {},
+            create: {
+              username: fullUsername,
+              realName: '(待补全)',
+              password: bcrypt.hashSync('', 10), // 空密码hash，无法登录
+              role: 'student',
+            },
+          });
+          await prisma.studentClass.upsert({
+            where: { studentId_classId: { studentId: user.id, classId: +classId } },
+            update: {},
+            create: { studentId: user.id, classId: +classId },
+          });
+          success++;
+          continue;
+        }
+
+        // 完整的学号+姓名
+        const fullUsername = sid.includes('@') ? sid : `${sid}@${code}`;
         const user = await prisma.user.upsert({
-          where: { username },
-          update: { realName },
+          where: { username: fullUsername },
+          update: { realName: name },
           create: {
-            username,
-            realName,
-            password: bcrypt.hashSync(username, 10),
+            username: fullUsername,
+            realName: name,
+            password: bcrypt.hashSync(sid, 10),
             role: 'student',
           },
         });
-        // 单独处理班级关联，避免重复创建导致唯一约束冲突
         await prisma.studentClass.upsert({
           where: { studentId_classId: { studentId: user.id, classId: +classId } },
           update: {},

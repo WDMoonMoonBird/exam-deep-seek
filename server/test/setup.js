@@ -1,10 +1,11 @@
 // 避免与已运行的服务端端口冲突
 process.env.PORT = '0';
 
+import bcrypt from 'bcryptjs';
 import prisma from '../src/utils/prisma.js';
 
 // 只 seed 一次
-const KEY = Symbol.for('testSeededV2');
+const KEY = Symbol.for('testSeededV3');
 if (!global[KEY]) {
   global[KEY] = true;
   await seedTestData();
@@ -12,7 +13,6 @@ if (!global[KEY]) {
 
 async function seedTestData() {
   // ===== 1. 彻底清理所有测试数据 =====
-  // 按 FK 依赖顺序删除
   const testTeacher = await prisma.user.findFirst({ where: { username: 'test_teacher' } });
 
   if (testTeacher) {
@@ -34,9 +34,17 @@ async function seedTestData() {
     await prisma.question.deleteMany({ where: { teacherId: testTeacher.id } });
   }
 
-  // 清理测试学生（包括 test_*, batch_* 等）
+  // 清理测试学生（包括 test_*, batch_*, tmp_* 等）
   const testStudents = await prisma.user.findMany({
-    where: { role: 'student', OR: [{ username: { startsWith: 'test_' } }, { username: { startsWith: 'batch_' } }] },
+    where: {
+      role: 'student',
+      OR: [
+        { username: { startsWith: 'test_' } },
+        { username: { startsWith: 'batch_' } },
+        { username: { startsWith: 'tmp_' } },
+        { username: { contains: '@10001' } },
+      ],
+    },
     select: { id: true },
   });
   for (const s of testStudents) {
@@ -45,49 +53,62 @@ async function seedTestData() {
     await prisma.user.delete({ where: { id: s.id } });
   }
 
-  // 清理教师
+  // 清理测试教师
   if (testTeacher) {
     await prisma.teacherClass.deleteMany({ where: { teacherId: testTeacher.id } });
     await prisma.teacherSchool.deleteMany({ where: { teacherId: testTeacher.id } });
     await prisma.user.delete({ where: { id: testTeacher.id } });
   }
 
-  // 清理测试班级（先删关联）
-  const testClass = await prisma.class.findFirst({ where: { name: 'test_class' } });
-  if (testClass) {
-    await prisma.studentClass.deleteMany({ where: { classId: testClass.id } });
-    await prisma.teacherClass.deleteMany({ where: { classId: testClass.id } });
-    await prisma.assignmentClass.deleteMany({ where: { classId: testClass.id } });
-    await prisma.class.delete({ where: { id: testClass.id } });
+  // 清理测试班级
+  const testClasses = await prisma.class.findMany({
+    where: { name: { startsWith: 'test_' } },
+    select: { id: true },
+  });
+  for (const c of testClasses) {
+    await prisma.studentClass.deleteMany({ where: { classId: c.id } });
+    await prisma.teacherClass.deleteMany({ where: { classId: c.id } });
+    await prisma.assignmentClass.deleteMany({ where: { classId: c.id } });
+    await prisma.teamClass.deleteMany({ where: { classId: c.id } });
+    await prisma.class.delete({ where: { id: c.id } });
   }
 
+  // 清理多学校测试数据
+  await prisma.teacherSchool.deleteMany({ where: { school: { officialCode: '99999' } } });
+  await prisma.teacherClass.deleteMany({ where: { class: { name: 'test_class_multi' } } });
+  await prisma.studentClass.deleteMany({ where: { class: { name: 'test_class_multi' } } });
+  await prisma.class.deleteMany({ where: { name: 'test_class_multi' } });
+  await prisma.school.deleteMany({ where: { officialCode: '99999' } });
+
   // ===== 2. 创建测试数据 =====
-  // 学校（如果不存在则创建）
+  // 学校（含院校代码）
   let school = await prisma.school.findFirst({ where: { name: 'test_university' } });
   if (!school) {
-    school = await prisma.school.create({ data: { name: 'test_university' } });
+    school = await prisma.school.create({ data: { name: 'test_university', officialCode: '10001' } });
+  } else if (!school.officialCode) {
+    school = await prisma.school.update({ where: { id: school.id }, data: { officialCode: '10001' } });
   }
 
   // 班级
   const cls = await prisma.class.create({ data: { name: 'test_class', schoolId: school.id } });
 
-  // 教师
+  // 教师（密码正确 hash）
   const teacher = await prisma.user.create({
-    data: { username: 'test_teacher', password: 'test_teacher', realName: '测试教师', role: 'teacher' },
+    data: { username: 'test_teacher', password: bcrypt.hashSync('test_teacher', 10), realName: '测试教师', role: 'teacher' },
   });
   await prisma.teacherSchool.create({ data: { teacherId: teacher.id, schoolId: school.id } });
   await prisma.teacherClass.create({ data: { teacherId: teacher.id, classId: cls.id } });
 
-  // 学生 × 3
+  // 学生 × 3（username = 学号@院校代码）
   await prisma.user.createMany({
     data: [
-      { username: 'test_stu_01', password: 'test_stu_01', realName: '学生甲', role: 'student' },
-      { username: 'test_stu_02', password: 'test_stu_02', realName: '学生乙', role: 'student' },
-      { username: 'test_stu_03', password: 'test_stu_03', realName: '学生丙', role: 'student' },
+      { username: 'test_stu_01@10001', password: bcrypt.hashSync('test_stu_01', 10), realName: '学生甲', role: 'student' },
+      { username: 'test_stu_02@10001', password: bcrypt.hashSync('test_stu_02', 10), realName: '学生乙', role: 'student' },
+      { username: 'test_stu_03@10001', password: bcrypt.hashSync('test_stu_03', 10), realName: '学生丙', role: 'student' },
     ],
   });
   const students = await prisma.user.findMany({
-    where: { username: { in: ['test_stu_01', 'test_stu_02', 'test_stu_03'] } },
+    where: { username: { in: ['test_stu_01@10001', 'test_stu_02@10001', 'test_stu_03@10001'] } },
     orderBy: { username: 'asc' },
   });
   for (const s of students) {
@@ -135,9 +156,11 @@ async function seedTestData() {
 
   global.__testData = {
     schoolId: school.id,
+    schoolCode: '10001',
     classId: cls.id,
     teacherId: teacher.id,
     studentIds: students.map(s => s.id),
+    studentUsers: students.map(s => s.username),
     questionId: question.id,
     assignmentId: assignment.id,
   };

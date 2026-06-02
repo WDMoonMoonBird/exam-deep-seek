@@ -234,9 +234,19 @@ export const createStudent = async (req, res) => {
     const { username, realName, classIds } = req.body;
     if (!username || !realName) return res.status(400).json({ code: 1001, message: '参数错误', data: null });
 
+    // 从第一个班级获取学校代码
+    let fullUsername = username;
+    if (classIds?.length && !username.includes('@')) {
+      const cls = await prisma.class.findUnique({ where: { id: +classIds[0] }, include: { school: true } });
+      if (cls) {
+        const code = cls.school.officialCode || `school${cls.school.id}`;
+        fullUsername = `${username}@${code}`;
+      }
+    }
+
     const student = await prisma.user.create({
       data: {
-        username,
+        username: fullUsername,
         realName,
         password: bcrypt.hashSync(username, 10),
         role: 'student',
