@@ -134,7 +134,9 @@ onMounted(() => {
   loadClasses();
   fetch();
   const wsUrl = import.meta.env.VITE_WS_URL || undefined;
-  socket = io(wsUrl, { transports: ['websocket', 'polling'] });
+  const wsOpts = { transports: ['websocket', 'polling'] };
+  if (!wsUrl) wsOpts.path = '/exam/socket.io';
+  socket = io(wsUrl, wsOpts);
   socket.on('connect', () => socket.emit('join-school', userStore.currentSchool?.id));
   let lastRefresh = 0;
   socket.on('graded', () => {

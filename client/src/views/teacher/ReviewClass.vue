@@ -221,7 +221,9 @@ async function exportXlsx() {
 let socket = null;
 function connectSocket() {
   const base = import.meta.env.VITE_WS_URL || undefined;
-  socket = io(base, { transports: ['websocket', 'polling'] });
+  const opts = { transports: ['websocket', 'polling'] };
+  if (!base) opts.path = '/exam/socket.io';
+  socket = io(base, opts);
   socket.on('connect', () => { socket.emit('join-school', userStore.currentSchool?.id); });
   let lastRefresh = 0;
   socket.on('graded', () => {
