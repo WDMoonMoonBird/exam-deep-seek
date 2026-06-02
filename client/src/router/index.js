@@ -13,6 +13,7 @@ const routes = [
       { path: 'teachers', component: () => import('../views/admin/Teachers.vue') },
       { path: 'students', component: () => import('../views/admin/Students.vue') },
       { path: 'monitor', component: () => import('../views/admin/Monitor.vue') },
+      { path: 'ai-config', component: () => import('../views/admin/AiConfig.vue') },
     ],
   },
   {

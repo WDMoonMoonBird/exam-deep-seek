@@ -1,6 +1,6 @@
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
-import { gradeSubmission } from './deepseek.js';
+import { gradeSubmission, getConcurrency } from './deepseek.js';
 import { ABNORMAL_FEEDBACK } from '../constants.js';
 
 const INTERNAL_SECRET = process.env.INTERNAL_SECRET || '***REDACTED***';
@@ -14,7 +14,8 @@ function notifyGradedViaHttp(schoolId, data) {
 }
 
 let running = true;
-const MAX_CONCURRENT = 8;
+let MAX_CONCURRENT = 16;
+let lastConcurrencyRefresh = 0;
 
 export function stop() {
   running = false;
@@ -131,7 +132,7 @@ async function gradeOne(sub) {
       logger.info({ submissionId: sub.id, type: sqData.type, correct }, '扁平客观题自动评分');
     } else {
       // 编程题：AI 评分
-      logger.info({ submissionId: sub.id, questionId: sub.questionId }, '开始 AI 评分');
+      logger.info({ submissionId: sub.id, questionId: sub.questionId, concurrency: MAX_CONCURRENT }, '开始 AI 评分');
       const result = await gradeSubmission({
         material: sub.question?.material || null,
         subQuestionTitle: sqData.title || '',
@@ -146,10 +147,10 @@ async function gradeOne(sub) {
       const max = sqData.score || 10;
       if (score > max * 2 && max < 100) {
         score = Math.round(score * max / 100);
-        logger.info({ submissionId: sub.id, rawScore: result.score, normalized: score, max }, 'AI 分数已归一化');
+        logger.info({ submissionId: sub.id, rawScore: result.score, normalized: score, max, concurrency: MAX_CONCURRENT }, 'AI 分数已归一化');
       }
       feedback = result.feedback;
-      logger.info({ submissionId: sub.id, score, elapsed: `${Date.now() - start}ms` }, 'AI 评分完成');
+      logger.info({ submissionId: sub.id, score, elapsed: `${Date.now() - start}ms`, concurrency: MAX_CONCURRENT }, 'AI 评分完成');
     }
 
     await prisma.submission.update({
@@ -163,9 +164,9 @@ async function gradeOne(sub) {
       notifyGradedViaHttp(schoolId, { id: sub.id, aiScore: score, aiFeedback: feedback, status: 'ai_graded', assignmentId: sub.assignmentId, classId });
     }
 
-    logger.info({ submissionId: sub.id, score, elapsed: `${Date.now() - start}ms` }, 'AI 评分完成');
+    logger.info({ submissionId: sub.id, score, elapsed: `${Date.now() - start}ms`, concurrency: MAX_CONCURRENT }, 'AI 评分完成');
   } catch (err) {
-    logger.error({ err, submissionId: sub.id }, 'AI 评分异常');
+    logger.error({ err, submissionId: sub.id, concurrency: MAX_CONCURRENT }, 'AI 评分异常');
     await prisma.submission.update({
       where: { id: sub.id },
       data: { aiScore: 0, aiFeedback: ABNORMAL_FEEDBACK, status: 'ai_graded' },
@@ -174,10 +175,22 @@ async function gradeOne(sub) {
 }
 
 export async function start() {
+  // 首次读取并发配置
+  MAX_CONCURRENT = await getConcurrency();
   logger.info({ maxConcurrent: MAX_CONCURRENT }, '评分 Worker 已启动');
 
   while (running) {
     try {
+      // 每 60 秒刷新一次并发配置
+      if (Date.now() - lastConcurrencyRefresh > 60_000) {
+        const newConcurrency = await getConcurrency();
+        if (newConcurrency !== MAX_CONCURRENT) {
+          logger.info({ old: MAX_CONCURRENT, new: newConcurrency }, 'Worker 并发配置已更新');
+          MAX_CONCURRENT = newConcurrency;
+        }
+        lastConcurrencyRefresh = Date.now();
+      }
+
       const submissions = await prisma.submission.findMany({
         where: { status: 'submitted' },
         include: {

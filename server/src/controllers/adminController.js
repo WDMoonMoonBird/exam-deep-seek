@@ -361,7 +361,7 @@ import { clearConfigCache } from '../services/deepseek.js';
 export const getSettings = async (_req, res) => {
   try {
     const rows = await prisma.systemConfig.findMany({
-      where: { key: { in: ['deepseek_api_key', 'deepseek_model', 'deepseek_base_url'] } },
+      where: { key: { in: ['deepseek_api_key', 'deepseek_model', 'deepseek_base_url', 'ai_concurrency'] } },
     });
     const map = Object.fromEntries(rows.map(r => [r.key, r.value]));
 
@@ -374,13 +374,22 @@ export const getSettings = async (_req, res) => {
       maskedKey = rawKey.slice(0, 2) + '****';
     }
 
+    const cpus = os.cpus().length;
+    const totalMemGB = +(os.totalmem() / 1024 / 1024 / 1024).toFixed(1);
+    // 推荐并发：核数×8，最小1，最大128
+    const recommended = Math.max(1, Math.min(cpus * 8, 128));
+
     res.json({
       code: 0,
       data: {
         deepseek_api_key: maskedKey,
         deepseek_model: map.deepseek_model || process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash',
         deepseek_base_url: map.deepseek_base_url || process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
+        ai_concurrency: +map.ai_concurrency || 16,
         has_key: !!rawKey,
+        cpus,
+        totalMemGB,
+        recommended_concurrency: recommended,
       },
     });
   } catch (err) {
@@ -391,7 +400,7 @@ export const getSettings = async (_req, res) => {
 
 export const updateSettings = async (req, res) => {
   try {
-    const { deepseek_api_key, deepseek_model, deepseek_base_url } = req.body;
+    const { deepseek_api_key, deepseek_model, deepseek_base_url, ai_concurrency } = req.body;
 
     const items = [];
     if (deepseek_api_key !== undefined && deepseek_api_key !== '') {
@@ -405,6 +414,12 @@ export const updateSettings = async (req, res) => {
     }
     if (deepseek_base_url) {
       items.push({ key: 'deepseek_base_url', value: deepseek_base_url });
+    }
+    if (ai_concurrency !== undefined) {
+      const c = +ai_concurrency;
+      if ([1,8,16,32,64,128].includes(c)) {
+        items.push({ key: 'ai_concurrency', value: String(c) });
+      }
     }
 
     for (const item of items) {
@@ -423,6 +438,45 @@ export const updateSettings = async (req, res) => {
   } catch (err) {
     logger.error({ err }, '保存AI配置失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+export const testConnection = async (_req, res) => {
+  const start = Date.now();
+  try {
+    const rows = await prisma.systemConfig.findMany({
+      where: { key: { in: ['deepseek_api_key', 'deepseek_model', 'deepseek_base_url', 'ai_concurrency'] } },
+    });
+    const map = Object.fromEntries(rows.map(r => [r.key, r.value]));
+    const apiKey = map.deepseek_api_key || process.env.DEEPSEEK_API_KEY;
+    const baseUrl = (map.deepseek_base_url || process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, '');
+    const model = map.deepseek_model || process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash';
+
+    if (!apiKey) {
+      return res.json({ code: 0, data: { ok: false, error: '未配置 API Key', latency: null } });
+    }
+
+    const resp = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: 'Hi' }],
+        max_tokens: 5,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    const latency = Date.now() - start;
+    if (resp.ok) {
+      res.json({ code: 0, data: { ok: true, latency: `${latency}ms`, error: null } });
+    } else {
+      const text = await resp.text().catch(() => '');
+      res.json({ code: 0, data: { ok: false, latency: `${latency}ms`, error: `HTTP ${resp.status}: ${text.slice(0, 200)}` } });
+    }
+  } catch (err) {
+    const latency = Date.now() - start;
+    res.json({ code: 0, data: { ok: false, latency: latency ? `${latency}ms` : '—', error: err.message || '连接失败' } });
   }
 };
 

@@ -22,33 +22,6 @@
       </a-row>
     </a-card>
 
-    <!-- AI 配置 -->
-    <a-card title="🤖 AI 配置" size="small" class="monitor-card">
-      <a-form layout="inline" style="flex-wrap:wrap;gap:12px;">
-        <a-form-item label="API Key">
-          <a-input-password
-            v-model:value="aiForm.apiKey"
-            placeholder="输入 DeepSeek API Key"
-            style="width:320px;"
-            :visibilityToggle="true"
-          />
-        </a-form-item>
-        <a-form-item label="模型">
-          <a-select
-            v-model:value="aiForm.model"
-            style="width:200px;"
-            :options="modelOptions"
-          />
-        </a-form-item>
-        <a-form-item label="Base URL">
-          <a-input v-model:value="aiForm.baseUrl" placeholder="https://api.deepseek.com" style="width:280px;" />
-        </a-form-item>
-        <a-form-item>
-          <a-button type="primary" :loading="savingAi" @click="saveAiConfig">保存配置</a-button>
-        </a-form-item>
-      </a-form>
-    </a-card>
-
     <!-- PM2 进程 -->
     <a-card title="📦 PM2 进程" size="small" class="monitor-card">
       <a-table
@@ -95,41 +68,6 @@ const isMemLow = computed(() => {
   return free && total && free / total < 0.15;
 });
 
-// AI 配置
-const savingAi = ref(false);
-const aiForm = reactive({ apiKey: '', model: '', baseUrl: '' });
-const modelOptions = [
-  { label: 'deepseek-v4-flash（推荐，快速）', value: 'deepseek-v4-flash' },
-  { label: 'deepseek-chat', value: 'deepseek-chat' },
-  { label: 'deepseek-reasoner', value: 'deepseek-reasoner' },
-];
-
-async function loadAiConfig() {
-  try {
-    const r = await request.get('/admin/settings');
-    const d = r.data;
-    aiForm.apiKey = d.deepseek_api_key || '';
-    aiForm.model = d.deepseek_model || 'deepseek-v4-flash';
-    aiForm.baseUrl = d.deepseek_base_url || 'https://api.deepseek.com';
-  } catch { /* ignore */ }
-}
-
-async function saveAiConfig() {
-  savingAi.value = true;
-  try {
-    await request.put('/admin/settings', {
-      deepseek_api_key: aiForm.apiKey || undefined,
-      deepseek_model: aiForm.model,
-      deepseek_base_url: aiForm.baseUrl,
-    });
-    message.success('AI 配置已保存，1分钟内生效');
-    await loadAiConfig(); // 重新加载脱敏后的值
-  } catch {
-    message.error('保存失败');
-  }
-  savingAi.value = false;
-}
-
 const procCols = [
   { title: '进程名', dataIndex: 'name', width: 140 },
   { title: '状态', key: 'status', width: 80 },
@@ -155,7 +93,6 @@ async function fetch() {
 
 onMounted(() => {
   fetch();
-  loadAiConfig();
   timer = setInterval(() => { if (autoRefresh.value) fetch(); }, 30000);
 });
 

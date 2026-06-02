@@ -33,6 +33,7 @@ async function getConfig(key, envFallback) {
 async function getApiKey()    { return await getConfig('deepseek_api_key',  process.env.DEEPSEEK_API_KEY); }
 async function getBaseUrl()   { return await getConfig('deepseek_base_url', process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com'); }
 async function getModel()     { return await getConfig('deepseek_model',    process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash'); }
+export async function getConcurrency() { const v = await getConfig('ai_concurrency', '16'); return +v || 16; }
 
 const DEFAULT_CRITERIA = `评分标准：
 代码题：代码正确性（60%）+ 代码效率（20%）+ 代码可读性（20%）

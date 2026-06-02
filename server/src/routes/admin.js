@@ -30,5 +30,6 @@ router.get('/monitor', admin.getMonitor);
 // AI 配置
 router.get('/settings', admin.getSettings);
 router.put('/settings', admin.updateSettings);
+router.post('/settings/test-connection', admin.testConnection);
 
 export default router;
