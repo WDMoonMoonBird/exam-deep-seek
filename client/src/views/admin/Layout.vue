@@ -10,6 +10,7 @@
         <a-menu-item key="/admin/classes"><template #icon><AppstoreOutlined /></template><span>班级管理</span></a-menu-item>
         <a-menu-item key="/admin/teachers"><template #icon><TeamOutlined /></template><span>教师管理</span></a-menu-item>
         <a-menu-item key="/admin/students"><template #icon><IdcardOutlined /></template><span>学生管理</span></a-menu-item>
+        <a-menu-item key="/admin/monitor"><template #icon><DashboardOutlined /></template><span>系统监控</span></a-menu-item>
       </a-menu>
     </a-layout-sider>
     <a-layout>
@@ -44,7 +45,7 @@
 import { ref, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useUserStore } from '../../stores/user.js';
-import { BankOutlined, AppstoreOutlined, TeamOutlined, IdcardOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
+import { BankOutlined, AppstoreOutlined, TeamOutlined, IdcardOutlined, DashboardOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
 import { Modal } from 'ant-design-vue';
 
 const router = useRouter(); const route = useRoute(); const userStore = useUserStore();

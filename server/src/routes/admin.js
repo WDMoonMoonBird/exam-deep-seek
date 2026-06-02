@@ -24,4 +24,7 @@ router.put('/teachers/:id', admin.updateTeacher);
 router.get('/students', admin.getStudents);
 router.post('/students', admin.createStudent);
 
+// 服务器监控
+router.get('/monitor', admin.getMonitor);
+
 export default router;

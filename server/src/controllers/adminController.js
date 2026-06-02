@@ -254,3 +254,87 @@ export const createStudent = async (req, res) => {
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
   }
 };
+
+// ===================== 服务器监控 =====================
+import { exec } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+
+function execAsync(cmd) {
+  return new Promise((resolve) => {
+    exec(cmd, { timeout: 10000 }, (err, stdout, stderr) => {
+      if (err) return resolve({ error: err.message, stderr });
+      resolve({ stdout, stderr });
+    });
+  });
+}
+
+export const getMonitor = async (_req, res) => {
+  try {
+    const result = { processes: [], logs: '', errors: [], system: {} };
+
+    // 系统信息
+    result.system = {
+      hostname: os.hostname(),
+      platform: os.platform(),
+      cpus: os.cpus().length,
+      totalMem: (os.totalmem() / 1024 / 1024 / 1024).toFixed(1) + ' GB',
+      freeMem: (os.freemem() / 1024 / 1024 / 1024).toFixed(1) + ' GB',
+      uptime: Math.floor(os.uptime() / 3600) + 'h ' + Math.floor((os.uptime() % 3600) / 60) + 'm',
+      loadAvg: os.loadavg().map(v => v.toFixed(2)),
+    };
+
+    // PM2 进程状态
+    const pm2 = await execAsync('pm2 jlist');
+    if (pm2.stdout) {
+      try {
+        const list = JSON.parse(pm2.stdout);
+        result.processes = list.map(p => ({
+          name: p.name,
+          status: p.pm2_env?.status || 'unknown',
+          cpu: p.monit?.cpu || 0,
+          memory: p.monit ? (p.monit.memory / 1024 / 1024).toFixed(1) + ' MB' : 'N/A',
+          uptime: p.pm2_env?.pm_uptime ? formatUptime(Date.now() - p.pm2_env.pm_uptime) : 'N/A',
+          restarts: p.pm2_env?.restart_time || 0,
+          pid: p.pid,
+        }));
+      } catch { result.errors.push('无法解析 PM2 JSON'); }
+    } else {
+      result.errors.push('PM2 不可用: ' + (pm2.error || '未知错误'));
+    }
+
+    // 最近错误日志（读取 PM2 日志文件）
+    const logDir = path.join(os.homedir(), '.pm2', 'logs');
+    try {
+      if (fs.existsSync(logDir)) {
+        const files = fs.readdirSync(logDir).filter(f => f.endsWith('.log') && f.includes('error'));
+        const logLines = [];
+        for (const file of files.slice(0, 4)) {
+          try {
+            const content = fs.readFileSync(path.join(logDir, file), 'utf-8');
+            const lines = content.split('\n').filter(l => l.trim()).slice(-30);
+            logLines.push(`--- ${file} (最近 ${lines.length} 行) ---`);
+            logLines.push(...lines);
+          } catch {}
+        }
+        result.logs = logLines.join('\n');
+      } else {
+        result.logs = '(日志目录不存在)';
+      }
+    } catch (e) {
+      result.errors.push('读取日志失败: ' + e.message);
+    }
+
+    res.json({ code: 0, data: result });
+  } catch (err) {
+    logger.error({ err }, '获取监控信息失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+function formatUptime(ms) {
+  if (ms < 60000) return Math.floor(ms / 1000) + 's';
+  if (ms < 3600000) return Math.floor(ms / 60000) + 'm';
+  return Math.floor(ms / 3600000) + 'h ' + Math.floor((ms % 3600000) / 60000) + 'm';
+}
