@@ -10,40 +10,41 @@ export const login = async (req, res) => {
       return res.status(400).json({ code: 1001, message: '参数错误', data: null });
     }
 
-    // schoolCode 存在时，用户已选择学校 → 精确匹配
+    // schoolCode 存在时 → 精确匹配 username@schoolCode
     const lookupUsername = schoolCode ? `${username}@${schoolCode}` : username;
 
-    let user = await prisma.user.findUnique({ where: { username: lookupUsername } });
+    let user = null;
+    const isStudentLogin = !username.includes('@') && !schoolCode;
+
+    // 学生登录：优先匹配新格式（学号@院校代码），避免旧格式空壳用户抢先命中
+    if (isStudentLogin) {
+      const newStudents = await prisma.user.findMany({
+        where: { username: { startsWith: username + '@' }, role: 'student' },
+      });
+
+      if (newStudents.length === 1) {
+        user = newStudents[0];
+      } else if (newStudents.length > 1) {
+        const codes = [...new Set(newStudents.map(s => s.username.split('@')[1]))];
+        const schools = await prisma.school.findMany({
+          where: { officialCode: { in: codes } },
+          select: { name: true, officialCode: true },
+        });
+        return res.json({
+          code: 1002,
+          message: '该学号存在多个学校，请选择所在学校',
+          data: { schools },
+        });
+      }
+    }
+
+    // 兜底：findUnique（教师、管理员、或确实只有旧格式的学生）
+    if (!user) {
+      user = await prisma.user.findUnique({ where: { username: lookupUsername } });
+    }
 
     if (!user) {
-      // 精确匹配不到，尝试多学校学生查询
-      if (!schoolCode && !username.includes('@')) {
-        const students = await prisma.user.findMany({
-          where: { username: { startsWith: username + '@' }, role: 'student' },
-        });
-
-        if (students.length === 0) {
-          return res.status(400).json({ code: 1001, message: '用户名或密码错误', data: null });
-        }
-
-        if (students.length === 1) {
-          user = students[0];
-        } else {
-          // 多个学校有相同学号 → 返回学校列表让用户选择
-          const codes = [...new Set(students.map(s => s.username.split('@')[1]))];
-          const schools = await prisma.school.findMany({
-            where: { officialCode: { in: codes } },
-            select: { name: true, officialCode: true },
-          });
-          return res.json({
-            code: 1002,
-            message: '该学号存在多个学校，请选择所在学校',
-            data: { schools },
-          });
-        }
-      } else {
-        return res.status(400).json({ code: 1001, message: '用户名或密码错误', data: null });
-      }
+      return res.status(400).json({ code: 1001, message: '用户名或密码错误', data: null });
     }
 
     const isMatch = bcrypt.compareSync(password, user.password);
