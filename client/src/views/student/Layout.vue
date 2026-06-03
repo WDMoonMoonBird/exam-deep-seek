@@ -19,7 +19,7 @@
         <a-dropdown>
           <div class="user-area">
             <a-avatar size="small" class="user-avatar">{{ user?.realName?.charAt(0) }}</a-avatar>
-            <span class="user-name">{{ user?.realName }}<span class="user-info"> · {{ user?.username }}</span></span>
+            <span class="user-name">{{ user?.realName }}<span class="user-info"> · {{ displayUsername }}{{ schoolName ? ' @ ' + schoolName : '' }}</span></span>
             <CaretDownOutlined class="user-caret" />
           </div>
           <template #overlay>
@@ -65,7 +65,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue';
+import { ref, reactive, computed, watch, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useUserStore } from '../../stores/user.js';
 import { Modal, message } from 'ant-design-vue';
@@ -91,6 +91,23 @@ function onMenuClick ({ key }) {
 
 const showProfile = ref(false);
 const profile = reactive({ classes: null });
+const schoolName = ref('');
+
+const displayUsername = computed(() => {
+  const u = user?.username || '';
+  const at = u.lastIndexOf('@');
+  return at > 0 ? u.substring(0, at) : u;
+});
+
+async function loadSchoolName() {
+  try {
+    const r = await request.get('/student/profile');
+    const classes = r.data?.classes || [];
+    if (classes.length) schoolName.value = classes[0].schoolName || '';
+  } catch {}
+}
+
+onMounted(() => { loadSchoolName(); });
 const pwdActiveKey = ref([]);
 const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' });
 const changingPwd = ref(false);
