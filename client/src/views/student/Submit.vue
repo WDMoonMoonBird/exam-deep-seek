@@ -121,7 +121,7 @@
                 v-model="answers[sq.id]"
                 :language="editorLangs[sq.id] || sq.language || 'cpp'"
                 :readOnly="isSqReadonly(sq.id)"
-                :height="280"
+                :height="560"
               />
             </div>
             <div
@@ -135,6 +135,12 @@
               </div>
             </div>
           </template>
+
+          <!-- 主观题参考答案（练习模式已评分后显示） -->
+          <div v-if="isPracticeMode && (subStatuses[sq.id] === 'ai_graded' || subStatuses[sq.id] === 'reviewed' || subStatuses[sq.id] === 'published') && sq.referenceAnswer" class="sq-reference">
+            <div class="fb-label">参考答案</div>
+            <pre class="reference-code">{{ sq.referenceAnswer }}</pre>
+          </div>
 
           <!-- 客观题：小问列表 -->
           <template v-else-if="sq.type === 'objective'">
@@ -204,6 +210,11 @@
                   :style="{ fontFamily: 'monospace' }"
                 />
               </div>
+
+              <!-- 练习模式已评分：显示正确答案 -->
+              <div v-if="isPracticeMode && isSqReadonly(sq.id) && item.answer != null" class="oi-reference">
+                正确答案：{{ formatItemAnswer(item) }}
+              </div>
             </div>
           </template>
 
@@ -214,8 +225,13 @@
           </div>
         </div>
 
+        <!-- 底部：练习模式全部出分 → 重新答题 -->
+        <div class="sp-submit-bar" v-if="practiceAllGraded" style="justify-content:center">
+          <a-button type="primary" size="large" @click="retryPractice">重新答题</a-button>
+        </div>
+
         <!-- 底部提交栏 -->
-        <div class="sp-submit-bar" v-if="!allSubmitted && !isExpired">
+        <div class="sp-submit-bar" v-else-if="!allSubmitted && !isExpired">
           <div class="sp-submit-info">
             <template v-if="unsubmittedCount === 0">
               <span style="color:#52c41a;">✓ 全部已提交</span>
@@ -306,6 +322,56 @@ function getNavLabel(sq, i) {
 function itemTypeLabel(type) {
   const map = { choice: '单选', multi_choice: '多选', judge: '判断', fill: '填空' };
   return map[type] || type;
+}
+
+function formatItemAnswer(item) {
+  if (!item) return '';
+  if (item.type === 'choice' || item.type === 'judge') {
+    if (item.type === 'judge') return item.answer === 'true' ? '正确' : '错误';
+    const opt = (item.options || []).find(o => o.key === item.answer);
+    return opt ? `${item.answer}. ${opt.text}` : item.answer;
+  } else if (item.type === 'multi_choice') {
+    const keys = (Array.isArray(item.answer) ? item.answer : String(item.answer || '').split(',')).map(s => s.trim());
+    return keys.map(k => {
+      const opt = (item.options || []).find(o => o.key === k);
+      return opt ? `${k}. ${opt.text}` : k;
+    }).join('；');
+  }
+  return item.answer || '';
+}
+
+async function retryPractice() {
+  Modal.confirm({
+    title: '重新答题',
+    content: '将清空当前所有答案，之前的高分记录会被保留。确定重新开始吗？',
+    okText: '确定',
+    cancelText: '取消',
+    onOk: async () => {
+      try {
+        await request.post(`/student/assignments/${route.params.id}/retry`);
+        // 清空本地状态
+        for (const key in answers) answers[key] = '';
+        for (const key in itemAnswers) {
+          itemAnswers[key].answer = '';
+          itemAnswers[key].correct = undefined;
+        }
+        for (const key in multiAnswerBind) multiAnswerBind[key] = [];
+        for (const key in subStatuses) subStatuses[key] = null;
+        for (const key in subScores) subScores[key] = null;
+        for (const key in subFeedbacks) subFeedbacks[key] = '';
+        bestScore.value = null;
+        stopPolling();
+        dirtySet.clear();
+        dirtyCount.value = 0;
+        // 卸载旧的编辑器状态以便重新挂载
+        for (const key in editorRefs) delete editorRefs[key];
+        for (const key in editorMounted) editorMounted[key] = false;
+        // 重新加载
+        await nextTick();
+        await fetch();
+      } catch { message.error('操作失败'); }
+    },
+  });
 }
 
 function itemTypeColor(type) {
@@ -429,8 +495,10 @@ const remainingAttempts = computed(() => {
 
 function isSqReadonly(sqId) {
   if (isExpired.value) return true;
+  const s = subStatuses[sqId];
+  // 练习模式已评分 → 锁定只读，显示答案
+  if (isPracticeMode.value && (s === 'ai_graded' || s === 'reviewed' || s === 'published')) return true;
   if (!allowResubmit.value) {
-    const s = subStatuses[sqId];
     return s === 'submitted' || s === 'ai_graded' || s === 'reviewed' || s === 'published';
   }
   return false;
@@ -463,6 +531,15 @@ const submitDisabled = computed(() => {
     }
   }
   return false;
+});
+
+const practiceAllGraded = computed(() => {
+  if (!isPracticeMode.value) return false;
+  if (!subQuestions.value.length) return false;
+  return subQuestions.value.every(sq => {
+    const s = subStatuses[sq.id];
+    return s === 'ai_graded' || s === 'reviewed' || s === 'published';
+  });
 });
 
 function isCodeStem(stem) {
@@ -1135,6 +1212,24 @@ onUnmounted(() => {
 }
 .fb-label { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
 .fb-body { font-size: 13px; color: #555; line-height: 1.7; }
+
+/* 参考答案 */
+.sq-reference {
+  margin-top: 16px; padding: 12px 16px;
+  background: #f6ffed; border: 1px solid #b7eb8f; border-radius: 8px;
+  max-height: 360px; overflow: auto;
+}
+.reference-code {
+  margin: 8px 0 0; font-size: 13px; line-height: 1.7;
+  white-space: pre-wrap; word-break: break-all;
+  font-family: 'SF Mono', Monaco, Consolas, monospace;
+  color: #333;
+}
+.oi-reference {
+  margin-top: 8px; padding: 6px 10px;
+  background: #fff7e6; border: 1px solid #ffd591; border-radius: 6px;
+  font-size: 13px; color: #ad6800;
+}
 
 /* 底部提交栏 */
 .sp-submit-bar {

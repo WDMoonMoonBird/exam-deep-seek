@@ -103,6 +103,26 @@ export const getAssignmentDetail = async (req, res) => {
       return { ...s, aiScore: null, aiFeedback: null, finalScore: null, teacherFeedback: null };
     });
 
+    // 学生有权看答案的条件 → 考试已发布 或 练习已评分
+    const canSeeAnswers = safeSubmissions.some(s =>
+      s.status === 'published' ||
+      (isPractice && (s.status === 'ai_graded' || s.status === 'reviewed'))
+    );
+
+    // strip 敏感字段：未出分时隐藏参考答案
+    if (!canSeeAnswers) {
+      for (const aq of assignment.assignmentQuestions) {
+        const subQuestions = aq.question?.subQuestions || [];
+        for (const sq of subQuestions) {
+          sq.referenceAnswer = null;
+          sq.scoringCriteria = null;
+          if (sq.objectiveItems) {
+            sq.objectiveItems = sq.objectiveItems.map(item => ({ ...item, answer: null }));
+          }
+        }
+      }
+    }
+
     res.json({ code: 0, message: 'ok', data: { assignment, submissions: safeSubmissions } });
   } catch (err) {
     logger.error({ err }, '获取作业详情失败');
@@ -205,6 +225,25 @@ export const saveDraft = async (req, res) => {
     res.json({ code: 0, message: '草稿已保存', data: null });
   } catch (err) {
     logger.error({ err }, '保存草稿失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+export const retryAssignment = async (req, res) => {
+  try {
+    const assignment = await prisma.assignment.findUnique({ where: { id: +req.params.id }, select: { mode: true, locked: true } });
+    if (!assignment) return res.status(404).json({ code: 1004, message: '作业不存在', data: null });
+    if (assignment.locked) return res.status(403).json({ code: 1003, message: '作业已被锁定', data: null });
+    if (assignment.mode !== 'practice') return res.status(400).json({ code: 1001, message: '仅练习模式支持重新答题', data: null });
+
+    await prisma.submission.updateMany({
+      where: { assignmentId: +req.params.id, studentId: req.user.id },
+      data: { status: 'draft', answer: '', aiScore: null, aiFeedback: null, finalScore: null, teacherFeedback: null, submittedAt: null, reviewedAt: null },
+    });
+    logger.info({ assignmentId: +req.params.id, studentId: req.user.id }, '练习重新答题');
+    res.json({ code: 0, message: '已重置', data: null });
+  } catch (err) {
+    logger.error({ err }, '重新答题失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
   }
 };

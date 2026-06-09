@@ -11,6 +11,7 @@ router.get('/assignments', student.getAssignments);
 router.get('/assignments/:id', student.getAssignmentDetail);
 router.post('/assignments/:id/submit', student.submitAnswer);
 router.put('/assignments/:id/draft', student.saveDraft);
+router.post('/assignments/:id/retry', student.retryAssignment);
 
 // 成绩
 router.get('/scores', student.getScores);
