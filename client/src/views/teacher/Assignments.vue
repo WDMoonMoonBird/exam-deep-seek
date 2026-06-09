@@ -99,7 +99,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted, h } from 'vue';
 import { message, Modal } from 'ant-design-vue';
 import { CheckOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons-vue';
 import dayjs from 'dayjs';
@@ -226,11 +226,36 @@ async function toggleLock(record) {
 
 function onPracticeToggle(checked) {
   if (!checked) { timeForm.isPractice = false; return; }
+
+  const items = [
+    { title: '学生可重复提交', desc: '在设定的次数范围内，学生可多次提交答案' },
+    { title: '自动出分，跳过审核', desc: '学生提交后，系统自动评分并直接显示分数和评语，无需教师审核和发布' },
+    { title: '保留最高分', desc: '多次提交中，系统自动保留最高的一次成绩' },
+    { title: '教师仍可查看', desc: '练习模式下教师仍可查看学生答题情况和系统评分' },
+  ];
+
+  const content = h('div', { style: 'padding:4px 0' }, [
+    h('p', { style: 'margin:0 0 16px;color:#555;font-size:14px' }, '开启后，该作业将变为练习模式：'),
+    ...items.map((item, i) =>
+      h('div', { style: `display:flex;align-items:flex-start;gap:12px;margin-bottom:${i < items.length - 1 ? '12px' : '0'}` }, [
+        h('span', { style: 'display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#52c41a;color:#fff;font-size:12px;font-weight:700;flex-shrink:0' }, i + 1),
+        h('div', { style: 'line-height:1.5' }, [
+          h('div', { style: 'font-weight:600;font-size:13px;color:#333' }, item.title),
+          h('div', { style: 'font-size:12px;color:#888' }, item.desc),
+        ]),
+      ])
+    ),
+    h('div', { style: 'margin-top:16px;padding:10px 12px;background:#fff7e6;border-radius:6px;border:1px solid #ffd591;font-size:13px;color:#ad6800' },
+      '开启后将无法切换回考试模式。确定开启练习模式吗？'
+    ),
+  ]);
+
   Modal.confirm({
     title: '开启练习模式',
-    content: '开启后，该作业将变为练习模式，具体变化如下：\n\n1. 学生可重复提交 — 在设定的次数范围内，学生可多次提交答案\n2. 自动出分 — 学生提交后，系统自动评分并直接显示分数和评语，无需教师审核和发布\n3. 保留最高分 — 多次提交中，系统自动保留最高的一次成绩\n4. 无需审核发布 — 跳过「教师审核 → 发布成绩」流程，练习模式下教师仍可查看学生答题情况\n\n确定开启练习模式吗？开启后将无法切换回考试模式。',
+    content,
     okText: '确定开启',
     cancelText: '取消',
+    width: 480,
     onOk: () => { timeForm.isPractice = true; },
   });
 }
