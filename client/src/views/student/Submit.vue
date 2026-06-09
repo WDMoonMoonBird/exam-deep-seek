@@ -925,6 +925,7 @@ async function pollStatus() {
     const r = await request.get(`/student/assignments/${route.params.id}`);
     const subs = r.data.submissions || [];
     let anyGrading = false;
+    let anyTransitioned = false;
     for (const s of subs) {
       const key = s.subQuestionId || s.questionId;
       const sq = subQuestions.value.find(sq => sq.id === key);
@@ -934,6 +935,7 @@ async function pollStatus() {
         anyGrading = true;
       } else if (s.status === 'ai_graded' || s.status === 'reviewed') {
         if (prevStatus !== s.status) {
+          anyTransitioned = true;
           subScores[key] = s.finalScore ?? s.aiScore;
           if (sq?.type === 'code' || !sq?.type) {
             subFeedbacks[key] = s.teacherFeedback || s.aiFeedback || '';
@@ -941,9 +943,24 @@ async function pollStatus() {
           if (sq?.type === 'objective') {
             markObjectiveCorrect(sq, s);
           }
-          // 更新最高分
           if (s.bestScore != null && (bestScore.value == null || s.bestScore > bestScore.value)) {
             bestScore.value = s.bestScore;
+          }
+        }
+      }
+    }
+    // 评分完成时刷新题目数据以获取参考答案（API 出分后才返回）
+    if (!anyGrading && anyTransitioned) {
+      const aq = r.data.assignment?.assignmentQuestions?.[0];
+      if (aq) {
+        const freshSubs = aq.question?.subQuestions || [];
+        for (const freshSq of freshSubs) {
+          const existing = subQuestions.value.find(sq => sq.id === freshSq.id);
+          if (existing) {
+            existing.referenceAnswer = freshSq.referenceAnswer;
+            if (freshSq.objectiveItems) {
+              existing.objectiveItems = freshSq.objectiveItems;
+            }
           }
         }
       }
