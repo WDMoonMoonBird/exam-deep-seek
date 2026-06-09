@@ -6,7 +6,7 @@
         ← 返回
       </a-button>
       <h3 class="rp-title">{{ q.title }}</h3>
-      <span class="rp-student">{{ studentName }} / {{ studentNo }}</span>
+      <span class="rp-student">{{ studentName }} / {{ displayStudentNo }}</span>
       <a-tag color="orange">总分 {{ q.maxScore }} 分</a-tag>
       <a-tag v-if="totalAiScore > 0" color="green">AI 评分 {{ totalAiScore }} / {{ q.maxScore }}</a-tag>
     </div>
@@ -199,6 +199,7 @@ const route = useRoute();
 const data = ref(null);
 const studentName = ref('');
 const studentNo = ref('');
+const schoolName = ref('');
 const q = ref({});
 const subQuestions = ref([]);
 const showMaterial = ref(true);
@@ -371,6 +372,17 @@ const totalAiScore = computed(() => {
   return sum;
 });
 
+const displayStudentNo = computed(() => {
+  const no = studentNo.value;
+  if (!no) return '';
+  const at = no.lastIndexOf('@');
+  if (at > 0 && schoolName.value) {
+    return no.substring(0, at) + '@' + schoolName.value;
+  }
+  if (at > 0) return no.substring(0, at);
+  return no;
+});
+
 function isCodeStem(stem) {
   if (!stem) return false;
   return stem.includes('```') || stem.includes('{') || stem.includes('function') || stem.includes('class ') || stem.includes('def ');
@@ -478,6 +490,7 @@ async function fetch() {
   data.value = r.data;
   studentName.value = r.data.student?.realName || '';
   studentNo.value = r.data.student?.username || '';
+  schoolName.value = r.data.schoolName || '';
   q.value = r.data.question || {};
   subQuestions.value = q.value.subQuestions || [];
 

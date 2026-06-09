@@ -43,6 +43,9 @@
         <template v-if="column.key === 'studentName'">
           {{ record.studentName }}
         </template>
+        <template v-if="column.key === 'studentNo'">
+          {{ formatStudentNo(record.studentNo, record.schoolName) }}
+        </template>
         <template v-if="column.key === 'aiScore'">{{ record.aiScore ?? '—' }}</template>
         <template v-if="column.key === 'finalScore'">
           <template v-if="!record.submitted"><span class="dim-text">—</span></template>
@@ -162,6 +165,17 @@ function statusText(s) {
   if (s === 'ai_graded') return 'AI已评分';
   if (s === 'submitted') return '待评分';
   return s;
+}
+
+function formatStudentNo(studentNo, schoolName) {
+  if (!studentNo) return '';
+  const at = studentNo.lastIndexOf('@');
+  if (at > 0 && schoolName) {
+    return studentNo.substring(0, at) + '@' + schoolName;
+  }
+  // 没有学校名但有@ → 只显示学号
+  if (at > 0) return studentNo.substring(0, at);
+  return studentNo;
 }
 
 let timer = null;

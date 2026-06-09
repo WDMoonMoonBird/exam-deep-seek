@@ -26,7 +26,7 @@ if (!process.env.JWT_SECRET) logger.warn('JWT_SECRET 未配置，使用默认密
 // 安全中间件
 app.use(helmet({ contentSecurityPolicy: false })); // CSP 由 Vite 处理
 app.use(cors({
-  origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ['http://localhost:5173'],
+  origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : [/^http:\/\/localhost:\d+$/],
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));

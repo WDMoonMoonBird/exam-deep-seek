@@ -108,7 +108,17 @@ export const getSubmissionDetail = async (req, res) => {
       include: { subQuestion: true },
     });
 
-    res.json({ code: 0, message: 'ok', data: { ...s, allSubmissions: allSubs } });
+    // 查学生所在学校
+    let schoolName = '';
+    if (s.studentId) {
+      const sc = await prisma.studentClass.findFirst({
+        where: { studentId: s.studentId },
+        include: { class: { include: { school: { select: { name: true } } } } },
+      });
+      schoolName = sc?.class?.school?.name || '';
+    }
+
+    res.json({ code: 0, message: 'ok', data: { ...s, allSubmissions: allSubs, schoolName } });
   } catch (err) {
     logger.error({ err }, '获取提交详情失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
@@ -323,6 +333,7 @@ export const getReviewSummary = async (req, res) => {
         });
         const studentSubMap = new Map();
         for (const s of subs) {
+          if (s.status === 'draft') continue; // draft 不算已交
           if (!studentSubMap.has(s.studentId)) studentSubMap.set(s.studentId, []);
           studentSubMap.get(s.studentId).push({ status: s.status, feedback: s.aiFeedback });
         }
@@ -361,7 +372,7 @@ export const getReviewByClass = async (req, res) => {
 
     const studentRecords = await prisma.studentClass.findMany({
       where: { classId },
-      include: { student: true, class: true },
+      include: { student: true, class: { include: { school: { select: { name: true } } } } },
       orderBy: { student: { username: 'asc' } },
     });
 
@@ -385,17 +396,20 @@ export const getReviewByClass = async (req, res) => {
     const statusOrder = { draft: 0, submitted: 1, ai_graded: 2, reviewed: 3, published: 4 };
     let rows = filtered.map(sc => {
       const subs = studentSubsMap.get(sc.studentId);
-      if (subs && subs.length) {
-        const aiTotal = subs.reduce((sum, s) => sum + (s.aiScore || 0), 0);
-        const finalTotal = subs.reduce((sum, s) => sum + (s.finalScore || 0), 0);
-        const hasAbnormal = subs.some(s => s.aiFeedback === ABNORMAL_FEEDBACK);
+      // 过滤掉草稿记录 — draft 不算正式提交
+      const realSubs = subs ? subs.filter(s => s.status !== 'draft') : [];
+      if (realSubs.length) {
+        const aiTotal = realSubs.reduce((sum, s) => sum + (s.aiScore ?? 0), 0);
+        const finalTotal = realSubs.reduce((sum, s) => sum + (s.finalScore ?? 0), 0);
+        const hasAbnormal = realSubs.some(s => s.aiFeedback === ABNORMAL_FEEDBACK);
         const worstStatus = hasAbnormal ? 'abnormal'
-          : subs.reduce((worst, s) =>
-              (statusOrder[s.status] ?? 0) < (statusOrder[worst] ?? 0) ? s.status : worst, subs[0].status);
+          : realSubs.reduce((worst, s) =>
+              (statusOrder[s.status] ?? 0) < (statusOrder[worst] ?? 0) ? s.status : worst, realSubs[0].status);
         return {
-          id: subs[0].id, studentId: sc.studentId,
+          id: realSubs[0].id, studentId: sc.studentId,
           studentName: sc.student.realName, studentNo: sc.student.username,
-          className: sc.class?.name || '', assignmentTitle: subs[0].assignment?.title || '',
+          schoolName: sc.class?.school?.name || '',
+          className: sc.class?.name || '', assignmentTitle: realSubs[0].assignment?.title || '',
           aiScore: aiTotal, finalScore: finalTotal > 0 ? finalTotal : null,
           status: worstStatus, submitted: true,
         };
@@ -403,6 +417,7 @@ export const getReviewByClass = async (req, res) => {
       return {
         id: `ns-${sc.studentId}`, studentId: sc.studentId,
         studentName: sc.student.realName, studentNo: sc.student.username,
+        schoolName: sc.class?.school?.name || '',
         className: sc.class?.name || '', assignmentTitle: '',
         aiScore: null, finalScore: null, status: 'not_submitted', submitted: false,
       };
