@@ -80,7 +80,7 @@
           <a-form-item label="作业标题"><a-input v-model:value="timeForm.title" /></a-form-item>
           <a-form-item label="作业说明"><a-textarea v-model:value="timeForm.description" :rows="3" /></a-form-item>
           <a-form-item label="起止时间"><a-range-picker v-model:value="timeForm.timeRange" show-time :locale="dateLocale" /></a-form-item>
-          <a-form-item label="练习模式"><a-switch v-model:checked="timeForm.isPractice" /></a-form-item>
+          <a-form-item label="练习模式"><a-switch :checked="timeForm.isPractice" @change="onPracticeToggle" /></a-form-item>
           <a-form-item v-if="timeForm.isPractice" label="允许提交次数">
             <a-input-number v-model:value="timeForm.maxAttempts" :min="1" placeholder="不限" style="width:120px" />
             <span style="margin-left:8px;color:var(--ink-muted);font-size:13px">留空为不限次数</span>
@@ -100,7 +100,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
-import { message } from 'ant-design-vue';
+import { message, Modal } from 'ant-design-vue';
 import { CheckOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons-vue';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
@@ -222,6 +222,17 @@ async function toggleLock(record) {
     record.locked = !record.locked;
     message.success(record.locked ? '已锁定' : '已解锁');
   } catch { message.error('操作失败'); }
+}
+
+function onPracticeToggle(checked) {
+  if (!checked) { timeForm.isPractice = false; return; }
+  Modal.confirm({
+    title: '开启练习模式',
+    content: '开启后，该作业将变为练习模式，具体变化如下：\n\n1. 学生可重复提交 — 在设定的次数范围内，学生可多次提交答案\n2. 自动出分 — 学生提交后，系统自动评分并直接显示分数和评语，无需教师审核和发布\n3. 保留最高分 — 多次提交中，系统自动保留最高的一次成绩\n4. 无需审核发布 — 跳过「教师审核 → 发布成绩」流程，练习模式下教师仍可查看学生答题情况\n\n确定开启练习模式吗？开启后将无法切换回考试模式。',
+    okText: '确定开启',
+    cancelText: '取消',
+    onOk: () => { timeForm.isPractice = true; },
+  });
 }
 
 onMounted(fetch);
