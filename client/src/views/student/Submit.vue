@@ -952,7 +952,7 @@ onUnmounted(() => {
   border-bottom: 1px solid #f0f0f0; flex-shrink: 0;
 }
 .sp-nav-list {
-  flex: 1; overflow-y: auto; padding: 8px 12px;
+  flex: 1; overflow-y: auto; padding: 8px 12px 16px;
 }
 .sp-nav-footer {
   padding: 8px 14px; font-size: 12px;
@@ -986,13 +986,14 @@ onUnmounted(() => {
 
 /* 方块网格容器（折叠动画） */
 .n-grid-wrap {
-  overflow: hidden;
-  max-height: 400px;
+  max-height: none;
+  overflow: visible;
   transition: max-height .3s ease, opacity .2s ease;
   opacity: 1;
 }
 .n-grid-wrap.collapsed {
   max-height: 0;
+  overflow: hidden;
   opacity: 0;
 }
 
