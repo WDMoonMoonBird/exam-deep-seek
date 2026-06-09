@@ -267,6 +267,7 @@ const showMaterial = ref(true);
 const isPracticeMode = ref(false);
 const maxAttempts = ref(null);
 const currentAttempt = ref(1);
+const submittedAttempts = ref(0);
 const bestScore = ref(null);
 
 const answers = reactive({});         // sqId → code string
@@ -422,7 +423,7 @@ const isExpired = computed(() => endTime.value ? Date.now() > new Date(endTime.v
 
 const remainingAttempts = computed(() => {
   if (!maxAttempts.value) return '不限';
-  const rem = maxAttempts.value - currentAttempt.value;
+  const rem = maxAttempts.value - submittedAttempts.value;
   return Math.max(0, rem);
 });
 
@@ -731,6 +732,7 @@ async function submitAll() {
       if (fail === 0) {
         message.success(`全部 ${ok} 题提交成功`);
         currentAttempt.value += 1;
+        submittedAttempts.value += 1;
         if (isPracticeMode.value) startPolling();
       } else message.warning(`${ok} 题成功，${fail} 题失败`);
     },
@@ -799,15 +801,16 @@ async function fetch() {
     }
   }
 
-  // 统计当前尝试次数和最高分
+  // 统计已提交次数和最高分
   let best = null;
-  const attemptsSet = new Set();
+  let maxAttemptCount = 0;
   (r.data.submissions || []).forEach(s => {
     if (s.bestScore != null && (best == null || s.bestScore > best)) best = s.bestScore;
-    if (s.attemptCount > 0) attemptsSet.add(s.attemptCount);
+    if (s.attemptCount > maxAttemptCount) maxAttemptCount = s.attemptCount;
   });
   bestScore.value = best;
-  currentAttempt.value = Math.max(1, attemptsSet.size);
+  submittedAttempts.value = maxAttemptCount;
+  currentAttempt.value = maxAttemptCount + 1;
 
   // 练习模式：如果有正在评分中的提交，开启轮询
   if (isPracticeMode.value) {
