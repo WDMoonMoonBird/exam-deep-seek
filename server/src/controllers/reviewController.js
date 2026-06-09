@@ -94,7 +94,7 @@ export const getSubmissionDetail = async (req, res) => {
         student: { select: { id: true, username: true, realName: true } },
         question: { include: { subQuestions: { orderBy: { sortOrder: 'asc' } } } },
         subQuestion: true,
-        assignment: { select: { id: true, title: true } },
+        assignment: { select: { id: true, title: true, mode: true } },
       },
     });
     if (!s) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
@@ -210,6 +210,9 @@ export const batchReview = async (req, res) => {
     const { schoolId, classId, assignmentId } = req.body;
     if (!schoolId) return res.status(400).json({ code: 1001, message: '请选择学校', data: null });
 
+    const assignment = await prisma.assignment.findUnique({ where: { id: +assignmentId }, select: { mode: true } });
+    if (assignment?.mode === 'practice') return res.status(400).json({ code: 1001, message: '练习模式无需审核', data: null });
+
     const classStudents = await prisma.studentClass.findMany({ where: { classId: +classId }, select: { studentId: true } });
     const studentIds = classStudents.map(cs => cs.studentId);
 
@@ -252,6 +255,9 @@ export const batchPublish = async (req, res) => {
   try {
     const { schoolId, classId, assignmentId } = req.body;
     if (!schoolId) return res.status(400).json({ code: 1001, message: '请选择学校', data: null });
+
+    const assignment = await prisma.assignment.findUnique({ where: { id: +assignmentId }, select: { mode: true } });
+    if (assignment?.mode === 'practice') return res.status(400).json({ code: 1001, message: '练习模式无需发布', data: null });
 
     const classStudents = await prisma.studentClass.findMany({ where: { classId: +classId }, select: { studentId: true } });
     const studentIds = classStudents.map(cs => cs.studentId);
@@ -314,7 +320,7 @@ export const getReviewSummary = async (req, res) => {
     const classes = await prisma.class.findMany({
       where: classWhere,
       include: {
-        assignmentClasses: { include: { assignment: true } },
+        assignmentClasses: { include: { assignment: { select: { id: true, title: true, startTime: true, endTime: true, mode: true, locked: true, deletedAt: true } } } },
         studentClasses: true,
       },
       orderBy: { name: 'asc' },
@@ -346,13 +352,17 @@ export const getReviewSummary = async (req, res) => {
           else if (items.some(i => i.feedback === ABNORMAL_FEEDBACK)) abnormal++;
           else if (items.some(i => i.status === 'ai_graded')) reviewPending++;
         }
+        const isPractice = a.mode === 'practice';
         const allAiDone = submittedStudents > 0 && aiPending === 0;
         const allReviewed = submittedStudents > 0 && aiPending === 0 && reviewPending === 0 && abnormal === 0;
         rows.push({
           assignmentId: a.id, title: a.title, classId: c.id, className: c.name,
           startTime: a.startTime, endTime: a.endTime,
+          mode: a.mode || 'exam', locked: a.locked,
           totalStudents, submittedCount: submittedStudents,
-          aiPending, reviewPending, abnormal, allAiDone, allReviewed,
+          aiPending, reviewPending: isPractice ? 0 : reviewPending, abnormal,
+          aiCompleted: isPractice ? reviewPending : 0,
+          allAiDone, allReviewed,
         });
       }
     }
@@ -384,7 +394,7 @@ export const getReviewByClass = async (req, res) => {
       include: {
         question: { select: { title: true } },
         subQuestion: { select: { id: true, score: true } },
-        assignment: { select: { title: true } },
+        assignment: { select: { title: true, mode: true } },
       },
     });
     const studentSubsMap = new Map();
@@ -410,6 +420,7 @@ export const getReviewByClass = async (req, res) => {
           studentName: sc.student.realName, studentNo: sc.student.username,
           schoolName: sc.class?.school?.name || '',
           className: sc.class?.name || '', assignmentTitle: realSubs[0].assignment?.title || '',
+          mode: realSubs[0].assignment?.mode || 'exam',
           aiScore: aiTotal, finalScore: finalTotal > 0 ? finalTotal : null,
           status: worstStatus, submitted: true,
         };
@@ -418,7 +429,7 @@ export const getReviewByClass = async (req, res) => {
         id: `ns-${sc.studentId}`, studentId: sc.studentId,
         studentName: sc.student.realName, studentNo: sc.student.username,
         schoolName: sc.class?.school?.name || '',
-        className: sc.class?.name || '', assignmentTitle: '',
+        className: sc.class?.name || '', assignmentTitle: '', mode: 'exam',
         aiScore: null, finalScore: null, status: 'not_submitted', submitted: false,
       };
     });

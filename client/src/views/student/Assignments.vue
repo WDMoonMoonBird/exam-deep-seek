@@ -29,7 +29,9 @@
 
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'title'">
-          <span class="hw-link">{{ record.title }}</span>
+          <span :class="{ 'locked-text': record.locked }">{{ record.title }}</span>
+          <a-tag v-if="record.mode === 'practice'" color="green" size="small" style="margin-left:6px">练习</a-tag>
+          <LockOutlined v-if="record.locked" style="color:#ff4d4f;margin-left:4px" />
         </template>
         <template v-if="column.key === 'qCount'">
           {{ record._count?.assignmentQuestions || 0 }}
@@ -64,7 +66,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import request from '../../api/request.js';
-import { FieldTimeOutlined } from '@ant-design/icons-vue';
+import { FieldTimeOutlined, LockOutlined } from '@ant-design/icons-vue';
 import DataTable from '../../components/DataTable.vue';
 
 const router = useRouter();
@@ -115,7 +117,7 @@ function statusText(a) {
   return '未提交';
 }
 
-function canEnter(a) { return !isNotStarted(a) && !(isExpired(a) && !hasRealSubmit(a)); }
+function canEnter(a) { return !a.locked && !isNotStarted(a) && !(isExpired(a) && !hasRealSubmit(a)); }
 function formatDate(d) { return d ? new Date(d).toLocaleDateString('zh-CN') : ''; }
 function formatTime(d) { return d ? new Date(d).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : ''; }
 
@@ -171,6 +173,7 @@ onUnmounted(() => { clearInterval(nowTimer); });
   flex-shrink: 0;
 }
 .hw-link { color: var(--blue); }
+.locked-text { color: var(--ink-muted); }
 .time-cell { display: flex; align-items: center; gap: 6px; justify-content: center; }
 .time-icon { font-size: 16px; color: var(--ink-muted); flex-shrink: 0; }
 .time-text { line-height: 1.4; }

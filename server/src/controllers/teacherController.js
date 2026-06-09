@@ -212,9 +212,10 @@ export const getAssignments = async (req, res) => {
         where,
         select: {
           id: true, title: true, startTime: true, endTime: true, createdAt: true,
+          mode: true, maxAttempts: true, locked: true,
           teacher: { select: { realName: true } },
           assignmentClasses: { include: { class: { select: { id: true, name: true } } } },
-          _count: { select: { assignmentQuestions: true, submissions: true } },
+          _count: { select: { assignmentQuestions: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip: (+page - 1) * +pageSize,
@@ -222,6 +223,30 @@ export const getAssignments = async (req, res) => {
       }),
       prisma.assignment.count({ where }),
     ]);
+
+    // 去重统计已提交学生数（排除 draft）
+    const assignmentIds = list.map(a => a.id);
+    if (assignmentIds.length) {
+      const subs = await prisma.submission.findMany({
+        where: { assignmentId: { in: assignmentIds }, status: { not: 'draft' } },
+        select: { assignmentId: true, studentId: true },
+      });
+      const countMap = {};
+      const seen = new Set();
+      for (const s of subs) {
+        const key = `${s.assignmentId}_${s.studentId}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          countMap[s.assignmentId] = (countMap[s.assignmentId] || 0) + 1;
+        }
+      }
+      for (const a of list) {
+        a.submissionCount = countMap[a.id] || 0;
+      }
+    } else {
+      for (const a of list) a.submissionCount = 0;
+    }
+
     res.json({ code: 0, message: 'ok', data: { list, total, page: +page, pageSize: +pageSize } });
   } catch (err) {
     logger.error({ err }, '获取作业列表失败');
@@ -248,7 +273,7 @@ export const getAssignment = async (req, res) => {
 
 export const createAssignment = async (req, res) => {
   try {
-    const { title, description, startTime, endTime, allowResubmit, questionIds, classIds } = req.body;
+    const { title, description, startTime, endTime, allowResubmit, questionIds, classIds, mode, maxAttempts } = req.body;
     if (!title || !startTime || !endTime || !questionIds?.length || !classIds?.length) {
       return res.status(400).json({ code: 1001, message: '参数错误', data: null });
     }
@@ -260,7 +285,9 @@ export const createAssignment = async (req, res) => {
         description,
         startTime: new Date(startTime),
         endTime: new Date(endTime),
-        allowResubmit: !!allowResubmit,
+        mode: mode || 'exam',
+        allowResubmit: mode === 'practice' ? true : !!allowResubmit,
+        maxAttempts: maxAttempts != null ? +maxAttempts : null,
         assignmentQuestions: {
           create: questionIds.map((qid, i) => ({ questionId: +qid, sortOrder: i + 1 })),
         },
@@ -273,6 +300,25 @@ export const createAssignment = async (req, res) => {
     res.json({ code: 0, message: '创建成功', data: assignment });
   } catch (err) {
     logger.error({ err }, '创建作业失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+export const lockAssignment = async (req, res) => {
+  try {
+    const id = +req.params.id;
+    const a = await prisma.assignment.findUnique({ where: { id }, select: { teacherId: true, locked: true } });
+    if (!a) return res.status(404).json({ code: 1004, message: '作业不存在', data: null });
+    if (a.teacherId !== req.user.id) return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+
+    const updated = await prisma.assignment.update({
+      where: { id },
+      data: { locked: !a.locked },
+      select: { id: true, locked: true },
+    });
+    res.json({ code: 0, message: updated.locked ? '已锁定' : '已解锁', data: updated });
+  } catch (err) {
+    logger.error({ err }, '锁定/解锁作业失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
   }
 };

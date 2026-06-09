@@ -32,6 +32,7 @@ router.post('/upload-material', teacher.uploadMaterial);
 router.get('/assignments', teacher.getAssignments);
 router.get('/assignments/:id', teacher.getAssignment);
 router.post('/assignments', teacher.createAssignment);
+router.put('/assignments/:id/lock', teacher.lockAssignment);
 
 // 评分审核
 router.get('/review-summary', review.getReviewSummary);

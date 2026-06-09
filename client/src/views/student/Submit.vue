@@ -6,8 +6,11 @@
         <ArrowLeftOutlined /> 返回
       </a-button>
       <h3 class="sp-title">{{ q.title }}</h3>
+      <a-tag v-if="isPracticeMode" color="green" size="small">练习 · 第 {{ currentAttempt }} 次</a-tag>
+      <a-tag v-if="isPracticeMode && maxAttempts" size="small">可提交 {{ remainingAttempts }} 次</a-tag>
       <a-tag color="orange">总分 {{ q.maxScore }} 分</a-tag>
       <a-tag v-if="totalScored > 0" color="green">得分 {{ totalScored }} / {{ q.maxScore }}</a-tag>
+      <a-tag v-if="bestScore != null" color="blue">最高分 {{ bestScore }} / {{ q.maxScore }}</a-tag>
       <span v-if="isExpired" class="sp-expired-tag">已过期</span>
     </div>
 
@@ -83,10 +86,13 @@
             <a-tag v-else color="blue" size="small">编程题</a-tag>
             <span class="sq-score">{{ sq.score }} 分</span>
             <span class="sq-status-spacer"></span>
-            <a-tag v-if="subStatuses[sq.id] === 'published'" color="green" size="small">
+            <a-tag v-if="subStatuses[sq.id] === 'published' || (isPracticeMode && (subStatuses[sq.id] === 'ai_graded' || subStatuses[sq.id] === 'reviewed'))" color="green" size="small">
               得分 {{ subScores[sq.id] }} / {{ sq.score }}
             </a-tag>
-            <a-tag v-else-if="subStatuses[sq.id] === 'submitted' || subStatuses[sq.id] === 'ai_graded' || subStatuses[sq.id] === 'reviewed'" color="blue" size="small">
+            <a-tag v-else-if="subStatuses[sq.id] === 'submitted'" color="blue" size="small">
+              <span class="spinner-dot"></span> 评分中...
+            </a-tag>
+            <a-tag v-else-if="subStatuses[sq.id] === 'ai_graded' || subStatuses[sq.id] === 'reviewed'" color="blue" size="small">
               <span class="spinner-dot"></span> 已提交
             </a-tag>
           </div>
@@ -258,6 +264,10 @@ const subQuestions = ref([]);
 const allowResubmit = ref(false);
 const endTime = ref(null);
 const showMaterial = ref(true);
+const isPracticeMode = ref(false);
+const maxAttempts = ref(null);
+const currentAttempt = ref(1);
+const bestScore = ref(null);
 
 const answers = reactive({});         // sqId → code string
 const itemAnswers = reactive({});     // "sqId_itemKey" → { answer, correct }
@@ -409,6 +419,12 @@ const safeMaterial = computed(() => DOMPurify.sanitize(q.value.material || ''));
 function safeSqContent(sq) { return DOMPurify.sanitize((sq || {}).content || ''); }
 
 const isExpired = computed(() => endTime.value ? Date.now() > new Date(endTime.value).getTime() : false);
+
+const remainingAttempts = computed(() => {
+  if (!maxAttempts.value) return '不限';
+  const rem = maxAttempts.value - currentAttempt.value;
+  return Math.max(0, rem);
+});
 
 function isSqReadonly(sqId) {
   if (isExpired.value) return true;
@@ -712,8 +728,11 @@ async function submitAll() {
       submittingAll.value = false;
       const ok = results.filter(r => r.status === 'fulfilled').length;
       const fail = results.filter(r => r.status === 'rejected').length;
-      if (fail === 0) message.success(`全部 ${ok} 题提交成功`);
-      else message.warning(`${ok} 题成功，${fail} 题失败`);
+      if (fail === 0) {
+        message.success(`全部 ${ok} 题提交成功`);
+        currentAttempt.value += 1;
+        if (isPracticeMode.value) startPolling();
+      } else message.warning(`${ok} 题成功，${fail} 题失败`);
     },
   });
 }
@@ -726,6 +745,8 @@ async function fetch() {
   if (ass) {
     allowResubmit.value = !!ass.allowResubmit;
     endTime.value = ass.endTime;
+    isPracticeMode.value = ass.mode === 'practice';
+    maxAttempts.value = ass.maxAttempts || null;
   }
   const aq = ass?.assignmentQuestions?.[0];
   if (!aq) return;
@@ -747,13 +768,13 @@ async function fetch() {
       answers[key] = s.answer || '';
     }
     subStatuses[key] = s.status;
-    if (s.status === 'published') {
+    // 已发布 或 练习模式已评分 → 显示分数
+    const isScored = s.status === 'published' || (isPracticeMode.value && (s.status === 'ai_graded' || s.status === 'reviewed'));
+    if (isScored) {
       subScores[key] = s.finalScore ?? s.aiScore;
-      // 主观题显示评语，客观题不显示
       if (sq?.type === 'code' || !sq?.type) {
         subFeedbacks[key] = s.teacherFeedback || s.aiFeedback || '';
       }
-      // 客观题比对答案判定对错
       if (sq?.type === 'objective') {
         markObjectiveCorrect(sq, s);
       }
@@ -777,6 +798,66 @@ async function fetch() {
       deadlineTimer = setTimeout(() => forceSubmitAll(), remaining);
     }
   }
+
+  // 统计当前尝试次数和最高分
+  let best = null;
+  const attemptsSet = new Set();
+  (r.data.submissions || []).forEach(s => {
+    if (s.bestScore != null && (best == null || s.bestScore > best)) best = s.bestScore;
+    if (s.attemptCount > 0) attemptsSet.add(s.attemptCount);
+  });
+  bestScore.value = best;
+  currentAttempt.value = Math.max(1, attemptsSet.size);
+
+  // 练习模式：如果有正在评分中的提交，开启轮询
+  if (isPracticeMode.value) {
+    const hasGrading = (r.data.submissions || []).some(s => s.status === 'submitted');
+    if (hasGrading) startPolling();
+  }
+}
+
+// ===================== 评分轮询 =====================
+let pollTimer = null;
+
+function startPolling() {
+  stopPolling();
+  pollTimer = setInterval(pollStatus, 2000);
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+async function pollStatus() {
+  try {
+    const r = await request.get(`/student/assignments/${route.params.id}`);
+    const subs = r.data.submissions || [];
+    let anyGrading = false;
+    for (const s of subs) {
+      const key = s.subQuestionId || s.questionId;
+      const sq = subQuestions.value.find(sq => sq.id === key);
+      const prevStatus = subStatuses[key];
+      subStatuses[key] = s.status;
+      if (s.status === 'submitted') {
+        anyGrading = true;
+      } else if (s.status === 'ai_graded' || s.status === 'reviewed') {
+        if (prevStatus !== s.status) {
+          subScores[key] = s.finalScore ?? s.aiScore;
+          if (sq?.type === 'code' || !sq?.type) {
+            subFeedbacks[key] = s.teacherFeedback || s.aiFeedback || '';
+          }
+          if (sq?.type === 'objective') {
+            markObjectiveCorrect(sq, s);
+          }
+          // 更新最高分
+          if (s.bestScore != null && (bestScore.value == null || s.bestScore > bestScore.value)) {
+            bestScore.value = s.bestScore;
+          }
+        }
+      }
+    }
+    if (!anyGrading) stopPolling();
+  } catch { stopPolling(); }
 }
 
 // ===================== 生命周期 =====================
@@ -814,6 +895,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  stopPolling();
   clearInterval(draftTimer);
   clearTimeout(saveDebounce);
   clearTimeout(deadlineTimer);

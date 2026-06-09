@@ -6,6 +6,7 @@
         ← 返回
       </a-button>
       <h3 class="rp-title">{{ q.title }}</h3>
+      <a-tag v-if="isPracticeMode" color="green" size="small">练习模式</a-tag>
       <span class="rp-student">{{ studentName }} / {{ displayStudentNo }}</span>
       <a-tag color="orange">总分 {{ q.maxScore }} 分</a-tag>
       <a-tag v-if="totalAiScore > 0" color="green">AI 评分 {{ totalAiScore }} / {{ q.maxScore }}</a-tag>
@@ -173,7 +174,7 @@
         </div>
 
         <!-- 底部审核 bar -->
-        <div class="rp-submit-bar">
+        <div v-if="!isPracticeMode" class="rp-submit-bar">
           <div class="rp-submit-info">
             <span>共 {{ subQuestions.length }} 题，AI 总分 {{ totalAiScore }} / {{ q.maxScore }}</span>
           </div>
@@ -370,6 +371,10 @@ const totalAiScore = computed(() => {
   let sum = 0;
   for (const key in subMap.value) sum += subMap.value[key].aiScore || 0;
   return sum;
+});
+
+const isPracticeMode = computed(() => {
+  return data.value?.assignment?.mode === 'practice';
 });
 
 const displayStudentNo = computed(() => {

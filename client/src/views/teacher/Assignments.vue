@@ -16,12 +16,26 @@
       @page-change="onPageChange"
     >
       <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'title'">
+          <span>{{ record.title }}</span>
+          <a-tag v-if="record.mode === 'practice'" color="green" size="small" style="margin-left:6px">练习</a-tag>
+          <LockOutlined v-if="record.locked" style="color:#ff4d4f;margin-left:4px" />
+        </template>
         <template v-if="column.key === 'qCount'">{{ record._count?.assignmentQuestions || 0 }}</template>
-        <template v-if="column.key === 'sCount'">{{ record._count?.submissions || 0 }}</template>
+        <template v-if="column.key === 'sCount'">{{ record.submissionCount ?? record._count?.submissions ?? 0 }}</template>
         <template v-if="column.key === 'classes'">
           <a-tag v-for="ac in record.assignmentClasses" :key="ac.classId" size="small">{{ ac.class?.name }}</a-tag>
         </template>
         <template v-if="column.key === 'time'">{{ record.startTime }} ~ {{ record.endTime }}</template>
+        <template v-if="column.key === 'action'">
+          <a-button type="link" size="small"
+            :style="{ color: record.locked ? '#ff4d4f' : '' }"
+            :title="record.locked ? '解锁' : '锁定'"
+            @click.stop="toggleLock(record)">
+            <LockOutlined v-if="record.locked" style="color:#ff4d4f" />
+            <UnlockOutlined v-else />
+          </a-button>
+        </template>
       </template>
     </DataTable>
 
@@ -66,7 +80,12 @@
           <a-form-item label="作业标题"><a-input v-model:value="timeForm.title" /></a-form-item>
           <a-form-item label="作业说明"><a-textarea v-model:value="timeForm.description" :rows="3" /></a-form-item>
           <a-form-item label="起止时间"><a-range-picker v-model:value="timeForm.timeRange" show-time :locale="dateLocale" /></a-form-item>
-          <a-form-item label="允许补交"><a-switch v-model:checked="timeForm.allowResubmit" /></a-form-item>
+          <a-form-item label="练习模式"><a-switch v-model:checked="timeForm.isPractice" /></a-form-item>
+          <a-form-item v-if="timeForm.isPractice" label="允许提交次数">
+            <a-input-number v-model:value="timeForm.maxAttempts" :min="1" placeholder="不限" style="width:120px" />
+            <span style="margin-left:8px;color:var(--ink-muted);font-size:13px">留空为不限次数</span>
+          </a-form-item>
+          <a-form-item v-if="!timeForm.isPractice" label="允许补交"><a-switch v-model:checked="timeForm.allowResubmit" /></a-form-item>
         </a-form>
       </div>
 
@@ -82,7 +101,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
 import { message } from 'ant-design-vue';
-import { CheckOutlined } from '@ant-design/icons-vue';
+import { CheckOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons-vue';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
 import dateLocale from 'ant-design-vue/es/date-picker/locale/zh_CN';
@@ -126,19 +145,20 @@ function toggleClass(id) {
   if (idx >= 0) selectedCIds.value.splice(idx, 1);
   else selectedCIds.value.push(id);
 }
-const timeForm = reactive({ title: '', description: '', timeRange: [], allowResubmit: false });
+const timeForm = reactive({ title: '', description: '', timeRange: [], allowResubmit: false, isPractice: false, maxAttempts: null });
 
 const qCols = [
   { title: '标题', dataIndex: 'title', width: 250, ellipsis: true },
   { title: '难度', dataIndex: 'difficulty', width: 80 },
 ];
 const columns = [
-  { title: '标题', dataIndex: 'title', width: 220, ellipsis: true },
-  { title: '班级', key: 'classes', width: 160 },
-  { title: '题目数', key: 'qCount', width: 80 },
-  { title: '提交数', key: 'sCount', width: 80 },
-  { title: '时间', key: 'time', width: 220, ellipsis: true },
-  { title: '创建时间', dataIndex: 'createdAt', width: 170 },
+  { title: '标题', key: 'title', width: 240, ellipsis: true },
+  { title: '班级', key: 'classes', width: 140 },
+  { title: '题目数', key: 'qCount', width: 70 },
+  { title: '提交数', key: 'sCount', width: 70 },
+  { title: '时间', key: 'time', width: 200, ellipsis: true },
+  { title: '创建时间', dataIndex: 'createdAt', width: 150 },
+  { title: '锁定', key: 'action', width: 60 },
 ];
 
 async function fetch() {
@@ -159,7 +179,7 @@ async function openAdd() {
   submitting.value = false;
   selectedQIds.value = [];
   selectedCIds.value = [];
-  Object.assign(timeForm, { title: '', description: '', timeRange: [], allowResubmit: false });
+  Object.assign(timeForm, { title: '', description: '', timeRange: [], allowResubmit: false, isPractice: false, maxAttempts: null });
   await Promise.all([searchQuestions(), loadClasses()]);
   visible.value = true;
 }
@@ -185,13 +205,23 @@ async function submit() {
     await request.post('/teacher/assignments', {
       title: timeForm.title, description: timeForm.description,
       startTime: timeForm.timeRange[0].toISOString(), endTime: timeForm.timeRange[1].toISOString(),
-      allowResubmit: timeForm.allowResubmit,
+      allowResubmit: timeForm.isPractice ? true : timeForm.allowResubmit,
+      mode: timeForm.isPractice ? 'practice' : 'exam',
+      maxAttempts: timeForm.isPractice ? (timeForm.maxAttempts || null) : null,
       questionIds: selectedQIds.value, classIds: selectedCIds.value,
     });
     message.success('布置成功');
     visible.value = false;
     fetch();
   } finally { submitting.value = false; }
+}
+
+async function toggleLock(record) {
+  try {
+    await request.put(`/teacher/assignments/${record.id}/lock`);
+    record.locked = !record.locked;
+    message.success(record.locked ? '已锁定' : '已解锁');
+  } catch { message.error('操作失败'); }
 }
 
 onMounted(fetch);

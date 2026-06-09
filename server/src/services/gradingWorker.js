@@ -153,9 +153,13 @@ async function gradeOne(sub) {
       logger.info({ submissionId: sub.id, score, elapsed: `${Date.now() - start}ms`, concurrency: MAX_CONCURRENT }, 'AI 评分完成');
     }
 
+    // 计算最高分
+    const existingSub = await prisma.submission.findUnique({ where: { id: sub.id }, select: { bestScore: true } });
+    const newBest = existingSub?.bestScore != null ? Math.max(existingSub.bestScore, score) : score;
+
     await prisma.submission.update({
       where: { id: sub.id },
-      data: { aiScore: score, aiFeedback: feedback, status: 'ai_graded' },
+      data: { aiScore: score, aiFeedback: feedback, status: 'ai_graded', bestScore: newBest },
     });
 
     const schoolId = sub.student?.studentClasses?.[0]?.class?.schoolId;

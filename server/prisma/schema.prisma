@@ -190,6 +190,9 @@ model Assignment {
   startTime        DateTime @map("start_time")
   endTime         DateTime  @map("end_time")
   allowResubmit   Boolean   @default(false) @map("allow_resubmit")
+  mode        String?   @default("exam") @db.VarChar(20)   // 'exam' | 'practice'
+  maxAttempts Int?      @map("max_attempts")               // NULL=不限
+  locked      Boolean   @default(false)                    // 教师锁定
   createdAt   DateTime  @default(now()) @map("created_at")
   deletedAt   DateTime? @map("deleted_at")
 
@@ -250,6 +253,8 @@ model Submission {
   status          SubmissionStatus @default(draft)
   submittedAt     DateTime?        @map("submitted_at")
   reviewedAt      DateTime?        @map("reviewed_at")
+  attemptCount    Int              @default(0) @map("attempt_count")
+  bestScore       Int?             @map("best_score")
 
   assignment  Assignment   @relation(fields: [assignmentId], references: [id])
   student     User         @relation("StudentSubmissions", fields: [studentId], references: [id])

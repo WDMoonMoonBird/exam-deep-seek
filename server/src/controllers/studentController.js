@@ -48,7 +48,7 @@ export const getAssignments = async (req, res) => {
       prisma.assignment.findMany({
         where,
         select: {
-          id: true, title: true, description: true, startTime: true, endTime: true, allowResubmit: true, createdAt: true, deletedAt: true,
+          id: true, title: true, description: true, startTime: true, endTime: true, allowResubmit: true, createdAt: true, deletedAt: true, mode: true, locked: true,
           _count: { select: { assignmentQuestions: true } },
           submissions: {
             where: { studentId },
@@ -85,14 +85,21 @@ export const getAssignmentDetail = async (req, res) => {
     });
     if (!assignment) return res.status(404).json({ code: 1004, message: '作业不存在', data: null });
 
+    // 锁定检查
+    if (assignment.locked) {
+      return res.status(403).json({ code: 1003, message: '作业已被锁定，无法查看', data: null });
+    }
+
     // 查已有提交
     const submissions = await prisma.submission.findMany({
       where: { assignmentId: +req.params.id, studentId: req.user.id },
     });
 
-    // 未发布的提交不返回评分/评语
+    // 未发布的提交不返回评分/评语，但练习模式例外
+    const isPractice = assignment.mode === 'practice';
     const safeSubmissions = submissions.map((s) => {
       if (s.status === 'published') return s;
+      if (isPractice && (s.status === 'ai_graded' || s.status === 'reviewed')) return s;
       return { ...s, aiScore: null, aiFeedback: null, finalScore: null, teacherFeedback: null };
     });
 
@@ -108,9 +115,13 @@ export const submitAnswer = async (req, res) => {
     const assignmentId = +req.params.id;
     const { questionId, subQuestionId, answer, force } = req.body;
 
-    // 检查作业是否过期
-    const assignment = await prisma.assignment.findUnique({ where: { id: assignmentId }, select: { endTime: true, allowResubmit: true } });
+    // 检查作业状态
+    const assignment = await prisma.assignment.findUnique({ where: { id: assignmentId }, select: { endTime: true, allowResubmit: true, mode: true, maxAttempts: true, locked: true } });
     if (!assignment) return res.status(404).json({ code: 1004, message: '作业不存在', data: null });
+
+    if (assignment.locked) {
+      return res.status(403).json({ code: 1003, message: '作业已被锁定，无法提交', data: null });
+    }
 
     const isExpired = new Date() > new Date(assignment.endTime);
 
@@ -128,7 +139,20 @@ export const submitAnswer = async (req, res) => {
       return res.status(400).json({ code: 1001, message: '已提交，不可重复提交', data: null });
     }
 
+    // 练习模式：检查提交次数
+    if (assignment.mode === 'practice' && assignment.maxAttempts != null) {
+      const currentCount = submission?.attemptCount || 0;
+      if (currentCount >= assignment.maxAttempts) {
+        return res.status(400).json({ code: 1001, message: `已达最大提交次数（${assignment.maxAttempts}次）`, data: null });
+      }
+    }
+
     const data = { answer, status: 'submitted', submittedAt: new Date() };
+    if (submission) {
+      data.attemptCount = { increment: 1 };
+    } else {
+      data.attemptCount = 1;
+    }
     if (subQuestionId) data.subQuestionId = +subQuestionId;
 
     if (submission) {
@@ -153,8 +177,11 @@ export const saveDraft = async (req, res) => {
     const { questionId, subQuestionId, answer } = req.body;
 
     // 检查作业是否过期
-    const assignment = await prisma.assignment.findUnique({ where: { id: assignmentId }, select: { endTime: true } });
+    const assignment = await prisma.assignment.findUnique({ where: { id: assignmentId }, select: { endTime: true, locked: true } });
     if (!assignment) return res.status(404).json({ code: 1004, message: '作业不存在', data: null });
+    if (assignment.locked) {
+      return res.status(403).json({ code: 1003, message: '作业已被锁定', data: null });
+    }
     if (new Date() > new Date(assignment.endTime)) {
       return res.json({ code: 0, message: '已过截止时间，跳过草稿', data: null });
     }
@@ -186,12 +213,19 @@ export const saveDraft = async (req, res) => {
 
 export const getScores = async (req, res) => {
   try {
+    // 查已发布 + 练习模式已评分
     const submissions = await prisma.submission.findMany({
-      where: { studentId: req.user.id, status: 'published' },
+      where: {
+        studentId: req.user.id,
+        OR: [
+          { status: 'published' },
+          { status: { in: ['ai_graded', 'reviewed'] }, assignment: { mode: 'practice' } },
+        ],
+      },
       include: {
         question: { select: { id: true, title: true, maxScore: true } },
         subQuestion: { select: { id: true, title: true } },
-        assignment: { select: { id: true, title: true } },
+        assignment: { select: { id: true, title: true, mode: true } },
       },
       orderBy: { reviewedAt: 'desc' },
     });
@@ -203,9 +237,12 @@ export const getScores = async (req, res) => {
         assignMap.set(key, {
           assignmentId: key,
           assignmentTitle: s.assignment.title,
+          mode: s.assignment.mode || 'exam',
           questionTitle: s.question.title,
           totalScore: 0,
           maxScore: s.question.maxScore,
+          bestScore: s.bestScore,
+          attemptCount: s.attemptCount,
           subItems: [],
         });
       }

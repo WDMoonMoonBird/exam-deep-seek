@@ -2,7 +2,7 @@
   <div class="page">
     <h2 class="page-title">我的成绩</h2>
 
-    <a-empty v-if="!list.length && !loading" description="暂无已发布成绩" style="flex:1;display:flex;align-items:center;justify-content:center;" />
+    <a-empty v-if="!list.length && !loading" description="暂无成绩" style="flex:1;display:flex;align-items:center;justify-content:center;" />
 
     <DataTable
       v-else
@@ -15,9 +15,16 @@
       :pageSize="20"
     >
       <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'assignment'">{{ record.assignmentTitle }}</template>
+        <template v-if="column.key === 'assignment'">
+          {{ record.assignmentTitle }}
+          <a-tag v-if="record.mode === 'practice'" color="green" size="small" style="margin-left:6px">练习</a-tag>
+        </template>
+        <template v-if="column.key === 'attemptCount'">
+          {{ record.attemptCount || 1 }} 次
+        </template>
         <template v-if="column.key === 'score'">
           <strong>{{ record.totalScore }}</strong> / {{ record.maxScore }}
+          <span v-if="record.bestScore != null && record.mode === 'practice'" style="color:#888;margin-left:4px">（最高 {{ record.bestScore }}）</span>
         </template>
       </template>
     </DataTable>
@@ -34,8 +41,9 @@ const loading = ref(false);
 const page = reactive({ current: 1, pageSize: 20 });
 
 const columns = [
-  { title: '作业', key: 'assignment', width: 200, ellipsis: true },
-  { title: '分数', key: 'score', width: 120 },
+  { title: '作业', key: 'assignment', width: 220, ellipsis: true },
+  { title: '提交次数', key: 'attemptCount', width: 90 },
+  { title: '分数', key: 'score', width: 140 },
 ];
 
 async function fetch() {

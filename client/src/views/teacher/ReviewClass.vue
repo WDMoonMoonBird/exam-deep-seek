@@ -5,7 +5,10 @@
       <a-button type="link" @click="$router.push('/teacher/review')" class="back-btn">← 返回</a-button>
       <div>
         <h2 class="top-title">{{ assignmentTitle || '加载中...' }}</h2>
-        <div class="top-sub" v-if="className"><a-tag>{{ className }}</a-tag></div>
+        <div class="top-sub" v-if="className">
+          <a-tag>{{ className }}</a-tag>
+          <a-tag v-if="isPracticeMode" color="green" style="margin-left:4px">练习模式</a-tag>
+        </div>
       </div>
     </div>
 
@@ -34,8 +37,10 @@
       </template>
 
       <template #toolbar-right>
-        <a-button type="primary" @click="batchReview" :loading="reviewing">一键审核全班</a-button>
-        <a-button @click="batchPublish" :loading="publishing">一键发布全班</a-button>
+        <template v-if="!isPracticeMode">
+          <a-button type="primary" @click="batchReview" :loading="reviewing">一键审核全班</a-button>
+          <a-button @click="batchPublish" :loading="publishing">一键发布全班</a-button>
+        </template>
         <a-button @click="exportXlsx">导出 Excel</a-button>
       </template>
 
@@ -162,10 +167,21 @@ function statusText(s) {
   if (s === 'published') return '已发布';
   if (s === 'reviewed') return '已审核';
   if (s === 'abnormal') return '评分异常';
-  if (s === 'ai_graded') return 'AI已评分';
+  if (s === 'ai_graded') return isPracticeMode.value ? '已完成' : 'AI已评分';
   if (s === 'submitted') return '待评分';
   return s;
 }
+
+const isPracticeMode = computed(() => {
+  const first = list.value.find(r => r.mode);
+  return first?.mode === 'practice';
+});
+
+const reviewSummary = computed(() => {
+  const total = list.value.filter(r => r.submitted).length;
+  const pending = list.value.filter(r => r.status === 'ai_graded' || r.status === 'submitted').length;
+  return { total, pending };
+});
 
 function formatStudentNo(studentNo, schoolName) {
   if (!studentNo) return '';
