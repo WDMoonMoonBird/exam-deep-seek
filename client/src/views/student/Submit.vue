@@ -136,8 +136,8 @@
             </div>
           </template>
 
-          <!-- 主观题参考答案（练习模式已评分后显示） -->
-          <div v-if="isPracticeMode && (subStatuses[sq.id] === 'ai_graded' || subStatuses[sq.id] === 'reviewed' || subStatuses[sq.id] === 'published') && sq.referenceAnswer" class="sq-reference">
+          <!-- 主观题参考答案（已出分后显示） -->
+          <div v-if="sqHasScore(sq.id) && sq.referenceAnswer" class="sq-reference">
             <div class="fb-label">参考答案</div>
             <pre class="reference-code">{{ sq.referenceAnswer }}</pre>
           </div>
@@ -211,8 +211,8 @@
                 />
               </div>
 
-              <!-- 练习模式已评分：显示正确答案 -->
-              <div v-if="isPracticeMode && isSqReadonly(sq.id) && item.answer != null" class="oi-reference">
+              <!-- 已出分：显示正确答案 -->
+              <div v-if="sqHasScore(sq.id) && item.answer != null" class="oi-reference">
                 正确答案：{{ formatItemAnswer(item) }}
               </div>
             </div>
@@ -324,6 +324,11 @@ function itemTypeLabel(type) {
   return map[type] || type;
 }
 
+function sqHasScore(sqId) {
+  const s = subStatuses[sqId];
+  return s === 'published' || (isPracticeMode.value && (s === 'ai_graded' || s === 'reviewed'));
+}
+
 function formatItemAnswer(item) {
   if (!item) return '';
   if (item.type === 'choice' || item.type === 'judge') {
@@ -394,7 +399,8 @@ function isSqAnswered(sq) {
 function getSqResult(sq) {
   const key = sq.id;
   const status = subStatuses[key];
-  if (status === 'published') {
+  // 考试已发布 或 练习已评分 → 按得分率着色
+  if (status === 'published' || (isPracticeMode.value && (status === 'ai_graded' || status === 'reviewed'))) {
     const ratio = (subScores[key] || 0) / (sq.score || 1);
     if (ratio >= 0.8) return 'correct';
     if (ratio >= 0.4) return 'partial';
@@ -416,7 +422,8 @@ function getItemResult(sqId, itemKey) {
 // 客观题卡片 class（出分后显示对错框色）
 function oiCardClass(sqId, item) {
   const subStatus = subStatuses[sqId];
-  if (subStatus !== 'published') return { 'oi-readonly': isSqReadonly(sqId) };
+  const isScored = subStatus === 'published' || (isPracticeMode.value && (subStatus === 'ai_graded' || subStatus === 'reviewed'));
+  if (!isScored) return { 'oi-readonly': isSqReadonly(sqId) };
   const entry = itemAnswers[getItemKey(sqId, item.key)];
   if (!entry || !(entry.answer || '').trim()) return {};
   return {
