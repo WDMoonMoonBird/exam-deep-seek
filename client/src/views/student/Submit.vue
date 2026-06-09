@@ -535,8 +535,13 @@ const submitDisabled = computed(() => {
 
 const practiceAllGraded = computed(() => {
   if (!isPracticeMode.value) return false;
-  if (!subQuestions.value.length) return false;
-  return subQuestions.value.every(sq => {
+  // 只检查已提交的小题是否全部评分完毕
+  const submitted = subQuestions.value.filter(sq => {
+    const s = subStatuses[sq.id];
+    return s === 'submitted' || s === 'ai_graded' || s === 'reviewed' || s === 'published';
+  });
+  if (!submitted.length) return false;
+  return submitted.every(sq => {
     const s = subStatuses[sq.id];
     return s === 'ai_graded' || s === 'reviewed' || s === 'published';
   });
