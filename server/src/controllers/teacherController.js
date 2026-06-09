@@ -4,7 +4,7 @@ import logger from '../utils/logger.js';
 import { DEFAULT_MAX_SCORE } from '../constants.js';
 import { resolveSubQuestionScores } from '../utils/scoring.js';
 import { getVisibleClassIds, getTeamTeacherIds } from './teamController.js';
-import { parseExamPaper, generateReferenceAnswer } from '../services/deepseek.js';
+import { parseExamPaper, parseExamPaperStream, generateReferenceAnswer } from '../services/deepseek.js';
 
 /** 获取教师当前学校ID（从 query 参数） */
 function getSchoolId(req) { return req.query.schoolId ? +req.query.schoolId : null; }
@@ -196,6 +196,35 @@ export const parseExam = async (req, res) => {
   } catch (err) {
     console.error('[parseExam] 失败:', err.message);
     res.status(500).json({ code: 2001, message: 'AI 解析失败: ' + (err.message || '未知错误'), data: null });
+  }
+};
+
+export const parseExamStream = async (req, res) => {
+  const { content } = req.body;
+  if (!content?.trim()) return res.status(400).json({ code: 1001, message: '请提供试卷内容', data: null });
+
+  const limit = 80000;
+  const trimmed = content.length > limit ? content.slice(0, limit) : content;
+
+  // SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+
+  const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+
+  try {
+    send({ phase: 'start', totalChars: trimmed.length });
+    const result = await parseExamPaperStream(trimmed, (progress) => send(progress));
+    send({ phase: 'done', questions: result.questions, count: result.questions.length });
+  } catch (err) {
+    console.error('[parseExamStream] 失败:', err.message);
+    send({ phase: 'error', message: 'AI 解析失败: ' + (err.message || '未知错误') });
+  } finally {
+    res.end();
   }
 };
 

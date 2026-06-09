@@ -264,7 +264,11 @@
         </a-upload-dragger>
       </div>
       <Transition name="upload-status">
-        <div v-if="uploadAnalyzing" key="analyzing" style="text-align:center;padding:24px;"><a-spin /><p style="margin-top:12px;color:var(--ink-muted);">AI 正在分析试卷，请稍候...</p></div>
+        <div v-if="uploadAnalyzing" key="analyzing" style="text-align:center;padding:24px;">
+          <a-spin />
+          <p style="margin-top:12px;color:var(--ink-muted);">正在解析试卷...</p>
+          <p v-if="uploadProgress>0" style="margin-top:4px;font-size:12px;color:var(--ink-muted);">已接收 {{ uploadProgress }} 字符</p>
+        </div>
         <div v-else-if="uploadResult" key="result" style="margin-top:12px;text-align:center;padding:12px;background:#f6ffed;border-radius:8px;color:#52c41a;">✓ 解析完成，共提取 {{uploadResult}} 道题目，请核对</div>
         <div v-else-if="uploadError" key="error" style="margin-top:12px;text-align:center;padding:12px;background:#fff2f0;border-radius:8px;color:#ff4d4f;">{{uploadError}}</div>
       </Transition>
@@ -356,6 +360,7 @@ const uploadFileList = ref([]);
 const uploadAnalyzing = ref(false);
 const uploadResult = ref(0);
 const uploadError = ref('');
+const uploadProgress = ref(0);
 
 // 预览
 const previewFocusKey = ref(-1);
@@ -468,10 +473,10 @@ function applySettings(){
 }
 
 // 上传试卷
-function resetUpload(){uploadFileList.value=[];uploadAnalyzing.value=false;uploadResult.value=0;uploadError.value='';}
+function resetUpload(){uploadFileList.value=[];uploadAnalyzing.value=false;uploadResult.value=0;uploadError.value='';uploadProgress.value=0;}
 async function handleUploadExam(file){
   console.log('[上传试卷] 文件:', file.name, '大小:', (file.size/1024).toFixed(1), 'KB');
-  uploadAnalyzing.value=true;uploadResult.value=0;uploadError.value='';
+  uploadAnalyzing.value=true;uploadResult.value=0;uploadError.value='';uploadProgress.value=0;
   try{
     const ext=file.name.split('.').pop().toLowerCase();let text='';
     console.log('[上传试卷] 扩展名:', ext);
@@ -489,16 +494,49 @@ async function handleUploadExam(file){
     }
     else{uploadError.value='不支持的文件格式';uploadAnalyzing.value=false;return false;}
     if(!text.trim()){uploadError.value='文件内容为空';uploadAnalyzing.value=false;return false;}
-    console.log('[上传试卷] 发送到 API，字符数:', text.length);
-    const r=await request.post('/teacher/parse-exam',{content:text},{timeout:180000});
-    uploadResult.value=r.data.questions?.length||0;
-    console.log('[上传试卷] 解析出题目数:', uploadResult.value);
-    if(uploadResult.value>0){
-      console.log('[上传试卷] 题型分布:', r.data.questions.map(q=>q.type).reduce((acc,t)=>{acc[t]=(acc[t]||0)+1;return acc;},{}));
-      fillFromParsed(r.data.questions);
+    // 流式 SSE 解析 — 永不超时
+    const token = (() => { try { return localStorage.getItem('token') || ''; } catch { return ''; } })();
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
+    const resp = await fetch(`${baseUrl}/teacher/parse-exam-stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ content: text }),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    let questions = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const evt = JSON.parse(line.slice(6));
+          if (evt.phase === 'streaming' || evt.phase === 'token') {
+            uploadProgress.value = evt.contentLength || 0;
+          } else if (evt.phase === 'done') {
+            questions = evt.questions || [];
+            uploadResult.value = questions.length;
+          } else if (evt.phase === 'error') {
+            throw new Error(evt.message);
+          }
+        } catch (e) { if (e.message && !e.message.includes('JSON')) throw e; }
+      }
+    }
+
+    console.log('[上传试卷] 解析出题目数:', questions.length);
+    if(questions.length>0){
+      fillFromParsed(questions);
       showUploadExam.value=false;resetUpload();
     }
-  }catch(e){console.error('[上传试卷] 错误:', e);uploadError.value=e?.response?.data?.message||'解析失败请重试';}
+  }catch(e){console.error('[上传试卷] 错误:', e);uploadError.value=e?.message||'解析失败请重试';}
   finally{uploadAnalyzing.value=false;}
   return false;
 }

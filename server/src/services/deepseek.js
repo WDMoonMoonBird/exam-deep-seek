@@ -286,6 +286,84 @@ export async function parseExamPaper(paperText) {
   throw new Error('试卷解析全部重试失败');
 }
 
+/**
+ * 流式解析试卷 — SSE 逐 token 推送，永不超时
+ * @param {string} paperText
+ * @param {function} onProgress - (progressData) => void
+ * @returns {Promise<{questions: Array}>}
+ */
+export async function parseExamPaperStream(paperText, onProgress) {
+  const userMessage = `现在开始提取以下试卷内容：\n---\n${paperText}\n---`;
+  const [BASE_URL, API_KEY, MODEL] = await Promise.all([getBaseUrl(), getApiKey(), getModel()]);
+
+  onProgress({ phase: 'connecting' });
+
+  const res = await fetch(`${BASE_URL}/v1/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
+    body: JSON.stringify({
+      model: MODEL,
+      messages: [
+        { role: 'system', content: `${PARSE_ROLE}\n\n${PARSE_RULES}` },
+        { role: 'user', content: userMessage },
+      ],
+      temperature: 0,
+      max_tokens: 16000,
+      stream: true,
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`DeepSeek API ${res.status}: ${errText.slice(0, 200)}`);
+  }
+
+  onProgress({ phase: 'streaming' });
+
+  let content = '';
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop(); // keep incomplete line in buffer
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (data === '[DONE]') continue;
+      try {
+        const chunk = JSON.parse(data);
+        const delta = chunk.choices?.[0]?.delta?.content;
+        if (delta) {
+          content += delta;
+          onProgress({ phase: 'token', contentLength: content.length });
+        }
+      } catch { /* skip unparseable chunks */ }
+    }
+  }
+
+  onProgress({ phase: 'parsing', contentLength: content.length });
+  console.log('[parseExamPaperStream] 流式接收完成，长度:', content.length);
+
+  const jsonMatch = content.match(/\{[\s\S]*"questions"[\s\S]*\}/);
+  if (!jsonMatch) {
+    console.error('[parseExamPaperStream] JSON匹配失败，完整响应:', content);
+    throw new Error('返回格式不包含有效的 JSON');
+  }
+
+  const parsed = JSON.parse(jsonMatch[0]);
+  const questions = parsed.questions || [];
+  console.log('[parseExamPaperStream] 解析成功，题目数:', questions.length);
+  logger.info({ count: questions.length }, '试卷流式解析完成');
+  return { questions };
+}
+
 // ===================== 参考答案生成 =====================
 
 const GEN_ROLE = '你是一名高校教师。请根据题目内容，生成一份高质量参考答案。';

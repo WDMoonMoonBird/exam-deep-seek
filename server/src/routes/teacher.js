@@ -25,6 +25,7 @@ router.post('/questions', teacher.createQuestion);
 router.put('/questions/:id', teacher.updateQuestion);
 router.delete('/questions/:id', teacher.deleteQuestion);
 router.post('/parse-exam', teacher.parseExam);
+router.post('/parse-exam-stream', teacher.parseExamStream);
 router.post('/generate-reference', teacher.generateReference);
 router.post('/upload-material', teacher.uploadMaterial);
 
