@@ -169,7 +169,7 @@ export const submitAnswer = async (req, res) => {
 
     const data = { answer, status: 'submitted', submittedAt: new Date() };
     if (submission) {
-      data.attemptCount = { increment: 1 };
+      data.attemptCount = (submission.attemptCount || 0) + 1;
     } else {
       data.attemptCount = 1;
     }
