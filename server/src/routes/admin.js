@@ -19,6 +19,7 @@ router.delete('/classes/:id', admin.deleteClass);
 router.get('/teachers', admin.getTeachers);
 router.post('/teachers', admin.createTeacher);
 router.put('/teachers/:id', admin.updateTeacher);
+router.put('/teachers/:id/reset-password', admin.resetTeacherPassword);
 
 // 学生
 router.get('/students', admin.getStudents);

@@ -16,6 +16,7 @@
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'school'">{{ record.school?.name }}</template>
+        <template v-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
         <template v-if="column.key === 'action'">
           <a-space>
             <a-button type="link" @click="openEdit(record)">编辑</a-button>
@@ -49,6 +50,7 @@
 import { ref, reactive, onMounted } from 'vue';
 import request from '../../api/request.js';
 import DataTable from '../../components/DataTable.vue';
+import { formatDateTime } from '../../utils/format.js';
 
 const loading = ref(false);
 const list = ref([]);
@@ -64,7 +66,7 @@ const form = reactive({ name: '', schoolId: undefined, teacherIds: [] });
 const columns = [
   { title: '班级名称', dataIndex: 'name', width: 180, ellipsis: true },
   { title: '所属学校', key: 'school', width: 200, ellipsis: true },
-  { title: '创建时间', dataIndex: 'createdAt', width: 170, ellipsis: true },
+  { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true },
   { title: '操作', key: 'action', width: 160 },
 ];
 

@@ -40,6 +40,7 @@
             <a-tag v-if="record._incomplete" color="orange" size="small" style="margin-left:4px">⚠ 待补全</a-tag>
           </template>
           <template v-if="column.key === 'school'">{{ record.studentClasses?.[0]?.class?.school?.name || '—' }}</template>
+          <template v-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
           <template v-if="column.key === 'classes'">
             <a-tag v-for="c in record.studentClasses" :key="c.classId">{{ c.class?.name }}</a-tag>
           </template>
@@ -153,6 +154,7 @@ import { InboxOutlined, CheckCircleOutlined, ExclamationCircleOutlined } from '@
 import * as XLSX from 'xlsx';
 import request from '../../api/request.js';
 import DataTable from '../../components/DataTable.vue';
+import { formatDateTime } from '../../utils/format.js';
 
 const page = reactive({ current: 1, pageSize: 20 });
 const loading = ref(false);
@@ -178,7 +180,7 @@ const columns = [
   { title: '姓名', dataIndex: 'realName', width: 120, ellipsis: true },
   { title: '学校', key: 'school', width: 180, ellipsis: true },
   { title: '班级', key: 'classes', width: 150 },
-  { title: '创建时间', dataIndex: 'createdAt', width: 170, ellipsis: true },
+  { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true },
   { title: '操作', key: 'action', width: 160 },
 ];
 

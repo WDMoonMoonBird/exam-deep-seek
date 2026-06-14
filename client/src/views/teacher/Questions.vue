@@ -16,6 +16,7 @@
       @page-change="onPageChange"
     >
       <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
         <template v-if="column.dataIndex === 'difficulty'">
           <a-tag :color="record.difficulty === 'easy' ? 'green' : record.difficulty === 'medium' ? 'orange' : 'red'">{{ record.difficulty }}</a-tag>
         </template>
@@ -37,6 +38,7 @@ import { ref, reactive, onMounted } from 'vue';
 import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
 import DataTable from '../../components/DataTable.vue';
+import { formatDateTime } from '../../utils/format.js';
 
 const loading = ref(false);
 const list = ref([]);
@@ -46,7 +48,7 @@ const columns = [
   { title: '标题', dataIndex: 'title', width: 250, ellipsis: true },
 { title: '难度', dataIndex: 'difficulty', width: 70 },
   { title: '满分', dataIndex: 'maxScore', width: 70 },
-  { title: '创建时间', dataIndex: 'createdAt', width: 170 },
+  { title: '创建时间', key: 'createdAt', width: 170 },
   { title: '操作', key: 'action', width: 160 },
 ];
 

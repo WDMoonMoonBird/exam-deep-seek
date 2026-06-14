@@ -15,6 +15,7 @@
       :pageSize="20"
     >
       <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
         <template v-if="column.key === 'classes'">
           <a-tag v-for="c in record.studentClasses" :key="c.classId">{{ c.class?.name }}</a-tag>
         </template>
@@ -39,7 +40,7 @@
 import { ref, reactive, onMounted } from 'vue';
 import request from '../../api/request.js';
 import DataTable from '../../components/DataTable.vue';
-
+import { formatDateTime } from '../../utils/format.js';
 const loading = ref(false);
 const list = ref([]);
 const page = reactive({ current: 1, pageSize: 20 });
@@ -51,7 +52,7 @@ const columns = [
   { title: '学号', dataIndex: 'username', width: 130, ellipsis: true },
   { title: '姓名', dataIndex: 'realName', width: 120, ellipsis: true },
   { title: '班级', key: 'classes', width: 180 },
-  { title: '创建时间', dataIndex: 'createdAt', width: 170, ellipsis: true },
+  { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true },
 ];
 
 async function fetch() {

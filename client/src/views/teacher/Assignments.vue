@@ -26,7 +26,8 @@
         <template v-if="column.key === 'classes'">
           <a-tag v-for="ac in record.assignmentClasses" :key="ac.classId" size="small">{{ ac.class?.name }}</a-tag>
         </template>
-        <template v-if="column.key === 'time'">{{ record.startTime }} ~ {{ record.endTime }}</template>
+        <template v-if="column.key === 'time'">{{ formatDateTime(record.startTime) }} ~ {{ formatDateTime(record.endTime) }}</template>
+        <template v-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
         <template v-if="column.key === 'action'">
           <a-button type="link" size="small"
             :style="{ color: record.locked ? '#ff4d4f' : '' }"
@@ -108,6 +109,7 @@ import dateLocale from 'ant-design-vue/es/date-picker/locale/zh_CN';
 import request from '../../api/request.js';
 import { useUserStore } from '../../stores/user.js';
 import DataTable from '../../components/DataTable.vue';
+import { formatDateTime } from '../../utils/format.js';
 
 dayjs.locale('zh-cn');
 
@@ -157,7 +159,7 @@ const columns = [
   { title: '题目数', key: 'qCount', width: 70 },
   { title: '提交数', key: 'sCount', width: 70 },
   { title: '时间', key: 'time', width: 200, ellipsis: true },
-  { title: '创建时间', dataIndex: 'createdAt', width: 150 },
+  { title: '创建时间', key: 'createdAt', width: 150 },
   { title: '锁定', key: 'action', width: 60 },
 ];
 

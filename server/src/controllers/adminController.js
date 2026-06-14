@@ -205,6 +205,22 @@ export const updateTeacher = async (req, res) => {
   }
 };
 
+export const resetTeacherPassword = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const teacher = await prisma.user.findFirst({ where: { id: +id, role: 'teacher' } });
+    if (!teacher) return res.status(404).json({ code: 1004, message: '教师不存在', data: null });
+
+    const newPassword = bcrypt.hashSync(teacher.username, 10);
+    await prisma.user.update({ where: { id: +id }, data: { password: newPassword } });
+    logger.info({ teacherId: id }, '教师密码已重置');
+    res.json({ code: 0, message: `密码已重置为工号（${teacher.username}）`, data: null });
+  } catch (err) {
+    logger.error({ err }, '重置教师密码失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
 // ===================== 学生管理 =====================
 
 export const getStudents = async (req, res) => {

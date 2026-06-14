@@ -18,8 +18,14 @@
         <template v-if="column.key === 'schools'">
           <a-tag v-for="ts in record.teacherSchools" :key="ts.schoolId">{{ ts.school?.name }}</a-tag>
         </template>
+        <template v-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
         <template v-if="column.key === 'action'">
-          <a-button type="link" @click="openEdit(record)">编辑</a-button>
+          <a-space>
+            <a-button type="link" @click="openEdit(record)">编辑</a-button>
+            <a-popconfirm title="确定重置该教师密码？" ok-text="确定" cancel-text="取消" @confirm="resetPwd(record.id)">
+              <a-button type="link">重置密码</a-button>
+            </a-popconfirm>
+          </a-space>
         </template>
       </template>
     </DataTable>
@@ -41,9 +47,10 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
+import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
 import DataTable from '../../components/DataTable.vue';
-
+import { formatDateTime } from '../../utils/format.js';
 const loading = ref(false);
 const list = ref([]);
 const page = reactive({ current: 1, pageSize: 20 });
@@ -57,7 +64,7 @@ const columns = [
   { title: '工号', dataIndex: 'username', width: 130, ellipsis: true },
   { title: '姓名', dataIndex: 'realName', width: 120, ellipsis: true },
   { title: '隶属学校', key: 'schools', width: 200 },
-  { title: '创建时间', dataIndex: 'createdAt', width: 170, ellipsis: true },
+  { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true },
   { title: '操作', key: 'action', width: 100 },
 ];
 
@@ -102,6 +109,13 @@ async function handleOk() {
   if (!isEdit.value) data.username = form.username;
   isEdit.value ? await request.put(`/admin/teachers/${editId.value}`, data) : await request.post('/admin/teachers', data);
   visible.value = false; fetch();
+}
+
+async function resetPwd(id) {
+  try {
+    const r = await request.put(`/admin/teachers/${id}/reset-password`);
+    message.success(r.message);
+  } catch { message.error('重置失败'); }
 }
 
 onMounted(fetch);

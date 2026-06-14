@@ -16,6 +16,7 @@
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'creator'">{{ record.creator?.realName }}</template>
+        <template v-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
         <template v-if="column.key === 'counts'">{{ record._count?.teachers || 0 }} 教师 / {{ record._count?.classes || 0 }} 班级</template>
         <template v-if="column.key === 'action'">
           <a-space>
@@ -43,6 +44,7 @@ import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
 import { useUserStore } from '../../stores/user.js';
 import DataTable from '../../components/DataTable.vue';
+import { formatDateTime } from '../../utils/format.js';
 
 const userStore = useUserStore();
 const loading = ref(false);
@@ -55,7 +57,7 @@ const columns = [
   { title: '团队名称', dataIndex: 'name', width: 200, ellipsis: true },
   { title: '创建者', key: 'creator', width: 100 },
   { title: '成员', key: 'counts', width: 160 },
-  { title: '创建时间', dataIndex: 'createdAt', width: 170 },
+  { title: '创建时间', key: 'createdAt', width: 170 },
   { title: '操作', key: 'action', width: 160 },
 ];
 

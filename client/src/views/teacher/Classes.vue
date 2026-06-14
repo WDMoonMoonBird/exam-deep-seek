@@ -20,6 +20,7 @@
           <a-tag v-if="record.isTeamClass" color="purple" size="small" style="margin-left:4px">团队共享 · {{ record.ownerTeacherName }}</a-tag>
         </template>
         <template v-if="column.key === 'school'">{{ record.school?.name }}</template>
+        <template v-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
         <template v-if="column.key === 'count'">{{ record._count?.studentClasses ?? 0 }}</template>
         <template v-if="column.key === 'action'">
           <a-space>
@@ -50,7 +51,7 @@ import { ref, reactive, onMounted } from 'vue';
 import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
 import DataTable from '../../components/DataTable.vue';
-
+import { formatDateTime } from '../../utils/format.js';
 const loading = ref(false);
 const list = ref([]);
 const page = reactive({ current: 1, pageSize: 20 });
@@ -65,7 +66,7 @@ const columns = [
   { title: '班级名称', key: 'name', width: 200, ellipsis: true },
   { title: '所属学校', key: 'school', width: 200, ellipsis: true },
   { title: '人数', key: 'count', width: 70 },
-  { title: '创建时间', dataIndex: 'createdAt', width: 170, ellipsis: true },
+  { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true },
   { title: '操作', key: 'action', width: 160 },
 ];
 
