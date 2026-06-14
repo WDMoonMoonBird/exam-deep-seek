@@ -25,6 +25,7 @@
         <template v-if="column.key === 'action'">
           <a-space>
             <a-button type="link" @click="openEdit(record)" :disabled="record.isTeamClass">编辑</a-button>
+            <a-button v-if="mySchools.length > 1" type="link" @click="openSwitchSchool(record)" :disabled="record.isTeamClass">切换学校</a-button>
             <a-popconfirm title="确定删除？" ok-text="确定" cancel-text="取消" @confirm="del(record.id)" :disabled="record.isTeamClass">
               <a-button type="link" danger :disabled="record.isTeamClass">删除</a-button>
             </a-popconfirm>
@@ -43,14 +44,24 @@
         </a-form-item>
       </a-form>
     </a-modal>
+
+    <a-modal :title="switchTitle" :open="switchVisible" @ok="handleSwitch" @cancel="switchVisible = false" ok-text="确定切换" cancel-text="取消" :width="520">
+      <div style="line-height:1.8;font-size:14px">
+        <p>将班级 <strong>{{ switchingClass?.name }}</strong> 从</p>
+        <p style="text-align:center;font-size:16px"><a-tag color="orange">{{ switchingClass?.school?.name }}</a-tag>  →  <a-tag color="green">{{ targetSchool?.name || '请选择' }}</a-tag></p>
+        <p style="color:#888;margin-top:12px">切换后，该班级的作业和提交记录将迁移至新学校。如该班级已加入教学团队，将自动退出所有团队。</p>
+        <a-select v-model:value="targetSchoolId" placeholder="选择目标学校" style="width:100%" :options="otherSchoolOptions" />
+      </div>
+    </a-modal>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
 import DataTable from '../../components/DataTable.vue';
+import { useUserStore } from '../../stores/user.js';
 import { formatDateTime } from '../../utils/format.js';
 const loading = ref(false);
 const list = ref([]);
@@ -61,6 +72,19 @@ const modalTitle = ref('');
 const isEdit = ref(false);
 const editId = ref(null);
 const form = reactive({ name: '', teamIds: [] });
+
+const userStore = useUserStore();
+const mySchools = computed(() => userStore.teacherSchools || []);
+const switchVisible = ref(false);
+const switchingClass = ref(null);
+const targetSchoolId = ref(undefined);
+const targetSchool = computed(() => mySchools.value.find(s => s.id === targetSchoolId.value));
+const switchTitle = computed(() => `切换学校 · ${switchingClass.value?.name || ''}`);
+const otherSchoolOptions = computed(() =>
+  mySchools.value
+    .filter(s => s.id !== switchingClass.value?.schoolId)
+    .map(s => ({ label: s.name, value: s.id }))
+);
 
 const columns = [
   { title: '班级名称', key: 'name', width: 200, ellipsis: true },
@@ -103,6 +127,22 @@ async function handleOk() {
 }
 
 async function del(id) { await request.delete(`/teacher/classes/${id}`); message.success('删除成功'); fetch(); }
+
+function openSwitchSchool(record) {
+  switchingClass.value = record;
+  targetSchoolId.value = undefined;
+  switchVisible.value = true;
+}
+
+async function handleSwitch() {
+  if (!targetSchoolId.value) return message.warn('请选择目标学校');
+  try {
+    const r = await request.put(`/teacher/classes/${switchingClass.value.id}/switch-school`, { newSchoolId: targetSchoolId.value });
+    message.success(r.message);
+    switchVisible.value = false;
+    fetch();
+  } catch { message.error('切换失败'); }
+}
 
 onMounted(fetch);
 </script>

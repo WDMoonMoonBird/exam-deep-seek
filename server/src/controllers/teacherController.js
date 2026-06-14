@@ -467,6 +467,63 @@ export const deleteClass = async (req, res) => {
   }
 };
 
+export const switchClassSchool = async (req, res) => {
+  try {
+    const classId = +req.params.id;
+    const { newSchoolId } = req.body;
+    if (!newSchoolId) return res.status(400).json({ code: 1001, message: '请选择目标学校', data: null });
+
+    // 查班级 + 当前学校 + 教师权限
+    const cls = await prisma.class.findUnique({
+      where: { id: classId },
+      include: { school: { select: { id: true, name: true } } },
+    });
+    if (!cls) return res.status(404).json({ code: 1004, message: '班级不存在', data: null });
+
+    const oldSchoolId = cls.schoolId;
+    if (oldSchoolId === newSchoolId) return res.status(400).json({ code: 1001, message: '目标学校与当前学校相同', data: null });
+
+    // 验证教师属于当前班级
+    const tc = await prisma.teacherClass.findFirst({ where: { teacherId: req.user.id, classId } });
+    if (!tc) return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+
+    // 验证教师同时属于新旧两校
+    const [oldBelongs, newBelongs] = await Promise.all([
+      prisma.teacherSchool.findFirst({ where: { teacherId: req.user.id, schoolId: oldSchoolId } }),
+      prisma.teacherSchool.findFirst({ where: { teacherId: req.user.id, schoolId: +newSchoolId } }),
+    ]);
+    if (!oldBelongs) return res.status(403).json({ code: 1003, message: '无权操作当前学校', data: null });
+    if (!newBelongs) return res.status(403).json({ code: 1003, message: '你不属于目标学校', data: null });
+
+    // 查目标学校信息
+    const newSchool = await prisma.school.findUnique({ where: { id: +newSchoolId }, select: { id: true, name: true } });
+
+    // 查出将被移除的团队
+    const existingTeams = await prisma.teamClass.findMany({
+      where: { classId },
+      include: { team: { select: { name: true } } },
+    });
+
+    // 原子操作
+    await prisma.$transaction([
+      prisma.class.update({ where: { id: classId }, data: { schoolId: +newSchoolId } }),
+      prisma.teamClass.deleteMany({ where: { classId } }),
+    ]);
+
+    const removedTeamNames = existingTeams.map(tc => tc.team.name);
+    logger.info({ classId, oldSchoolId, newSchoolId, removedTeams: removedTeamNames }, '班级已切换学校');
+
+    res.json({
+      code: 0,
+      message: `已从「${cls.school.name}」迁移至「${newSchool.name}」${removedTeamNames.length ? '，已退出团队：' + removedTeamNames.join('、') : ''}`,
+      data: { oldSchoolId, newSchoolId: +newSchoolId, school: newSchool, removedTeams: removedTeamNames },
+    });
+  } catch (err) {
+    logger.error({ err }, '切换班级学校失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
 // ===================== 学生管理 =====================
 
 export const getMyStudents = async (req, res) => {

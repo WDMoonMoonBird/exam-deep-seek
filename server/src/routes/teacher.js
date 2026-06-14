@@ -17,6 +17,7 @@ router.get('/classes', teacher.getAllClasses);
 router.post('/classes', teacher.createClass);
 router.put('/classes/:id', teacher.updateClass);
 router.delete('/classes/:id', teacher.deleteClass);
+router.put('/classes/:id/switch-school', teacher.switchClassSchool);
 
 // 题库
 router.get('/questions', teacher.getQuestions);
