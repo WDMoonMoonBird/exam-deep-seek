@@ -1,4 +1,6 @@
 import bcrypt from 'bcryptjs';
+import fs from 'fs';
+import path from 'path';
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
 import { DEFAULT_MAX_SCORE } from '../constants.js';
@@ -35,7 +37,7 @@ export const getQuestions = async (req, res) => {
     const [list, total] = await Promise.all([
       prisma.question.findMany({
         where,
-        select: { id: true, title: true, difficulty: true, maxScore: true, createdAt: true, _count: { select: { subQuestions: true } } },
+        select: { id: true, title: true, type: true, difficulty: true, maxScore: true, createdAt: true, _count: { select: { subQuestions: true } } },
         orderBy: { createdAt: 'desc' },
         skip: (+page - 1) * +pageSize,
         take: +pageSize,
@@ -64,9 +66,140 @@ export const getQuestion = async (req, res) => {
   }
 };
 
+export const getProjectFiles = async (req, res) => {
+  try {
+    const id = +req.params.id;
+    const q = await prisma.question.findFirst({
+      where: { id, teacherId: req.user.id, type: 'project', deletedAt: null },
+    });
+    if (!q) return res.status(404).json({ code: 1004, message: '题目不存在', data: null });
+    if (!q.attachmentUrl) return res.json({ code: 0, message: 'ok', data: { tree: [] } });
+
+    const dir = path.join(__dirname, '../../uploads', q.attachmentUrl);
+    if (!fs.existsSync(dir)) return res.json({ code: 0, message: 'ok', data: { tree: [] } });
+
+    // 动态导入 fileTree（ESM 兼容）
+    const { buildTree, flattenTree } = await import('../utils/fileTree.js');
+    const tree = buildTree(dir);
+    const flatList = flattenTree(tree);
+
+    // 读取文件内容
+    const contents = {};
+    for (const f of flatList) {
+      if (f.type === 'file') {
+        try {
+          contents[f.path] = fs.readFileSync(path.join(dir, f.path), 'utf-8');
+        } catch {
+          contents[f.path] = '// 无法读取文件内容';
+        }
+      }
+    }
+    res.json({ code: 0, message: 'ok', data: { tree, contents } });
+  } catch (err) {
+    logger.error({ err }, '获取实训题文件树失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+export const gradeProject = async (req, res) => {
+  try {
+    const id = +req.params.id;
+    const q = await prisma.question.findFirst({
+      where: { id, teacherId: req.user.id, type: 'project', deletedAt: null },
+    });
+    if (!q) return res.status(404).json({ code: 1004, message: '题目不存在', data: null });
+
+    // 读取标准项目文件
+    const readDirFiles = (dir) => {
+      const result = [];
+      if (!fs.existsSync(dir)) return result;
+      const walk = (base, rel = '') => {
+        for (const entry of fs.readdirSync(base, { withFileTypes: true })) {
+          if (entry.isDirectory()) walk(path.join(base, entry.name), rel + entry.name + '/');
+          else if (entry.isFile()) {
+            const fpath = rel + entry.name;
+            try {
+              result.push({ path: fpath, content: fs.readFileSync(path.join(base, entry.name), 'utf-8') });
+            } catch {}
+          }
+        }
+      };
+      walk(dir);
+      return result;
+    };
+
+    const standardDir = q.attachmentUrl ? path.join(__dirname, '../../uploads', q.attachmentUrl) : '';
+    const standardFiles = readDirFiles(standardDir)
+      .map(f => `// 文件名: ${f.path}\n${f.content}`).join('\n\n');
+
+    // 读取学生提交文件（从请求体或默认路径）
+    const { studentPath } = req.body || {};
+    const studentDir = studentPath || standardDir; // 测试时默认用标准文件
+    const studentFiles = readDirFiles(studentDir)
+      .map(f => `// 文件名: ${f.path}\n${f.content}`).join('\n\n');
+
+    if (!standardFiles) {
+      return res.status(400).json({ code: 1001, message: '未找到标准项目文件', data: null });
+    }
+
+    const { gradeProject: doGrade } = await import('../services/deepseek.js');
+    const result = await doGrade({
+      title: q.title,
+      description: q.material || '',
+      scoringRubric: q.scoringRubric || '',
+      standardFiles,
+      studentFiles,
+    });
+
+    res.json({ code: 0, message: '评分完成', data: result });
+  } catch (err) {
+    logger.error({ err }, '项目评分失败');
+    res.status(500).json({ code: 2001, message: '评分失败: ' + (err.message || '未知错误'), data: null });
+  }
+};
+
 export const createQuestion = async (req, res) => {
   try {
-    const { title, difficulty = 'medium', material, attachmentUrl, objectiveSettings, subQuestions } = req.body;
+    const { title, difficulty = 'medium', type = 'code', material, attachmentUrl, objectiveSettings, subQuestions, scoringRubric, maxScore, tempId } = req.body;
+
+    // 实训题（type=project）：不需要 subQuestions
+    if (type === 'project') {
+      if (!title) return res.status(400).json({ code: 1001, message: '参数错误', data: null });
+      if (title.length > 200) return res.status(400).json({ code: 1001, message: '标题不能超过200字', data: null });
+      if (material?.length > 50000) return res.status(400).json({ code: 1001, message: '题目材料过长', data: null });
+
+      const q = await prisma.question.create({
+        data: {
+          teacherId: req.user.id,
+          title,
+          type: 'project',
+          maxScore: maxScore || 100,
+          difficulty,
+          material: material || null,
+          attachmentUrl: tempId ? `projects/${tempId}/standard` : null,
+          scoringRubric: scoringRubric || null,
+        },
+      });
+
+      // 将临时上传的 zip 文件移动到正式目录
+      if (tempId) {
+        const srcDir = path.join(__dirname, '../../uploads/projects', tempId);
+        const destDir = path.join(__dirname, '../../uploads/project-questions', String(q.id));
+        if (fs.existsSync(srcDir)) {
+          fs.mkdirSync(path.dirname(destDir), { recursive: true });
+          fs.renameSync(srcDir, destDir);
+        }
+        await prisma.question.update({
+          where: { id: q.id },
+          data: { attachmentUrl: `project-questions/${q.id}/standard` },
+        });
+      }
+
+      logger.info({ questionId: q.id, type: 'project' }, '实训题已创建');
+      return res.json({ code: 0, message: '创建成功', data: q });
+    }
+
+    // 编程题（type=code）：原有逻辑不变
     if (!title || !subQuestions?.length) {
       return res.status(400).json({ code: 1001, message: '参数错误', data: null });
     }
@@ -121,9 +254,24 @@ export const updateQuestion = async (req, res) => {
     const existing = await prisma.question.findFirst({ where: { id, teacherId: req.user.id, deletedAt: null } });
     if (!existing) return res.status(404).json({ code: 1004, message: '题目不存在', data: null });
 
-    const { title, difficulty = 'medium', material, attachmentUrl, objectiveSettings, subQuestions } = req.body;
+    const { title, difficulty = 'medium', material, attachmentUrl, objectiveSettings, subQuestions, scoringRubric, maxScore } = req.body;
     if (title?.length > 200) return res.status(400).json({ code: 1001, message: '标题不能超过200字', data: null });
     if (material?.length > 50000) return res.status(400).json({ code: 1001, message: '题目材料过长', data: null });
+
+    // 实训题：直接更新，不处理 subQuestions
+    if (existing.type === 'project') {
+      await prisma.question.update({
+        where: { id },
+        data: {
+          title, maxScore: maxScore || existing.maxScore, difficulty,
+          material, attachmentUrl, scoringRubric: scoringRubric ?? existing.scoringRubric,
+          objectiveSettings: objectiveSettings || undefined,
+        },
+      });
+      return res.json({ code: 0, message: '更新成功', data: null });
+    }
+
+    // 编程题：原有逻辑
     let resolved, totalScore;
     try {
       const result = resolveSubQuestionScores(subQuestions);
@@ -785,8 +933,6 @@ export const batchAddStudents = async (req, res) => {
 
 // ===================== 文件上传 =====================
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -804,6 +950,7 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  defParamCharset: 'utf8',
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (ext !== '.zip') return cb(new Error('仅支持 zip 文件'));

@@ -79,7 +79,7 @@
         </template>
         <template v-if="column.key === 'action'">
           <a-button v-if="record.submitted" type="link"
-            @click="$router.push(`/teacher/review/${record.id}`)">审核</a-button>
+            @click="openReview(record)">审核</a-button>
           <span v-else class="dim-text">—</span>
         </template>
       </template>
@@ -89,7 +89,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { message, Modal } from 'ant-design-vue';
 import { io } from 'socket.io-client';
 import request from '../../api/request.js';
@@ -99,6 +99,7 @@ import { exportReviewXlsx } from '../../utils/export.js';
 import DataTable from '../../components/DataTable.vue';
 
 const route = useRoute();
+const router = useRouter();
 const userStore = useUserStore();
 const classId = +route.params.classId;
 const assignmentId = +route.query.assignmentId;
@@ -118,6 +119,14 @@ watch(() => pagination.current, (v) => { savedPage.value = v; });
 
 const sortField = savedSortField;
 const sortOrder = savedSortOrder;
+
+function openReview(record) {
+  if (record.projectSubmissionId) {
+    router.push(`/teacher/review/project/${record.projectSubmissionId}`);
+  } else {
+    router.push(`/teacher/review/${record.id}`);
+  }
+}
 
 function onTableChange(_p, _f, sorter) {
   sortField.value = sorter.order ? sorter.field : '';

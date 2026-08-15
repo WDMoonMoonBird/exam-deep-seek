@@ -3,6 +3,7 @@ import auth from '../middleware/auth.js';
 import requireRole from '../middleware/role.js';
 import * as teacher from '../controllers/teacherController.js';
 import * as review from '../controllers/reviewController.js';
+import * as projectReview from '../controllers/projectReviewController.js';
 import * as team from '../controllers/teamController.js';
 
 const router = Router();
@@ -21,6 +22,8 @@ router.put('/classes/:id/switch-school', teacher.switchClassSchool);
 
 // 题库
 router.get('/questions', teacher.getQuestions);
+router.get('/questions/:id/project-files', teacher.getProjectFiles);
+router.post('/questions/:id/grade-project', teacher.gradeProject);
 router.get('/questions/:id', teacher.getQuestion);
 router.post('/questions', teacher.createQuestion);
 router.put('/questions/:id', teacher.updateQuestion);
@@ -44,11 +47,17 @@ router.get('/submissions', review.getSubmissions);
 router.get('/submissions/:id', review.getSubmissionDetail);
 router.put('/submissions/:id/score', review.updateScore);
 router.put('/submissions/:id/review', review.reviewSubmission);
+// 新实训题流程审核（Submission.type=project）：三栏审核数据
+router.get('/project-submission/:id', projectReview.getProjectReview);
 router.post('/submissions/:id/regrade', review.regradeSubmission);
 router.put('/submissions/publish', review.publishScores);
 router.post('/submissions/batch-review', review.batchReview);
 router.post('/submissions/batch-publish', review.batchPublish);
 router.get('/export-review', review.exportReviewData);
+// 实训题（体系C）教师双栏审核
+router.get('/submissions/:id/project', review.getProjectReview);
+router.put('/submissions/:id/project/review', review.reviewProjectSubmission);
+router.post('/submissions/:id/project/regrade', projectReview.regradeProjectSubmission);
 
 // 教学团队
 router.get('/teams', team.getTeams);

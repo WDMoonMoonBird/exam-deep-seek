@@ -28,6 +28,8 @@ model User {
   submissionsAsStudent Submission[]       @relation("StudentSubmissions")
   teamsCreated         Team[]             @relation("TeamCreator")
   teamMemberships      TeamTeacher[]
+  projects             Project[]          @relation("TeacherProjects")
+  projectSubmissions   ProjectSubmission[] @relation("StudentProjectSubmissions")
 
   @@unique([username])
   @@index([username, role])
@@ -73,6 +75,7 @@ model Class {
   studentClasses     StudentClass[]
   assignmentClasses  AssignmentClass[]
   teamClasses        TeamClass[]
+  projectClasses     ProjectClass[]
 
   @@index([schoolId])
   @@map("classes")
@@ -135,9 +138,11 @@ model Question {
   title             String     @db.VarChar(200)
   maxScore          Float      @default(100) @map("max_score")
   difficulty        Difficulty
+  type              QuestionType @default(code)
   material          String?    @db.Text
   attachmentUrl     String?    @map("attachment_url") @db.VarChar(500)
   objectiveSettings Json?      @map("objective_settings")
+  scoringRubric     String?    @map("scoring_rubric") @db.Text
   createdAt         DateTime   @default(now()) @map("created_at")
   deletedAt         DateTime?  @map("deleted_at")
 
@@ -177,6 +182,11 @@ enum Difficulty {
   easy
   medium
   hard
+}
+
+enum QuestionType {
+  code
+  project
 }
 
 // ============================
@@ -327,4 +337,140 @@ enum SubmissionStatus {
   ai_graded
   reviewed
   published
+}
+
+// ============================
+// 13. projects — 实训任务表
+// ============================
+model Project {
+  id             Int           @id @default(autoincrement()) @db.UnsignedInt
+  teacherId      Int           @map("teacher_id") @db.UnsignedInt
+  title          String        @db.VarChar(200)
+  description    String?       @db.Text
+  startTime      DateTime      @map("start_time")
+  endTime        DateTime      @map("end_time")
+  machineWeight  Float         @default(0.3) @map("machine_weight")
+  astWeight      Float         @default(0.3) @map("ast_weight")
+  aiWeight       Float         @default(0.4) @map("ai_weight")
+  machineConfig  Json?         @map("machine_config")
+  aiPromptExtra  String?       @map("ai_prompt_extra") @db.Text
+  status         ProjectStatus @default(draft)
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  deletedAt      DateTime?     @map("deleted_at")
+
+  teacher      User                @relation("TeacherProjects", fields: [teacherId], references: [id])
+  classes      ProjectClass[]
+  files        ProjectFile[]
+  submissions  ProjectSubmission[]
+
+  @@index([teacherId])
+  @@index([status])
+  @@map("projects")
+}
+
+enum ProjectStatus {
+  draft
+  published
+  closed
+}
+
+// ============================
+// 14. project_classes — 任务-班级关联表
+// ============================
+model ProjectClass {
+  projectId Int @map("project_id") @db.UnsignedInt
+  classId   Int @map("class_id") @db.UnsignedInt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  class   Class   @relation(fields: [classId], references: [id])
+
+  @@id([projectId, classId])
+  @@index([classId])
+  @@map("project_classes")
+}
+
+// ============================
+// 15. project_files — 工程文件树表（标准工程）
+// ============================
+model ProjectFile {
+  id         Int      @id @default(autoincrement()) @db.UnsignedInt
+  projectId  Int      @map("project_id") @db.UnsignedInt
+  path       String   @db.VarChar(500)
+  name       String   @db.VarChar(200)
+  type       FileType
+  language   String?  @db.VarChar(30)
+  size       Int?     @db.UnsignedInt
+  parentPath String?  @map("parent_path") @db.VarChar(500)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([projectId, parentPath])
+  @@map("project_files")
+}
+
+enum FileType {
+  file
+  directory
+}
+
+// ============================
+// 16. project_submissions — 学生提交表
+// ============================
+model ProjectSubmission {
+  id               Int                      @id @default(autoincrement()) @db.UnsignedInt
+  projectId        Int                      @map("project_id") @db.UnsignedInt
+  studentId        Int                      @map("student_id") @db.UnsignedInt
+  machineScore     Float?                   @map("machine_score")
+  machineFeedback  String?                  @map("machine_feedback") @db.Text
+  astScore         Float?                   @map("ast_score")
+  astFeedback      String?                  @map("ast_feedback") @db.Text
+  aiScore          Float?                   @map("ai_score")
+  aiFeedback       String?                  @map("ai_feedback") @db.Text
+  totalScore       Float?                   @map("total_score")
+  finalScore       Float?                   @map("final_score")
+  teacherFeedback  String?                  @map("teacher_feedback") @db.Text
+  status           ProjectSubmissionStatus  @default(draft)
+  submittedAt      DateTime?                @map("submitted_at")
+  reviewedAt       DateTime?                @map("reviewed_at")
+
+  project Project          @relation(fields: [projectId], references: [id])
+  student User             @relation("StudentProjectSubmissions", fields: [studentId], references: [id])
+  files   SubmissionFile[]
+
+  @@unique([projectId, studentId])
+  @@index([projectId])
+  @@index([projectId, status])
+  @@index([studentId])
+  @@map("project_submissions")
+}
+
+enum ProjectSubmissionStatus {
+  draft
+  submitted
+  grading
+  graded
+  reviewed
+  published
+}
+
+// ============================
+// 17. submission_files — 学生提交文件树表
+// ============================
+model SubmissionFile {
+  id           Int      @id @default(autoincrement()) @db.UnsignedInt
+  submissionId Int      @map("submission_id") @db.UnsignedInt
+  path         String   @db.VarChar(500)
+  name         String   @db.VarChar(200)
+  type         FileType
+  language     String?  @db.VarChar(30)
+  size         Int?     @db.UnsignedInt
+  parentPath   String?  @map("parent_path") @db.VarChar(500)
+
+  submission ProjectSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+  @@index([submissionId, parentPath])
+  @@map("submission_files")
 }

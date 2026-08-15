@@ -1,0 +1,253 @@
+classDiagram
+    %% ==================== 数据模型层（Prisma，零 migration）====================
+    class Question {
+        +Int id
+        +Int teacherId
+        +String title
+        +Float maxScore
+        +QuestionType type "code | project"
+        +String material
+        +String attachmentUrl "标准包目录，教师专用，禁下发学生"
+        +String scoringRubric
+        +DateTime deletedAt
+    }
+
+    class Submission {
+        +Int id
+        +Int assignmentId
+        +Int studentId
+        +Int questionId
+        +Int subQuestionId "实训题恒为 NULL"
+        +String answer "实训题=ProjectAnswerMeta JSON"
+        +Int aiScore "教师专用"
+        +String aiFeedback "教师专用，永不下发学生 R3"
+        +Int finalScore "仅 reviewed/published 下发"
+        +String teacherFeedback "仅 reviewed/published 下发"
+        +SubmissionStatus status
+        +DateTime submittedAt
+        +DateTime reviewedAt
+        +Int attemptCount "= 当前 version"
+    }
+
+    class SubmissionStatus {
+        <<enumeration>>
+        draft
+        submitted
+        ai_graded
+        reviewed
+        published
+    }
+
+    class ProjectAnswerMeta {
+        <<JSON in Submission.answer>>
+        +String kind "project"
+        +Int version
+        +String dir
+        +String entry
+        +String originalName
+        +Int fileCount
+        +Int totalBytes
+        +DateTime uploadedAt
+        +VersionRef[] history "R7 历史版本，永不覆盖"
+        +GradingState grading
+    }
+
+    class VersionRef {
+        <<JSON>>
+        +Int version
+        +String dir
+        +DateTime at
+    }
+
+    class GradingState {
+        <<JSON>>
+        +String state "pending|running|success|failed"
+        +Int attempts
+        +DateTime startedAt
+        +DateTime finishedAt
+        +String lastError "教师可见，学生裁剪"
+        +String model
+    }
+
+    %% ==================== 工具层（新建，架构核心）====================
+    class projectPaths {
+        <<module: utils/projectPaths.js>>
+        +String ROOT
+        +String UPLOADS_ROOT
+        +String STANDARDS_ROOT
+        +String SUBMISSIONS_ROOT
+        +standardDir(questionId) String
+        +submissionDir(questionId, studentId, version) String
+        +assertInside(base, ...segments) String "路径逃逸守卫，封堵 S2"
+        -safeSegment(value, label) String "白名单 ^[A-Za-z0-9_-]+$"
+    }
+
+    class decodeZipName {
+        <<module: utils/decodeZipName.js>>
+        +decodeZipName(nameOrEntry) String "latin1→utf8，判 flags&0x800 防二次破坏，封堵 S5"
+    }
+
+    class projectView {
+        <<module: utils/projectView.js>>
+        +canStudentSeeScore(submission) Boolean "唯一分数开关 R4"
+        +toStudentView(submission, question) StudentProjectView "白名单构造 R2"
+        +toTeacherView(submission, question) TeacherProjectView
+    }
+
+    class StudentProjectView {
+        <<DTO 白名单，超出即 bug>>
+        +Int id
+        +Int questionId
+        +Int assignmentId
+        +String status "ai_graded 对外映射为 submitted R6"
+        +DateTime submittedAt
+        +Int version
+        +FileBundle files
+        +Int score "null 除非 reviewed/published"
+        +String feedback "teacherFeedback，绝不含 aiFeedback"
+        +DateTime reviewedAt
+    }
+
+    class TeacherProjectView {
+        <<DTO 全量>>
+        +FileBundle standard
+        +FileBundle student
+        +Int aiScore
+        +String aiFeedback
+        +GradingState grading
+        +Int finalScore
+        +String teacherFeedback
+        +String status
+    }
+
+    class FileBundle {
+        <<DTO>>
+        +TreeNode[] tree
+        +Map~String,String~ contents
+        +String entry
+    }
+
+    %% ==================== 中间件层 ====================
+    class projectAssetGuard {
+        <<middleware>>
+        +handle(req, res, next) void
+        note "封堵 S1：/uploads/project-standards|project-submissions|projects 一律 403"
+    }
+
+    %% ==================== 服务层 ====================
+    class projectGrading {
+        <<service: services/projectGrading.js 新建>>
+        +runProjectGrading(submissionId) Promise~void~
+        -acquireLock(submission) Boolean "幂等：running 则跳过"
+        -loadPackages(question, submission) Object
+        -onSuccess(submissionId, result) void "→ ai_graded"
+        -onFailure(submissionId, error) void "→ 保持 submitted + failed"
+    }
+
+    class deepseek {
+        <<service: services/deepseek.js 现有>>
+        +gradeProject(params) Promise~GradeResult~
+    }
+
+    class GradeResult {
+        +Number totalScore
+        +Object[] breakdown
+        +String[] highlights
+        +String[] issues
+        +String overallComment
+    }
+
+    %% ==================== 控制器层 ====================
+    class studentController {
+        <<controller>>
+        +getProjectQuestion(req, res) "S-1"
+        +submitProject(req, res) "S-2 不等待 AI"
+        +getProjectFiles(req, res) "S-3 按 version"
+        +getScores(req, res) "S-4"
+    }
+
+    class teacherController {
+        <<controller>>
+        +getProjectFiles(req, res) "T-1 标准包"
+        +createQuestion(req, res)
+        +updateQuestion(req, res)
+        -gradeProject() "❌ 删除：S2 漏洞源头"
+    }
+
+    class reviewController {
+        <<controller>>
+        +getProjectSubmissionDetail(req, res) "T-2 双栏"
+        +reviewSubmission(req, res) "T-3 → reviewed"
+        +regradeProjectSubmission(req, res) "T-4 兜底，202"
+        +updateScore(req, res) "实训题禁用 aiFeedback fallback"
+        +publishScores(req, res) "→ published"
+    }
+
+    %% ==================== 前端组件层 ====================
+    class StudentProject_vue {
+        <<view: views/student/StudentProject.vue 新建>>
+        +status String
+        +files FileBundle
+        +score Number "服务端给 null 即不可见"
+        +handleSubmit() "提交后原地渲染，不跳页"
+        note "无 gradeResult / 无 aiFeedback / 无评分模态框"
+    }
+
+    class ProjectQuestionEdit_vue {
+        <<view: views/teacher/ProjectQuestionEdit.vue 瘦身>>
+        +form Object
+        +handleSave()
+        note "移除 mode prop 与全部学生态分支"
+    }
+
+    class ProjectReviewDetail_vue {
+        <<view: views/teacher/ProjectReviewDetail.vue 新建>>
+        +standard FileBundle
+        +student FileBundle
+        +ai Object
+        +submitReview()
+        +regrade()
+    }
+
+    class CodeTreeViewer_vue {
+        <<component: 公共复用>>
+        +tree TreeNode[]
+        +contents Map
+        +openTabs Array
+    }
+
+    %% ==================== 关系 ====================
+    Question "1" --> "0..*" Submission : 一道实训题多个学生提交
+    Submission --> SubmissionStatus : status
+    Submission ..> ProjectAnswerMeta : answer 字段序列化为
+    ProjectAnswerMeta *-- "0..*" VersionRef : history (R7)
+    ProjectAnswerMeta *-- "1" GradingState : grading
+
+    projectView ..> Submission : 读取
+    projectView ..> Question : 读取
+    projectView --> StudentProjectView : 构造(白名单)
+    projectView --> TeacherProjectView : 构造(全量)
+    StudentProjectView *-- FileBundle
+    TeacherProjectView *-- "2" FileBundle : standard + student
+
+    studentController ..> projectView : 必经组装层
+    studentController ..> projectPaths : 必经路径层
+    studentController ..> decodeZipName : 文件名编码修复
+    studentController ..> projectGrading : setImmediate 触发(不 await)
+    teacherController ..> projectPaths
+    reviewController ..> projectView
+    reviewController ..> projectGrading : 手动重评兜底
+
+    projectGrading ..> deepseek : 调用
+    projectGrading ..> projectPaths
+    projectGrading ..> Submission : 落库 ai_graded / failed
+    deepseek --> GradeResult
+
+    projectAssetGuard ..> projectPaths : 前缀规则来源
+
+    StudentProject_vue ..> studentController : S-1/S-2/S-3
+    ProjectQuestionEdit_vue ..> teacherController : T-1
+    ProjectReviewDetail_vue ..> reviewController : T-2/T-3/T-4
+    StudentProject_vue *-- CodeTreeViewer_vue
+    ProjectQuestionEdit_vue *-- CodeTreeViewer_vue
+    ProjectReviewDetail_vue *-- "2" CodeTreeViewer_vue : 左右双栏

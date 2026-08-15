@@ -25,6 +25,9 @@
                 <a-menu-item key="/teacher/review"><template #icon>
                         <SafetyCertificateOutlined />
                     </template><span>评分审核</span></a-menu-item>
+                <a-menu-item key="/teacher/projects"><template #icon>
+                        <ExperimentOutlined />
+                    </template><span>实训任务</span></a-menu-item>
             </a-menu>
         </a-layout-sider>
         <a-layout>
@@ -107,7 +110,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { useUserStore } from '../../stores/user.js';
 import request from '../../api/request.js';
 import { Modal, message } from 'ant-design-vue';
-import { QuestionCircleOutlined, UserOutlined, NodeIndexOutlined, UserSwitchOutlined, PoweroffOutlined, AppstoreOutlined, IdcardOutlined, DatabaseOutlined, FileTextOutlined, SafetyCertificateOutlined, TeamOutlined, BookOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
+import { QuestionCircleOutlined, UserOutlined, NodeIndexOutlined, UserSwitchOutlined, PoweroffOutlined, AppstoreOutlined, IdcardOutlined, DatabaseOutlined, FileTextOutlined, SafetyCertificateOutlined, TeamOutlined, BookOutlined, ExperimentOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
 
 const router = useRouter(); const route = useRoute(); const userStore = useUserStore();
 const user = userStore.user;
@@ -155,8 +158,9 @@ watch(() => route.path, (p) => {
   if (p.startsWith('/teacher/review')) selectedKeys.value = ['/teacher/review'];
   else if (p.startsWith('/teacher/questions/')) selectedKeys.value = ['/teacher/questions'];
   else if (p.startsWith('/teacher/teams')) selectedKeys.value = ['/teacher/teams'];
+  else if (p.startsWith('/teacher/projects')) selectedKeys.value = ['/teacher/projects'];
   else selectedKeys.value = [p];
-  collapsed.value = p.includes('/teacher/questions/') || p.includes('/teacher/review/');
+  collapsed.value = p.includes('/teacher/questions/') || p.includes('/teacher/review/') || p.includes('/teacher/projects/');
 });
 function onMenuClick ({ key }) {
   router.push(key);

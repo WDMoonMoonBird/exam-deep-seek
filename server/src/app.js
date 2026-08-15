@@ -14,6 +14,10 @@ import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
 import teacherRoutes from './routes/teacher.js';
 import studentRoutes from './routes/student.js';
+import projectRoutes from './routes/projects.js';
+import auth from './middleware/auth.js';
+import requireRole from './middleware/role.js';
+import projectAssetGuard from './middleware/projectAssetGuard.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -92,7 +96,12 @@ app.post('/api/internal/graded', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/teacher', teacherRoutes);
+app.use('/api/teacher/projects', auth, requireRole('teacher'), projectRoutes);
 app.use('/api/student', studentRoutes);
+
+// 实训资产（标准答案 / 学生提交 / 项目工作区）禁止匿名静态访问，
+// 必须注册在 express.static 之前，改走带鉴权的 API 通道。
+app.use(projectAssetGuard);
 
 // 生产环境：服务前端静态文件
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));

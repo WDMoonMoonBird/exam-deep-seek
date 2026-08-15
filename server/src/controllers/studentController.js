@@ -1,5 +1,16 @@
+import fs from "fs";
+import path from "path";
+import multer from "multer";
+import { fileURLToPath } from "url";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+import { buildTree, isIgnored } from "../utils/fileTree.js";
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
+import { submissionDir } from '../utils/projectPaths.js';
+import { toStudentView, parseProjectAnswer, serializeProjectAnswer } from '../utils/projectView.js';
+import { extractZipSafely, decodeUploadName, MAX_TEXT_BYTES } from '../utils/projectArchive.js';
+import { enqueueProjectGrade } from '../services/projectGrading.js';
 
 // ===================== 作业列表 =====================
 
@@ -50,6 +61,7 @@ export const getAssignments = async (req, res) => {
         select: {
           id: true, title: true, description: true, startTime: true, endTime: true, allowResubmit: true, createdAt: true, deletedAt: true, mode: true, locked: true,
           _count: { select: { assignmentQuestions: true } },
+          assignmentQuestions: { select: { question: { select: { id: true, type: true } } } },
           submissions: {
             where: { studentId },
             select: { status: true, id: true },
@@ -65,7 +77,7 @@ export const getAssignments = async (req, res) => {
     res.json({ code: 0, message: 'ok', data: { list, total, page: +page, pageSize: +pageSize } });
   } catch (err) {
     logger.error({ err }, '获取作业列表失败');
-    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+    res.status(500).json({ code: 2001, message: "服务器错误: " + (err.message || "未知"), data: null });
   }
 };
 
@@ -126,7 +138,7 @@ export const getAssignmentDetail = async (req, res) => {
     res.json({ code: 0, message: 'ok', data: { assignment, submissions: safeSubmissions } });
   } catch (err) {
     logger.error({ err }, '获取作业详情失败');
-    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+    res.status(500).json({ code: 2001, message: "服务器错误: " + (err.message || "未知"), data: null });
   }
 };
 
@@ -187,7 +199,7 @@ export const submitAnswer = async (req, res) => {
     res.json({ code: 0, message: msg, data: null });
   } catch (err) {
     logger.error({ err }, '提交答案失败');
-    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+    res.status(500).json({ code: 2001, message: "服务器错误: " + (err.message || "未知"), data: null });
   }
 };
 
@@ -225,7 +237,7 @@ export const saveDraft = async (req, res) => {
     res.json({ code: 0, message: '草稿已保存', data: null });
   } catch (err) {
     logger.error({ err }, '保存草稿失败');
-    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+    res.status(500).json({ code: 2001, message: "服务器错误: " + (err.message || "未知"), data: null });
   }
 };
 
@@ -244,7 +256,7 @@ export const retryAssignment = async (req, res) => {
     res.json({ code: 0, message: '已重置', data: null });
   } catch (err) {
     logger.error({ err }, '重新答题失败');
-    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+    res.status(500).json({ code: 2001, message: "服务器错误: " + (err.message || "未知"), data: null });
   }
 };
 
@@ -296,7 +308,7 @@ export const getScores = async (req, res) => {
     res.json({ code: 0, message: 'ok', data: [...assignMap.values()] });
   } catch (err) {
     logger.error({ err }, '获取成绩失败');
-    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+    res.status(500).json({ code: 2001, message: "服务器错误: " + (err.message || "未知"), data: null });
   }
 };
 
@@ -310,6 +322,378 @@ export const getProfile = async (req, res) => {
     res.json({ code: 0, data: { realName: req.user.realName, username: req.user.username, classes } });
   } catch (err) {
     logger.error({ err }, '获取学生信息失败');
-    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+    res.status(500).json({ code: 2001, message: "服务器错误: " + (err.message || "未知"), data: null });
   }
 };
+
+// ===================== 实训题 =====================
+
+/**
+ * 读取版本目录下所有文本文件内容。
+ *
+ * 复用 fileTree 的过滤规则（跳过 node_modules / 二进制后缀等），
+ * 超过 MAX_TEXT_BYTES 的文件折叠为占位提示，避免响应体膨胀。
+ *
+ * @param {string} dir 版本目录绝对路径
+ * @returns {Record<string, string>} 相对路径 → 文件内容
+ */
+function readVersionContents(dir) {
+  /** @type {Record<string, string>} */
+  const contents = {};
+  if (!dir || !fs.existsSync(dir)) return contents;
+
+  const walk = (base, rel = '') => {
+    let entries;
+    try {
+      entries = fs.readdirSync(base, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const abs = path.join(base, entry.name);
+      const relPath = rel + entry.name;
+      if (entry.isDirectory()) {
+        if (isIgnored(entry.name)) continue;
+        walk(abs, relPath + '/');
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      if (isIgnored(entry.name)) continue;
+
+      try {
+        const { size } = fs.statSync(abs);
+        if (size > MAX_TEXT_BYTES) {
+          contents[relPath] = `// 文件过大（${(size / 1024 / 1024).toFixed(2)} MB），已折叠不予预览`;
+          continue;
+        }
+        contents[relPath] = fs.readFileSync(abs, 'utf-8');
+      } catch {
+        // 单个文件读失败不影响整体预览
+      }
+    }
+  };
+
+  walk(dir);
+  return contents;
+}
+
+/**
+ * 安全构建文件树，失败返回空数组。
+ *
+ * @param {string} dir 目录绝对路径
+ * @returns {Array<object>} 文件树节点数组
+ */
+function buildTreeSafe(dir) {
+  try {
+    return buildTree(dir, { skipBaseDir: true });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 读取某个版本的文件树与内容。
+ *
+ * @param {number} questionId 题目 ID
+ * @param {number} studentId 学生 ID
+ * @param {number} version 版本号
+ * @returns {{tree: Array<object>, contents: Record<string, string>}|null} 目录不存在时返回 null
+ */
+function readVersionFiles(questionId, studentId, version) {
+  if (!Number.isInteger(version) || version < 1) return null;
+  let dir;
+  try {
+    dir = submissionDir(questionId, studentId, version);
+  } catch {
+    return null;
+  }
+  if (!fs.existsSync(dir)) return null;
+  return { tree: buildTreeSafe(dir), contents: readVersionContents(dir) };
+}
+
+/**
+ * 校验学生是否属于该作业所覆盖的班级，并返回作业记录。
+ *
+ * 防止学生通过篡改 URL 里的 assignmentId 访问不属于自己的作业。
+ *
+ * @param {number} assignmentId 作业 ID
+ * @param {number} studentId 学生 ID
+ * @returns {Promise<{ok: true, assignment: object}|{ok: false, code: number, message: string}>} 校验结果
+ */
+async function assertStudentInAssignment(assignmentId, studentId) {
+  if (!Number.isInteger(assignmentId) || assignmentId < 1) {
+    return { ok: false, code: 1001, message: '作业参数非法' };
+  }
+
+  const assignment = await prisma.assignment.findFirst({
+    where: { id: assignmentId },
+    select: { id: true, title: true, locked: true, mode: true, endTime: true, allowResubmit: true },
+  });
+  if (!assignment) return { ok: false, code: 1004, message: '作业不存在' };
+  if (assignment.locked) return { ok: false, code: 1003, message: '作业已被锁定' };
+
+  // 学生必须在该作业所投放的某个班级内
+  const classIds = (await prisma.studentClass.findMany({
+    where: { studentId },
+    select: { classId: true },
+  })).map((c) => c.classId);
+
+  if (classIds.length === 0) {
+    return { ok: false, code: 1003, message: '无权访问该作业' };
+  }
+
+  const linked = await prisma.assignmentClass.findFirst({
+    where: { assignmentId, classId: { in: classIds } },
+    select: { assignmentId: true },
+  });
+  if (!linked) return { ok: false, code: 1003, message: '无权访问该作业' };
+
+  return { ok: true, assignment };
+}
+
+/**
+ * 校验题目属于该作业且为实训题。
+ *
+ * @param {number} assignmentId 作业 ID
+ * @param {number} questionId 题目 ID
+ * @returns {Promise<object|null>} 题目记录，不匹配时返回 null
+ */
+async function findProjectQuestionInAssignment(assignmentId, questionId) {
+  if (!Number.isInteger(questionId) || questionId < 1) return null;
+
+  const link = await prisma.assignmentQuestion.findFirst({
+    where: { assignmentId, questionId },
+    select: { assignmentId: true },
+  });
+  if (!link) return null;
+
+  // 只取展示所需字段。绝不 include subQuestions（内含 referenceAnswer 标准答案）
+  return prisma.question.findFirst({
+    where: { id: questionId, type: 'project', deletedAt: null },
+    select: {
+      id: true,
+      title: true,
+      difficulty: true,
+      maxScore: true,
+      material: true,
+      scoringRubric: true,
+      type: true,
+    },
+  });
+}
+
+/**
+ * GET /student/assignments/:assignmentId/project/:questionId
+ *
+ * 学生查看实训题：返回题面 + 本人最新提交（经 toStudentView 脱敏）+ 文件树。
+ */
+export const getProjectQuestion = async (req, res) => {
+  try {
+    const assignmentId = +req.params.assignmentId;
+    const questionId = +req.params.questionId;
+    const studentId = req.user.id;
+
+    const guard = await assertStudentInAssignment(assignmentId, studentId);
+    if (!guard.ok) {
+      return res.status(guard.code === 1004 ? 404 : 403)
+        .json({ code: guard.code, message: guard.message, data: null });
+    }
+
+    const question = await findProjectQuestionInAssignment(assignmentId, questionId);
+    if (!question) {
+      return res.status(404).json({ code: 1004, message: '题目不存在', data: null });
+    }
+
+    // 该生在本作业本题下的提交（唯一键保证至多一行）
+    const submission = await prisma.submission.findFirst({
+      where: { assignmentId, studentId, questionId, subQuestionId: null },
+    });
+
+    let files = null;
+    let studentView = null;
+
+    if (submission) {
+      // R2/R3/R4/R6：所有对外字段一律经 toStudentView 白名单裁剪
+      studentView = toStudentView(submission, question);
+
+      const envelope = parseProjectAnswer(submission.answer);
+      if (submission.status !== 'draft' && envelope.currentVersion > 0) {
+        files = readVersionFiles(questionId, studentId, envelope.currentVersion);
+      }
+    }
+
+    res.json({
+      code: 0,
+      message: 'ok',
+      data: {
+        question: {
+          id: question.id,
+          title: question.title,
+          difficulty: question.difficulty,
+          maxScore: question.maxScore,
+          material: question.material,
+          scoringRubric: question.scoringRubric,
+        },
+        submission: studentView,
+        files,
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, '获取实训题失败');
+    res.status(500).json({ code: 2001, message: '服务器错误: ' + (err.message || '未知'), data: null });
+  }
+};
+
+/**
+ * POST /student/assignments/:assignmentId/project/:questionId/submit
+ *
+ * 学生提交实训题压缩包。
+ *
+ * 关键语义：
+ *   - R7：每次提交生成**新版本目录**，绝不删除历史版本
+ *   - 同步返回文件树，**不等待 AI 评分**（评分触发属于 T03）
+ *   - 解压失败 / 含穿越路径 → 整包拒收并回滚已创建的版本目录
+ */
+export const submitProject = (req, res) => {
+  upload.single('file')(req, res, async (uploadErr) => {
+    if (uploadErr) {
+      return res.status(400).json({ code: 1001, message: uploadErr.message, data: null });
+    }
+    if (!req.file) {
+      return res.status(400).json({ code: 1001, message: '未选择文件', data: null });
+    }
+    return submitProjectCore(req, res);
+  });
+};
+
+/**
+ * submitProject 核心逻辑（multer 已解析出 req.file）。
+ * 抽出便于测试，不改变路由注册与对外行为。
+ */
+export async function submitProjectCore(req, res) {
+  /** 解压目标目录，失败时用于回滚 */
+  let versionDir = null;
+
+    try {
+      const assignmentId = +req.params.assignmentId;
+      const questionId = +req.params.questionId;
+      const studentId = req.user.id;
+
+      const guard = await assertStudentInAssignment(assignmentId, studentId);
+      if (!guard.ok) {
+        return res.status(guard.code === 1004 ? 404 : 403)
+          .json({ code: guard.code, message: guard.message, data: null });
+      }
+
+      const question = await findProjectQuestionInAssignment(assignmentId, questionId);
+      if (!question) {
+        return res.status(404).json({ code: 1004, message: '题目不存在', data: null });
+      }
+
+      // ---- 计算新版本号：已有提交的 currentVersion + 1 ----
+      const existing = await prisma.submission.findFirst({
+        where: { assignmentId, studentId, questionId, subQuestionId: null },
+      });
+      const prevEnvelope = parseProjectAnswer(existing?.answer);
+      const version = prevEnvelope.currentVersion + 1;
+
+      // ---- 解压到版本目录（R7：新目录，不动旧版本）----
+      versionDir = submissionDir(questionId, studentId, version);
+      if (fs.existsSync(versionDir)) {
+        // 理论上不该发生；若磁盘残留同版本目录，清掉重来以保证内容干净。
+        // 注意这里删的是「本次要写的新版本目录」，不是历史版本。
+        fs.rmSync(versionDir, { recursive: true, force: true });
+      }
+
+      const stats = extractZipSafely(req.file.buffer, versionDir);
+
+      // ---- 组装版本信封 ----
+      const now = new Date();
+      const historyEntry = {
+        version,
+        submittedAt: now.toISOString(),
+        originalName: decodeUploadName(req.file.originalname),
+        fileCount: stats.fileCount,
+        byteSize: stats.byteSize,
+      };
+      const envelope = {
+        kind: 'project',
+        currentVersion: version,
+        history: [...prevEnvelope.history, historyEntry],
+        grading: { state: 'pending', version, startedAt: null, finishedAt: null, error: null },
+      };
+
+      // ---- 写库（upsert：唯一键为 assignmentId+studentId+questionId+subQuestionId）----
+      const payload = {
+        status: 'submitted',
+        answer: serializeProjectAnswer(envelope),
+        attemptCount: version,
+        submittedAt: now,
+      };
+
+      const saved = existing
+        ? await prisma.submission.update({ where: { id: existing.id }, data: payload })
+        : await prisma.submission.create({
+            data: { assignmentId, studentId, questionId, subQuestionId: null, ...payload },
+          });
+
+      logger.info(
+        { assignmentId, questionId, studentId, version, fileCount: stats.fileCount },
+        '实训题已提交'
+      );
+
+      // ---- 异步触发 AI 评分（R5：fire-and-forget，不阻塞返回）----
+      enqueueProjectGrade(saved.id);
+
+      // ---- 同步返回文件树，AI 评分在后台进行 ----
+      res.json({
+        code: 0,
+        message: '提交成功',
+        data: {
+          submission: toStudentView(saved, question),
+          files: { tree: buildTreeSafe(versionDir), contents: readVersionContents(versionDir) },
+          version,
+          status: 'submitted',
+          submittedAt: now.toISOString(),
+        },
+      });
+    } catch (err) {
+      // 解压/校验失败 → 回滚本次版本目录，避免留下半包
+      if (versionDir) {
+        try {
+          fs.rmSync(versionDir, { recursive: true, force: true });
+        } catch (rollbackErr) {
+          logger.error({ err: rollbackErr, versionDir }, '回滚版本目录失败');
+        }
+      }
+
+      // 路径穿越与压缩包非法属于客户端错误，返回 400 且不回显内部细节
+      const msg = err?.message || '未知错误';
+      const isClientError =
+        msg.includes('Path traversal denied') ||
+        msg.includes('压缩包') ||
+        msg.includes('Invalid path segment');
+
+      logger.error({ err }, '实训题提交失败');
+
+      if (isClientError) {
+        const safeMsg = msg.includes('Path traversal denied') || msg.includes('Invalid path segment')
+          ? '压缩包内容非法'
+          : msg;
+        return res.status(400).json({ code: 1001, message: safeMsg, data: null });
+      }
+      res.status(500).json({ code: 2001, message: '服务器错误: ' + msg, data: null });
+    }
+}
+
+/** 学生提交包上传：内存暂存，单包上限 50MB，仅允许 zip */
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  defParamCharset: 'utf8',
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext !== '.zip') return cb(new Error('仅支持 zip 文件'));
+    cb(null, true);
+  },
+});

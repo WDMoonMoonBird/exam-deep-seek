@@ -1,0 +1,102 @@
+sequenceDiagram
+    autonumber
+    actor Stu as 学生
+    participant FE as StudentProject.vue
+    participant API as studentController<br/>submitProject
+    participant PATH as projectPaths.js
+    participant DB as MySQL (submissions)
+    participant JOB as projectGrading.js<br/>(setImmediate)
+    participant AI as deepseek.gradeProject
+    actor Tea as 教师
+    participant TAPI as reviewController
+
+    rect rgb(232,244,255)
+    note over Stu,DB: 阶段一 —— 提交（同步，不等待 AI）
+    Stu->>FE: 选择 zip 并点击「提交」
+    FE->>API: POST /student/assignments/:aid/project/:qid/submit
+    API->>API: decodeZipName(file.originalname)<br/>latin1→utf8 修复（仅入库，不进路径）
+
+    API->>DB: 读 attemptCount → version = n+1
+    API->>PATH: submissionDir(qid, sid, version)
+    Note over API,PATH: safeSegment 白名单 ^[A-Za-z0-9_-]+$
+
+    alt ✖ id/version 非法（safeSegment 抛错）
+        PATH--xAPI: Error
+        API->>API: console.error(原始错误)
+        API-->>FE: 400 { code:400, message:'参数非法' }<br/>★ 不回传 err.message，防目录结构泄漏 ★
+        FE-->>Stu: 提示「参数非法」
+    else ✔ 路径合法
+        API->>API: mkdir 版本目录<br/>【不删除历史版本 R7】
+
+        loop 遍历 zip 每个 entry
+            API->>API: name = decodeZipName(entry)<br/>（读 flags & 0x800 判 UTF-8，防二次破坏）
+            API->>API: 拒绝 \0 / 绝对路径 / '.' / '..' 段
+            API->>PATH: assertInside(版本目录, name)<br/>★ 逐条校验，封堵 zip slip ★
+        end
+
+        alt ✖ 任一 entry 逃逸
+            PATH--xAPI: Path traversal denied
+            API->>API: fs.rmSync(版本目录, recursive)<br/>★ 整包拒收并回滚，不留半包 ★
+            API-->>FE: 400 { code:400, message:'压缩包内容非法' }
+            FE-->>Stu: 提示「压缩包内容非法」
+        else ✔ 全部 entry 合法
+            API->>API: 按真实相对路径逐条落盘<br/>（保留中文名，不改名/不哈希）
+            API->>DB: upsert status='submitted'<br/>answer={version,dir,entry,originalName,<br/>history:[...追加], grading:pending}
+            API->>API: buildTree + readContents（实时读磁盘）
+            API-->>FE: 200 { submission: toStudentView() }<br/>含 files.tree + files.contents
+            Note over API,FE: ★ 此处直接返回，绝不 await AI ★
+            FE-->>Stu: 原地渲染 VSCode 文件树 + 代码预览<br/>（不跳页）
+        end
+    end
+    end
+
+    rect rgb(255,247,230)
+    note over API,AI: 阶段二 —— 异步评分（学生完全无感 R5/R6）
+    Note over API,JOB: 仅在阶段一 200 成功分支才触发；<br/>400 分支不产生评分任务
+    API->>JOB: setImmediate(runProjectGrading(subId))
+    JOB->>DB: 幂等检查 grading.state==='running' ? return
+    JOB->>DB: grading.state='running'
+    JOB->>PATH: standardDir(qid) / submissionDir(...)
+    JOB->>AI: gradeProject({标准包, 学生包, rubric})
+    alt 评分成功
+        AI-->>JOB: { totalScore, breakdown, issues, overallComment }
+        JOB->>DB: aiScore, aiFeedback, status='ai_graded'<br/>grading.state='success'
+    else 评分失败 / 超时 / 429
+        AI--xJOB: Error
+        JOB->>DB: status 保持 'submitted'（不新增枚举）<br/>grading={state:'failed', lastError}
+    end
+    end
+
+    rect rgb(240,240,240)
+    note over Stu,FE: 学生二次进入 —— 无论评分成功与否，恒显示「已提交」
+    Stu->>FE: 再次进入实训题
+    FE->>API: GET /student/assignments/:aid/project/:qid
+    API->>DB: 查 submission
+    API->>API: toStudentView()<br/>ai_graded → 对外映射为 submitted<br/>剥离 aiScore/aiFeedback/grading
+    API-->>FE: { status:'submitted', score:null, files:{...} }
+    FE-->>Stu: 回看历史文件树 + 代码，无分数
+    end
+
+    rect rgb(240,255,240)
+    note over Tea,DB: 阶段三 —— 教师审核放分（R3/R4）
+    Tea->>TAPI: GET /teacher/submissions/:id/project
+    TAPI->>DB: 查 submission + question
+    TAPI->>TAPI: toTeacherView()（全量）
+    TAPI-->>Tea: 左栏标准包 ‖ 右栏学生包<br/>+ aiScore + aiFeedback + grading 状态
+    alt grading.state === 'failed'
+        Tea->>TAPI: POST /teacher/submissions/:id/regrade-project
+        TAPI-->>Tea: 202 accepted（异步重跑）
+    end
+    Tea->>Tea: 参考 AI 评语，改写为 teacherFeedback<br/>（禁止直接沿用 aiFeedback）
+    Tea->>TAPI: PUT /teacher/submissions/:id/review<br/>{ finalScore, teacherFeedback }
+    TAPI->>DB: status='reviewed', reviewedAt=now()
+    end
+
+    rect rgb(255,240,245)
+    note over Stu,DB: 阶段四 —— 放分（唯一开关生效）
+    Stu->>FE: 进入实训题 / 成绩页
+    FE->>API: GET /student/assignments/:aid/project/:qid
+    API->>API: canStudentSeeScore(status='reviewed') → true
+    API-->>FE: { status:'reviewed', score:finalScore,<br/>feedback:teacherFeedback }
+    FE-->>Stu: 显示分数与教师评语<br/>（AI 原文始终不可见）
+    end

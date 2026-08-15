@@ -2,6 +2,12 @@ import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
 import { gradeSubmission, getConcurrency } from './deepseek.js';
 import { ABNORMAL_FEEDBACK } from '../constants.js';
+import { gradeMachine, gradeAST, gradeAI, calculateTotal } from './projectGrader.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROJECTS_UPLOAD_DIR = path.join(__dirname, '../../uploads/projects');
 
 const INTERNAL_SECRET = process.env.INTERNAL_SECRET || '***REDACTED***';
 function notifyGradedViaHttp(schoolId, data) {
@@ -21,6 +27,8 @@ export function stop() {
   running = false;
 }
 
+// ==================== 现有提交评分 ====================
+
 async function gradeOne(sub) {
   const start = Date.now();
   try {
@@ -29,7 +37,6 @@ async function gradeOne(sub) {
       : sub.question?.subQuestions?.[0];
     const sqData = sq || {};
 
-    // 找不到小题 → 直接 0 分
     if (!sq) {
       logger.warn({ submissionId: sub.id, subQuestionId: sub.subQuestionId }, '找不到对应小题，给 0 分');
       await prisma.submission.update({
@@ -41,7 +48,6 @@ async function gradeOne(sub) {
 
     let score, feedback;
 
-    // 客观题：逐小问比对答案
     if (sqData.type === 'objective') {
       const items = sqData.objectiveItems || [];
       const answers = (() => { try { return JSON.parse(sub.answer || '[]'); } catch { return []; } })();
@@ -57,12 +63,10 @@ async function gradeOne(sub) {
         const itemScore = item.score ?? Math.round(sqScore / itemCount * 100) / 100;
 
         if (item.type === 'choice') {
-          // 单选：直接比对
           const correct = studentAns.trim() === (item.answer || '').trim();
           if (correct) { totalScore += itemScore; correctCount++; }
           feedbackParts.push(`第${item.key + 1}问：${correct ? '✓' : '✗'}（你的答案: ${studentAns || '未作答'}，正确答案: ${item.answer}）`);
         } else if (item.type === 'multi_choice') {
-          // 多选
           const studentSet = new Set((studentAns || '').split(',').map(s => s.trim()).filter(Boolean));
           const answerSet = new Set((Array.isArray(item.answer) ? item.answer : String(item.answer).split(',')).map(s => s.trim()));
           const correctOpts = [...studentSet].filter(s => answerSet.has(s)).length;
@@ -75,7 +79,6 @@ async function gradeOne(sub) {
             totalScore += itemScore; correctCount++;
             feedbackParts.push(`第${item.key + 1}问：✓（全对）`);
           } else {
-            // 给分方式
             const scoring = settings.multiChoiceScoring || 'partial';
             if (scoring === 'partial') {
               const partial = Math.round(itemScore * correctOpts / answerSet.size * 100) / 100;
@@ -100,10 +103,10 @@ async function gradeOne(sub) {
             const ra = String(refAnswers[b] || '').trim();
             if (sa.toLowerCase() === ra.toLowerCase()) correctBlanks++;
           }
-          const score = correctBlanks * perBlankScore;
-          totalScore += score;
+          const s = correctBlanks * perBlankScore;
+          totalScore += s;
           if (correctBlanks === blankCount) correctCount++;
-          feedbackParts.push(`第${item.key + 1}问：${correctBlanks}/${blankCount}空正确（得分 ${score}/${Math.round(itemScore)}）`);
+          feedbackParts.push(`第${item.key + 1}问：${correctBlanks}/${blankCount}空正确（得分 ${s}/${Math.round(itemScore)}）`);
         }
       }
       score = Math.round(totalScore);
@@ -122,7 +125,7 @@ async function gradeOne(sub) {
         const refAnswers = ra.split(',').map(s=>s.trim());
         const stuAnswers = sa.split(',').map(s=>s.trim());
         const blankCount = Math.max(refAnswers.length, stuAnswers.length, 1);
-        correct = blankCount <= 1 ? sa.toLowerCase() === ra.toLowerCase() : false; // 多空不走简单比对
+        correct = blankCount <= 1 ? sa.toLowerCase() === ra.toLowerCase() : false;
         feedback = refAnswers.length > 1 ? `多空题（${blankCount}空）请查看详情` : (correct ? '正确' : `错误，参考答案：${ra}`);
       } else {
         correct = sa === ra;
@@ -131,7 +134,6 @@ async function gradeOne(sub) {
       score = correct ? (sqData.score || 0) : 0;
       logger.info({ submissionId: sub.id, type: sqData.type, correct }, '扁平客观题自动评分');
     } else {
-      // 编程题：AI 评分
       logger.info({ submissionId: sub.id, questionId: sub.questionId, concurrency: MAX_CONCURRENT }, '开始 AI 评分');
       const result = await gradeSubmission({
         material: sub.question?.material || null,
@@ -143,17 +145,14 @@ async function gradeOne(sub) {
         scoringCriteria: sqData.scoringCriteria || null,
       });
       score = result.score;
-      // 安全网：AI 有时返回 0-100 分制，按百分制缩放到满分
       const max = sqData.score || 10;
       if (score > max * 2 && max < 100) {
         score = Math.round(score * max / 100);
         logger.info({ submissionId: sub.id, rawScore: result.score, normalized: score, max, concurrency: MAX_CONCURRENT }, 'AI 分数已归一化');
       }
       feedback = result.feedback;
-      logger.info({ submissionId: sub.id, score, elapsed: `${Date.now() - start}ms`, concurrency: MAX_CONCURRENT }, 'AI 评分完成');
     }
 
-    // 计算最高分
     const existingSub = await prisma.submission.findUnique({ where: { id: sub.id }, select: { bestScore: true } });
     const newBest = existingSub?.bestScore != null ? Math.max(existingSub.bestScore, score) : score;
 
@@ -178,14 +177,141 @@ async function gradeOne(sub) {
   }
 }
 
+// ==================== 现有提交扫描 ====================
+
+async function scanSubmissions() {
+  const submissions = await prisma.submission.findMany({
+    where: { status: 'submitted' },
+    include: {
+      question: { select: { material: true, objectiveSettings: true, subQuestions: { orderBy: { sortOrder: 'asc' } } } },
+      student: { include: { studentClasses: { include: { class: { select: { schoolId: true } } } } } },
+    },
+    orderBy: { submittedAt: 'asc' },
+    take: MAX_CONCURRENT,
+  });
+
+  if (submissions.length === 0) {
+    // 兜底：扫描已过期的草稿，强制提交
+    const expiredDrafts = await prisma.submission.findMany({
+      where: {
+        status: 'draft',
+        assignment: { endTime: { lt: new Date() } },
+      },
+      take: MAX_CONCURRENT,
+    });
+    if (expiredDrafts.length > 0) {
+      await prisma.submission.updateMany({
+        where: { id: { in: expiredDrafts.map(s => s.id) } },
+        data: { status: 'submitted', submittedAt: new Date() },
+      });
+      logger.info({ count: expiredDrafts.length }, '到期草稿已自动提交');
+    }
+    await sleep(2000);
+    return;
+  }
+
+  await Promise.all(submissions.map(gradeOne));
+}
+
+// ==================== 实训项目提交扫描 ====================
+
+async function scanProjectSubmissions() {
+  try {
+    const subs = await prisma.projectSubmission.findMany({
+      where: { status: 'submitted' },
+      include: { project: true },
+      orderBy: { submittedAt: 'asc' },
+      take: 5, // 项目评分较重，限制并发
+    });
+
+    if (subs.length === 0) {
+      // 也处理 grading 状态（regrade 触发的）
+      const gradingSubs = await prisma.projectSubmission.findMany({
+        where: { status: 'grading' },
+        include: { project: true },
+        orderBy: { submittedAt: 'asc' },
+        take: 3,
+      });
+      if (gradingSubs.length > 0) {
+        await Promise.all(gradingSubs.map(gradeOneProject));
+      }
+      return;
+    }
+
+    await Promise.all(subs.map(gradeOneProject));
+  } catch (err) {
+    logger.error({ err }, '项目提交扫描异常');
+  }
+}
+
+async function gradeOneProject(sub) {
+  const start = Date.now();
+  try {
+    const projectId = sub.projectId;
+    const submissionId = sub.id;
+
+    const submissionDir = path.join(PROJECTS_UPLOAD_DIR, String(projectId), 'submissions', String(submissionId));
+    const standardDir = path.join(PROJECTS_UPLOAD_DIR, String(projectId), 'standard');
+
+    logger.info({ submissionId, projectId }, '开始项目评分');
+
+    // 并行执行三方评分
+    const [machineResult, astResult, aiResult] = await Promise.all([
+      gradeMachine(submissionDir, sub.project.machineConfig || {}),
+      gradeAST(submissionDir, 'java'),
+      gradeAI(standardDir, submissionDir, sub.project.aiPromptExtra || ''),
+    ]);
+
+    const totalScore = calculateTotal(
+      machineResult.score, astResult.score, aiResult.score,
+      {
+        machine: sub.project.machineWeight || 0.3,
+        ast: sub.project.astWeight || 0.3,
+        ai: sub.project.aiWeight || 0.4,
+      }
+    );
+
+    await prisma.projectSubmission.update({
+      where: { id: submissionId },
+      data: {
+        machineScore: machineResult.score,
+        machineFeedback: machineResult.feedback,
+        astScore: astResult.score,
+        astFeedback: astResult.feedback,
+        aiScore: aiResult.score,
+        aiFeedback: aiResult.feedback,
+        totalScore,
+        status: 'graded',
+      },
+    });
+
+    logger.info({ submissionId, totalScore, machineScore: machineResult.score, astScore: astResult.score, aiScore: aiResult.score, elapsed: `${Date.now() - start}ms` }, '项目评分完成');
+  } catch (err) {
+    logger.error({ err, submissionId: sub.id }, '项目评分异常');
+    await prisma.projectSubmission.update({
+      where: { id: sub.id },
+      data: {
+        machineScore: 0,
+        machineFeedback: '评分异常',
+        astScore: 0,
+        astFeedback: '评分异常',
+        aiScore: 0,
+        aiFeedback: '评分异常',
+        totalScore: 0,
+        status: 'graded',
+      },
+    });
+  }
+}
+
+// ==================== 主循环 ====================
+
 export async function start() {
-  // 首次读取并发配置
   MAX_CONCURRENT = await getConcurrency();
   logger.info({ maxConcurrent: MAX_CONCURRENT }, '评分 Worker 已启动');
 
   while (running) {
     try {
-      // 每 60 秒刷新一次并发配置
       if (Date.now() - lastConcurrencyRefresh > 60_000) {
         const newConcurrency = await getConcurrency();
         if (newConcurrency !== MAX_CONCURRENT) {
@@ -195,38 +321,10 @@ export async function start() {
         lastConcurrencyRefresh = Date.now();
       }
 
-      const submissions = await prisma.submission.findMany({
-        where: { status: 'submitted' },
-        include: {
-          question: { select: { material: true, objectiveSettings: true, subQuestions: { orderBy: { sortOrder: 'asc' } } } },
-          student: { include: { studentClasses: { include: { class: { select: { schoolId: true } } } } } },
-        },
-        orderBy: { submittedAt: 'asc' },
-        take: MAX_CONCURRENT,
-      });
-
-      if (submissions.length === 0) {
-        // 兜底：扫描已过期的草稿，强制提交
-        const expiredDrafts = await prisma.submission.findMany({
-          where: {
-            status: 'draft',
-            assignment: { endTime: { lt: new Date() } },
-          },
-          take: MAX_CONCURRENT,
-        });
-        if (expiredDrafts.length > 0) {
-          await prisma.submission.updateMany({
-            where: { id: { in: expiredDrafts.map(s => s.id) } },
-            data: { status: 'submitted', submittedAt: new Date() },
-          });
-          logger.info({ count: expiredDrafts.length }, '到期草稿已自动提交');
-        }
-        await sleep(2000);
-        continue;
-      }
-
-      // 真正并行：全部同时启动
-      await Promise.all(submissions.map(gradeOne));
+      await Promise.all([
+        scanSubmissions(),
+        scanProjectSubmissions(),
+      ]);
     } catch (err) {
       logger.error({ err }, 'Worker 轮询异常');
       await sleep(5000);

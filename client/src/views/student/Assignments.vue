@@ -96,12 +96,18 @@ const columns = [
 function isNotStarted(a) { return now.value < new Date(a.startTime).getTime(); }
 function isExpired(a) { return now.value > new Date(a.endTime).getTime(); }
 function hasRealSubmit(a) { return (a.submissions || []).some(s => s.status !== 'draft'); }
+/** 实训题作业判定：仅实训题使用"已批改"文案，编程题保持原语义 */
+function isProjectAssignment(a) {
+  return (a.assignmentQuestions || []).some(q => q.question?.type === 'project');
+}
 
 function statusColor(a) {
   if (isNotStarted(a) && !hasRealSubmit(a)) return 'orange';
   const s = a.submissions?.[0]?.status;
   if (s === 'published') return 'success';
-  if (s === 'submitted' || s === 'ai_graded' || s === 'reviewed') return 'processing';
+  // 实训题：已批改（reviewed）绿色；编程题保持 processing
+  if (s === 'reviewed') return isProjectAssignment(a) ? 'success' : 'processing';
+  if (s === 'submitted' || s === 'ai_graded') return 'processing';
   if (isExpired(a) && !hasRealSubmit(a)) return 'red';
   if (s === 'draft') return 'default';
   return 'default';
@@ -111,7 +117,9 @@ function statusText(a) {
   if (isNotStarted(a) && !hasRealSubmit(a)) return '未开始';
   const s = a.submissions?.[0]?.status;
   if (s === 'published') return '已出分';
-  if (s === 'submitted' || s === 'ai_graded' || s === 'reviewed') return '已提交';
+  // 实训题：审核通过（reviewed）即已批改放分；编程题保持"已提交"
+  if (s === 'reviewed') return isProjectAssignment(a) ? '已批改' : '已提交';
+  if (s === 'submitted' || s === 'ai_graded') return '已提交';
   if (isExpired(a) && !hasRealSubmit(a)) return '已过期';
   if (s === 'draft') return '草稿';
   return '未提交';
@@ -141,7 +149,12 @@ const filteredList = computed(() => {
 
 function goDetail(record) {
   if (!canEnter(record)) return;
-  router.push(`/student/assignments/${record.id}`);
+  const projectQ = record.assignmentQuestions?.find(aq => aq.question?.type === 'project');
+  if (projectQ) {
+    router.push(`/student/assignments/${record.id}/project/${projectQ.question.id}`);
+  } else {
+    router.push(`/student/assignments/${record.id}`);
+  }
 }
 
 async function fetch() {

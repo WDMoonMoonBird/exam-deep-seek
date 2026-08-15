@@ -1,8 +1,78 @@
 // 避免与已运行的服务端端口冲突
 process.env.PORT = '0';
 
+import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import prisma from '../src/utils/prisma.js';
+
+/**
+ * 从数据库连接串中解析出「库名」（URL pathname，去掉前导斜杠与 query）。
+ *
+ * 必须只取库名参与安全判定：若对整条连接串做子串匹配，密码或主机名里
+ * 恰好含 'test'（如 password=Test@2024、host=test-db.internal）就会让指向
+ * 生产库的清理逻辑被放行——这正是护栏要防的事故类型。
+ *
+ * 解析失败（空值/非法 URL/密码含裸 '@' 等）一律返回空串，
+ * 由调用方按 fail-closed 处理（拒绝执行），绝不因解析不出而放行。
+ *
+ * @param {string} url 原始连接串
+ * @returns {string} 库名；无法解析时为空串
+ */
+function pickDbName(url) {
+  try {
+    return decodeURIComponent(new URL(String(url)).pathname.replace(/^\//, ''));
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * 破坏性操作前置护栏：只允许对「测试库」执行测试数据清理与 seed。
+ *
+ * 判定规则：DATABASE_URL 解析出的【库名】必须包含子串 'test'（大小写不敏感）。
+ * 不满足则打印醒目警告并以退出码 1 中止进程，绝不继续往下执行。
+ * 库名解析不出时同样拒绝（fail-closed）。
+ *
+ * 背景：seedTestData() 会按 username 前缀（test_/batch_/tmp_）以及
+ * `username contains '@10001'` 批量 deleteMany 学生及其 submission。
+ * '@10001' 是「学号@院校代码」格式的真实用户名片段，若本文件运行在
+ * 生产/开发主库上，会连带删除院校代码为 10001 的全部真实学生与提交
+ * （参见 2026-08-03 数据删除事故）。因此运行前必须确认数据源是测试库。
+ *
+ * @returns {void}
+ */
+function assertSafeToWipe() {
+  const url = process.env.DATABASE_URL || '';
+  const dbName = pickDbName(url);
+  if (!/test/i.test(dbName)) {
+    console.error('');
+    console.error('==================================================');
+    console.error('⛔ 拒绝执行：DATABASE_URL 库名不含 \'test\'，疑似生产/重要库，已中止');
+    console.error('==================================================');
+    console.error('   test/setup.js 会批量删除学生/提交/作业/班级等数据，');
+    console.error('   仅允许在【库名】含 "test" 的数据源上运行');
+    console.error('   （只认库名：密码/主机名里含 "test" 不算数）。');
+    console.error(`   当前 DATABASE_URL: ${url ? maskDbUrl(url) : '(未设置)'}`);
+    console.error(`   解析到的库名: ${dbName || '(无法解析)'}`);
+    console.error('   解决办法：创建独立测试库并在运行测试前指定，例如');
+    console.error('     DATABASE_URL="mysql://user:pass@localhost:3306/exam_system_test" npm test');
+    console.error('');
+    process.exit(1);
+  }
+}
+
+/**
+ * 打码数据库连接串中的密码，避免凭据出现在日志/终端输出中。
+ *
+ * @param {string} url 原始连接串
+ * @returns {string} 已打码的连接串
+ */
+function maskDbUrl(url) {
+  return String(url).replace(/(:\/\/[^:/?#]+):[^@]*@/, '$1:***@');
+}
+
+// 护栏：任何破坏性行为之前先校验数据源安全
+assertSafeToWipe();
 
 // 只 seed 一次
 const KEY = Symbol.for('testSeededV3');
@@ -12,6 +82,9 @@ if (!global[KEY]) {
 }
 
 async function seedTestData() {
+  // 二次校验：seed 前置清理为破坏性操作，防止调用方绕过入口直接调用
+  assertSafeToWipe();
+
   // ===== 1. 彻底清理所有测试数据 =====
   const testTeacher = await prisma.user.findFirst({ where: { username: 'test_teacher' } });
 

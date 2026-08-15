@@ -1,8 +1,13 @@
+import fs from 'fs';
+import path from 'path';
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
 import { gradeSubmission } from '../services/deepseek.js';
 import { ABNORMAL_FEEDBACK } from '../constants.js';
 import { getVisibleClassIds } from './teamController.js';
+import { parseProjectAnswer, toTeacherView } from '../utils/projectView.js';
+import { submissionDir, standardDir, ROOT } from '../utils/projectPaths.js';
+import { readProjectTree } from '../utils/projectFiles.js';
 
 /** 根据学校/班级/题目构建筛选条件 */
 async function buildFilter({ schoolId, classId, questionId, assignmentId, status }) {
@@ -166,7 +171,7 @@ export const updateScore = async (req, res) => {
 
     const sub = await prisma.submission.findUnique({
       where: { id },
-      select: { status: true, aiScore: true, aiFeedback: true, teacherFeedback: true },
+      select: { status: true, aiScore: true, aiFeedback: true, teacherFeedback: true, question: { select: { type: true } } },
     });
     if (!sub) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
 
@@ -175,7 +180,10 @@ export const updateScore = async (req, res) => {
     if (sub.status === 'ai_graded') {
       data.status = 'reviewed';
       data.reviewedAt = new Date();
-      if (!sub.teacherFeedback) data.teacherFeedback = sub.aiFeedback || '';
+      // R3：实训题 AI 评语绝不透传给学生，必须由教师手动填写 teacherFeedback
+      if (sub.question?.type !== 'project' && !sub.teacherFeedback) {
+        data.teacherFeedback = sub.aiFeedback || '';
+      }
     }
 
     if (sub.status === 'submitted') {
@@ -218,7 +226,7 @@ export const batchReview = async (req, res) => {
 
     const subs = await prisma.submission.findMany({
       where: { assignmentId: +assignmentId, studentId: { in: studentIds } },
-      select: { id: true, studentId: true, status: true, aiScore: true, aiFeedback: true },
+      select: { id: true, studentId: true, status: true, aiScore: true, aiFeedback: true, question: { select: { type: true } } },
     });
     const studentSubs = new Map();
     for (const s of subs) {
@@ -237,9 +245,11 @@ export const batchReview = async (req, res) => {
     let count = 0;
     if (toReview.length) {
       for (const s of toReview) {
+        const isProject = s.question?.type === 'project';
         await prisma.submission.update({
           where: { id: s.id },
-          data: { status: 'reviewed', reviewedAt: new Date(), finalScore: s.aiScore, teacherFeedback: s.aiFeedback || '' },
+          // R3：实训题不把 AI 评语当作教师评语透传给学生
+          data: { status: 'reviewed', reviewedAt: new Date(), finalScore: s.aiScore, teacherFeedback: isProject ? (s.teacherFeedback || '') : (s.aiFeedback || '') },
         });
         count++;
       }
@@ -392,7 +402,7 @@ export const getReviewByClass = async (req, res) => {
     const submissions = await prisma.submission.findMany({
       where: { assignmentId: +assignmentId, studentId: { in: filtered.map(sc => sc.studentId) } },
       include: {
-        question: { select: { title: true } },
+        question: { select: { title: true, type: true } },
         subQuestion: { select: { id: true, score: true } },
         assignment: { select: { title: true, mode: true } },
       },
@@ -415,6 +425,8 @@ export const getReviewByClass = async (req, res) => {
         const worstStatus = hasAbnormal ? 'abnormal'
           : realSubs.reduce((worst, s) =>
               (statusOrder[s.status] ?? 0) < (statusOrder[worst] ?? 0) ? s.status : worst, realSubs[0].status);
+        // 新实训题流程（Submission.type=project）：透出项目提交 id，供前端跳转三栏审核（R4 成绩门禁在审核后开放）
+        const projectSub = realSubs.find(s => s.question?.type === 'project');
         return {
           id: realSubs[0].id, studentId: sc.studentId,
           studentName: sc.student.realName, studentNo: sc.student.username,
@@ -423,6 +435,7 @@ export const getReviewByClass = async (req, res) => {
           mode: realSubs[0].assignment?.mode || 'exam',
           aiScore: aiTotal, finalScore: finalTotal > 0 ? finalTotal : null,
           status: worstStatus, submitted: true,
+          projectSubmissionId: projectSub ? projectSub.id : null,
         };
       }
       return {
@@ -602,6 +615,118 @@ export const exportReviewData = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, '导出审核数据失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+// ===================== 实训题（体系C）教师审核 =====================
+
+/**
+ * 读取标准答案文件树：优先 project-standards/{questionId}，
+ * 兼容历史上传（question.attachmentUrl）。
+ */
+async function readStandardTree(question) {
+  const newDir = standardDir(question.id);
+  if (fs.existsSync(newDir)) {
+    const t = readProjectTree(newDir);
+    if (t.tree.length || Object.keys(t.contents).length) return t;
+  }
+  if (question.attachmentUrl) {
+    const legacyDir = path.join(ROOT, 'uploads', question.attachmentUrl);
+    if (fs.existsSync(legacyDir)) return readProjectTree(legacyDir);
+  }
+  return { tree: [], contents: {} };
+}
+
+/**
+ * GET /teacher/submissions/:id/project
+ *
+ * 教师查看实训题提交详情：双栏所需数据（标准答案 + 学生提交 + AI 结果）。
+ * 仅面向教师，含 AI 原始评语（R3 不约束教师端）。
+ */
+export const getProjectReview = async (req, res) => {
+  try {
+    const id = +req.params.id;
+    const sub = await prisma.submission.findUnique({
+      where: { id },
+      include: {
+        student: { select: { id: true, username: true, realName: true } },
+        question: { select: { id: true, title: true, material: true, scoringRubric: true, maxScore: true, attachmentUrl: true, type: true } },
+        assignment: { select: { id: true, title: true } },
+      },
+    });
+    if (!sub) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
+    if (sub.question.type !== 'project') return res.status(400).json({ code: 1001, message: '非实训题提交', data: null });
+
+    const env = parseProjectAnswer(sub.answer);
+    const version = env.currentVersion;
+
+    const studentFiles = version ? readProjectTree(submissionDir(sub.questionId, sub.studentId, version)) : { tree: [], contents: {} };
+    const standardFiles = await readStandardTree(sub.question);
+
+    let aiResult = null;
+    if (sub.aiFeedback) {
+      try {
+        aiResult = JSON.parse(sub.aiFeedback);
+      } catch {
+        aiResult = { overallComment: sub.aiFeedback };
+      }
+    }
+
+    res.json({
+      code: 0,
+      message: 'ok',
+      data: {
+        submission: toTeacherView(sub),
+        question: sub.question,
+        assignment: sub.assignment,
+        student: sub.student,
+        version,
+        studentFiles,
+        standardFiles,
+        aiResult,
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, '获取实训题审核详情失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+/**
+ * PUT /teacher/submissions/:id/project/review
+ *
+ * 教师审核通过实训题提交。R3：教师必须显式提供评语（teacherFeedback），
+ * 绝不回退到 AI 评语。审核后状态置 reviewed → 学生可见分数（D3）。
+ */
+export const reviewProjectSubmission = async (req, res) => {
+  try {
+    const id = +req.params.id;
+    const { finalScore, teacherFeedback } = req.body;
+
+    const sub = await prisma.submission.findUnique({
+      where: { id },
+      include: { question: { select: { type: true, maxScore: true } } },
+    });
+    if (!sub) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
+    if (sub.question.type !== 'project') return res.status(400).json({ code: 1001, message: '非实训题提交', data: null });
+
+    const data = { status: 'reviewed', reviewedAt: new Date() };
+    if (finalScore !== undefined) {
+      const max = sub.question.maxScore || 100;
+      data.finalScore = Math.max(0, Math.min(max, Number(finalScore)));
+    }
+    // R3：教师评语以显式传入为准；未传则保留已有（初始为空），绝不取 AI 评语
+    data.teacherFeedback = teacherFeedback !== undefined ? String(teacherFeedback || '') : (sub.teacherFeedback || '');
+
+    const updated = await prisma.submission.update({ where: { id }, data });
+    res.json({
+      code: 0,
+      message: '审核成功',
+      data: { id, status: updated.status, finalScore: updated.finalScore, teacherFeedback: updated.teacherFeedback },
+    });
+  } catch (err) {
+    logger.error({ err }, '实训题审核失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
   }
 };

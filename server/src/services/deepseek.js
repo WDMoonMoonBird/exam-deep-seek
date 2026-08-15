@@ -444,3 +444,96 @@ export async function generateReferenceAnswer({ material, stem, scoringCriteria 
 
   throw new Error('参考答案生成全部重试失败');
 }
+
+// ===================== 实训题项目评分 =====================
+
+const PROJECT_ROLE = '你是一名计算机专业教授。请对比标准答案和学生提交的项目代码，根据评分标准给出专业评审结果。';
+
+const DEFAULT_PROJECT_CRITERIA = '默认评分标准：\n功能完整性（50%）：核心功能是否全部实现，能否正常运行\n代码规范性（25%）：命名是否规范、注释是否完整、代码组织是否清晰\n健壮性（25%）：异常处理、输入校验、边界条件覆盖';
+
+/**
+ * 调用 DeepSeek API 对实训题项目进行评分
+ * @param {object} params
+ * @param {string} params.title - 项目标题
+ * @param {string} params.description - 项目要求描述
+ * @param {string} params.scoringRubric - 教师自定义评分标准
+ * @param {string} params.standardFiles - 标准答案源码（格式化字符串）
+ * @param {string} params.studentFiles - 学生提交源码（格式化字符串）
+ * @returns {Promise<{totalScore:number, breakdown:Array, highlights:Array, issues:Array, overallComment:string}>}
+ */
+export async function gradeProject({ title, description, scoringRubric, standardFiles, studentFiles }) {
+  const criteria = scoringRubric || DEFAULT_PROJECT_CRITERIA;
+
+  const prompt = `【项目题目】${title || '未命名项目'}
+【项目要求】${description || '无'}
+
+【评分标准】
+${criteria}
+
+=== 标准答案源码 ===
+${standardFiles}
+
+=== 学生提交源码 ===
+${studentFiles}
+
+请以严格 JSON 返回（不要包含 markdown 标记）：
+{
+  "totalScore": 85,
+  "breakdown": [
+    { "item": "具体评分项", "score": 18, "maxScore": 20, "comment": "简要点评" }
+  ],
+  "highlights": ["优点1", "优点2"],
+  "issues": ["问题1", "问题2"],
+  "overallComment": "总体评价，包含改进建议"
+}`;
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 180000);
+
+      const [BASE_URL, API_KEY, MODEL] = await Promise.all([getBaseUrl(), getApiKey(), getModel()]);
+      const res = await fetch(`${BASE_URL}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
+        body: JSON.stringify({
+          model: MODEL,
+          messages: [
+            { role: 'system', content: PROJECT_ROLE },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.3,
+          max_tokens: 8000,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (res.status === 429) {
+        const wait = [10, 30][attempt - 1] * 1000;
+        logger.warn({ attempt }, `项目评分限流，等待 ${wait / 1000}s`);
+        await new Promise(r => setTimeout(r, wait));
+        continue;
+      }
+
+      if (!res.ok) throw new Error(`DeepSeek API ${res.status}`);
+
+      const data = await res.json();
+      const content = data.choices?.[0]?.message?.content || '';
+      const jsonMatch = content.match(/\{[\s\S]*"totalScore"[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('返回格式不包含有效的 JSON');
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      logger.info({ totalScore: parsed.totalScore }, '项目评分完成');
+      return parsed;
+
+    } catch (err) {
+      logger.warn({ attempt, err: err.message }, '项目评分失败');
+      if (attempt >= 2) throw err;
+      await new Promise(r => setTimeout(r, 3000));
+    }
+  }
+
+  throw new Error('项目评分全部重试失败');
+}
