@@ -10,7 +10,9 @@ import logger from './utils/logger.js';
 import prisma from './utils/prisma.js';
 import { initSocket, notifyGraded } from './socket.js';
 import { ReviewUseCases } from './application/use-cases/review.use-cases.js';
+import { QuestionUseCases } from './application/use-cases/question.use-cases.js';
 import { SubmissionRepository } from './infrastructure/persistence/submission.repository.js';
+import { QuestionRepository } from './infrastructure/persistence/question.repository.js';
 import { SystemConfigRepository } from './infrastructure/persistence/system-config.repository.js';
 import { DeepSeekGateway } from './infrastructure/ai/deepseek-gateway.js';
 
@@ -33,6 +35,10 @@ const aiGateway = new DeepSeekGateway({ configRepo, logger });
 app.locals.reviewUseCases = new ReviewUseCases({
   submissionRepo: new SubmissionRepository({ prisma }),
   aiGateway,
+  logger,
+});
+app.locals.questionUseCases = new QuestionUseCases({
+  questionRepo: new QuestionRepository({ prisma }),
   logger,
 });
 

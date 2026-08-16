@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import path from 'path';
 import prisma from '../utils/prisma.js';
+import { DomainError } from '../domain/errors.js';
 import logger from '../utils/logger.js';
 import { DEFAULT_MAX_SCORE } from '../constants.js';
 import { resolveSubQuestionScores } from '../utils/scoring.js';
@@ -206,49 +207,21 @@ export const createQuestion = async (req, res) => {
       return res.json({ code: 0, message: '创建成功', data: q });
     }
 
-    // 编程题（type=code）：原有逻辑不变
-    if (!title || !subQuestions?.length) {
-      return res.status(400).json({ code: 1001, message: '参数错误', data: null });
-    }
-    if (title.length > 200) return res.status(400).json({ code: 1001, message: '标题不能超过200字', data: null });
-    if (material?.length > 50000) return res.status(400).json({ code: 1001, message: '题目材料过长', data: null });
-
-    let resolved, totalScore;
+    // 编程题（type=code）：校验与创建已迁移至 QuestionUseCases（application/use-cases）
     try {
-      const result = resolveSubQuestionScores(subQuestions);
-      resolved = result.resolved;
-      totalScore = result.totalScore;
-    } catch (e) {
-      return res.status(400).json({ code: 1001, message: e.message, data: null });
-    }
-
-    const q = await prisma.question.create({
-      data: {
+      const q = await req.app.locals.questionUseCases.create({
         teacherId: req.user.id,
-        title,
-        maxScore: totalScore,
-        difficulty,
-        material,
-        attachmentUrl,
-        objectiveSettings: objectiveSettings || undefined,
-        subQuestions: {
-          create: resolved.map((sq, i) => ({
-            sortOrder: i + 1,
-            title: sq.title || '',
-            type: sq.type || 'code',
-            score: sq.score,
-            content: sq.content || '',
-            referenceAnswer: sq.referenceAnswer || '',
-            language: sq.language || 'cpp',
-            objectiveItems: sq.objectiveItems || undefined,
-            scoringCriteria: sq.scoringCriteria || null,
-          })),
-        },
-      },
-      include: { subQuestions: { orderBy: { sortOrder: 'asc' } } },
-    });
-    logger.info({ questionId: q.id }, '题目已创建');
-    res.json({ code: 0, message: '创建成功', data: q });
+        title, maxScore, difficulty, material, attachmentUrl, objectiveSettings, subQuestions,
+      });
+      logger.info({ questionId: q.id }, '题目已创建');
+      return res.json({ code: 0, message: '创建成功', data: q });
+    } catch (err) {
+      if (err instanceof DomainError) {
+        return res.status(400).json({ code: 1001, message: err.message, data: null });
+      }
+      logger.error({ err }, '创建题目失败');
+      return res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+    }
   } catch (err) {
     logger.error({ err }, '创建题目失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
@@ -452,6 +425,8 @@ export const getAssignment = async (req, res) => {
       },
     });
     if (!a) return res.status(404).json({ code: 1004, message: '作业不存在', data: null });
+    // P4 缺陷修复：作业详情不露出软删除题目（to-one include 不支持 where，JS 层过滤）
+    a.assignmentQuestions = (a.assignmentQuestions || []).filter(aq => aq.question && !aq.question.deletedAt);
     res.json({ code: 0, message: 'ok', data: a });
   } catch (err) {
     logger.error({ err }, '获取作业详情失败');
@@ -467,7 +442,11 @@ export const createAssignment = async (req, res) => {
     }
 
     // Q9 强校验：作业包含实训题（type=project）时，该题必须已上传非空标准工程包，否则拒绝创建作业
-    const questions = await prisma.question.findMany({ where: { id: { in: questionIds } } });
+    // 缺陷修复（P4）：查询过滤软删除题目；已删题目不可被选入新作业
+    const questions = await prisma.question.findMany({ where: { id: { in: questionIds }, deletedAt: null } });
+    if (questions.length !== questionIds.length) {
+      return res.status(400).json({ code: 1001, message: '部分题目不存在或已删除，无法布置', data: null });
+    }
     for (const q of questions) {
       if (q.type !== 'project') continue;
       const standardDir = path.join(__dirname, '../../uploads/project-questions', String(q.id), 'standard');
