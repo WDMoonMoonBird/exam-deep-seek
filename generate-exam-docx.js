@@ -1,5 +1,6 @@
 const docx = require("docx");
 const fs = require("fs");
+const path = require("path");
 
 const {
   Document,
@@ -267,9 +268,12 @@ const doc = new Document({
 
 // ============ Generate and save ============
 
-const outputPath = "/Users/you/My Projects/My Vue/Exam-DeepSeek/Java期末考试.docx";
+// 输出目录：默认当前目录，可用 CLI 参数（第 1 个）或环境变量 DOCX_OUTPUT_DIR 覆盖
+const outputDir = process.env.DOCX_OUTPUT_DIR || process.argv[2] || './';
+const outputPath = path.join(outputDir, 'Java期末考试.docx');
 
 Packer.toBuffer(doc).then((buffer) => {
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   fs.writeFileSync(outputPath, buffer);
   console.log(`Document saved to: ${outputPath}`);
   console.log(`File size: ${(buffer.length / 1024).toFixed(1)} KB`);

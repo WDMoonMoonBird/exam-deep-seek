@@ -226,7 +226,7 @@ export const batchReview = async (req, res) => {
 
     const subs = await prisma.submission.findMany({
       where: { assignmentId: +assignmentId, studentId: { in: studentIds } },
-      select: { id: true, studentId: true, status: true, aiScore: true, aiFeedback: true, question: { select: { type: true } } },
+      select: { id: true, studentId: true, status: true, aiScore: true, aiFeedback: true, teacherFeedback: true, question: { select: { type: true } } },
     });
     const studentSubs = new Map();
     for (const s of subs) {
@@ -652,11 +652,13 @@ export const getProjectReview = async (req, res) => {
       include: {
         student: { select: { id: true, username: true, realName: true } },
         question: { select: { id: true, title: true, material: true, scoringRubric: true, maxScore: true, attachmentUrl: true, type: true } },
-        assignment: { select: { id: true, title: true } },
+        assignment: { select: { id: true, title: true, teacherId: true } },
       },
     });
     if (!sub) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
     if (sub.question.type !== 'project') return res.status(400).json({ code: 1001, message: '非实训题提交', data: null });
+    // R6：仅作业所属教师可查看实训提交（作业/班级/学校归属校验）
+    if (sub.assignment.teacherId !== req.user.id) return res.status(403).json({ code: 1003, message: '无权操作', data: null });
 
     const env = parseProjectAnswer(sub.answer);
     const version = env.currentVersion;
@@ -706,10 +708,15 @@ export const reviewProjectSubmission = async (req, res) => {
 
     const sub = await prisma.submission.findUnique({
       where: { id },
-      include: { question: { select: { type: true, maxScore: true } } },
+      include: {
+        question: { select: { type: true, maxScore: true } },
+        assignment: { select: { teacherId: true } },
+      },
     });
     if (!sub) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
     if (sub.question.type !== 'project') return res.status(400).json({ code: 1001, message: '非实训题提交', data: null });
+    // R6：仅作业所属教师可审核实训提交
+    if (sub.assignment.teacherId !== req.user.id) return res.status(403).json({ code: 1003, message: '无权操作', data: null });
 
     const data = { status: 'reviewed', reviewedAt: new Date() };
     if (finalScore !== undefined) {

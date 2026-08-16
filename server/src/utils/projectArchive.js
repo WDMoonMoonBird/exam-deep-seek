@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import AdmZip from 'adm-zip';
+import { shouldIgnorePath, shouldIgnorePathWithContent } from '../utils/uploadFilter.js';
 
 /** 文本文件预览体积上限，超过折叠为占位提示（与 studentController 共用） */
 export const MAX_TEXT_BYTES = 1024 * 1024;
@@ -122,6 +123,9 @@ export function extractZipSafely(buffer, targetDir) {
   for (const entry of entries) {
     if (isSymlinkEntry(entry)) continue;
     const decoded = decodeEntryName(entry.rawEntryName).replace(/\\/g, '/');
+    // 预算只统计"将落盘"的条目：依赖/构建产物/二进制（shouldIgnorePath 命中）不计入，
+    // 与解压过滤一致——大项目带 node_modules 也不会被预算误拒（前端已过滤重打包，此为兜底）
+    if (shouldIgnorePath(decoded)) continue;
     const depth = decoded.split('/').filter(Boolean).length;
     if (depth > maxDepth) maxDepth = depth;
     if (decoded.endsWith('/')) continue; // 目录条目不计文件数与大小
@@ -134,33 +138,48 @@ export function extractZipSafely(buffer, targetDir) {
 
   let fileCount = 0;
   let byteSize = 0;
+  const MAX_EXPANDED_BYTES = 200 * 1024 * 1024; // 与预算一致：写盘时按实际字节二次限流（防声明大小欺骗）
 
   for (const entry of entries) {
     // Q7：符号链接条目跳过，不写盘（避免把链接目标路径字符串当文件内容落盘）
     if (isSymlinkEntry(entry)) continue;
     const decoded = decodeEntryName(entry.rawEntryName).replace(/\\/g, '/');
+    // 穿越校验基于未清洗的 decoded，避免清洗把 '..' 变成 '_' 后校验失效（整包拒收语义不变）
+    // 注意：目录条目尾部 '/' 会产生空段（'demo/' → ['demo','']），空段不算穿越；文件条目保留原空段检查
+    const segs = decoded.split('/');
+    const segsClean = segs.filter(Boolean);
+    if (segsClean.some((s) => s === '..')) {
+      throw new Error('Path traversal denied');
+    }
+    if (!decoded.endsWith('/') && segs.some((s) => s === '')) {
+      throw new Error('Path traversal denied');
+    }
+    // 教学批改只关注代码：统一上传过滤引擎路径层（Set 强规则 + ignore 规则文件），
+    // 跳过依赖/构建产物目录与二进制扩展名（node_modules、.git、target、.idea、.jar/.class/.png 等），
+    // 与读取端 buildTree/isIgnored 规则一致，磁盘只落代码文件
+    if (shouldIgnorePath(decoded)) continue;
     const rel = decoded.split('/').map(sanitizeSegment).join('/');
+    // 清洗后复检（E 终审建议 C）：node_modules. / env. 等会被清洗成被忽略名，防止绕过
+    if (shouldIgnorePath(rel)) continue;
     if (decoded.endsWith('/')) {
       // 目录项仅校验，不单独落盘（文件写入时自动建父目录）
-      // 校验用未清洗的 decoded，保证 '..' 段仍被识别并整包拒收
-      if (decoded.split('/').some((s) => s === '..')) throw new Error('压缩包内容非法');
       continue;
-    }
-    // 穿越校验基于未清洗的 decoded，避免清洗把 '..' 变成 '_' 后校验失效（整包拒收语义不变）
-    const segs = decoded.split('/');
-    if (segs.some((s) => s === '..' || s === '')) {
-      throw new Error('Path traversal denied');
     }
     const abs = path.resolve(targetDir, rel);
     if (abs !== targetDir && !abs.startsWith(targetDir + path.sep)) {
       throw new Error('Path traversal denied');
     }
     const content = entry.getData();
-    if (content && content.length) {
+    // 内容层检测（魔数 + NUL 兜底，跨生态依赖识别）：文本源码才落盘，二进制依赖无论扩展名一律跳过
+    if (shouldIgnorePathWithContent(decoded, content)) continue;
+    // 空文件也必须写盘并计数：Buffer.byteLength === 0 的文件同样落盘，不能因 content.length === 0 被丢弃
+    if (content) {
+      byteSize += content.length;
+      // 写盘前按实际解压字节二次限流（E 终审建议 H）：header.size 声明可被恶意包欺骗
+      if (byteSize > MAX_EXPANDED_BYTES) throw new Error('压缩包过大（实际解压超过 200MB）');
       fs.mkdirSync(path.dirname(abs), { recursive: true });
       fs.writeFileSync(abs, content);
       fileCount += 1;
-      byteSize += content.length;
     }
   }
 

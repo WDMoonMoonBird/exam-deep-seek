@@ -24,10 +24,19 @@ async function get(url, token) {
   return res.json();
 }
 
+// 校验 API 响应：code !== 0（或响应缺失）时打印错误并以退出码 1 中止
+function check(name, r) {
+  if (!r || r.code !== 0) {
+    console.error(`[失败] ${name}: ${r?.message || '未知错误'} (code=${r?.code ?? '无'})`);
+    process.exit(1);
+  }
+  return r;
+}
+
 async function main() {
   // 1. teacher_a 登录
   console.log('1. teacher_a 登录...');
-  let tl = await post('/auth/login', { username: 'teacher_a', password: 'teacher_a' });
+  const tl = check('登录 teacher_a', await post('/auth/login', { username: 'teacher_a', password: 'teacher_a' }));
   const tToken = tl.data.token;
   console.log('   已登录, schoolId=', SCHOOL_ID);
 
@@ -43,25 +52,24 @@ async function main() {
   // 2. 创建 500 人班级
   console.log('2. 创建班级...');
   const className = 'Java500人班';
-  // 删旧同名
-  const oldCls = await T('GET', '/teacher/classes');
-  for (const c of (oldCls.data || [])) {
-    if (c.name === className) {
-      await T('PUT', `/teacher/classes/${c.id}`, null); // 不能删，直接复用
-      console.log('   复用旧班级 id=', c.id);
-    }
+  // 同名班级已存在则直接复用其 id，不重复创建
+  const oldCls = check('查询班级列表', await T('GET', '/teacher/classes'));
+  const existCls = (oldCls.data || []).find(c => c.name === className);
+  let classId = existCls ? existCls.id : null;
+  if (classId) {
+    console.log('   复用旧班级 id=', classId);
+  } else {
+    const cls = check('创建班级', await T('POST', '/teacher/classes', { name: className }));
+    classId = cls.data.id;
+    console.log('   班级:', className, 'id=', classId);
   }
-  // 新建
-  const cls = await T('POST', '/teacher/classes', { name: className });
-  const classId = cls.data?.id;
-  console.log('   班级:', className, 'id=', classId);
 
   // 3. 批量创建 500 学生
   console.log('3. 创建 500 学生...');
   const t0 = Date.now();
   let created = 0;
   // 先查已有
-  const existing = await T('GET', `/teacher/students?classId=${classId}`);
+  const existing = check('查询班级学生', await T('GET', `/teacher/students?classId=${classId}`));
   const have = (existing.data || []).length;
   console.log(`   已有 ${have} 人`);
   const need = Math.max(0, 500 - have);
@@ -73,7 +81,7 @@ async function main() {
       const num = String(j + 1).padStart(4, '0');
       batch.push({ username: `sz${num}`, realName: `Java${num}` });
     }
-    const r = await T('POST', '/teacher/students/batch', { classId, students: batch });
+    const r = check('批量创建学生', await T('POST', '/teacher/students/batch', { classId, students: batch }));
     created += r.data?.success || 0;
     process.stdout.write(`\r   ${created}/${need}`);
   }
@@ -81,7 +89,7 @@ async function main() {
 
   // 4. 创建题目
   console.log('4. 创建题目...');
-  const q = await T('POST', '/teacher/questions', {
+  const q = check('创建题目', await T('POST', '/teacher/questions', {
     title: 'Java程序设计期末考试',
     difficulty: 'medium',
     material: '<p>请实现一个<strong>学生成绩管理系统</strong>。</p>',
@@ -93,7 +101,7 @@ async function main() {
       language: 'java',
       scoringCriteria: '代码正确性(60%)+效率(20%)+可读性(20%)',
     }],
-  });
+  }));
   const questionId = q.data.id;
   const subQuestionId = q.data.subQuestions[0].id;
   console.log('   questionId=', questionId, 'subQuestionId=', subQuestionId);
@@ -101,7 +109,7 @@ async function main() {
   // 5. 创建作业
   console.log('5. 创建作业...');
   const now = new Date();
-  const a = await T('POST', '/teacher/assignments', {
+  const a = check('创建作业', await T('POST', '/teacher/assignments', {
     title: 'Java程序设计期末考试',
     description: '请独立完成编码，严禁抄袭。',
     startTime: new Date(now - 86400000).toISOString(),
@@ -109,7 +117,7 @@ async function main() {
     allowResubmit: false,
     questionIds: [questionId],
     classIds: [classId],
-  });
+  }));
   const assignmentId = a.data.id;
   console.log('   assignmentId=', assignmentId);
 

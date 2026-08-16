@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const T = { username: '202519011', password: '202519011' };
+const T = { username: 'e2e_teacher', password: 'e2e_teacher' };
 
 async function login(page) {
   await page.goto('/exam/login', { waitUntil: 'networkidle' });

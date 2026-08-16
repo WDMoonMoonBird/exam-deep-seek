@@ -11,7 +11,8 @@ import logger from '../utils/logger.js';
 import { standardDir, submissionDir } from '../utils/projectPaths.js';
 import { toTeacherView, parseProjectAnswer, serializeProjectAnswer } from '../utils/projectView.js';
 import { enqueueProjectGrade } from '../services/projectGrading.js';
-import { buildTree } from '../utils/fileTree.js';
+import { buildTree, isIgnored } from '../utils/fileTree.js';
+import { MAX_TEXT_BYTES } from '../utils/projectArchive.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -30,12 +31,21 @@ function collectFiles(dir) {
         return;
       }
       for (const entry of entries) {
+        // 与 buildTree 共用忽略规则（IGNORED_DIRS / IGNORED_EXTENSIONS）：
+        // node_modules/.git/二进制/编译产物等一律不读，避免把整包内容拖进响应与 AI 上下文
+        if (isIgnored(entry.name)) continue;
         const abs = path.join(base, entry.name);
         const relPath = rel + entry.name;
         if (entry.isDirectory()) {
           walk(abs, relPath + '/');
         } else if (entry.isFile()) {
           try {
+            // 超大文件折叠为占位，避免整段读进内存/响应膨胀（上限与项目其它预览一致）
+            const { size } = fs.statSync(abs);
+            if (size > MAX_TEXT_BYTES) {
+              contents[relPath] = `// 文件过大（${(size / 1024 / 1024).toFixed(2)} MB，超过 ${MAX_TEXT_BYTES} 字节上限），内容已折叠，请下载查看`;
+              continue;
+            }
             contents[relPath] = fs.readFileSync(abs, 'utf-8');
           } catch {
             contents[relPath] = '// 无法读取文件内容';

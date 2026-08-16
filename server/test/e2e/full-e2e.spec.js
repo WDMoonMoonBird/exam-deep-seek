@@ -59,6 +59,8 @@ test.describe('E2E 全量测试 (测试计划模块8)', () => {
   });
 
   // ==================== E8.3~E8.5 AI 解析试卷 ====================
+  // AI 解析耗时 60-170s，测试超时放宽到 5 分钟
+  test.setTimeout(300000);
   async function parseExam(filename, expectedMinQuestions) {
     const filePath = path.join(EXAM_DIR, filename);
     let content = '';
@@ -72,6 +74,7 @@ test.describe('E2E 全量测试 (测试计划模块8)', () => {
     const res = await ctx.post(`${API}/teacher/parse-exam?schoolId=${STATE.schoolId}`, {
       data: { content },
       headers: T(),
+      timeout: 240000, // AI 解析实测 60-170s，远超默认 10s
     });
     expect(res.status()).toBe(200);
     const body = await res.json();
@@ -232,12 +235,12 @@ test.describe('E2E 全量测试 (测试计划模块8)', () => {
 
   // ==================== E8.9 评分 Worker ====================
   test('E8.9 评分Worker处理', async () => {
-    test.setTimeout(30000);
+    test.setTimeout(180000); // AI 评分需 30-60s+，worker 异步处理
     // 等待 Worker 处理
     console.log('  等待 Worker 评分...');
     let graded = false;
-    for (let i = 0; i < 20; i++) {
-      await new Promise(r => setTimeout(r, 1500));
+    for (let i = 0; i < 50; i++) {
+      await new Promise(r => setTimeout(r, 3000));
       const res = await ctx.get(
         `${API}/student/assignments/${javaAssId}`,
         { headers: S() }

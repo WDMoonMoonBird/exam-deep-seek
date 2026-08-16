@@ -33,7 +33,7 @@
     <!-- 题目描述模态框 -->
     <a-modal v-model:open="showDescModal" :title="isTeacher ? '题目描述' : '题目描述（只读）'" :footer="null" width="720px" wrap-class-name="desc-modal">
       <RichEditor v-if="isTeacher" v-model="form.description" placeholder="请输入题目描述，说明项目要实现的功能和目标" />
-      <div v-else class="readonly-desc" v-html="form.description || '<p style=color:#999>暂无题目描述</p>'"></div>
+      <div v-else class="readonly-desc" v-html="safeDescriptionHtml"></div>
     </a-modal>
 
     <!-- 评分标准模态框 -->
@@ -68,41 +68,26 @@
       </div>
     </div>
 
-    <!-- 阶段切换 -->
+    <!-- 阶段切换（还原封装前布局）：未上传 = 整页居中圆形按钮；已上传 = 文件树 + Monaco -->
     <Transition name="kind-pick-switch" mode="out-in">
-      <!-- 阶段一：上传 -->
-      <div v-if="!hasUploaded" key="picker" class="kind-picker">
-        <button class="kind-add-btn" @click="triggerUpload" :disabled="uploading">
-          <LoadingOutlined v-if="uploading" spin />
-          <span v-else>+</span>
-        </button>
-        <p class="kind-hint">{{ uploading ? '正在解析中...' : (isTeacher ? '点击上传标准工程包' : '点击上传项目文件') }}</p>
-        <input ref="fileInputRef" type="file" accept=".zip" style="display:none" @change="onFileChange" />
+      <!-- 阶段一：整页居中上传入口（圆形按钮 + 提示） -->
+      <div v-if="!hasUploaded" key="picker" class="ide-stage">
+        <ProjectZipUploader
+          :hint="isTeacher ? '点击上传标准工程包' : '点击上传项目文件'"
+          v-model:package="form.packageFile"
+          @ready="onZipReady"
+          @error="(m) => message.error(m)"
+        />
       </div>
 
-      <!-- 阶段二：VSCode 风格 IDE -->
+      <!-- 阶段二：VSCode 风格 IDE（左文件树 + 右 Monaco） -->
       <div v-else key="editor" class="ide-stage">
         <div class="ide-body">
           <div class="sidebar">
-            <div class="sidebar-title">资源管理器</div>
-            <div class="file-tree">
-              <a-tree
-                :tree-data="fileTreeData"
-                :field-names="{ children: 'children', title: 'name', key: 'path' }"
-                :default-expanded-keys="defaultExpandedKeys"
-                :show-icon="true"
-                @select="onTreeSelect"
-                @dblclick="onTreeDblclick"
-              >
-                <template #icon="{ type, path }">
-                  <FolderOutlined v-if="type === 'directory'" style="color:#dcb67a;font-size:14px;" />
-                  <span v-else class="tree-icon fiv-icon" :class="getClassWithColor(path || '')"></span>
-                </template>
-                <template #title="{ name, type }">
-                  <span :class="type==='directory'?'tree-dir':'tree-file'">{{ name }}</span>
-                </template>
-              </a-tree>
-            </div>
+            <ProjectZipUploader
+              :tree-data="externalTree"
+              @select="onZipSelect"
+            />
           </div>
           <div class="editor-area">
             <div class="tab-bar" v-if="openTabs.length">
@@ -112,7 +97,13 @@
               </div>
               <div class="tab-bar-fill"></div>
             </div>
-            <div class="editor-container" ref="editorContainerRef"></div>
+            <div class="editor-body">
+              <div class="editor-container" ref="editorContainerRef"></div>
+              <div v-if="!openTabs.length" class="editor-empty">
+                <FileTextOutlined style="font-size:48px;color:#d9d9d9" />
+                <p>从左侧选择文件查看代码</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -124,15 +115,14 @@
 import { reactive, ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { message } from 'ant-design-vue';
-import { FolderOutlined, LoadingOutlined } from '@ant-design/icons-vue';
-import JSZip from 'jszip';
+import { LoadingOutlined, FileTextOutlined } from '@ant-design/icons-vue';
 import loader from '@monaco-editor/loader';
-import { getClassWithColor } from 'file-icons-js';
-import 'file-icons-js/css/style.css';
 import RichEditor from '../../components/RichEditor.vue';
+import DOMPurify from 'dompurify';
 import request from '../../api/request.js';
 import { uploadPackage } from '../../api/projects.js';
 import { getLanguage } from '../../utils/fileLang.js';
+import ProjectZipUploader from '../../components/ProjectZipUploader.vue';
 
 const props = defineProps({ mode: { type: String, default: 'teacher' } });
 const isTeacher = computed(() => props.mode === 'teacher');
@@ -141,18 +131,16 @@ const isStudent = computed(() => props.mode === 'student');
 const router = useRouter();
 const route = useRoute();
 const isEdit = computed(() => !!route.params.id);
-const uploading = ref(false);
 const submitting = ref(false);
 const hasUploaded = ref(false);
-const fileInputRef = ref(null);
 const editorContainerRef = ref(null);
 const showDescModal = ref(false);
 const showRubricModal = ref(false);
 
 const activePath = ref('');
 const fileContents = new Map();
-const fileTreeData = ref([]);
-const defaultExpandedKeys = ref([]);
+/** 外部文件树（回看/提交后服务端返回），传给 ProjectZipUploader 显示 */
+const externalTree = ref([]);
 const openTabs = ref([]);
 const studentSubmission = ref(null);
 
@@ -197,54 +185,35 @@ const form = reactive({
   tempId: '',
 });
 
+// 学生端只读渲染题目描述：教师 RichEditor 产出的 HTML 可能携带脚本，渲染前必须用 DOMPurify 净化
+const safeDescriptionHtml = computed(() => {
+  const html = form.description || '';
+  if (!html) return '<p style="color:#999">暂无题目描述</p>';
+  return DOMPurify.sanitize(html);
+});
+
 let monaco = null;
 let editor = null;
 let models = {};
 
+// 释放所有 Monaco model 缓存，避免重新上传/重新提交后旧 model 内容残留
+function resetModels() {
+  if (editor && monaco) editor.setModel(null);
+  Object.values(models).forEach(m => { try { m.dispose(); } catch { /* ignore */ } });
+  models = {};
+}
+
 // zip 条目名智能解码：先 UTF-8 严格，失败（Windows GBK 包）回退 GBK
 const UTF8_STRICT = new TextDecoder('utf-8', { fatal: true });
 const GBK_DECODER = new TextDecoder('gbk');
-function robustZipFileName(bytes) {
-  try { return UTF8_STRICT.decode(bytes); } catch { return GBK_DECODER.decode(bytes); }
-}
 
-// ===== Zip 解析 =====
-
-async function parseZip(file) {
-  const zip = await JSZip.loadAsync(file, { decodeFileName: robustZipFileName });
-  const tree = [];
-  const dirMap = { '': { children: tree, name: '/', type: 'directory' } };
-
-  for (const [path, entry] of Object.entries(zip.files)) {
-    if (path.startsWith('__MACOSX/') || path.includes('/.')) continue;
-    if (entry.dir) {
-      const parts = path.replace(/\/$/, '').split('/');
-      let parent = dirMap[''];
-      for (let i = 0; i < parts.length; i++) {
-        const key = parts.slice(0, i + 1).join('/');
-        if (!dirMap[key]) {
-          const node = { name: parts[i], path: key, type: 'directory', children: [] };
-          parent.children.push(node);
-          dirMap[key] = node;
-        }
-        parent = dirMap[key];
-      }
-    } else {
-      const ext = path.split('.').pop()?.toLowerCase();
-      const codeExts = ['java','py','js','ts','cpp','c','cs','go','rs','rb','php','swift','kt','html','css','json','xml','yml','yaml','md','txt','vue','jsx','tsx'];
-      if (ext && !codeExts.includes(ext)) continue;
-
-      const content = await entry.async('string');
-      fileContents.set(path, content);
-      const parts = path.split('/');
-      const parentPath = parts.slice(0, -1).join('/');
-      const parent = dirMap[parentPath] || dirMap[''];
-      parent.children.push({ name: parts[parts.length - 1], path, type: 'file', isLeaf: true, language: getLanguage(path) });
-    }
-  }
-  return tree;
-}
-
+/**
+ * 本地 zip 解析（降级/内容预览用）：
+ * 1) 解压全部条目（UTF-8 → GBK 智能解码文件名）
+ * 2) 填 fileContents：所有文件内容，>1MB 不读内容、用占位字符串（控制内存）
+ * 3) 返回全量文件树（教师上传失败时回退展示用）
+ * 不再维护前端过滤清单（目录/扩展名黑名单已删除，避免与服务端双清单漂移），过滤以服务端为准
+ */
 // ===== Monaco =====
 
 function registerExtraLanguages() {
@@ -296,59 +265,6 @@ function openFile(path, name, language) {
   switchTab(path);
 }
 
-// ===== 文件处理 =====
-
-async function onFileChange(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  uploading.value = true;
-  try {
-    const tree = await parseZip(file);
-    fileTreeData.value = tree;
-    defaultExpandedKeys.value = [];
-    form.packageFile = file;
-
-    // 教师模式：上传到服务端
-    if (isTeacher.value) {
-      const formData = new FormData();
-      formData.append('file', file);
-      uploadPackage(formData).then(r => { form.tempId = r.data?.tempId || ''; }).catch(() => {});
-    }
-
-    hasUploaded.value = true;
-    message.success('文件解析成功');
-    await nextTick();
-    await new Promise(r => setTimeout(r, 300));
-    if (editorContainerRef.value) await initMonaco();
-  } catch (e) {
-    message.error('解析失败：' + (e.message || '未知错误'));
-  }
-  uploading.value = false;
-  e.target.value = '';
-}
-
-function triggerUpload() { fileInputRef.value?.click(); }
-
-function onTreeSelect(keys) {
-  if (!keys.length) return;
-  const find = (nodes) => {
-    for (const n of nodes) {
-      if (n.path === keys[0] && n.type === 'file') return n;
-      if (n.children) { const r = find(n.children); if (r) return r; }
-    }
-    return null;
-  };
-  const node = find(fileTreeData.value);
-  if (node && node.type === 'file') openFile(node.path, node.name, node.language);
-}
-
-function onTreeDblclick(keys) {
-  if (!keys.length) return;
-  if (!openTabs.value.find(t => t.path === keys[0])) onTreeSelect(keys);
-}
-
-// ===== 教师：保存 =====
-
 async function handleSave() {
   if (!form.title) return message.warn('请输入题目名称');
   const payload = { title: form.title, difficulty: form.difficulty, maxScore: form.maxScore, type: 'project', material: form.description, scoringRubric: form.scoringRubric };
@@ -368,6 +284,59 @@ async function handleSave() {
   }
 }
 
+// ===== 上传组件回调（ProjectZipUploader） =====
+
+/** 过滤完成：填充内容预览、教师立刻上传服务端拿 tempId、打开第一个文件 */
+async function onZipReady({ tree, fileContents: fc }) {
+  // 重新选择文件时释放旧 Monaco model
+  resetModels();
+  fileContents.clear();
+  fc.forEach((v, k) => fileContents.set(k, v));
+  // 传给阶段二 sidebar 组件显示（外部树优先，picker 自动隐藏）
+  externalTree.value = tree;
+  hasUploaded.value = true;
+
+  if (isTeacher.value && form.packageFile) {
+    await teacherUpload(form.packageFile.blob, form.packageFile.name);
+  }
+
+  await nextTick();
+  await new Promise(r => setTimeout(r, 300));
+  if (editorContainerRef.value) await initMonaco();
+  const first = findFirstFile(tree);
+  if (first) openFile(first.path, first.name, first.language);
+}
+
+/** 点击树节点：打开 Monaco tab */
+function onZipSelect({ path, name, language }) {
+  openFile(path, name, language);
+}
+
+/** 教师上传过滤后的包到服务端（拿 tempId；上传动作由页面决定，组件不感知） */
+async function teacherUpload(blob, name) {
+  try {
+    const formData = new FormData();
+    formData.append('file', blob, name);
+    const r = await uploadPackage(formData);
+    form.tempId = r.data?.tempId || '';
+    message.success('上传成功，标准工程包已保存');
+  } catch (err) {
+    form.tempId = '';
+    message.error('上传失败：' + (err.response?.data?.message || err.message) + '（保存前请重新上传）');
+  }
+}
+
+function findFirstFile(nodes) {
+  for (const n of nodes || []) {
+    if (n.type === 'file') return n;
+    if (n.children?.length) {
+      const f = findFirstFile(n.children);
+      if (f) return f;
+    }
+  }
+  return null;
+}
+
 // ===== 学生：提交答案 =====
 
 async function handleSubmit() {
@@ -375,7 +344,8 @@ async function handleSubmit() {
   submitting.value = true;
   try {
     const formData = new FormData();
-    formData.append('file', form.packageFile);
+    // 上传前端过滤重打包后的纯代码 zip（依赖已在选择文件时剔除）
+    formData.append('file', form.packageFile.blob, form.packageFile.name);
 
     // 学生端提交（T02）：写库 + 版本化 + 同步返回文件树，不触发 AI 评分（T03 负责）
     const r = await request.post(
@@ -386,12 +356,16 @@ async function handleSubmit() {
     const data = r.data;
     studentSubmission.value = data.submission;
     if (data.files?.tree) {
-      fileTreeData.value = data.files.tree;
+      // 新版本文件内容填充前先释放旧 model 缓存，避免展示旧内容
+      resetModels();
+      externalTree.value = data.files.tree;
       fileContents.clear();
       if (data.files.contents) Object.entries(data.files.contents).forEach(([p, c]) => fileContents.set(p, c));
       hasUploaded.value = true;
       await nextTick(); await new Promise(res => setTimeout(res, 300));
       if (editorContainerRef.value) await initMonaco();
+      const first = findFirstFile(data.files.tree);
+      if (first) openFile(first.path, first.name, first.language);
     }
     message.success(`提交成功，已生成第 ${data.version ?? '新'} 个版本`);
     submitting.value = false;
@@ -418,11 +392,13 @@ async function loadQuestion() {
       if (q.attachmentUrl) {
         const treeRes = await request.get(`/teacher/questions/${route.params.id}/project-files`);
         if (treeRes.data?.tree?.length) {
-          fileTreeData.value = treeRes.data.tree;
+          externalTree.value = treeRes.data.tree;
           if (treeRes.data?.contents) Object.entries(treeRes.data.contents).forEach(([p, c]) => fileContents.set(p, c));
           hasUploaded.value = true;
           await nextTick(); await new Promise(res => setTimeout(res, 300));
           if (editorContainerRef.value) await initMonaco();
+          const first = findFirstFile(treeRes.data.tree);
+          if (first) openFile(first.path, first.name, first.language);
         }
       }
       return;
@@ -443,11 +419,13 @@ async function loadQuestion() {
     if (sub) {
       studentSubmission.value = sub;
       if (q.files?.tree?.length) {
-        fileTreeData.value = q.files.tree;
+        externalTree.value = q.files.tree;
         if (q.files.contents) Object.entries(q.files.contents).forEach(([p, c]) => fileContents.set(p, c));
         hasUploaded.value = true;
         await nextTick(); await new Promise(res => setTimeout(res, 300));
         if (editorContainerRef.value) await initMonaco();
+        const first = findFirstFile(q.files.tree);
+        if (first) openFile(first.path, first.name, first.language);
       }
     }
   } catch (e) {
@@ -526,7 +504,10 @@ onBeforeUnmount(() => {
 .tab-close { margin-left:6px; font-size:14px; color:#999; line-height:1; }
 .tab-close:hover { color:#333; }
 .tab-bar-fill { flex:1; background:#ececec; border-bottom:2px solid #ececec; height:35px; }
-.editor-container { flex:1; overflow:hidden; background:#fff; }
+.editor-body { flex:1; position:relative; display:flex; min-height:0; overflow:hidden; }
+  .editor-container { flex:1; overflow:hidden; background:#fff; }
+.editor-empty { position:absolute; inset:0; background:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#bfbfbf; gap:12px; }
+.editor-empty p { margin:0; }
 
 .readonly-desc { padding: 12px; min-height: 200px; font-size: 14px; line-height: 1.8; }
 .readonly-rubric { padding: 12px; min-height: 100px; font-size: 14px; line-height: 2; white-space: pre-wrap; }

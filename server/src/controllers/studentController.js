@@ -12,6 +12,39 @@ import { toStudentView, parseProjectAnswer, serializeProjectAnswer } from '../ut
 import { extractZipSafely, decodeUploadName, MAX_TEXT_BYTES } from '../utils/projectArchive.js';
 import { enqueueProjectGrade } from '../services/projectGrading.js';
 
+// ===================== 实训题提交并发串行化 =====================
+
+/**
+ * 进程内互斥锁表：以 (assignmentId, studentId, questionId) 为键，串行化同一键的实训题提交。
+ *
+ * 【为什么不用 SELECT ... FOR UPDATE】
+ * 提交临界区不止读写数据库——还包含版本目录 rmSync 与 zip 解压等本地文件操作，
+ * 数据库事务锁无法覆盖文件系统。进程内 Promise 链锁能把「读库算版本 + 落盘 + 写库」
+ * 整段串行化，双击/压测下不再出现相同 version 互删目录或 P2002 冲突。
+ * 本服务为单实例部署，进程内锁即可正确工作，且不改变对外行为与错误返回。
+ */
+const submitLocks = new Map();
+
+/**
+ * 获取以 key 为键的互斥锁并执行 task，串行化同一键的提交。
+ *
+ * @param {string} key 锁键（如 "12:3:4"，即 assignmentId:studentId:questionId）
+ * @param {() => Promise<any>} task 临界区任务
+ * @returns {Promise<any>} task 的结果；task 抛错时原样向上抛出，由调用方 try/catch 处理
+ */
+async function withSubmitLock(key, task) {
+  // 前一个请求无论成功/失败都已结束（或正在结束），用 .then(task, task) 等它完成再执行本次任务
+  const prev = submitLocks.get(key) || Promise.resolve();
+  const run = prev.then(task, task);
+  // 本请求结束后若仍是最新锁则清除，避免 Map 无限增长；真实结果仍由 run 承载
+  const settle = () => {
+    if (submitLocks.get(key) === run) submitLocks.delete(key);
+  };
+  run.then(settle, settle);
+  submitLocks.set(key, run);
+  return run;
+}
+
 // ===================== 作业列表 =====================
 
 export const getAssignments = async (req, res) => {
@@ -557,7 +590,9 @@ export const getProjectQuestion = async (req, res) => {
 export const submitProject = (req, res) => {
   upload.single('file')(req, res, async (uploadErr) => {
     if (uploadErr) {
-      return res.status(400).json({ code: 1001, message: uploadErr.message, data: null });
+      // multer 错误中文化
+      const msg = uploadErr.code === 'LIMIT_FILE_SIZE' ? '文件过大（超过 50MB 上限）' : uploadErr.message;
+      return res.status(400).json({ code: 1001, message: msg, data: null });
     }
     if (!req.file) {
       return res.status(400).json({ code: 1001, message: '未选择文件', data: null });
@@ -599,95 +634,102 @@ export async function submitProjectCore(req, res) {
         return res.status(404).json({ code: 1004, message: '题目不存在', data: null });
       }
 
-      // ---- 计算新版本号：已有提交的 currentVersion + 1 ----
-      const existing = await prisma.submission.findFirst({
-        where: { assignmentId, studentId, questionId, subQuestionId: null },
-      });
-      const prevEnvelope = parseProjectAnswer(existing?.answer);
-      const version = prevEnvelope.currentVersion + 1;
+      // ---- 并发串行化：同一 (assignmentId, studentId, questionId) 的提交互斥执行 ----
+      // 双击/压测下两个请求若同时走到「读旧提交 → 算版本号」，会得到相同 version：
+      // 后到者 rmSync 掉先到者正在写入的版本目录，且 update/create 相互覆盖（P2002 冲突）。
+      // 锁内重新读取已有提交，保证版本号计算与写库基于最新状态。实现说明见模块顶部。
+      const lockKey = `${assignmentId}:${studentId}:${questionId}`;
+      await withSubmitLock(lockKey, async () => {
+        // 锁内重新读取已有提交：前一个请求可能刚创建/更新过，必须基于最新状态计算版本号
+        const existing = await prisma.submission.findFirst({
+          where: { assignmentId, studentId, questionId, subQuestionId: null },
+        });
+        const prevEnvelope = parseProjectAnswer(existing?.answer);
+        const version = prevEnvelope.currentVersion + 1;
 
-      // ---- Q5：审核锁定——reviewed / published 后禁止重交（教师撤回重审后重新开放）----
-      if (existing && (existing.status === 'reviewed' || existing.status === 'published')) {
-        return res.status(403).json({ code: 1003, message: '成绩已发布，如需重交请联系老师', data: null });
-      }
+        // ---- Q5：审核锁定——reviewed / published 后禁止重交（教师撤回重审后重新开放）----
+        if (existing && (existing.status === 'reviewed' || existing.status === 'published')) {
+          return res.status(403).json({ code: 1003, message: '成绩已发布，如需重交请联系老师', data: null });
+        }
 
-      // ---- Q5：次数上限校验 ----
-      // allowResubmit=false：已有正式提交（status !== 'draft'）即不可再交
-      if (!guard.assignment.allowResubmit && existing && existing.status !== 'draft') {
-        return res.status(403).json({ code: 1003, message: '该作业不允许重复提交', data: null });
-      }
-      // maxAttempts > 0：attemptCount 达到上限即拒绝
-      if (
-        guard.assignment.maxAttempts != null &&
-        guard.assignment.maxAttempts > 0 &&
-        (existing?.attemptCount ?? 0) >= guard.assignment.maxAttempts
-      ) {
-        return res.status(403).json({ code: 1003, message: `已达最大提交次数（${guard.assignment.maxAttempts}次）`, data: null });
-      }
+        // ---- Q5：次数上限校验 ----
+        // allowResubmit=false：已有正式提交（status !== 'draft'）即不可再交
+        if (!guard.assignment.allowResubmit && existing && existing.status !== 'draft') {
+          return res.status(403).json({ code: 1003, message: '该作业不允许重复提交', data: null });
+        }
+        // maxAttempts > 0：attemptCount 达到上限即拒绝
+        if (
+          guard.assignment.maxAttempts != null &&
+          guard.assignment.maxAttempts > 0 &&
+          (existing?.attemptCount ?? 0) >= guard.assignment.maxAttempts
+        ) {
+          return res.status(403).json({ code: 1003, message: `已达最大提交次数（${guard.assignment.maxAttempts}次）`, data: null });
+        }
 
-      // ---- 解压到版本目录（R7：新目录，不动旧版本）----
-      versionDir = submissionDir(questionId, studentId, version);
-      if (fs.existsSync(versionDir)) {
-        // 理论上不该发生；若磁盘残留同版本目录，清掉重来以保证内容干净。
-        // 注意这里删的是「本次要写的新版本目录」，不是历史版本。
-        fs.rmSync(versionDir, { recursive: true, force: true });
-      }
+        // ---- 解压到版本目录（R7：新目录，不动旧版本）----
+        versionDir = submissionDir(questionId, studentId, version);
+        if (fs.existsSync(versionDir)) {
+          // 理论上不该发生；若磁盘残留同版本目录，清掉重来以保证内容干净。
+          // 注意这里删的是「本次要写的新版本目录」，不是历史版本。
+          fs.rmSync(versionDir, { recursive: true, force: true });
+        }
 
-      const stats = extractZipSafely(req.file.buffer, versionDir);
+        const stats = extractZipSafely(req.file.buffer, versionDir);
 
-      // ---- 组装版本信封 ----
-      const now = new Date();
-      const historyEntry = {
-        version,
-        submittedAt: now.toISOString(),
-        originalName: decodeUploadName(req.file.originalname),
-        fileCount: stats.fileCount,
-        byteSize: stats.byteSize,
-      };
-      const envelope = {
-        kind: 'project',
-        currentVersion: version,
-        history: [...prevEnvelope.history, historyEntry],
-        grading: { state: 'pending', version, startedAt: null, finishedAt: null, error: null },
-      };
-
-      // ---- 写库（upsert：唯一键为 assignmentId+studentId+questionId+subQuestionId）----
-      const payload = {
-        status: 'submitted',
-        answer: serializeProjectAnswer(envelope),
-        attemptCount: version,
-        submittedAt: now,
-        // Q5：新提交清空旧分（防止审核放分后旧分残留）
-        aiScore: null,
-        finalScore: null,
-        teacherFeedback: null,
-      };
-
-      const saved = existing
-        ? await prisma.submission.update({ where: { id: existing.id }, data: payload })
-        : await prisma.submission.create({
-            data: { assignmentId, studentId, questionId, subQuestionId: null, ...payload },
-          });
-
-      logger.info(
-        { assignmentId, questionId, studentId, version, fileCount: stats.fileCount },
-        '实训题已提交'
-      );
-
-      // ---- 异步触发 AI 评分（R5：fire-and-forget，不阻塞返回）----
-      enqueueProjectGrade(saved.id);
-
-      // ---- 同步返回文件树，AI 评分在后台进行 ----
-      res.json({
-        code: 0,
-        message: '提交成功',
-        data: {
-          submission: toStudentView(saved, question),
-          files: { tree: buildTreeSafe(versionDir), contents: readVersionContents(versionDir) },
+        // ---- 组装版本信封 ----
+        const now = new Date();
+        const historyEntry = {
           version,
-          status: 'submitted',
           submittedAt: now.toISOString(),
-        },
+          originalName: decodeUploadName(req.file.originalname),
+          fileCount: stats.fileCount,
+          byteSize: stats.byteSize,
+        };
+        const envelope = {
+          kind: 'project',
+          currentVersion: version,
+          history: [...prevEnvelope.history, historyEntry],
+          grading: { state: 'pending', version, startedAt: null, finishedAt: null, error: null },
+        };
+
+        // ---- 写库（upsert：唯一键为 assignmentId+studentId+questionId+subQuestionId）----
+        const payload = {
+          status: 'submitted',
+          answer: serializeProjectAnswer(envelope),
+          attemptCount: version,
+          submittedAt: now,
+          // Q5：新提交清空旧分（防止审核放分后旧分残留）
+          aiScore: null,
+          finalScore: null,
+          teacherFeedback: null,
+        };
+
+        const saved = existing
+          ? await prisma.submission.update({ where: { id: existing.id }, data: payload })
+          : await prisma.submission.create({
+              data: { assignmentId, studentId, questionId, subQuestionId: null, ...payload },
+            });
+
+        logger.info(
+          { assignmentId, questionId, studentId, version, fileCount: stats.fileCount },
+          '实训题已提交'
+        );
+
+        // ---- 异步触发 AI 评分（R5：fire-and-forget，不阻塞返回）----
+        enqueueProjectGrade(saved.id);
+
+        // ---- 同步返回文件树，AI 评分在后台进行 ----
+        res.json({
+          code: 0,
+          message: '提交成功',
+          data: {
+            submission: toStudentView(saved, question),
+            files: { tree: buildTreeSafe(versionDir), contents: readVersionContents(versionDir) },
+            version,
+            status: 'submitted',
+            submittedAt: now.toISOString(),
+          },
+        });
       });
     } catch (err) {
       // 解压/校验失败 → 回滚本次版本目录，避免留下半包

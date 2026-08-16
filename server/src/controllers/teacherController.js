@@ -80,7 +80,7 @@ export const getProjectFiles = async (req, res) => {
 
     // 动态导入 fileTree（ESM 兼容）
     const { buildTree, flattenTree } = await import('../utils/fileTree.js');
-    const tree = buildTree(dir);
+    const tree = buildTree(dir, { skipBaseDir: true }); // 与上传预览(uploadPackage)/学生端一致：树根为 zip 内容而非存储目录名 standard
     const flatList = flattenTree(tree);
 
     // 读取文件内容
@@ -101,7 +101,7 @@ export const getProjectFiles = async (req, res) => {
   }
 };
 
-export const gradeProject = async (req, res) => {
+const gradeProject = async (req, res) => {
   try {
     const id = +req.params.id;
     const q = await prisma.question.findFirst({
@@ -132,9 +132,8 @@ export const gradeProject = async (req, res) => {
     const standardFiles = readDirFiles(standardDir)
       .map(f => `// 文件名: ${f.path}\n${f.content}`).join('\n\n');
 
-    // 读取学生提交文件（从请求体或默认路径）
-    const { studentPath } = req.body || {};
-    const studentDir = studentPath || standardDir; // 测试时默认用标准文件
+    // 读取学生提交文件：仅允许读取标准包目录，不接受任何外部路径（封堵任意文件读取）
+    const studentDir = standardDir;
     const studentFiles = readDirFiles(studentDir)
       .map(f => `// 文件名: ${f.path}\n${f.content}`).join('\n\n');
 
@@ -167,6 +166,10 @@ export const createQuestion = async (req, res) => {
       if (!title) return res.status(400).json({ code: 1001, message: '参数错误', data: null });
       if (title.length > 200) return res.status(400).json({ code: 1001, message: '标题不能超过200字', data: null });
       if (material?.length > 50000) return res.status(400).json({ code: 1001, message: '题目材料过长', data: null });
+      // 安全校验：tempId 仅接受服务端生成的临时目录标识（防路径穿越）
+      if (tempId != null && !/^temp_\d+_[a-z0-9]+$/.test(String(tempId))) {
+        return res.status(400).json({ code: 1001, message: '非法临时目录标识', data: null });
+      }
 
       const q = await prisma.question.create({
         data: {
@@ -181,9 +184,13 @@ export const createQuestion = async (req, res) => {
         },
       });
 
-      // 将临时上传的 zip 文件移动到正式目录
+      // 将临时上传的 zip 文件移动到正式目录（校验 tempId 格式 + 目录不越界，封堵路径穿越）
       if (tempId) {
-        const srcDir = path.join(__dirname, '../../uploads/projects', tempId);
+        const projectsRoot = path.resolve(__dirname, '../../uploads/projects');
+        const srcDir = path.resolve(projectsRoot, String(tempId));
+        if (!srcDir.startsWith(projectsRoot + path.sep)) {
+          return res.status(400).json({ code: 1001, message: '非法临时目录标识', data: null });
+        }
         const destDir = path.join(__dirname, '../../uploads/project-questions', String(q.id));
         if (fs.existsSync(srcDir)) {
           fs.mkdirSync(path.dirname(destDir), { recursive: true });
@@ -260,6 +267,10 @@ export const updateQuestion = async (req, res) => {
 
     // 实训题：直接更新，不处理 subQuestions
     if (existing.type === 'project') {
+      // 安全校验：attachmentUrl 仅接受白名单格式（防路径穿越，getProjectFiles 会对其 path.join）
+      if (attachmentUrl != null && !/^project-questions\/\d+\/standard$/.test(attachmentUrl)) {
+        return res.status(400).json({ code: 1001, message: 'attachmentUrl 格式非法', data: null });
+      }
       await prisma.question.update({
         where: { id },
         data: {

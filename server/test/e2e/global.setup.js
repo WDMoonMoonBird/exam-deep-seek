@@ -95,9 +95,12 @@ export default async function () {
   }, teacherToken);
   const assignmentId = a.data?.id;
 
+  // 学生密码 = 学号（@ 前部分），而非完整用户名（用户名含 @学校代码）
+  const studentPassword = studentUsername.includes('@') ? studentUsername.split('@')[0] : studentUsername;
   const state = {
+    admin: { username: 'admin', password: '***REDACTED***' },
     teacher: { username: 'e2e_teacher', password: 'e2e_teacher' },
-    student: { username: studentUsername, password: studentUsername },
+    student: { username: studentUsername, password: studentPassword },
     schoolId, classId, questionId, assignmentId,
   };
 

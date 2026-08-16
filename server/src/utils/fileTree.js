@@ -12,15 +12,29 @@ import path from 'path';
 
 // ==================== 过滤规则 ====================
 
-/** 需要跳过的目录名 */
-const IGNORED_DIRS = new Set([
+/** 需要跳过的目录名
+ * 主流生态 + 跨生态通用依赖/构建产物语义（vendor/deps/obj/Pods/.gradle 等），
+ * 不依赖具体生态清单；二进制内容由 uploadFilter.isBinaryContent 在解压层兜底识别。
+ * 注意：lib/packages 等可能存放源码的目录不在此列，避免误伤。
+ * 导出供 uploadFilter.js 统一上传过滤引擎引用（Set 强规则层）。
+ */
+export const IGNORED_DIRS = new Set([
+  // 主流生态（dist/out 已移至规则文件根锚定 /dist/ /out/，避免 src/dist 等源码目录误伤；
+  // build/target 为构建产物强信号，接受任意深度，见 E 终审权衡）
   'node_modules', '.git', '__pycache__', '.idea', '.vscode',
-  '.DS_Store', 'venv', '.venv', 'env', '.env', 'dist', 'build',
-  'target', 'out', '.next', '.nuxt',
+  '.DS_Store', 'venv', '.venv', 'env', '.env', 'build',
+  'target', '.next', '.nuxt',
+  // 跨生态通用语义（依赖/第三方/缓存/中间产物）
+  // 注意：deps/external/caches/artifacts/out/dist/obj/Debug/Release 等通用词可能命中源码
+  // 包名（如 src/external、lib/debug），一律不放入 Set 强规则（E 终审实证误伤），
+  // 由规则文件根锚定（/out/ /dist/ 等）+ 内容层处理
+  'vendor', 'third_party', 'thirdparty',
+  '.gradle', '.dart_tool', '.pytest_cache', '.mypy_cache',
+  'Pods', 'DerivedData', 'CMakeFiles', 'conan', '.cache',
 ]);
 
-/** 需要跳过的文件后缀（二进制/编译产物） */
-const IGNORED_EXTENSIONS = new Set([
+/** 需要跳过的文件后缀（二进制/编译产物）；导出供 uploadFilter.js 引用 */
+export const IGNORED_EXTENSIONS = new Set([
   '.class', '.jar', '.war', '.exe', '.dll', '.so', '.dylib',
   '.o', '.obj', '.pyc', '.pyo', '.pyd', '.bin', '.dat',
   '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.svg',
@@ -64,6 +78,8 @@ const EXT_TO_LANG = {
   '.kt':        'kotlin',
   '.scala':     'scala',
   '.html':      'html',
+  '.jsp':       'html',
+  '.jspx':      'html',
   '.htm':       'html',
   '.css':       'css',
   '.scss':      'scss',

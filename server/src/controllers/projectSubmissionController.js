@@ -88,6 +88,14 @@ export const getSubmissionDetail = async (req, res) => {
     const projectId = +req.params.id;
     const submissionId = +req.params.submissionId;
 
+    // R6：校验任务归属（与 listSubmissions 一致）
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, deletedAt: null },
+      select: { id: true, teacherId: true },
+    });
+    if (!project) return res.status(404).json({ code: 1004, message: '任务不存在', data: null });
+    if (project.teacherId !== req.user.id) return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+
     const sub = await prisma.projectSubmission.findFirst({
       where: { id: submissionId, projectId },
       include: {
@@ -124,6 +132,14 @@ export const getFileContent = async (req, res) => {
     const projectId = +req.params.id;
     const submissionId = +req.params.submissionId;
     const { path: filePath } = req.query;
+
+    // R6：校验任务归属（与 listSubmissions 一致）
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, deletedAt: null },
+      select: { id: true, teacherId: true },
+    });
+    if (!project) return res.status(404).json({ code: 1004, message: '任务不存在', data: null });
+    if (project.teacherId !== req.user.id) return res.status(403).json({ code: 1003, message: '无权操作', data: null });
 
     if (!filePath) {
       return res.status(400).json({ code: 1001, message: '缺少 path 参数', data: null });
@@ -188,6 +204,14 @@ export const reviewSubmission = async (req, res) => {
     const submissionId = +req.params.submissionId;
     const { finalScore, teacherFeedback, status = 'reviewed' } = req.body;
 
+    // R6：校验任务归属（与 listSubmissions 一致）
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, deletedAt: null },
+      select: { id: true, teacherId: true },
+    });
+    if (!project) return res.status(404).json({ code: 1004, message: '任务不存在', data: null });
+    if (project.teacherId !== req.user.id) return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+
     if (finalScore === undefined || finalScore === null) {
       return res.status(400).json({ code: 1001, message: '请填写最终分数', data: null });
     }
@@ -222,6 +246,14 @@ export const regradeSubmission = async (req, res) => {
   try {
     const projectId = +req.params.id;
     const submissionId = +req.params.submissionId;
+
+    // R6：校验任务归属（与 listSubmissions 一致）
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, deletedAt: null },
+      select: { id: true, teacherId: true },
+    });
+    if (!project) return res.status(404).json({ code: 1004, message: '任务不存在', data: null });
+    if (project.teacherId !== req.user.id) return res.status(403).json({ code: 1003, message: '无权操作', data: null });
 
     const sub = await prisma.projectSubmission.findFirst({
       where: { id: submissionId, projectId },

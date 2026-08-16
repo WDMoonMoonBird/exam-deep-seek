@@ -7,7 +7,7 @@
  * - calculateTotal(m, a, ai, w)  → 加权总分
  */
 
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import logger from '../utils/logger.js';
@@ -69,13 +69,12 @@ async function checkJavaCompile(dir, javaFiles) {
     fs.mkdirSync(tempDir, { recursive: true });
 
     // 构建 javac 命令，只编译根目录下的 .java 文件
-    const fileArgs = javaFiles.map(f => path.resolve(dir, f)).join(' ');
-    const cmd = `javac -d "${tempDir}" ${fileArgs}`;
+    // 安全：execFileSync 参数数组方式，不经 shell，文件名中的特殊字符不会被执行（OCR critical 修复）
+    const fileArgs = javaFiles.map(f => path.resolve(dir, f));
 
-    const stdout = execSync(cmd, {
+    const stdout = execFileSync('javac', ['-d', tempDir, ...fileArgs], {
       timeout: 15000,
       encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     // 清理临时目录
@@ -103,13 +102,11 @@ async function checkJavaCompile(dir, javaFiles) {
 
 async function checkPythonCompile(dir, pyFiles) {
   try {
-    const fileArgs = pyFiles.map(f => path.resolve(dir, f)).join(' ');
-    const cmd = `python3 -m py_compile ${fileArgs}`;
+    const fileArgs = pyFiles.map(f => path.resolve(dir, f));
 
-    execSync(cmd, {
+    execFileSync('python3', ['-m', 'py_compile', ...fileArgs], {
       timeout: 15000,
       encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     return {

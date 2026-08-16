@@ -101,6 +101,8 @@ async function main() {
   const answers = [REF, PARTIAL, POOR, EMPTY, REF];
 
   const t1 = Date.now();
+  let ok = 0;
+  let fail = 0;
   for (let i = 0; i < students.length; i += 40) {
     const batch = [];
     for (let j = i; j < Math.min(i + 40, students.length); j++) {
@@ -110,24 +112,66 @@ async function main() {
       batch.push((async () => {
         try {
           const login = await api('POST', '/auth/login', { username: sid, password: sid });
-          if (login.code !== 0) return;
-          await api('POST', `/student/assignments/${assignmentId}/submit`, {
+          if (login.code !== 0) { fail++; console.error(`  [提交失败] ${sid} 登录失败: ${login.message || 'code=' + login.code}`); return; }
+          const sub = await api('POST', `/student/assignments/${assignmentId}/submit`, {
             questionId, subQuestionId, answer: ans,
           }, login.data.token);
-        } catch {}
+          if (sub.code === 0) ok++;
+          else { fail++; console.error(`  [提交失败] ${sid}: ${sub.message || 'code=' + sub.code}`); }
+        } catch (e) {
+          fail++;
+          console.error(`  [提交异常] ${sid}: ${e.message || e}`);
+        }
       })());
     }
     await Promise.all(batch);
     process.stdout.write(`\r  ${Math.min(i + 40, students.length)}/${students.length} (${Math.round((Date.now()-t1)/1000)}s)`);
   }
-  console.log(`\n  提交完成! ${Math.round((Date.now()-t1)/1000)}s`);
+  console.log(`\n  提交完成! 成功 ${ok} 人，失败 ${fail} 人（${Math.round((Date.now()-t1)/1000)}s）`);
+  if (ok === 0) {
+    console.error('\n⛔ 没有任何提交成功，退出');
+    process.exit(1);
+  }
 
   console.log('=== 8. 等待评分... ===');
-  await new Promise(r => setTimeout(r, 8000));
+  // 轮询提交列表，直到全部已成功提交的记录完成评分（status=ai_graded），超时打印明细并退出码非 0
+  const POLL_INTERVAL_MS = 10000;
+  const MAX_WAIT_MS = 600000; // 10 分钟上限
+  const pollStart = Date.now();
+  let graded = 0;
+  while (Date.now() - pollStart < MAX_WAIT_MS) {
+    await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+    const st = await T('GET', `/teacher/submissions?assignmentId=${assignmentId}&pageSize=500`);
+    if (st.code !== 0) {
+      console.error(`  [轮询失败] 查询提交列表: ${st.message || 'code=' + st.code}`);
+      continue;
+    }
+    const list = st.data?.list || [];
+    graded = list.filter(s => s.status === 'ai_graded').length;
+    console.log(`  已评分 ${graded}/${ok}（提交记录 ${st.data?.total ?? list.length}）`);
+    if (graded >= ok) break;
+  }
+
+  if (graded < ok) {
+    console.error(`\n⛔ 超时：${Math.round((Date.now()-pollStart)/1000)}s 内仅 ${graded}/${ok} 完成评分，未完成明细：`);
+    const st = await T('GET', `/teacher/submissions?assignmentId=${assignmentId}&pageSize=500`);
+    if (st.code === 0) {
+      for (const s of (st.data?.list || [])) {
+        if (s.status !== 'ai_graded') {
+          console.error(`  - ${s.student?.username || s.studentId} status=${s.status} 提交时间=${s.submittedAt || '无'}`);
+        }
+      }
+    }
+    console.error('\n日志: /tmp/worker.log');
+    process.exit(1);
+  }
+
+  console.log(`\n  评分完成! ${Math.round((Date.now()-pollStart)/1000)}s`);
 
   console.log('\n=== ✅ 完成 ===');
   console.log('班级:', className, '(500人)');
   console.log('作业: Java程序设计期末考试');
+  console.log(`提交: 成功 ${ok} 人，失败 ${fail} 人`);
   console.log('分布: 1-100满分 | 101-200部分 | 201-300差 | 301-400空 | 401-500满分');
   console.log('日志: /tmp/worker.log');
 }

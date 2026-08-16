@@ -30,10 +30,11 @@ const MAX_DEPTH = 32;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOADS_DIR = path.resolve(__dirname, '../uploads');
 
-/** 待扫描的两个上传根目录 */
+/** 待扫描的三个上传根目录（project-questions 为标准答案包目录） */
 const SCAN_ROOTS = [
   { key: 'project-submissions', dir: path.join(UPLOADS_DIR, 'project-submissions') },
   { key: 'projects', dir: path.join(UPLOADS_DIR, 'projects') },
+  { key: 'project-questions', dir: path.join(UPLOADS_DIR, 'project-questions') },
 ];
 
 /**
@@ -154,7 +155,7 @@ function printRecord(rec, idx) {
 }
 
 /**
- * 主流程：扫描两个上传根目录并输出汇总报告。
+ * 主流程：扫描全部上传根目录（SCAN_ROOTS）并输出汇总报告。
  * @returns {void}
  */
 function main() {

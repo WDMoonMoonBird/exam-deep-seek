@@ -187,11 +187,19 @@ const aiScoreClass = computed(() => {
   return s >= 80 ? 'score-good' : s >= 60 ? 'score-ok' : 'score-bad';
 });
 
-// 文件树点击
+// 文件树点击（keys 是选中项的 key 数组，需按 key 在树中查找节点，与 ProjectQuestionEdit 一致）
 async function onFileSelect(keys) {
   if (!keys.length) return;
-  const node = keys[0];
-  if (node.type === 'directory') return;
+  const key = keys[0];
+  const findNode = (nodes) => {
+    for (const n of nodes) {
+      if (n.path === key) return n;
+      if (n.children) { const r = findNode(n.children); if (r) return r; }
+    }
+    return null;
+  };
+  const node = findNode(fileTree.value);
+  if (!node || node.type === 'directory') return;
 
   selectedFile.value = node;
   currentLang.value = node.language || getLanguage(node.name);
@@ -280,7 +288,7 @@ async function fetchDetail() {
     if (fileTree.value.length && !selectedFile.value) {
       const firstFile = findFirstFile(fileTree.value);
       if (firstFile) {
-        onFileSelect([firstFile]);
+        onFileSelect([firstFile.path]);
       }
     }
   } catch { /* ignore */ }

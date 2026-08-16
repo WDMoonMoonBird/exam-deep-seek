@@ -135,63 +135,77 @@ export const createProject = async (req, res) => {
     if (title.length > 200) {
       return res.status(400).json({ code: 1001, message: '标题不能超过200字', data: null });
     }
+    // 验证权重：必须为有限数值且不小于 0（防 "abc" 等字符串被 Number() 转成 NaN 后绕过校验并持久化）
+    const mwNum = +machineWeight;
+    const awNum = +astWeight;
+    const aiwNum = +aiWeight;
+    if (!Number.isFinite(mwNum) || !Number.isFinite(awNum) || !Number.isFinite(aiwNum)
+      || mwNum < 0 || awNum < 0 || aiwNum < 0) {
+      return res.status(400).json({ code: 1001, message: '评分权重必须为非负数字', data: null });
+    }
     // 验证权重合计为1
-    const totalWeight = (+machineWeight) + (+astWeight) + (+aiWeight);
+    const totalWeight = mwNum + awNum + aiwNum;
     if (Math.abs(totalWeight - 1) > 0.001) {
       return res.status(400).json({ code: 1001, message: '评分权重合计必须为100%', data: null });
     }
 
-    // 创建任务
-    const project = await prisma.project.create({
-      data: {
-        teacherId: req.user.id,
-        title,
-        description: description || null,
-        startTime: new Date(startTime),
-        endTime: new Date(endTime),
-        machineWeight: +machineWeight,
-        astWeight: +astWeight,
-        aiWeight: +aiWeight,
-        machineConfig: machineConfig || undefined,
-        aiPromptExtra: aiPromptExtra || null,
-        status,
-      },
-    });
-
-    // 关联班级
-    if (classIds.length) {
-      await prisma.projectClass.createMany({
-        data: classIds.map(cid => ({ projectId: project.id, classId: +cid })),
+    // 创建任务 + 关联班级 + 文件树记录：整体放入交互式事务，中途失败整体回滚，避免孤儿数据
+    // 注：目录迁移/buildTree 属文件系统操作无法回滚，按约定容忍其在事务内执行；
+    // 事务保证 project / projectClass / projectFile 三者要么全部成功要么全部回滚
+    const project = await prisma.$transaction(async (tx) => {
+      const p = await tx.project.create({
+        data: {
+          teacherId: req.user.id,
+          title,
+          description: description || null,
+          startTime: new Date(startTime),
+          endTime: new Date(endTime),
+          machineWeight: mwNum,
+          astWeight: awNum,
+          aiWeight: aiwNum,
+          machineConfig: machineConfig || undefined,
+          aiPromptExtra: aiPromptExtra || null,
+          status,
+        },
       });
-    }
 
-    // 处理标准工程包：从临时目录迁移
-    if (tempId) {
-      const tempDir = path.join(PROJECTS_UPLOAD_DIR, String(tempId));
-      const targetDir = path.join(PROJECTS_UPLOAD_DIR, String(project.id));
-      if (fs.existsSync(tempDir)) {
-        fs.renameSync(tempDir, targetDir);
-        // 构建文件树并写入 project_files 表
-        const standardDir = path.join(targetDir, 'standard');
-        if (fs.existsSync(standardDir)) {
-          const tree = buildTree(standardDir, { skipBaseDir: true });
-          const flatList = flattenTree(tree);
-          if (flatList.length > 0) {
-            await prisma.projectFile.createMany({
-              data: flatList.map(f => ({
-                projectId: project.id,
-                path: f.path,
-                name: f.name,
-                type: f.type,
-                language: f.language,
-                size: f.size,
-                parentPath: f.parentPath,
-              })),
-            });
+      // 关联班级
+      if (classIds.length) {
+        await tx.projectClass.createMany({
+          data: classIds.map(cid => ({ projectId: p.id, classId: +cid })),
+        });
+      }
+
+      // 处理标准工程包：从临时目录迁移
+      if (tempId) {
+        const tempDir = path.join(PROJECTS_UPLOAD_DIR, String(tempId));
+        const targetDir = path.join(PROJECTS_UPLOAD_DIR, String(p.id));
+        if (fs.existsSync(tempDir)) {
+          fs.renameSync(tempDir, targetDir);
+          // 构建文件树并写入 project_files 表
+          const standardDir = path.join(targetDir, 'standard');
+          if (fs.existsSync(standardDir)) {
+            const tree = buildTree(standardDir, { skipBaseDir: true });
+            const flatList = flattenTree(tree);
+            if (flatList.length > 0) {
+              await tx.projectFile.createMany({
+                data: flatList.map(f => ({
+                  projectId: p.id,
+                  path: f.path,
+                  name: f.name,
+                  type: f.type,
+                  language: f.language,
+                  size: f.size,
+                  parentPath: f.parentPath,
+                })),
+              });
+            }
           }
         }
       }
-    }
+
+      return p;
+    });
 
     logger.info({ projectId: project.id, classIds }, '实训任务已创建');
     res.json({ code: 0, message: '创建成功', data: project });
@@ -238,58 +252,66 @@ export const updateProject = async (req, res) => {
     if (aiPromptExtra !== undefined) data.aiPromptExtra = aiPromptExtra;
     if (status !== undefined) data.status = status;
 
-    // 验证权重
+    // 验证权重：必须为有限数值且不小于 0（与 createProject 同款，防 NaN 持久化）
     const mw = data.machineWeight ?? existing.machineWeight;
     const aw = data.astWeight ?? existing.astWeight;
     const aiw = data.aiWeight ?? existing.aiWeight;
+    if (!Number.isFinite(mw) || !Number.isFinite(aw) || !Number.isFinite(aiw)
+      || mw < 0 || aw < 0 || aiw < 0) {
+      return res.status(400).json({ code: 1001, message: '评分权重必须为非负数字', data: null });
+    }
     if (Math.abs(mw + aw + aiw - 1) > 0.001) {
       return res.status(400).json({ code: 1001, message: '评分权重合计必须为100%', data: null });
     }
 
-    await prisma.project.update({ where: { id }, data });
+    // 更新任务、班级关联、文件记录：整体放入交互式事务，中途失败回滚，避免孤儿数据
+    // 注：rmSync/renameSync/buildTree 属文件系统操作，按约定容忍在事务内执行
+    await prisma.$transaction(async (tx) => {
+      await tx.project.update({ where: { id }, data });
 
-    // 更新班级关联
-    if (classIds !== undefined) {
-      await prisma.projectClass.deleteMany({ where: { projectId: id } });
-      if (classIds.length) {
-        await prisma.projectClass.createMany({
-          data: classIds.map(cid => ({ projectId: id, classId: +cid })),
-        });
-      }
-    }
-
-    // 处理标准工程包迁移
-    if (tempId) {
-      const tempDir = path.join(PROJECTS_UPLOAD_DIR, String(tempId));
-      const targetDir = path.join(PROJECTS_UPLOAD_DIR, String(id));
-      if (fs.existsSync(tempDir)) {
-        // 删除旧文件记录和目录
-        await prisma.projectFile.deleteMany({ where: { projectId: id } });
-        if (fs.existsSync(targetDir)) {
-          fs.rmSync(targetDir, { recursive: true, force: true });
+      // 更新班级关联
+      if (classIds !== undefined) {
+        await tx.projectClass.deleteMany({ where: { projectId: id } });
+        if (classIds.length) {
+          await tx.projectClass.createMany({
+            data: classIds.map(cid => ({ projectId: id, classId: +cid })),
+          });
         }
-        fs.renameSync(tempDir, targetDir);
-        // 重建文件记录
-        const standardDir = path.join(targetDir, 'standard');
-        if (fs.existsSync(standardDir)) {
-          const tree = buildTree(standardDir, { skipBaseDir: true });
-          const flatList = flattenTree(tree);
-          if (flatList.length > 0) {
-            await prisma.projectFile.createMany({
-              data: flatList.map(f => ({
-                projectId: id,
-                path: f.path,
-                name: f.name,
-                type: f.type,
-                language: f.language,
-                size: f.size,
-                parentPath: f.parentPath,
-              })),
-            });
+      }
+
+      // 处理标准工程包迁移
+      if (tempId) {
+        const tempDir = path.join(PROJECTS_UPLOAD_DIR, String(tempId));
+        const targetDir = path.join(PROJECTS_UPLOAD_DIR, String(id));
+        if (fs.existsSync(tempDir)) {
+          // 删除旧文件记录和目录
+          await tx.projectFile.deleteMany({ where: { projectId: id } });
+          if (fs.existsSync(targetDir)) {
+            fs.rmSync(targetDir, { recursive: true, force: true });
+          }
+          fs.renameSync(tempDir, targetDir);
+          // 重建文件记录
+          const standardDir = path.join(targetDir, 'standard');
+          if (fs.existsSync(standardDir)) {
+            const tree = buildTree(standardDir, { skipBaseDir: true });
+            const flatList = flattenTree(tree);
+            if (flatList.length > 0) {
+              await tx.projectFile.createMany({
+                data: flatList.map(f => ({
+                  projectId: id,
+                  path: f.path,
+                  name: f.name,
+                  type: f.type,
+                  language: f.language,
+                  size: f.size,
+                  parentPath: f.parentPath,
+                })),
+              });
+            }
           }
         }
       }
-    }
+    });
 
     logger.info({ projectId: id }, '实训任务已更新');
     res.json({ code: 0, message: '更新成功', data: null });
@@ -323,7 +345,9 @@ export const deleteProject = async (req, res) => {
 export const uploadPackage = (req, res) => {
   upload.single('file')(req, res, async (err) => {
     if (err) {
-      return res.status(400).json({ code: 1001, message: err.message, data: null });
+      // multer 错误中文化：LIMIT_FILE_SIZE → 友好提示
+      const msg = err.code === 'LIMIT_FILE_SIZE' ? '文件过大（超过 50MB 上限）' : err.message;
+      return res.status(400).json({ code: 1001, message: msg, data: null });
     }
     if (!req.file) {
       return res.status(400).json({ code: 1001, message: '未选择文件', data: null });

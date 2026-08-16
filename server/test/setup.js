@@ -27,9 +27,17 @@ function pickDbName(url) {
 }
 
 /**
+ * 允许执行测试数据清理与 seed 的测试库名白名单（精确匹配【库名】，大小写不敏感）。
+ * 新增测试库时必须先在这里登记，严禁放宽成子串匹配——
+ * 否则密码/主机名里恰好含 'test'（如 password=Test@2024、host=test-db.internal）
+ * 的库也会被放行，这正是护栏要防的事故类型。
+ */
+const TEST_DB_NAMES = ['exam_system_test'];
+
+/**
  * 破坏性操作前置护栏：只允许对「测试库」执行测试数据清理与 seed。
  *
- * 判定规则：DATABASE_URL 解析出的【库名】必须包含子串 'test'（大小写不敏感）。
+ * 判定规则：DATABASE_URL 解析出的【库名】必须精确命中 TEST_DB_NAMES 白名单。
  * 不满足则打印醒目警告并以退出码 1 中止进程，绝不继续往下执行。
  * 库名解析不出时同样拒绝（fail-closed）。
  *
@@ -44,17 +52,17 @@ function pickDbName(url) {
 function assertSafeToWipe() {
   const url = process.env.DATABASE_URL || '';
   const dbName = pickDbName(url);
-  if (!/test/i.test(dbName)) {
+  if (!TEST_DB_NAMES.includes(dbName.trim().toLowerCase())) {
     console.error('');
     console.error('==================================================');
-    console.error('⛔ 拒绝执行：DATABASE_URL 库名不含 \'test\'，疑似生产/重要库，已中止');
+    console.error('⛔ 拒绝执行：DATABASE_URL 库名不在测试库白名单内，疑似生产/重要库，已中止');
     console.error('==================================================');
     console.error('   test/setup.js 会批量删除学生/提交/作业/班级等数据，');
-    console.error('   仅允许在【库名】含 "test" 的数据源上运行');
-    console.error('   （只认库名：密码/主机名里含 "test" 不算数）。');
+    console.error(`   仅允许在以下测试库上运行：${TEST_DB_NAMES.join('、')}`);
+    console.error('   （精确匹配库名：密码/主机名里含 "test" 不算数）。');
     console.error(`   当前 DATABASE_URL: ${url ? maskDbUrl(url) : '(未设置)'}`);
     console.error(`   解析到的库名: ${dbName || '(无法解析)'}`);
-    console.error('   解决办法：创建独立测试库并在运行测试前指定，例如');
+    console.error('   解决办法：创建独立测试库并登记到 TEST_DB_NAMES 后在运行测试时指定，例如');
     console.error('     DATABASE_URL="mysql://user:pass@localhost:3306/exam_system_test" npm test');
     console.error('');
     process.exit(1);

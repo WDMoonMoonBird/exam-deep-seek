@@ -40,9 +40,18 @@ function pickDbName(url) {
 }
 
 /**
- * 破坏性操作前置护栏：只允许对「测试库」执行清空/结构重建。
+ * 允许执行破坏性操作（清库/重建结构）的测试库名白名单。
+ * 必须精确匹配：不做子串匹配，避免生产库名含 'test' 字样被误判为测试库而放行。
+ */
+const SAFE_TEST_DB_NAMES = new Set(['exam_system_test', 'exam_test']);
+
+/**
+ * 破坏性操作前置护栏：只允许对「白名单内的测试库」执行清空/结构重建。
  *
- * 判定规则：DATABASE_URL 解析出的【库名】必须包含子串 'test'（大小写不敏感）。
+ * 判定规则：DATABASE_URL 解析出的【库名】必须【精确等于】SAFE_TEST_DB_NAMES
+ * 中的条目（如 exam_system_test / exam_test）。不做子串匹配——生产库名若含
+ * 'test'（如 xxx-test-prod，或业务库名恰好带 test 字样）会被误判为测试库而
+ * 放行，这正是本护栏要防的事故类型。
  * 不满足则打印醒目警告并以退出码 1 中止进程，绝不继续往下执行。
  * 库名解析不出时同样拒绝（fail-closed）。
  *
@@ -54,16 +63,18 @@ function pickDbName(url) {
 function assertSafeToWipe() {
   const url = process.env.DATABASE_URL || '';
   const dbName = pickDbName(url);
-  if (!/test/i.test(dbName)) {
+  // 精确匹配白名单：不在名单内一律拒绝（fail-closed），杜绝生产库名误判
+  if (!SAFE_TEST_DB_NAMES.has(dbName)) {
     console.error('');
     console.error('==================================================');
-    console.error('⛔ 拒绝执行：DATABASE_URL 库名不含 \'test\'，疑似生产/重要库，已中止');
+    console.error('⛔ 拒绝执行：DATABASE_URL 库名不在测试库白名单中，疑似生产/重要库，已中止');
     console.error('==================================================');
     console.error('   本脚本包含破坏性操作：');
     console.error('     - prisma db push --accept-data-loss（可能删列/删表）');
     console.error('     - teacherSchool / school 整表 deleteMany()');
-    console.error('   仅允许在【库名】含 "test" 的数据源上运行');
-    console.error('   （只认库名：密码/主机名里含 "test" 不算数）。');
+    console.error('   仅允许在【库名精确匹配】以下白名单的数据源上运行：');
+    console.error('     ' + [...SAFE_TEST_DB_NAMES].join('、'));
+    console.error('   （只认库名：密码/主机名含 "test" 不算数；库名含 "test" 但不完全等于白名单条目也不算数）。');
     console.error(`   当前 DATABASE_URL: ${url ? maskDbUrl(url) : '(未设置)'}`);
     console.error(`   解析到的库名: ${dbName || '(无法解析)'}`);
     console.error('   如需初始化正式库，请人工确认后手动执行对应 SQL/命令。');

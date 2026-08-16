@@ -10,6 +10,7 @@
 
 const BLOCKED_PREFIXES = [
   '/uploads/project-standards',
+  '/uploads/project-questions',
   '/uploads/project-submissions',
   '/uploads/projects',
 ];

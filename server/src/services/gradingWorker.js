@@ -288,17 +288,16 @@ async function gradeOneProject(sub) {
     logger.info({ submissionId, totalScore, machineScore: machineResult.score, astScore: astResult.score, aiScore: aiResult.score, elapsed: `${Date.now() - start}ms` }, '项目评分完成');
   } catch (err) {
     logger.error({ err, submissionId: sub.id }, '项目评分异常');
+    // 评分失败：不覆盖已有分数、不置为 graded；保持 submitted 由轮询自动重试或教师重评，
+    // 仅在各反馈字段记录错误信息便于排查（下次成功评分会覆盖）
+    const errorMsg = `评分异常：${err?.message || '未知错误'}`;
     await prisma.projectSubmission.update({
       where: { id: sub.id },
       data: {
-        machineScore: 0,
-        machineFeedback: '评分异常',
-        astScore: 0,
-        astFeedback: '评分异常',
-        aiScore: 0,
-        aiFeedback: '评分异常',
-        totalScore: 0,
-        status: 'graded',
+        machineFeedback: errorMsg,
+        astFeedback: errorMsg,
+        aiFeedback: errorMsg,
+        status: 'submitted',
       },
     });
   }

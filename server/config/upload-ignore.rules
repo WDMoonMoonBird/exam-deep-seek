@@ -1,0 +1,204 @@
+# ============================================================================
+# upload-ignore.rules — 上传内容过滤规则（依赖 / 构建产物 / 二进制 / 锁文件）
+#
+# 用途：统一过滤引擎读取本文件（gitignore 语法），在上传/落盘时过滤依赖目录、
+#       构建产物、二进制文件与锁文件，保留源代码与配置。
+#       注意：本文件禁止加入任何可能命中源码的模式
+#       （*.java /*.py /*.js /*.ts /*.c /*.cpp /*.h /*.html /*.css /*.json
+#        /*.xml /*.yml /*.properties /*.sql /*.md 等）。
+#
+# 来源：github/gitignore 官方模板库（https://github.com/github/gitignore）
+# 模板：Node.js Java Python VisualStudio VisualStudioCode Go Rust Flutter Android Swift Objective-C Kotlin Dart Ruby PHP C++ C CMake Unity Gradle Maven Vue React
+# 生成：server/scripts/generate-ignore-rules.mjs --update
+# 生成时间：2026-08-16T05:40:52Z（UTC）
+# ============================================================================
+
+# ==== E 终审补充：构建产物目录（根锚定，src/xxx 源码目录不误伤）====
+/Debug/
+/Release/
+/obj/
+/out/
+/dist/
+
+# ==== 通用（跨生态：依赖目录 / 锁文件 / 二进制资产 / 系统杂项） ====
+vendor/
+third_party/
+Pods/
+DerivedData/
+# (E 终审) *.lock 删除：过宽；Cargo.lock/Gemfile.lock 等具体锁文件已全覆盖
+.DS_Store
+Thumbs.db
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.7z
+# ==== Node.js ====
+*.log
+build/Release
+node_modules/
+*.tsbuildinfo
+*.tgz
+.env
+.cache
+.next
+# (E 终审) 裸名 out 删除：[Oo]ut/ 已覆盖目录语义
+.nuxt
+# (E 终审) 裸名 dist 删除：[Dd]ist/ 类目录规则已覆盖
+.output
+.vite/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+pnpm-lock.yml
+bun.lockb
+# ==== Java ====
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+# ==== Python ====
+__pycache__/
+*.py[codz]
+*$py.class
+*.so
+.Python
+build/
+.eggs/
+*.egg-info/
+*.egg
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+*.mo
+db.sqlite3
+.venv
+env/
+venv/
+.mypy_cache/
+poetry.lock
+Pipfile.lock
+# ==== VisualStudio ====
+# (E 终审) [Dd]ebug/[Rr]elease/[Oo]bj/[Oo]ut 任意深度规则已删除：与上方 /Debug/ 等根锚定重复，
+# 且会误伤 lib/debug、src/out 等源码目录
+# (E 终审) [Ll]og/ 删除：src/log、lib/log 为常见源码包名
+# (E 终审) **/[Bb]in/* 删除：Ruby/PHP 生态把可执行源码放 bin/
+.vs/
+project.lock.json
+project.fragment.lock.json
+*.ilk
+*.obj
+*.pch
+*.pdb
+*.tmp
+*.nupkg
+*.snupkg
+*.appx
+*.appxbundle
+~$*
+*~
+*.pfx
+*.mdf
+*.ldf
+*.pyc
+.vscode/*
+*.vsix
+*.cab
+*.msi
+packages.lock.json
+# ==== VisualStudioCode ====
+# （本生态无独立规则）
+# ==== Go ====
+*.exe
+*.dll
+*.dylib
+*.test
+*.out
+go.sum
+# ==== Rust ====
+# (E 终审) 裸名 debug 删除：任意深度误伤 src/debug、lib/debug 等源码目录；[Dd]ebug/ 已覆盖
+target
+**/mutants.out*/
+Cargo.lock
+# ==== Flutter ====
+.buildlog/
+.dart_tool/
+.flutter-plugins
+.packages
+*.jks
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+coverage/
+# ==== Android ====
+.externalNativeBuild/
+.cxx/
+*.aab
+*.apk
+.idea/
+*.keystore
+*.hprof
+# ==== Swift ====
+xcuserdata/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+.build/
+Carthage/Build/
+Podfile.lock
+Package.resolved
+# ==== Objective-C ====
+# （本生态无独立规则）
+# ==== Kotlin ====
+.kotlin/
+# ==== Dart ====
+pubspec.lock
+# ==== Ruby ====
+*.gem
+*.rbc
+/.bundle/
+/vendor/bundle
+Gemfile.lock
+# ==== PHP ====
+composer.lock
+composer.phar
+*.phar
+# 说明：官方模板库无 PHP.gitignore，使用内置 composer 生态补充规则
+# ==== C++ ====
+*.o
+*.gch
+*.so.*
+*.a
+*.lib
+*.app
+Build/
+/build-*/   # 根锚定（E 终审：build-utils 等工具源码目录不得误伤）
+# ==== C ====
+*.ko
+*.elf
+# ==== CMake ====
+CMakeFiles
+CMakeScripts
+/Testing/    # 根锚定（E 终审：任意深度 Testing 会误伤测试源码目录）
+_deps
+# ==== Unity ====
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+*.unitypackage
+*.unitypackage.meta
+# ==== Gradle ====
+.gradle
+gradle.lockfile
+# ==== Maven ====
+.mvn/wrapper/maven-wrapper.jar
+# ==== Vue ====
+# （本生态无独立规则：官方 Vue 模板仅含 test/、docs/_book 等源码/文档规则，已剔除；依赖规则复用 Node.js）
+# ==== React ====
+# （本生态无独立规则：官方模板库无 React.gitignore（社区建议复用 Node.gitignore），无独立规则）

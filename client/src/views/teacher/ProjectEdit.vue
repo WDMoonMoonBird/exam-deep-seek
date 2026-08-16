@@ -232,7 +232,9 @@ async function save(status) {
     const data = {
       title: form.title,
       description: form.description,
-      startTime: new Date().toISOString(),
+      // 仅新建时提交 startTime；编辑时不带该字段（后端 updateProject 对未传字段不做更新），
+      // 避免每次编辑都把任务开始时间重置为当前时间
+      ...(isEdit.value ? {} : { startTime: new Date().toISOString() }),
       endTime: form.endTime.toISOString(),
       machineWeight: form.machineWeight / 100,
       astWeight: form.astWeight / 100,

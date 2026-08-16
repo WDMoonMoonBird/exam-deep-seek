@@ -4,6 +4,7 @@ import {
   NumberFormat, LevelFormat,
 } from "docx";
 import * as fs from "fs";
+import * as path from "path";
 
 // Helper: bold + size paragraph
 function boldPara(text, size = 28, align = AlignmentType.CENTER) {
@@ -314,8 +315,9 @@ const doc = new Document({
 });
 
 const buffer = await Packer.toBuffer(doc);
-fs.writeFileSync(
-  "/Users/you/My Projects/My Vue/Exam-DeepSeek/C#期末考试.docx",
-  buffer
-);
-console.log("Document generated successfully.");
+// 输出目录：默认当前目录，可用 CLI 参数（第 1 个）或环境变量 DOCX_OUTPUT_DIR 覆盖
+const outputDir = process.env.DOCX_OUTPUT_DIR || process.argv[2] || './';
+const outputPath = path.join(outputDir, 'C#期末考试.docx');
+fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+fs.writeFileSync(outputPath, buffer);
+console.log(`Document saved to: ${outputPath}`);

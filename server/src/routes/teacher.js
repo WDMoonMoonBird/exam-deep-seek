@@ -23,7 +23,6 @@ router.put('/classes/:id/switch-school', teacher.switchClassSchool);
 // 题库
 router.get('/questions', teacher.getQuestions);
 router.get('/questions/:id/project-files', teacher.getProjectFiles);
-router.post('/questions/:id/grade-project', teacher.gradeProject);
 router.get('/questions/:id', teacher.getQuestion);
 router.post('/questions', teacher.createQuestion);
 router.put('/questions/:id', teacher.updateQuestion);

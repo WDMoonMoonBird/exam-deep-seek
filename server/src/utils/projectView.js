@@ -61,7 +61,8 @@ export function toStudentView(submission, _question) {
     status,
     submittedAt: submission.submittedAt || null,
     version: env.currentVersion,
-    score: showScore ? (submission.finalScore ?? submission.aiScore ?? null) : null,
+    // D3：审核通过但教师未给分时显示 null（—），绝不回退到 AI 原始分
+    score: showScore ? (submission.finalScore ?? null) : null,
     feedback: showScore ? (submission.teacherFeedback ?? null) : null,
     // 仅 submitted 态暴露后台评分进度；ai_graded 对学生映射为 submitted，
     // 但此时已在后台完成，无需展示进度。grading.failed 时前端提示"评分异常，稍候"。
