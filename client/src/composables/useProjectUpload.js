@@ -23,8 +23,6 @@ export function useProjectUpload(options = {}) {
   const errorMsg = ref('');
   /** 过滤后文件树（内部） */
   const tree = ref([]);
-  /** 过滤统计文案 */
-  const stats = ref('');
   /** 过滤后待上传的包 { blob, name } */
   const packageFile = ref(null);
 
@@ -44,7 +42,6 @@ export function useProjectUpload(options = {}) {
         return null;
       }
       tree.value = r.tree;
-      stats.value = `已过滤依赖，保留 ${r.keptCount} 个代码文件（${(r.keptBytes / 1024).toFixed(0)}KB）`;
       packageFile.value = { blob: r.blob, name: r.name };
       return {
         tree: r.tree,
@@ -65,9 +62,8 @@ export function useProjectUpload(options = {}) {
     processing.value = false;
     errorMsg.value = '';
     tree.value = [];
-    stats.value = '';
     packageFile.value = null;
   }
 
-  return { processing, errorMsg, tree, stats, packageFile, selectFile, reset };
+  return { processing, errorMsg, tree, packageFile, selectFile, reset };
 }

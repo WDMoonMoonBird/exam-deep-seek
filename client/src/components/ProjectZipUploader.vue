@@ -18,7 +18,6 @@
     <div v-if="visibleTree.length" class="zu-tree">
       <div class="zu-tree-head">
         <span class="zu-tree-title">资源管理器</span>
-        <span v-if="stats || statsText" class="zu-stats">{{ stats || statsText }}</span>
       </div>
       <a-tree
         :tree-data="visibleTree"
@@ -57,8 +56,6 @@ const props = defineProps({
   treeData: { type: Array, default: () => [] },
   /** 选择提示文案（还原原 UI：教师"点击上传标准工程包"/学生"点击上传项目文件"） */
   hint: { type: String, default: '点击上传工程文件（zip）' },
-  /** 外部过滤统计（阶段切换后由页面传入，恢复"已过滤依赖"提示） */
-  statsText: { type: String, default: '' },
 });
 
 const emit = defineEmits(['update:package', 'ready', 'select', 'error']);
@@ -68,7 +65,7 @@ const expandedKeys = ref([]);
 const selectedKeys = ref([]);
 
 // 上传逻辑（composable：过滤重打包 + 大小校验 + 状态），UI 保持基线一致
-const { processing, errorMsg, tree, stats, packageFile, selectFile } = useProjectUpload({
+const { processing, errorMsg, tree, packageFile, selectFile } = useProjectUpload({
   sizeLimitMB: props.sizeLimitMB,
 });
 
@@ -162,7 +159,7 @@ function onTreeExpand(keys) {
 .zu-tree { flex:1; overflow:auto; margin-top:10px; min-height:0; }
 .zu-tree-head { display:flex; align-items:baseline; gap:8px; margin-bottom:6px; }
 .zu-tree-title { font-size:11px; font-weight:600; text-transform:uppercase; color:#666; letter-spacing:.5px; }
-.zu-stats { font-size:11px; color:#999; }
+
 .zu-tree :deep(.ant-tree) { background:transparent; font-size:13px; }
 .zu-tree :deep(.ant-tree-treenode) { padding:1px 0; white-space:nowrap; }
 .zu-tree :deep(.ant-tree-node-content-wrapper) { padding:0 6px 0 2px; overflow:hidden; text-overflow:ellipsis; }

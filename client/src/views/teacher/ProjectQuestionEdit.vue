@@ -101,7 +101,6 @@
           <div class="sidebar">
             <ProjectZipUploader
               :tree-data="externalTree"
-              :stats-text="uploadStats"
               @select="onZipSelect"
             />
           </div>
@@ -150,7 +149,6 @@ const isEdit = computed(() => !!route.params.id);
 const submitting = ref(false);
 const hasUploaded = ref(false);
 /** 上传过滤统计（"已过滤依赖，保留 X 个文件"，阶段二展示 + 成功 message） */
-const uploadStats = ref('');
 const uploadKeptCount = ref(0);
 const uploadKeptBytes = ref(0);
 const editorContainerRef = ref(null);
@@ -329,8 +327,7 @@ async function onZipReady({ tree, fileContents: fc, keptCount, keptBytes }) {
   fc.forEach((v, k) => fileContents.set(k, v));
   // 传给阶段二 sidebar 组件显示（外部树优先，picker 自动隐藏）
   externalTree.value = tree;
-  // 记录过滤统计（阶段二小字 + 上传/提交成功 message）
-  uploadStats.value = `已过滤依赖，保留 ${keptCount} 个代码文件（${(keptBytes / 1024).toFixed(0)}KB）`;
+  // 记录过滤统计（上传/提交成功 message 用）
   uploadKeptCount.value = keptCount;
   uploadKeptBytes.value = keptBytes;
   hasUploaded.value = true;
