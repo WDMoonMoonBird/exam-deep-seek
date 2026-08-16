@@ -13,6 +13,7 @@ import { SystemConfigRepository } from '../persistence/system-config.repository.
 import { DeepSeekGateway } from '../ai/deepseek-gateway.js';
 import { InMemoryEventBus } from '../events/in-memory-event-bus.js';
 import { SocketNotifier } from '../notifier/socket-notifier.js';
+import { InMemoryRateLimiter } from '../rate-limit/in-memory-rate-limiter.js';
 
 /**
  * @param {object} deps
@@ -25,6 +26,7 @@ export function compose({ prisma, logger }) {
   const aiGateway = new DeepSeekGateway({ configRepo, logger });
   const eventBus = new InMemoryEventBus();
   const socketNotifier = new SocketNotifier();
+  const rateLimiter = new InMemoryRateLimiter();
   return {
     reviewUseCases: new ReviewUseCases({ submissionRepo: new SubmissionRepository({ prisma }), aiGateway, logger }),
     questionUseCases: new QuestionUseCases({ questionRepo: new QuestionRepository({ prisma }), logger }),
@@ -33,5 +35,6 @@ export function compose({ prisma, logger }) {
     configRepo,
     eventBus,
     socketNotifier,
+    rateLimiter,
   };
 }

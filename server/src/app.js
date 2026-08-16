@@ -39,39 +39,26 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 
-// 登录失败限流（防暴力破解，不影响正常登录）
-const loginFailMap = new Map();
-const LOGIN_FAIL_MAX = 10;       // 同一 IP 最多连续失败次数
-const LOGIN_FAIL_WINDOW = 300000; // 5 分钟窗口
-app.use('/api/auth/login', (req, res, next) => {
+// 登录失败限流（防暴力破解）—— 逻辑已迁移至 InMemoryRateLimiter（RateLimiterPort），经 app.locals.rateLimiter 取用
+app.use('/api/auth/login', async (req, res, next) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
-  const now = Date.now();
-  const record = loginFailMap.get(ip);
-  if (record && record.count >= LOGIN_FAIL_MAX && (now - record.since) < LOGIN_FAIL_WINDOW) {
+  if (await app.locals.rateLimiter.isBlocked(ip)) {
     return res.status(429).json({ code: 1003, message: '登录失败次数过多，请 5 分钟后再试', data: null });
   }
   // 捕获响应，判断登录是否成功
   const originalJson = res.json.bind(res);
   res.json = function (body) {
     if (res.statusCode === 200 && body?.code === 0) {
-      loginFailMap.delete(ip); // 登录成功，重置计数
+      app.locals.rateLimiter.recordSuccess(ip); // 登录成功，重置计数
     } else if (res.statusCode === 400 || body?.code === 1001) {
-      const rec = loginFailMap.get(ip) || { count: 0, since: now };
-      rec.count++;
-      if (!loginFailMap.has(ip)) rec.since = now;
-      loginFailMap.set(ip, rec);
+      app.locals.rateLimiter.recordFailure(ip);
     }
     return originalJson(body);
   };
   next();
 });
 // 定期清理过期记录
-setInterval(() => {
-  const cutoff = Date.now() - LOGIN_FAIL_WINDOW * 2;
-  for (const [ip, rec] of loginFailMap) {
-    if (rec.since < cutoff) loginFailMap.delete(ip);
-  }
-}, 600000);
+setInterval(() => app.locals.rateLimiter.cleanup(), 600000);
 
 // 请求日志
 app.use((req, _res, next) => {
