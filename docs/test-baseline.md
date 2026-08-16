@@ -69,6 +69,19 @@
 | integration R3（班级审核列表）偶发 30s 超时 | 瞬时 MySQL 负载/前序进程清理未完成导致查询阻塞；接口本身未改动（review-class 不走新用例） | 重跑全量即过；如频繁出现需排查 review-class 查询性能（N+1） |
 | integration student-v2 偶发失败 | 同因（suite 间数据/时序干扰，共享 seed） | 重跑即过 |
 
+## 生产问题修复记录
+
+### P-2026-08-16-01：实训题（project）AI 评分偶发失败
+
+| 项 | 内容 |
+|---|---|
+| 现象 | 实训项目提交评分失败：`grading.state=failed`，错误『AI 评分服务异常』；学生端显示 0 分/未评分；教师端『重试评分』仍可能失败 |
+| 证据 | 日志：`err.message: 返回格式不包含有效的 JSON` @ deepseek.js gradeProject（正则 `\{[\s\S]*"totalScore"[\s\S]*\}` 匹配失败）；全库 21 条 project 提交中 1 条失败（10003/提交 10327），同作业其他学生正常 |
+| 根因 | gradeProject 仅支持『裸 JSON』响应：① 模型输出 markdown 代码块围栏 ② 前后带说明文字 ③ `max_tokens=8000` 截断（`finish_reason=length`，长 prompt 场景：30 文件源码拼入）→ 均解析失败。**概率性**：同提交内容重试结果不同（失败 2 次后第 3 次成功得 95 分），属模型输出格式不稳定，非配置/链路问题 |
+| 修复 | commit `29c9383`：新增 `extractProjectGradeJson` 三级解析——直接匹配 → 剥离 markdown 围栏 → **括号栈补齐截断闭合符**；解析失败时记录 `finish_reason` / `contentLength` / 响应前 300 字符（诊断增强） |
+| 验证 | +6 单测（G1-G6 覆盖围栏/说明文字/截断/纯文本/结构不符）；unit 220/220、integration 63/63、守卫 0 违规；真实 API 调用 7.7s 成功 |
+| 后续建议 | 教师端『重试评分』可恢复；连续失败时查日志 `项目评分响应解析失败` 的 `snippet` 判断是纯文本还是截断；长 prompt 场景可考虑按文件抽样/截断源码送入 |
+
 ## 红线规则
 
 1. 重构提交不得引入**新的**测试失败；
