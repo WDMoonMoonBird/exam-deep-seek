@@ -9,13 +9,7 @@ import { fileURLToPath } from 'url';
 import logger from './utils/logger.js';
 import prisma from './utils/prisma.js';
 import { initSocket, notifyGraded } from './socket.js';
-import { ReviewUseCases } from './application/use-cases/review.use-cases.js';
-import { QuestionUseCases } from './application/use-cases/question.use-cases.js';
-import { SubmissionUseCases } from './application/use-cases/submission.use-cases.js';
-import { SubmissionRepository } from './infrastructure/persistence/submission.repository.js';
-import { QuestionRepository } from './infrastructure/persistence/question.repository.js';
-import { SystemConfigRepository } from './infrastructure/persistence/system-config.repository.js';
-import { DeepSeekGateway } from './infrastructure/ai/deepseek-gateway.js';
+import { compose } from './infrastructure/bootstrap/compose.js';
 
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
@@ -30,22 +24,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ---- 组合根（P5 迁至 infrastructure/bootstrap/）：依赖装配，controller 经 app.locals 取用 ----
-const configRepo = new SystemConfigRepository({ prisma, logger });
-const aiGateway = new DeepSeekGateway({ configRepo, logger });
-app.locals.reviewUseCases = new ReviewUseCases({
-  submissionRepo: new SubmissionRepository({ prisma }),
-  aiGateway,
-  logger,
-});
-app.locals.questionUseCases = new QuestionUseCases({
-  questionRepo: new QuestionRepository({ prisma }),
-  logger,
-});
-app.locals.submissionUseCases = new SubmissionUseCases({
-  submissionRepo: new SubmissionRepository({ prisma }),
-  logger,
-});
+// ---- 组合根：依赖装配集中在 infrastructure/bootstrap/compose.js，结果挂 app.locals ----
+Object.assign(app.locals, compose({ prisma, logger }));
 
 // 关键配置校验
 if (!process.env.DEEPSEEK_API_KEY) logger.warn('DEEPSEEK_API_KEY 未配置，AI 评分将不可用');

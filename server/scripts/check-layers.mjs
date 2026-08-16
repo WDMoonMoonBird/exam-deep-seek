@@ -70,8 +70,10 @@ for (const file of files) {
         v('application-imports-infra', '应用层禁止依赖基础设施/接口层');
       }
     } else if (layer === 'infrastructure') {
-      if (!isExternal && (targetLayer === 'application' || targetLayer === 'interface')) {
-        v('infrastructure-imports-upper', '基础设施层禁止反向依赖应用/接口层');
+      // 组合根例外：infrastructure/bootstrap/ 负责装配全部依赖（依赖倒置的合法豁免）
+      const isCompositionRoot = rel.startsWith('infrastructure/bootstrap/');
+      if (!isCompositionRoot && !isExternal && (targetLayer === 'application' || targetLayer === 'interface')) {
+        v('infrastructure-imports-upper', '基础设施层禁止反向依赖应用/接口层（组合根除外）');
       }
     } else if (layer === 'interface') {
       if (!isExternal && targetLayer === 'infrastructure') {

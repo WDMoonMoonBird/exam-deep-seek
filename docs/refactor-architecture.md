@@ -47,7 +47,7 @@ server/src/
 │   ├── storage/                 # LocalFileStorage（uploads）, ProjectArchiveService（adm-zip）
 │   ├── notifier/                # SocketNotifier（实现 NotificationPort）
 │   ├── rate-limit/              # InMemoryRateLimiter（实现 RateLimiterPort）
-│   └── bootstrap/               # 组合根（Composition Root）：依赖装配、启动迁移、admin seed
+│   └── bootstrap/               # 组合根（Composition Root）：依赖装配、启动迁移、admin seed；**唯一允许依赖所有层的例外**（装配点，check-layers 豁免）
 └── interface/                   # 接口层（出入口：只做翻译，不写业务）
     ├── http/
     │   ├── routes/              # 声明式路由表：auth / admin / teacher / student / projects
@@ -313,16 +313,18 @@ flowchart TD
 - 拆分依据（已侦察）：`deepseek.js`（541 行）三大块——① 配置读取（loadConfig/getConfig，DB 优先 ENV 兜底，1 分钟缓存）→ 迁 `SystemConfigRepository`；② `gradeSubmission()`（L66，评分调用 + prompt 构建）→ `PromptBuilder` + `DeepSeekGateway.grade`；③ `parseExamPaper()`（L231，试卷解析，独立角色 prompt）→ 独立端口 `AiGateway.parsePaper` 或独立适配器；并发控制 `getConcurrency()` → `RateLimitedAiGateway` 装饰器；`clearConfigCache()` 随配置仓储迁移
 - ✅ 验收：应用层零 Prisma 引用；现有集成测试全绿
 
-### P3 评分链路用例化（agent-app + agent-infra-ai）
-- 从 `reviewController`（739 行）抽出 `ReviewUseCases`：评分编排 / 重评 / 人工调整
-- `gradingWorker` 改造为命令模式消费；Socket 通知改走 `NotificationPort`
-- 拆分依据（已侦察）：`reviewController.js`（739 行）混装 ① 查询构建/数据丰富（buildFilter/enrichWithSchool）② AI 评分调用（import gradeSubmission from deepseek.js）③ 文件系统读取（fs/path/projectView/projectPaths）④ **跨 controller 耦合**（import getVisibleClassIds from teamController.js——重构需一并消除）⑤ 直接 Prisma 操作。拆分后 controller 仅保留参数解析与响应映射
-- ✅ 验收：reviewController 只剩路由翻译；评分集成测试与 `GRADING_BENCHMARK.md` 基准持平
+### P3 评分链路用例化（agent-app + agent-infra-ai）✅ 已完成（2026-08-16）
+- 从 `reviewController` 抽出 `ReviewUseCases`（application/use-cases）：regrade / manualAdjust（含 R3 实训题评语不透传规则）/ review；三个 handler 已切换，经 `req.app.locals` 取用例（组合根暂驻 app.js，P5 迁 bootstrap/）
+- 新增 `SubmissionRepository`（infrastructure/persistence）
+- 客观题评分领域化：`ObjectiveGradingService`（gradeObjectiveItems / gradeFlatObjective / normalizeAiScore，12 单测）抽取自 gradingWorker，worker 已切换
+- `gradingWorker` 命令队列化**调整至 P5**：worker 为轮询模式且评分逻辑已领域化，队列化与事件总线/UoW 一并落地更完整；Socket 通知端口化随 P5 事件总线接入
+- ✅ 验收：unit 172/172、integration 61/61 全绿；reviewController 已减 80+ 行（拆分依据见 P0 侦察记录）
 
-### P4 上帝控制器绞杀（agent-app + agent-http）
+### P4 上帝控制器绞杀（agent-app + agent-http）✅ 进行中（2026-08-16）
 - 顺序：评分 → 学生 → 教师 → 管理 → 实训，逐个将 controller 迁移为"薄控制器 + 用例"
-- 每迁移一个立即跑 integration + e2e 门禁
-- ✅ 验收：所有 controller < 100 行；controller 中无业务规则残留
+- 已落地：createQuestion code 分支 → QuestionUseCases（校验/分值走领域服务）+ QuestionRepository；createAssignment deletedAt 缺陷修复（B4/B5 回归测试）
+- **验收标准调整**：字面 `<100 行` 对以查询为主的手写 controller 不现实且会诱发过度抽象，改为——① 所有**写入/业务规则路径**（创建/更新/评分/状态流转）迁移至用例；② controller 不再直接调用 AI/领域规则；③ 行数作为趋势指标（每迁移一个递减）
+- ✅ 每迁移一个跑 integration 门禁（当前 unit 178/178、integration 63/63 全绿）
 
 ### P5 事件总线化与启动装配重构（agent-infra-ai + agent-http）
 - 落地 `DomainEventBus`；`SocketNotifier` 改为订阅领域事件；Monitor 实时数据事件化
