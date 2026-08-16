@@ -182,3 +182,21 @@
 - 路由记录：**38 条**（含 3 个 redirect、1 个兜底）
 - API 模块：request.js + projects.js（12 个实训 API）；stores：user.js + reviewStore.js
 - Socket 消费点：2 处（Review.vue、ReviewClass.vue）
+
+## 7. 已授权 UI 变更记录（产品负责人逐项授权，ui-guard 复核）
+
+> 铁律的例外仅限下表所列变更；未列入的 UI/交互/动效仍受冻结约束。
+> 记录人：架构师；审核：agent-ui-guard（每项变更均复核通过）。
+
+| 日期 | 变更 | 文件 | 提交 | 内容 |
+|---|---|---|---|---|
+| 2026-08-16 | 实训题教师页交互优化（三处） | ProjectQuestionEdit.vue / ProjectReviewNew.vue | `00458b1` | ① 编辑页「题目描述/评分标准」按钮去 ✓，模态框加 确定/取消（教师）与 关闭（学生只读），编辑走 draft 暂存、确定才写回；② 审核页左侧文件树切换「学生提交/标准答案包」时内容跟随并 0.15s 淡入；③ 双数据源各自独立维护 打开 tab/选中文件/展开目录，切换来回不丢失（实现曾因普通对象写入不响应，ui-guard 复核发现后改 reactive 修复） |
+| 2026-08-16 | 学生实训作业提交按钮锁死 | ProjectQuestionEdit.vue | `a97f582` | 提交一次（status 非 draft）即禁用提交按钮，避免「不能重复提交/请先上传项目文件」误导提示；练习模式的多版本交互留待后续完善（未实现） |
+| 2026-08-16 | 学生端代码预览动效 | ProjectQuestionEdit.vue | `bc10002` | 学生端切换文件预览代码时，与教师审核页一致的 0.15s 淡入上移动效（CSS animation 重放，不重建 Monaco 容器） |
+| 2026-08-16 | 代码预览字体统一 | style.css / CodeEditor.vue / ProjectQuestionEdit.vue / ProjectReviewNew.vue | `4f0e3cf` | 全部 Monaco 代码预览使用 Monaco.ttf（字体移至 client/src/assets/fonts/，@font-face 注册 MonacoDSH，三处编辑器配置 fontFamily），回退 monospace |
+
+## 8. 变更后 UI 状态提示
+
+- 上述 4 项变更已生效并随 `4f0e3cf` 推送到 Gitee（`00458b1..4f0e3cf`）；
+- 其余 30 页面的 UI/交互/动效继续冻结：后续任何改动（含未来练习模式完善）须先经产品确认 + ui-guard 复核；
+- 动效基线新增两项：文件树/预览区切换 0.15s 淡入上移（pr-fade / pr-fade-in），与既有 page-fade/tab-fade 风格一致。
