@@ -20,7 +20,8 @@
           <a-tab-pane key="standard" tab="标准答案包" />
         </a-tabs>
 
-        <div class="file-tree">
+        <Transition name="pr-fade" mode="out-in">
+        <div class="file-tree" :key="activeTree">
           <a-tree
             v-if="fileTreeData.length"
             :tree-data="fileTreeData"
@@ -45,6 +46,7 @@
             :image="false"
           />
         </div>
+        </Transition>
       </div>
 
       <div class="editor-area">
@@ -62,7 +64,7 @@
         </div>
 
         <div class="editor-body">
-          <div class="editor-container" ref="editorContainerRef"></div>
+          <div class="editor-container" ref="editorContainerRef" :class="{ 'pr-fade-in': fading }"></div>
           <div v-if="!openTabs.length" class="pr-code-empty">
             <FileTextOutlined style="font-size:48px;color:#d9d9d9" />
             <p>从左侧选择文件查看代码</p>
@@ -192,11 +194,31 @@ const studentFiles = reactive({ tree: [], contents: {} });
 
 const activeTree = ref('student'); // 'student' | 'standard'
 const editorContainerRef = ref(null);
-const fileContents = new Map();
+// 双数据源各自的 IDE 状态（2026-08-16 交互优化：切换源不丢选中/打开的文件）
+// 必须 reactive：computed setter 写普通对象不会触发响应（ui-guard 复核发现）
+const sourceState = reactive({
+  student: { openTabs: [], activePath: '', expandedKeys: [] },
+  standard: { openTabs: [], activePath: '', expandedKeys: [] },
+});
+// 内容缓存按源隔离（键含源前缀，与 Monaco model 隔离方式一致）
+const fileContents = { student: new Map(), standard: new Map() };
 const fileTreeData = ref([]);
-const defaultExpandedKeys = ref([]);
-const openTabs = ref([]);
-const activePath = ref('');
+// 当前源状态代理：模板与逻辑读写当前源，互不干扰
+const curState = computed(() => sourceState[activeTree.value]);
+const openTabs = computed({
+  get: () => curState.value.openTabs,
+  set: (v) => { curState.value.openTabs = v; },
+});
+const activePath = computed({
+  get: () => curState.value.activePath,
+  set: (v) => { curState.value.activePath = v; },
+});
+const defaultExpandedKeys = computed({
+  get: () => curState.value.expandedKeys,
+  set: (v) => { curState.value.expandedKeys = v; },
+});
+// 内容切换动效（CSS animation 重放：先移除类再添加，不重建 Monaco 容器）
+const fading = ref(true);
 
 let monaco = null;
 let editor = null;
@@ -246,7 +268,7 @@ function getOrCreateModel(path, language) {
   const uri = monaco.Uri.parse(`file:///${activeTree.value}/${path}`);
   const existing = monaco.editor.getModel(uri);
   if (existing) { models[cacheKey] = existing; return existing; }
-  const newModel = monaco.editor.createModel(fileContents.get(path) || '', language || 'plaintext', uri);
+  const newModel = monaco.editor.createModel((fileContents[activeTree.value]?.get(path)) || '', language || 'plaintext', uri);
   models[cacheKey] = newModel;
   return newModel;
 }
@@ -300,19 +322,33 @@ function collectDirKeys(nodes, acc = []) {
   return acc;
 }
 
-/** 切换数据源：重灌树与内容，清空 tab，避免学生/标准同名文件混淆 */
+/** 切换数据源：重灌树与内容缓存；保留各源 openTabs/选中状态，切回即恢复（2026-08-16 交互优化） */
 function applySource(key) {
   const source = key === 'standard' ? standardFiles : studentFiles;
-  fileContents.clear();
-  Object.entries(source.contents || {}).forEach(([p, c]) => fileContents.set(p, c));
+  // 只重建当前源的内容缓存，另一源不受影响
+  fileContents[key] = new Map(Object.entries(source.contents || {}));
   fileTreeData.value = source.tree || [];
-  defaultExpandedKeys.value = collectDirKeys(source.tree || []);
-  openTabs.value = [];
-  activePath.value = '';
-  if (editor) editor.setModel(null);
+  // 展开目录按源恢复：首访（无记录）才全展开兜底，之后保留用户折叠状态
+  const st = sourceState[key];
+  if (!st.expandedKeys || st.expandedKeys.length === 0) {
+    st.expandedKeys = collectDirKeys(source.tree || []);
+  }
+  defaultExpandedKeys.value = st.expandedKeys;
+  // 恢复该源上次打开的文件（内容缓存已就位；Monaco 未就绪时安全跳过）
+  if (st.activePath) {
+    nextTick(() => switchTab(st.activePath));
+  } else if (editor) {
+    editor.setModel(null);
+  }
 }
 
 watch(activeTree, (key) => { applySource(key); });
+
+// 编辑器内容切换动效：切换文件/切源时重放淡入（不重建 Monaco DOM）
+watch([activePath, activeTree], () => {
+  fading.value = false;
+  nextTick(() => { fading.value = true; });
+});
 
 function findFirstFile(nodes) {
   for (const n of nodes || []) {
@@ -506,4 +542,14 @@ onBeforeUnmount(() => {
 .t-actions { display:flex; align-items:center; gap:10px; margin-top:auto; padding-top:8px; }
 .t-hint { flex:1; font-size:12px; color:#999; }
 
+/* ===== 数据源/内容切换动效（2026-08-16 交互优化，0.15s 淡入上移） ===== */
+.pr-fade-enter-active { transition: opacity 0.15s ease, transform 0.15s ease; }
+.pr-fade-leave-active { transition: opacity 0.1s ease; }
+.pr-fade-enter-from { opacity: 0; transform: translateY(6px); }
+.pr-fade-leave-to { opacity: 0; }
+.pr-fade-in { animation: prFadeIn 0.15s ease; }
+@keyframes prFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
 </style>

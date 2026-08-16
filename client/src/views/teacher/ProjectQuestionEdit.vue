@@ -21,8 +21,8 @@
         <span v-else style="font-weight:700;color:var(--blue);">{{ form.maxScore }} 分</span>
       </a-space>
       <a-space>
-        <a-button @click="showDescModal = true">{{ form.description ? (isTeacher ? '题目描述 ✓' : '题目描述') : '题目描述' }}</a-button>
-        <a-button @click="showRubricModal = true">{{ form.scoringRubric ? (isTeacher ? '评分标准 ✓' : '评分标准') : '评分标准' }}</a-button>
+        <a-button @click="openDescModal">题目描述</a-button>
+        <a-button @click="openRubricModal">评分标准</a-button>
         <a-button v-if="isTeacher" type="primary" @click="handleSave">保存</a-button>
           <a-button v-else type="primary" :disabled="!hasUploaded || submitting" :loading="submitting" @click="handleSubmit">
           {{ submitting ? '提交中...' : '提交答案' }}
@@ -31,16 +31,30 @@
     </div>
 
     <!-- 题目描述模态框 -->
-    <a-modal v-model:open="showDescModal" :title="isTeacher ? '题目描述' : '题目描述（只读）'" :footer="null" width="720px" wrap-class-name="desc-modal">
-      <RichEditor v-if="isTeacher" v-model="form.description" placeholder="请输入题目描述，说明项目要实现的功能和目标" />
+    <a-modal v-model:open="showDescModal" :title="isTeacher ? '题目描述' : '题目描述（只读）'" width="720px" wrap-class-name="desc-modal">
+      <RichEditor v-if="isTeacher" v-model="descDraft" placeholder="请输入题目描述，说明项目要实现的功能和目标" />
       <div v-else class="readonly-desc" v-html="safeDescriptionHtml"></div>
+      <template #footer>
+        <a-button v-if="!isTeacher" @click="showDescModal = false">关闭</a-button>
+        <template v-else>
+          <a-button @click="showDescModal = false">取消</a-button>
+          <a-button type="primary" @click="confirmDesc">确定</a-button>
+        </template>
+      </template>
     </a-modal>
 
     <!-- 评分标准模态框 -->
-    <a-modal v-model:open="showRubricModal" :title="isTeacher ? '评分标准' : '评分标准（只读）'" :footer="null" width="640px">
-      <a-textarea v-if="isTeacher" v-model:value="form.scoringRubric" :rows="12" placeholder="请逐行填写评分项..." />
+    <a-modal v-model:open="showRubricModal" :title="isTeacher ? '评分标准' : '评分标准（只读）'" width="640px">
+      <a-textarea v-if="isTeacher" v-model:value="rubricDraft" :rows="12" placeholder="请逐行填写评分项..." />
       <div v-else class="readonly-rubric">{{ form.scoringRubric || '未填写，使用默认标准：功能完整性50% + 代码规范25% + 健壮性25%' }}</div>
       <div v-if="isTeacher" style="margin-top:8px;font-size:12px;color:#999;">不填写则使用默认标准：功能完整性50% + 代码规范25% + 健壮性25%</div>
+      <template #footer>
+        <a-button v-if="!isTeacher" @click="showRubricModal = false">关闭</a-button>
+        <template v-else>
+          <a-button @click="showRubricModal = false">取消</a-button>
+          <a-button type="primary" @click="confirmRubric">确定</a-button>
+        </template>
+      </template>
     </a-modal>
 
     <!-- 学生端：成绩卡片（实训题专用，R4 成绩唯一开关；未出分时仅显示提交状态） -->
@@ -136,6 +150,14 @@ const hasUploaded = ref(false);
 const editorContainerRef = ref(null);
 const showDescModal = ref(false);
 const showRubricModal = ref(false);
+// 模态框草稿（确定才写回 form，取消即还原）
+const descDraft = ref('');
+const rubricDraft = ref('');
+
+function openDescModal() { descDraft.value = form.description; showDescModal.value = true; }
+function openRubricModal() { rubricDraft.value = form.scoringRubric; showRubricModal.value = true; }
+function confirmDesc() { form.description = descDraft.value; showDescModal.value = false; }
+function confirmRubric() { form.scoringRubric = rubricDraft.value; showRubricModal.value = false; }
 
 const activePath = ref('');
 const fileContents = new Map();
