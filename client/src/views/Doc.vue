@@ -88,7 +88,7 @@
                 </section>
 
                 <section id="project" class="doc-section">
-                    <h2 class="section-title">7. 实训题管理 <span class="doc-tag" style="background:#ff7a00;color:#fff;border:none;">BETA</span></h2>
+                    <h2 class="section-title">7. 实训题管理 <a-tag color="orange" size="small" style="margin-left:4px;vertical-align:middle;">BETA</a-tag></h2>
                     <div class="section-body">
                         <p>实训题 = 完整工程项目实践任务（如「用户管理系统（前端）」）。学生上传项目压缩包，系统自动进行 <b>AI 对比评分</b>（以教师上传的标准工程包为参照）。</p>
 
@@ -203,8 +203,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, h, onMounted, onUnmounted } from 'vue';
 import { BarsOutlined } from '@ant-design/icons-vue';
+import { Tag } from 'ant-design-vue';
 
 const showMobileToc = ref(false);
 const mobileTocOpen = ref(false);
@@ -505,7 +506,7 @@ const allSections = [
     { id: 'intro', title: '1. 系统简介' },
     ...sections2to5.value,
     { id: 'questions', title: '6. 题库管理' },
-    { id: 'project', title: '7. 实训题管理（BETA）' },
+    { id: 'project', title: '7. 实训题' },
     ...sections7.value,
     { id: 'aiflow', title: '9. AI 评分流程' },
     { id: 'performance', title: '10. 性能优势' },
@@ -514,7 +515,9 @@ const allSections = [
 const anchors = allSections.map(s => ({
     key: s.id,
     href: `#${s.id}`,
-    title: s.title,
+    title: s.id === 'project'
+        ? () => h('span', null, ['7. 实训题', h(Tag, { color: 'orange', size: 'small', style: 'margin-left:4px;' }, { default: () => 'BETA' })])
+        : s.title,
 }));
 </script>
 
