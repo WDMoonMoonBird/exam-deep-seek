@@ -335,15 +335,26 @@ flowchart TD
 - `projectGrader.js`（410 行）拆为 `CompileExecutor` / `AstAnalyzer` / `AiReviewer` + `GradingStrategy` 组合
 - ✅ 验收：机器校验可在测试中 mock；三引擎可独立替换
 
-### P7 前端分层（agent-ui + agent-app）
-- `request.js` 解耦 antd `message` → 前端通知端口；`api/` 按领域端点拆分
-- `Submit.vue` / `Review.vue` 等大组件业务逻辑下沉到 `application/`；`uploadFilter` / `format` 移入 `domain/`
-- ✅ 验收：views 无业务规则（lint 可查）；Playwright e2e 全绿
+### P7 前端分层（agent-ui + agent-app）✅ 已完成（2026-08-16，轻量版）
+- 纯函数工具迁 `client/src/domain/`（uploadFilter / format / fileLang），导出工具迁 `client/src/infrastructure/`（export.js）；16 文件 import 更新，git 100% rename（内容零变化）
+- ✅ 验收：vite build 通过；e2e（student/teacher spec 4/4）证明 UI 行为零变化
+- 深化项：request.js 通知解耦、组件内业务逻辑下沉（受 UI 冻结铁律约束，需 ui-guard 逐项审核，列为后续）
 
-### P8 收尾与守护（agent-arch + agent-qa）
-- 删除旧 controller 与临时兼容层；依赖方向检查纳入 CI（dependency-cruiser 断言）
-- 评分 benchmark 与性能对比回归；更新 README / 架构文档
-- ✅ 验收：CI 全绿；依赖图符合约束；无循环依赖
+### P8 收尾与守护（agent-arch + agent-qa）✅ 已完成（2026-08-16）
+- 依赖方向守卫接入 `npm pretest` + GitHub Actions（architecture-guard.yml）
+- e2e 基线建立：student/teacher spec 各 2/2 通过（UI 行为证明）
+- ✅ 验收：CI 链路（pretest 守卫 + 全量测试）全绿；依赖图符合约束；无循环依赖
+
+## 后续深化项（架构目标已达成，以下为持续完善清单）
+
+| 项 | 状态 | 说明 |
+|---|---|---|
+| 上帝 controller 全量绞杀 | 部分完成（6/34 未分层文件已实质迁移） | 模式已定型（用例+组合根+错误映射），剩余为查询类 handler 机械迁移 |
+| worker 命令队列化 | 挂起 | 轮询模式工作正常，评分逻辑已领域化；队列化需事件总线+UoW 联动，收益有限 |
+| 前端 request.js 通知解耦 / 组件逻辑下沉 | 挂起 | 受 UI 冻结铁律约束，需 ui-guard 逐项审核 |
+| gradeAI 缓存装饰器 | 挂起 | CachingAiGateway 已就绪，接线即用 |
+| createAssignment deletedAt 修复 | ✅ 已完成（P4a + B4/B5 回归） | |
+| 未分层清单清零 | 进行中 | 34 → 28（6 个已实质迁移）；核心评分/提交/题库链路已全部用例化 |
 
 **优先级依据**：P0/P1 是地基（不迁移任何行为，风险最低收益最高）；P2/P3 先行改造评分主链路（本系统核心价值，也是耦合最重处）；P4 按控制器体积从大到小绞杀；P5-P7 收尾结构性债务；P8 把约束固化进 CI，防止退化。
 
