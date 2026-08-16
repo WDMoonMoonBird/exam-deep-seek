@@ -181,7 +181,9 @@ async function gradeOne(sub) {
 
 async function scanSubmissions() {
   const submissions = await prisma.submission.findMany({
-    where: { status: 'submitted' },
+    // 排除实训题（type=project）：实训题无 subQuestions，评分由 projectGrading.js 负责，
+    // 若被此处误捞会报"找不到题目信息"并抢先给 0 分（Worker 双路径竞争 bug）
+    where: { status: 'submitted', question: { type: { not: 'project' } } },
     include: {
       question: { select: { material: true, objectiveSettings: true, subQuestions: { orderBy: { sortOrder: 'asc' } } } },
       student: { include: { studentClasses: { include: { class: { select: { schoolId: true } } } } } },
