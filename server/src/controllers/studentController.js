@@ -6,6 +6,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import { buildTree, isIgnored } from "../utils/fileTree.js";
 import prisma from '../utils/prisma.js';
+import { DomainError, EntityNotFoundError } from '../domain/errors.js';
 import logger from '../utils/logger.js';
 import { submissionDir } from '../utils/projectPaths.js';
 import { toStudentView, parseProjectAnswer, serializeProjectAnswer } from '../utils/projectView.js';
@@ -116,6 +117,15 @@ export const getAssignments = async (req, res) => {
 
 // ===================== 提交答案 =====================
 
+function mapSubmissionError(res, err) {
+  if (err instanceof EntityNotFoundError) return res.status(404).json({ code: 1004, message: err.message, data: null });
+  if (err instanceof DomainError) {
+    if (err.code === 'LOCKED') return res.status(403).json({ code: 1003, message: err.message, data: null });
+    return res.status(400).json({ code: 1001, message: err.message, data: null });
+  }
+  return null;
+}
+
 export const getAssignmentDetail = async (req, res) => {
   try {
     // 允许查看已删除的作业（只要学生曾提交过）
@@ -177,60 +187,18 @@ export const getAssignmentDetail = async (req, res) => {
 
 export const submitAnswer = async (req, res) => {
   try {
-    const assignmentId = +req.params.id;
-    const { questionId, subQuestionId, answer, force } = req.body;
-
-    // 检查作业状态
-    const assignment = await prisma.assignment.findUnique({ where: { id: assignmentId }, select: { endTime: true, allowResubmit: true, mode: true, maxAttempts: true, locked: true } });
-    if (!assignment) return res.status(404).json({ code: 1004, message: '作业不存在', data: null });
-
-    if (assignment.locked) {
-      return res.status(403).json({ code: 1003, message: '作业已被锁定，无法提交', data: null });
-    }
-
-    const isExpired = new Date() > new Date(assignment.endTime);
-
-    const where = { assignmentId, studentId: req.user.id, questionId: +questionId };
-    if (subQuestionId) where.subQuestionId = +subQuestionId;
-    let submission = await prisma.submission.findFirst({ where });
-
-    // 已过期且非强制提交 → 拒绝
-    if (isExpired && !force) {
-      return res.status(400).json({ code: 1001, message: '已过截止时间，不可提交', data: null });
-    }
-
-    // 已提交且不允许补交 → 拒绝
-    if (submission && submission.status !== 'draft' && !assignment.allowResubmit && !force) {
-      return res.status(400).json({ code: 1001, message: '已提交，不可重复提交', data: null });
-    }
-
-    // 练习模式：检查提交次数
-    if (assignment.mode === 'practice' && assignment.maxAttempts != null) {
-      const currentCount = submission?.attemptCount || 0;
-      if (currentCount >= assignment.maxAttempts) {
-        return res.status(400).json({ code: 1001, message: `已达最大提交次数（${assignment.maxAttempts}次）`, data: null });
-      }
-    }
-
-    const data = { answer, status: 'submitted', submittedAt: new Date() };
-    if (submission) {
-      data.attemptCount = (submission.attemptCount || 0) + 1;
-    } else {
-      data.attemptCount = 1;
-    }
-    if (subQuestionId) data.subQuestionId = +subQuestionId;
-
-    if (submission) {
-      await prisma.submission.update({ where: { id: submission.id }, data });
-    } else {
-      await prisma.submission.create({
-        data: { assignmentId, studentId: req.user.id, questionId: +questionId, ...data },
-      });
-    }
-
-    const msg = force ? '时间已截止，已自动提交' : '提交成功';
-    res.json({ code: 0, message: msg, data: null });
+    const { message } = await req.app.locals.submissionUseCases.submit({
+      assignmentId: +req.params.id,
+      studentId: req.user.id,
+      questionId: req.body.questionId,
+      subQuestionId: req.body.subQuestionId,
+      answer: req.body.answer,
+      force: req.body.force,
+    });
+    res.json({ code: 0, message, data: null });
   } catch (err) {
+    const mapped = mapSubmissionError(res, err);
+    if (mapped) return mapped;
     logger.error({ err }, '提交答案失败');
     res.status(500).json({ code: 2001, message: "服务器错误: " + (err.message || "未知"), data: null });
   }
@@ -238,37 +206,17 @@ export const submitAnswer = async (req, res) => {
 
 export const saveDraft = async (req, res) => {
   try {
-    const assignmentId = +req.params.id;
-    const { questionId, subQuestionId, answer } = req.body;
-
-    // 检查作业是否过期
-    const assignment = await prisma.assignment.findUnique({ where: { id: assignmentId }, select: { endTime: true, locked: true } });
-    if (!assignment) return res.status(404).json({ code: 1004, message: '作业不存在', data: null });
-    if (assignment.locked) {
-      return res.status(403).json({ code: 1003, message: '作业已被锁定', data: null });
-    }
-    if (new Date() > new Date(assignment.endTime)) {
-      return res.json({ code: 0, message: '已过截止时间，跳过草稿', data: null });
-    }
-
-    const where = { assignmentId, studentId: req.user.id, questionId: +questionId };
-    if (subQuestionId) where.subQuestionId = +subQuestionId;
-    let submission = await prisma.submission.findFirst({ where });
-
-    if (submission && submission.status !== 'draft') {
-      return res.json({ code: 0, message: '已提交，跳过草稿', data: null });
-    }
-
-    if (submission) {
-      await prisma.submission.update({ where: { id: submission.id }, data: { answer } });
-    } else {
-      await prisma.submission.create({
-        data: { assignmentId, studentId: req.user.id, questionId: +questionId, subQuestionId: subQuestionId ? +subQuestionId : null, answer, status: 'draft' },
-      });
-    }
-
-    res.json({ code: 0, message: '草稿已保存', data: null });
+    const { message } = await req.app.locals.submissionUseCases.saveDraft({
+      assignmentId: +req.params.id,
+      studentId: req.user.id,
+      questionId: req.body.questionId,
+      subQuestionId: req.body.subQuestionId,
+      answer: req.body.answer,
+    });
+    res.json({ code: 0, message, data: null });
   } catch (err) {
+    const mapped = mapSubmissionError(res, err);
+    if (mapped) return mapped;
     logger.error({ err }, '保存草稿失败');
     res.status(500).json({ code: 2001, message: "服务器错误: " + (err.message || "未知"), data: null });
   }
@@ -276,18 +224,15 @@ export const saveDraft = async (req, res) => {
 
 export const retryAssignment = async (req, res) => {
   try {
-    const assignment = await prisma.assignment.findUnique({ where: { id: +req.params.id }, select: { mode: true, locked: true } });
-    if (!assignment) return res.status(404).json({ code: 1004, message: '作业不存在', data: null });
-    if (assignment.locked) return res.status(403).json({ code: 1003, message: '作业已被锁定', data: null });
-    if (assignment.mode !== 'practice') return res.status(400).json({ code: 1001, message: '仅练习模式支持重新答题', data: null });
-
-    await prisma.submission.updateMany({
-      where: { assignmentId: +req.params.id, studentId: req.user.id },
-      data: { status: 'draft', answer: '', aiScore: null, aiFeedback: null, finalScore: null, teacherFeedback: null, submittedAt: null, reviewedAt: null },
+    const { message } = await req.app.locals.submissionUseCases.retry({
+      assignmentId: +req.params.id,
+      studentId: req.user.id,
     });
     logger.info({ assignmentId: +req.params.id, studentId: req.user.id }, '练习重新答题');
-    res.json({ code: 0, message: '已重置', data: null });
+    res.json({ code: 0, message, data: null });
   } catch (err) {
+    const mapped = mapSubmissionError(res, err);
+    if (mapped) return mapped;
     logger.error({ err }, '重新答题失败');
     res.status(500).json({ code: 2001, message: "服务器错误: " + (err.message || "未知"), data: null });
   }

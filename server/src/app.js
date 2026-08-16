@@ -11,6 +11,7 @@ import prisma from './utils/prisma.js';
 import { initSocket, notifyGraded } from './socket.js';
 import { ReviewUseCases } from './application/use-cases/review.use-cases.js';
 import { QuestionUseCases } from './application/use-cases/question.use-cases.js';
+import { SubmissionUseCases } from './application/use-cases/submission.use-cases.js';
 import { SubmissionRepository } from './infrastructure/persistence/submission.repository.js';
 import { QuestionRepository } from './infrastructure/persistence/question.repository.js';
 import { SystemConfigRepository } from './infrastructure/persistence/system-config.repository.js';
@@ -39,6 +40,10 @@ app.locals.reviewUseCases = new ReviewUseCases({
 });
 app.locals.questionUseCases = new QuestionUseCases({
   questionRepo: new QuestionRepository({ prisma }),
+  logger,
+});
+app.locals.submissionUseCases = new SubmissionUseCases({
+  submissionRepo: new SubmissionRepository({ prisma }),
   logger,
 });
 
