@@ -24,7 +24,7 @@
         <a-button @click="openDescModal">题目描述</a-button>
         <a-button @click="openRubricModal">评分标准</a-button>
         <a-button v-if="isTeacher" type="primary" @click="handleSave">保存</a-button>
-          <a-button v-else type="primary" :disabled="!hasUploaded || submitting" :loading="submitting" @click="handleSubmit">
+          <a-button v-else type="primary" :disabled="!hasUploaded || submitting || (isStudent && studentSubmission && studentSubmission.status !== 'draft')" :loading="submitting" @click="handleSubmit">
           {{ submitting ? '提交中...' : '提交答案' }}
         </a-button>
       </a-space>
