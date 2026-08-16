@@ -68,6 +68,7 @@
 |---|---|---|
 | integration R3（班级审核列表）偶发 30s 超时 | 瞬时 MySQL 负载/前序进程清理未完成导致查询阻塞；接口本身未改动（review-class 不走新用例） | 重跑全量即过；如频繁出现需排查 review-class 查询性能（N+1） |
 | integration student-v2 偶发失败 | 同因（suite 间数据/时序干扰，共享 seed） | 重跑即过 |
+| integration auth A5 偶发（2026-08-16 回归第 1 轮） | 学生登录 token undefined；单套件 6/6 全绿、连续 2 轮全量未复现 → 偶发/顺序干扰（登录链路时序） | 重跑即过；若频繁出现再排查登录链路时序 |
 
 ## 生产问题修复记录
 
