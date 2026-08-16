@@ -50,7 +50,7 @@
 import { ref, reactive, onMounted } from 'vue';
 import request from '../../api/request.js';
 import DataTable from '../../components/DataTable.vue';
-import { formatDateTime } from '../../utils/format.js';
+import { formatDateTime } from '../../domain/format.js';
 
 const loading = ref(false);
 const list = ref([]);

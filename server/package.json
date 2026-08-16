@@ -8,6 +8,7 @@
     "start": "node src/app.js",
     "worker": "node src/worker.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest --config test/jest.config.js --runInBand --forceExit",
+    "pretest": "node scripts/check-layers.mjs",
     "test:unit": "NODE_OPTIONS=--experimental-vm-modules jest --config test/jest.config.js --runInBand --forceExit --testPathPatterns=unit",
     "check:layers": "node scripts/check-layers.mjs",
     "test:integration": "NODE_OPTIONS=--experimental-vm-modules jest --config test/jest.config.js --runInBand --forceExit --testPathPatterns=integration",

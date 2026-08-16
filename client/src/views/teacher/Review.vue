@@ -83,7 +83,7 @@ import { io } from 'socket.io-client';
 import request from '../../api/request.js';
 import { useUserStore } from '../../stores/user.js';
 import { savedSortField, savedSortOrder, savedPage } from '../../stores/reviewStore.js';
-import { exportReviewXlsx } from '../../utils/export.js';
+import { exportReviewXlsx } from '../../infrastructure/export.js';
 import DataTable from '../../components/DataTable.vue';
 
 const userStore = useUserStore();

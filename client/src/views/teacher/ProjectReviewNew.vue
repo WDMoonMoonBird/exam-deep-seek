@@ -163,7 +163,7 @@ import loader from '@monaco-editor/loader';
 import { getClassWithColor } from 'file-icons-js';
 import 'file-icons-js/css/style.css';
 import { getProjectReview, saveProjectReview, regradeProjectSubmission } from '../../api/projects.js';
-import { getLanguage } from '../../utils/fileLang.js';
+import { getLanguage } from '../../domain/fileLang.js';
 
 const route = useRoute();
 const submissionId = +route.params.submissionId;

@@ -2,7 +2,7 @@
  * useProjectUpload — 工程包上传逻辑（组合式函数，无 UI）
  *
  * 封装层级：
- *   utils/uploadFilter.js（纯函数：过滤/重打包）
+ *   domain/uploadFilter.js（纯函数：过滤/重打包）
  *     → useProjectUpload.js（本文件：状态 + 流程）
  *     → ProjectZipUploader.vue（UI 组件，界面与基线 9c4a2fc 一致）
  *     → 使用方页面（教师建题页 / 学生做题页）
@@ -12,7 +12,7 @@
  * 上传动作由使用方决定（教师页立即传服务端拿 tempId；学生页提交时传）。
  */
 import { ref } from 'vue';
-import { filterAndRepackZip } from '../utils/uploadFilter.js';
+import { filterAndRepackZip } from '../domain/uploadFilter.js';
 
 export function useProjectUpload(options = {}) {
   const sizeLimitMB = options.sizeLimitMB ?? 50;

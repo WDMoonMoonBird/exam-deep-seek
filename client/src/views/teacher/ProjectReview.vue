@@ -144,7 +144,7 @@ import { useRoute } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { ArrowLeftOutlined, FileTextOutlined } from '@ant-design/icons-vue';
 import { getSubmissionDetail, getFileContent, saveReview as saveReviewApi, regrade } from '../../api/projects.js';
-import { getLanguage } from '../../utils/fileLang.js';
+import { getLanguage } from '../../domain/fileLang.js';
 import CodeEditor from '../../components/CodeEditor.vue';
 
 const route = useRoute();

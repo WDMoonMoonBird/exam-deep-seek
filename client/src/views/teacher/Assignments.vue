@@ -109,7 +109,7 @@ import dateLocale from 'ant-design-vue/es/date-picker/locale/zh_CN';
 import request from '../../api/request.js';
 import { useUserStore } from '../../stores/user.js';
 import DataTable from '../../components/DataTable.vue';
-import { formatDateTime } from '../../utils/format.js';
+import { formatDateTime } from '../../domain/format.js';
 
 dayjs.locale('zh-cn');
 

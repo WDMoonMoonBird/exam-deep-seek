@@ -87,7 +87,7 @@ import { useRoute } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { ArrowLeftOutlined, DownloadOutlined } from '@ant-design/icons-vue';
 import { getProject, getSubmissions } from '../../api/projects.js';
-import { formatDateTime } from '../../utils/format.js';
+import { formatDateTime } from '../../domain/format.js';
 
 const route = useRoute();
 const projectId = +route.params.id;

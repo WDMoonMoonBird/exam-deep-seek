@@ -1,0 +1,19 @@
+name: architecture-guard
+on:
+  push:
+    paths: ['server/src/**', 'server/scripts/**']
+  pull_request:
+    paths: ['server/src/**', 'server/scripts/**']
+jobs:
+  check-layers:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 分层依赖守卫（domain 零依赖 / 依赖单向 / 禁止循环依赖）
+        run: node scripts/check-layers.mjs

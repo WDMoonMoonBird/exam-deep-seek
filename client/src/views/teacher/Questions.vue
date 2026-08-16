@@ -51,7 +51,7 @@ import { message } from 'ant-design-vue';
 import { DownOutlined } from '@ant-design/icons-vue';
 import request from '../../api/request.js';
 import DataTable from '../../components/DataTable.vue';
-import { formatDateTime } from '../../utils/format.js';
+import { formatDateTime } from '../../domain/format.js';
 
 const router = useRouter();
 

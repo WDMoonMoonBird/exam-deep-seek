@@ -71,7 +71,7 @@
 import { ref, reactive, onMounted } from 'vue';
 import { message } from 'ant-design-vue';
 import { getProjects, deleteProject } from '../../api/projects.js';
-import { formatDateTime } from '../../utils/format.js';
+import { formatDateTime } from '../../domain/format.js';
 
 const loading = ref(false);
 const list = ref([]);

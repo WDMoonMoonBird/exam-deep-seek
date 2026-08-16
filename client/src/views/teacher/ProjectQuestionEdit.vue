@@ -121,7 +121,7 @@ import RichEditor from '../../components/RichEditor.vue';
 import DOMPurify from 'dompurify';
 import request from '../../api/request.js';
 import { uploadPackage } from '../../api/projects.js';
-import { getLanguage } from '../../utils/fileLang.js';
+import { getLanguage } from '../../domain/fileLang.js';
 import ProjectZipUploader from '../../components/ProjectZipUploader.vue';
 
 const props = defineProps({ mode: { type: String, default: 'teacher' } });

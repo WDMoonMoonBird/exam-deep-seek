@@ -154,7 +154,7 @@ import { InboxOutlined, CheckCircleOutlined, ExclamationCircleOutlined } from '@
 import * as XLSX from 'xlsx';
 import request from '../../api/request.js';
 import DataTable from '../../components/DataTable.vue';
-import { formatDateTime } from '../../utils/format.js';
+import { formatDateTime } from '../../domain/format.js';
 
 const page = reactive({ current: 1, pageSize: 20 });
 const loading = ref(false);
