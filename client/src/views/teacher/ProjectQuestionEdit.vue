@@ -101,6 +101,7 @@
           <div class="sidebar">
             <ProjectZipUploader
               :tree-data="externalTree"
+              :stats-text="uploadStats"
               @select="onZipSelect"
             />
           </div>
@@ -148,6 +149,8 @@ const route = useRoute();
 const isEdit = computed(() => !!route.params.id);
 const submitting = ref(false);
 const hasUploaded = ref(false);
+/** 上传过滤统计（"已过滤依赖，保留 X 个文件"，阶段二展示） */
+const uploadStats = ref('');
 const editorContainerRef = ref(null);
 const showDescModal = ref(false);
 const showRubricModal = ref(false);
@@ -317,13 +320,15 @@ async function handleSave() {
 // ===== 上传组件回调（ProjectZipUploader） =====
 
 /** 过滤完成：填充内容预览、教师立刻上传服务端拿 tempId、打开第一个文件 */
-async function onZipReady({ tree, fileContents: fc }) {
+async function onZipReady({ tree, fileContents: fc, keptCount, keptBytes }) {
   // 重新选择文件时释放旧 Monaco model
   resetModels();
   fileContents.clear();
   fc.forEach((v, k) => fileContents.set(k, v));
   // 传给阶段二 sidebar 组件显示（外部树优先，picker 自动隐藏）
   externalTree.value = tree;
+  // 恢复"已过滤依赖"统计提示（阶段切换后由阶段二组件显示）
+  uploadStats.value = `已过滤依赖，保留 ${keptCount} 个代码文件（${(keptBytes / 1024).toFixed(0)}KB）`;
   hasUploaded.value = true;
 
   if (isTeacher.value && form.packageFile) {

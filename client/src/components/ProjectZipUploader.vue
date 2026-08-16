@@ -18,7 +18,7 @@
     <div v-if="visibleTree.length" class="zu-tree">
       <div class="zu-tree-head">
         <span class="zu-tree-title">资源管理器</span>
-        <span v-if="stats" class="zu-stats">{{ stats }}</span>
+        <span v-if="stats || statsText" class="zu-stats">{{ stats || statsText }}</span>
       </div>
       <a-tree
         :tree-data="visibleTree"
@@ -57,6 +57,8 @@ const props = defineProps({
   treeData: { type: Array, default: () => [] },
   /** 选择提示文案（还原原 UI：教师"点击上传标准工程包"/学生"点击上传项目文件"） */
   hint: { type: String, default: '点击上传工程文件（zip）' },
+  /** 外部过滤统计（阶段切换后由页面传入，恢复"已过滤依赖"提示） */
+  statsText: { type: String, default: '' },
 });
 
 const emit = defineEmits(['update:package', 'ready', 'select', 'error']);
