@@ -14,11 +14,11 @@
 
 ## 基线统计（2026-08-16）
 
-| 套件 | P0 基线（2026-08-16） | P1 结果（2026-08-16） |
-|---|---|---|
-| unit（6 suites） | 108/118 通过，10 失败 | **132/134 通过，2 失败**（仅剩 E4/E6，P2 处置） |
-| integration（7 suites） | 54/61 通过，7 失败 | **61/61 全部通过** ✅ |
-| e2e（Playwright） | 未运行（需前端构建 + 浏览器环境，待补充） | 未运行（P3 前补充） |
+| 套件 | P0 基线 | P1 结果 | P2 结果（当前） |
+|---|---|---|---|
+| unit（8 suites） | 108/118，10 失败 | 132/134，2 失败 | **151/151 全部通过** ✅（E4 修复 + E6 测试更新） |
+| integration（7 suites） | 54/61，7 失败 | 61/61 全绿 | **61/61 全绿** ✅ |
+| e2e（Playwright） | 未运行 | 未运行 | 未运行（P3 前补充） |
 
 ## 失败明细与根因
 
@@ -59,6 +59,8 @@
 | 2026-08-16 | E6（.git 前导点）定性为**测试过时**：设计已演进为『解压端直接过滤隐藏目录』（projectArchive.js shouldIgnorePath 先行），测试断言过时 | 架构师查证 | P2 更新测试断言，期待 .git 不落盘 |
 | 2026-08-16 | E4（Path traversal）定性为 **Node 22 环境差异**：path.relative 对非规范路径直接抛错 | 架构师查证 | P2 迁移 utils 时捕获并转换为领域错误 |
 | 2026-08-16 | **附带发现（真实缺陷，未修）**：teacherController.js:470 createAssignment 的 question 查询漏过滤 `deletedAt`，软删除题目仍可被选入作业 | agent-test-sync 调查 | P4 迁移 teacher 用例时一并修复并补测试 |
+| 2026-08-16 | E4 已修复（P2）：预算统计循环穿越检查前置，避免 ignore 包对含 `..` 路径抛 RangeError；E6 测试已按现行语义更新（解压端过滤 + 原契约抛错） | 架构师实施 | 已完成，filename-decode 24/24 |
+| 2026-08-16 | P2 基础设施层落地：SystemConfigRepository / PromptBuilder / DeepSeekGateway / CachingAiGateway（行为等价迁移，17 单测全过）；原 deepseek.js 保持不动待 P3 切换 | 架构师实施 | 已完成 |
 
 ## 红线规则
 

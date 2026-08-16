@@ -123,6 +123,10 @@ export function extractZipSafely(buffer, targetDir) {
   for (const entry of entries) {
     if (isSymlinkEntry(entry)) continue;
     const decoded = decodeEntryName(entry.rawEntryName).replace(/\\/g, '/');
+    // 穿越检查前置（与解压循环一致）：ignore 包对含 '..' 的非规范路径会抛 RangeError（Node 22），
+    // 必须先于 shouldIgnorePath 拦截，保证 Zip-Slip 整包拒收语义
+    const segsClean = decoded.split('/').filter(Boolean);
+    if (segsClean.some((s) => s === '..')) throw new Error('Path traversal denied');
     // 预算只统计"将落盘"的条目：依赖/构建产物/二进制（shouldIgnorePath 命中）不计入，
     // 与解压过滤一致——大项目带 node_modules 也不会被预算误拒（前端已过滤重打包，此为兜底）
     if (shouldIgnorePath(decoded)) continue;

@@ -176,17 +176,15 @@ describe('extractZipSafely — GBK 文件名回归用例', () => {
     expect(fs.existsSync(path.join(path.dirname(tmpDir), 'evil.txt'))).toBe(false);
   });
 
-  it('E6: ".git/config" 解压后目录名仍带前导点，未被洗成 "git"（隐藏目录过滤语义恢复）', () => {
+  it('E6: ".git/config" 被解压端过滤不落盘（隐藏目录过滤语义：解压端先行，P2 更新）', () => {
     const buf = buildZipWithRawName(Buffer.from('.git/config', 'ascii'), '[core]\n');
 
-    const result = extractZipSafely(buf, tmpDir);
-
-    // 关键断言：磁盘目录名保留前导点，IGNORED_DIRS.has('.git') 才能重新命中
-    expect(fs.existsSync(path.join(tmpDir, '.git'))).toBe(true);
+    // 现行语义：shouldIgnorePath 在清洗前命中 .git 直接跳过（不落盘），
+    // 全部条目被过滤后按原契约抛『压缩包内没有可读文件』（projectArchive.js:190）
+    expect(() => extractZipSafely(buf, tmpDir)).toThrow('压缩包内没有可读文件');
+    expect(fs.existsSync(path.join(tmpDir, '.git'))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, 'git'))).toBe(false);
-    expect(fs.existsSync(path.join(tmpDir, '.git', 'config'))).toBe(true);
-    expect(fs.readdirSync(tmpDir)).toContain('.git');
-    expect(result.fileCount).toBe(1);
+    expect(fs.readdirSync(tmpDir)).toEqual([]);
   });
 
   it('E5: 空 Buffer 与无可读文件的包按原契约抛错', () => {
