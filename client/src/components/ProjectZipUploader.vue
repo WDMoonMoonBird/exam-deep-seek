@@ -46,7 +46,7 @@ import { ref, computed, watch } from 'vue';
 import { LoadingOutlined, FolderOutlined } from '@ant-design/icons-vue';
 import { getClassWithColor } from 'file-icons-js';
 import 'file-icons-js/css/style.css';
-import { filterAndRepackZip } from '../utils/uploadFilter.js';
+import { useProjectUpload } from '../composables/useProjectUpload.js';
 
 const props = defineProps({
   /** 过滤后展开大小上限（MB），超限拒绝 */
@@ -62,12 +62,13 @@ const props = defineProps({
 const emit = defineEmits(['update:package', 'ready', 'select', 'error']);
 
 const fileInputRef = ref(null);
-const processing = ref(false);
-const errorMsg = ref('');
-const tree = ref([]); // 内部过滤树
-const stats = ref('');
 const expandedKeys = ref([]);
 const selectedKeys = ref([]);
+
+// 上传逻辑（composable：过滤重打包 + 大小校验 + 状态），UI 保持基线一致
+const { processing, errorMsg, tree, stats, packageFile, selectFile } = useProjectUpload({
+  sizeLimitMB: props.sizeLimitMB,
+});
 
 /** 显示的树：外部 treeData（回看/提交后）优先，否则内部过滤树 */
 const visibleTree = computed(() => (props.treeData.length ? props.treeData : tree.value));
@@ -111,47 +112,25 @@ function triggerUpload() {
 async function onFileChange(e) {
   const file = e.target.files[0];
   if (!file) return;
-  processing.value = true;
-  errorMsg.value = '';
   e.target.value = '';
-  try {
-    // 过滤 + 重打包（依赖不上传，只看代码文件）
-    const r = await filterAndRepackZip(file);
-
-    // 大小校验：过滤后展开大小超限拒绝
-    if (r.keptBytes > props.sizeLimitMB * 1024 * 1024) {
-      const msg = `过滤后代码文件仍超过 ${props.sizeLimitMB}MB（${(r.keptBytes / 1024 / 1024).toFixed(1)}MB，共 ${r.keptCount} 个文件），无法上传`;
-      errorMsg.value = msg;
-      emit('error', msg);
-      return;
-    }
-    if (r.keptCount === 0) {
-      const msg = '未在压缩包中找到可用的代码文件';
-      errorMsg.value = msg;
-      emit('error', msg);
-      return;
-    }
-
-    // 展示过滤后文件树
-    tree.value = r.tree;
-    expandedKeys.value = collectDirKeys(r.tree);
-    selectedKeys.value = [];
-    stats.value = `已过滤依赖，保留 ${r.keptCount} 个代码文件（${(r.keptBytes / 1024).toFixed(0)}KB）`;
-
-    // 把过滤后的包交给使用方（上传动作由页面决定：教师立刻传、学生提交时传）
-    emit('update:package', { blob: r.blob, name: r.name });
-    emit('ready', {
-      tree: r.tree,
-      fileContents: r.fileContents,
-      keptBytes: r.keptBytes,
-      keptCount: r.keptCount,
-    });
-  } catch (err) {
-    errorMsg.value = '解析失败：' + (err.message || '未知错误');
+  // composable：过滤重打包 + 大小校验 + 状态更新；成功返回产出
+  const r = await selectFile(file);
+  if (!r) {
+    // 失败（错误信息已在 composable.errorMsg）
     emit('error', errorMsg.value);
-  } finally {
-    processing.value = false;
+    return;
   }
+  // 展示过滤后文件树（全展开）+ 统计
+  expandedKeys.value = collectDirKeys(r.tree);
+  selectedKeys.value = [];
+  // 把过滤后的包交给使用方（上传动作由页面决定：教师立刻传、学生提交时传）
+  emit('update:package', { blob: packageFile.value.blob, name: packageFile.value.name });
+  emit('ready', {
+    tree: r.tree,
+    fileContents: r.fileContents,
+    keptBytes: r.keptBytes,
+    keptCount: r.keptCount,
+  });
 }
 
 function onTreeSelect(keys) {
