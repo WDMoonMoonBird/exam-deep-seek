@@ -1,3 +1,10 @@
+/* ===== 代码预览等宽字体（Monaco.ttf，2026-08-16） ===== */
+@font-face {
+  font-family: 'MonacoDSH';
+  src: url('./assets/fonts/Monaco.ttf') format('truetype');
+  font-display: swap;
+}
+
 /* ===== Apple-Inspired Design System ===== */
 :root {
   /* Brand */

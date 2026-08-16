@@ -251,7 +251,7 @@ async function initMonaco() {
   editor = monaco.editor.create(editorContainerRef.value, {
     value: '', language: 'plaintext', readOnly: true,
     minimap: { enabled: true, maxColumn: 80 }, automaticLayout: true,
-    fontSize: 13, lineNumbers: 'on', scrollBeyondLastLine: false,
+    fontSize: 13, fontFamily: 'MonacoDSH, monospace', lineNumbers: 'on', scrollBeyondLastLine: false,
     tabSize: 4, renderWhitespace: 'selection', smoothScrolling: true, cursorBlinking: 'smooth',
   });
 }

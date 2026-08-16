@@ -31,6 +31,7 @@ onMounted(async () => {
     minimap: { enabled: false },
     automaticLayout: true,
     fontSize: 14,
+    fontFamily: 'MonacoDSH, monospace',
     lineNumbers: 'on',
     scrollBeyondLastLine: false,
     tabSize: 4,
