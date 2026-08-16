@@ -3,6 +3,7 @@ import logger from '../utils/logger.js';
 import { gradeSubmission, getConcurrency } from './deepseek.js';
 import { ABNORMAL_FEEDBACK } from '../constants.js';
 import { gradeMachine, gradeAST, gradeAI, calculateTotal } from './projectGrader.js';
+import { gradeObjectiveItems, gradeFlatObjective, normalizeAiScore } from '../domain/services/objective-grading.service.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -52,86 +53,26 @@ async function gradeOne(sub) {
       const items = sqData.objectiveItems || [];
       const answers = (() => { try { return JSON.parse(sub.answer || '[]'); } catch { return []; } })();
       const sqScore = sqData.score || 0;
-      const itemCount = items.length;
-      let totalScore = 0;
-      let correctCount = 0;
-      const feedbackParts = [];
-
-      for (const item of items) {
-        const studentItem = answers.find(a => a.key === item.key) || {};
-        const studentAns = studentItem.answer || '';
-        const itemScore = item.score ?? Math.round(sqScore / itemCount * 100) / 100;
-
-        if (item.type === 'choice') {
-          const correct = studentAns.trim() === (item.answer || '').trim();
-          if (correct) { totalScore += itemScore; correctCount++; }
-          feedbackParts.push(`第${item.key + 1}问：${correct ? '✓' : '✗'}（你的答案: ${studentAns || '未作答'}，正确答案: ${item.answer}）`);
-        } else if (item.type === 'multi_choice') {
-          const studentSet = new Set((studentAns || '').split(',').map(s => s.trim()).filter(Boolean));
-          const answerSet = new Set((Array.isArray(item.answer) ? item.answer : String(item.answer).split(',')).map(s => s.trim()));
-          const correctOpts = [...studentSet].filter(s => answerSet.has(s)).length;
-          const wrongOpts = [...studentSet].filter(s => !answerSet.has(s)).length;
-          const missingOpts = [...answerSet].filter(s => !studentSet.has(s)).length;
-          const settings = sub.question?.objectiveSettings || {};
-          if (studentSet.size === 0) {
-            feedbackParts.push(`第${item.key + 1}问：✗（未作答）`);
-          } else if (correctOpts === answerSet.size && wrongOpts === 0) {
-            totalScore += itemScore; correctCount++;
-            feedbackParts.push(`第${item.key + 1}问：✓（全对）`);
-          } else {
-            const scoring = settings.multiChoiceScoring || 'partial';
-            if (scoring === 'partial') {
-              const partial = Math.round(itemScore * correctOpts / answerSet.size * 100) / 100;
-              totalScore += Math.max(0, partial - wrongOpts);
-              feedbackParts.push(`第${item.key + 1}问：△ 部分正确（对${correctOpts}错${wrongOpts}漏${missingOpts}，得${Math.max(0, partial - wrongOpts)}/${itemScore}分）`);
-            } else {
-              feedbackParts.push(`第${item.key + 1}问：✗（答案: ${studentAns}，正确: ${item.answer}）`);
-            }
-          }
-        } else if (item.type === 'judge') {
-          const correct = String(studentAns).trim() === String(item.answer).trim();
-          if (correct) { totalScore += itemScore; correctCount++; }
-          feedbackParts.push(`第${item.key + 1}问：${correct ? '✓' : '✗'}（你的答案: ${studentAns || '未作答'}，正确答案: ${item.answer === 'true' ? '对' : '错'}）`);
-        } else if (item.type === 'fill') {
-          const refAnswers = String(item.answer || '').split(',').map(s=>s.trim());
-          const stuAnswers = String(studentAns || '').split(',').map(s=>s.trim());
-          const blankCount = Math.max(refAnswers.length, stuAnswers.length, 1);
-          const perBlankScore = blankCount > 0 ? itemScore / blankCount : itemScore;
-          let correctBlanks = 0;
-          for (let b = 0; b < blankCount; b++) {
-            const sa = String(stuAnswers[b] || '').trim();
-            const ra = String(refAnswers[b] || '').trim();
-            if (sa.toLowerCase() === ra.toLowerCase()) correctBlanks++;
-          }
-          const s = correctBlanks * perBlankScore;
-          totalScore += s;
-          if (correctBlanks === blankCount) correctCount++;
-          feedbackParts.push(`第${item.key + 1}问：${correctBlanks}/${blankCount}空正确（得分 ${s}/${Math.round(itemScore)}）`);
-        }
-      }
-      score = Math.round(totalScore);
-      feedback = `${correctCount}/${itemCount} 正确，得分 ${totalScore} / ${sqScore}\n` + feedbackParts.join('\n');
+      const graded = gradeObjectiveItems({
+        items,
+        answers,
+        sqScore,
+        objectiveSettings: sub.question?.objectiveSettings || {},
+      });
+      score = graded.score;
+      feedback = graded.feedback;
+      const { correctCount, itemCount } = graded;
       logger.info({ submissionId: sub.id, type: 'objective', correct: correctCount, total: itemCount }, '客观题自动评分');
     } else if (sqData.type === 'choice' || sqData.type === 'multi_choice' || sqData.type === 'judge' || sqData.type === 'fill') {
-      const sa = (sub.answer || '').trim();
-      const ra = (sqData.referenceAnswer || '').trim();
-      let correct = false;
-      if (sqData.type === 'multi_choice') {
-        const sSet = new Set(sa.split(',').map(s => s.trim()).filter(Boolean));
-        const aSet = new Set(ra.split(',').map(s => s.trim()).filter(Boolean));
-        correct = sSet.size === aSet.size && [...sSet].every(s => aSet.has(s));
-        feedback = correct ? '正确' : `错误，正确答案：${ra}`;
-      } else if (sqData.type === 'fill') {
-        const refAnswers = ra.split(',').map(s=>s.trim());
-        const stuAnswers = sa.split(',').map(s=>s.trim());
-        const blankCount = Math.max(refAnswers.length, stuAnswers.length, 1);
-        correct = blankCount <= 1 ? sa.toLowerCase() === ra.toLowerCase() : false;
-        feedback = refAnswers.length > 1 ? `多空题（${blankCount}空）请查看详情` : (correct ? '正确' : `错误，参考答案：${ra}`);
-      } else {
-        correct = sa === ra;
-        feedback = correct ? '正确' : `错误，正确答案：${ra}`;
-      }
-      score = correct ? (sqData.score || 0) : 0;
+      const flat = gradeFlatObjective({
+        type: sqData.type,
+        studentAnswer: sub.answer,
+        referenceAnswer: sqData.referenceAnswer,
+        score: sqData.score,
+      });
+      score = flat.score;
+      feedback = flat.feedback;
+      const correct = flat.correct;
       logger.info({ submissionId: sub.id, type: sqData.type, correct }, '扁平客观题自动评分');
     } else {
       logger.info({ submissionId: sub.id, questionId: sub.questionId, concurrency: MAX_CONCURRENT }, '开始 AI 评分');
@@ -146,8 +87,9 @@ async function gradeOne(sub) {
       });
       score = result.score;
       const max = sqData.score || 10;
-      if (score > max * 2 && max < 100) {
-        score = Math.round(score * max / 100);
+      const normalized = normalizeAiScore(score, max);
+      if (normalized !== score) {
+        score = normalized;
         logger.info({ submissionId: sub.id, rawScore: result.score, normalized: score, max, concurrency: MAX_CONCURRENT }, 'AI 分数已归一化');
       }
       feedback = result.feedback;
