@@ -10,7 +10,7 @@ const auth = async (req, res, next) => {
   try {
     const token = header.split(' ')[1];
     const payload = jwt.verify(token, process.env.JWT_SECRET || 'exam_system_fallback_secret');
-    const user = await prisma.user.findUnique({ where: { id: payload.id } });
+    const user = await prisma.user.findFirst({ where: { id: payload.id, deletedAt: null } });
     if (!user) {
       return res.status(401).json({ code: 1002, message: '用户不存在', data: null });
     }

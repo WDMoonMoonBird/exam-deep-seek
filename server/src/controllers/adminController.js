@@ -146,7 +146,7 @@ export const deleteClass = async (req, res) => {
 export const getTeachers = async (req, res) => {
   try {
     const list = await prisma.user.findMany({
-      where: { role: 'teacher' },
+      where: { role: 'teacher', deletedAt: null },
       select: { id: true, username: true, realName: true, createdAt: true, teacherSchools: { include: { school: true } } },
       orderBy: { createdAt: 'desc' },
     });
@@ -217,6 +217,26 @@ export const resetTeacherPassword = async (req, res) => {
     res.json({ code: 0, message: `密码已重置为工号（${teacher.username}）`, data: null });
   } catch (err) {
     logger.error({ err }, '重置教师密码失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+export const deleteTeacher = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const target = await prisma.user.findUnique({ where: { id: +id } });
+    if (!target || target.role !== 'teacher' || target.deletedAt) {
+      return res.status(404).json({ code: 1004, message: '教师不存在', data: null });
+    }
+    if (target.id === req.user.id) {
+      return res.status(400).json({ code: 1001, message: '不能删除当前登录账号', data: null });
+    }
+    // 软删除：保留历史数据（题目/作业/成绩/班级关联可追溯），账号立即不可登录
+    await prisma.user.update({ where: { id: +id }, data: { deletedAt: new Date() } });
+    logger.info({ teacherId: id }, '教师已删除（软删除）');
+    res.json({ code: 0, message: '删除成功', data: null });
+  } catch (err) {
+    logger.error({ err }, '删除教师失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
   }
 };

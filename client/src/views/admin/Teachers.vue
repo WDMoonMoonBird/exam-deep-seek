@@ -25,6 +25,9 @@
             <a-popconfirm title="确定重置该教师密码？" ok-text="确定" cancel-text="取消" @confirm="resetPwd(record.id)">
               <a-button type="link">重置密码</a-button>
             </a-popconfirm>
+            <a-popconfirm v-if="record.id !== currentUserId" title="确定删除该教师？删除后其账号将无法登录，历史数据（题目/作业/成绩）保留" ok-text="删除" ok-button-props="{ danger: true }" cancel-text="取消" @confirm="removeTeacher(record)">
+              <a-button type="link" danger>删除</a-button>
+            </a-popconfirm>
           </a-space>
         </template>
       </template>
@@ -116,6 +119,21 @@ async function resetPwd(id) {
     const r = await request.put(`/admin/teachers/${id}/reset-password`);
     message.success(r.message);
   } catch { message.error('重置失败'); }
+}
+
+/** 当前登录管理员 id（与 request.js 的 localStorage 约定一致），用于隐藏自身的删除按钮 */
+const currentUserId = (() => {
+  try { return JSON.parse(localStorage.getItem('user') || 'null')?.id ?? null; } catch { return null; }
+})();
+
+async function removeTeacher(row) {
+  try {
+    await request.delete(`/admin/teachers/${row.id}`);
+    message.success(`教师「${row.realName}」已删除`);
+    fetch();
+  } catch (e) {
+    message.error(e.response?.data?.message || '删除失败');
+  }
 }
 
 onMounted(fetch);

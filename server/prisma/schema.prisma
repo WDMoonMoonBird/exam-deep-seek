@@ -18,6 +18,7 @@ model User {
   role         UserRole
   lastSchoolId Int?             @map("last_school_id") @db.UnsignedInt
   createdAt    DateTime         @default(now()) @map("created_at")
+  deletedAt    DateTime?        @map("deleted_at")
 
   // 关系
   questions            Question[]         @relation("TeacherQuestions")

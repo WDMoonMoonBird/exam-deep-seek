@@ -19,7 +19,7 @@ export const login = async (req, res) => {
     // 学生登录：优先匹配新格式（学号@院校代码），避免旧格式空壳用户抢先命中
     if (isStudentLogin) {
       const newStudents = await prisma.user.findMany({
-        where: { username: { startsWith: username + '@' }, role: 'student' },
+        where: { username: { startsWith: username + '@' }, role: 'student', deletedAt: null },
       });
 
       if (newStudents.length === 1) {
@@ -40,7 +40,7 @@ export const login = async (req, res) => {
 
     // 兜底：findUnique（教师、管理员、或确实只有旧格式的学生）
     if (!user) {
-      user = await prisma.user.findUnique({ where: { username: lookupUsername } });
+      user = await prisma.user.findFirst({ where: { username: lookupUsername, deletedAt: null } });
     }
 
     if (!user) {
