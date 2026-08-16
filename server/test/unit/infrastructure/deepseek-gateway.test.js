@@ -124,6 +124,45 @@ describe('DeepSeekGateway.parsePaper（行为等价迁移自 parseExamPaper）',
   });
 });
 
+describe('DeepSeekGateway.gradeProject（等价迁移自 projectGrader.gradeAI）', () => {
+  it('正常评审 → 返回 {score, feedback} 并截断到 0-100', async () => {
+    const gw = new DeepSeekGateway({
+      configRepo: makeConfigRepo(),
+      logger: { warn() {}, error() {}, info() {} },
+      fetchImpl: okFetch('{"score":88,"feedback":"代码规范"}'),
+    });
+    const r = await gw.gradeProject({ standardFiles: 'a.java', submissionFiles: 'b.java' });
+    expect(r).toEqual({ score: 88, feedback: '代码规范' });
+  });
+  it('分数超 100 → 截断', async () => {
+    const gw = new DeepSeekGateway({
+      configRepo: makeConfigRepo(),
+      logger: { warn() {}, error() {}, info() {} },
+      fetchImpl: okFetch('{"score":150,"feedback":"x"}'),
+    });
+    const r = await gw.gradeProject({ standardFiles: 'a', submissionFiles: 'b' });
+    expect(r.score).toBe(100);
+  });
+  it('未配置 API Key → 返回不可用提示（不抛出）', async () => {
+    const gw = new DeepSeekGateway({
+      configRepo: makeConfigRepo({ getApiKey: async () => null }),
+      logger: { warn() {}, error() {}, info() {} },
+      fetchImpl: okFetch('{}'),
+    });
+    const r = await gw.gradeProject({ standardFiles: 'a', submissionFiles: 'b' });
+    expect(r.feedback).toContain('未配置 API Key');
+  });
+  it('返回非 JSON → 兜底失败反馈（不抛出）', async () => {
+    const gw = new DeepSeekGateway({
+      configRepo: makeConfigRepo(),
+      logger: { warn() {}, error() {}, info() {} },
+      fetchImpl: okFetch('not json'),
+    });
+    const r = await gw.gradeProject({ standardFiles: 'a', submissionFiles: 'b' });
+    expect(r.feedback).toContain('AI 评审失败');
+  });
+});
+
 describe('CachingAiGateway（装饰器：避免重复扣费）', () => {
   it('相同请求命中缓存，内层只调用一次', async () => {
     let innerCalls = 0;

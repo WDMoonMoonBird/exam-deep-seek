@@ -126,6 +126,27 @@ export const PARSE_RULES = [
 /** 项目评分默认标准（等价 deepseek.js DEFAULT_PROJECT_CRITERIA） */
 export const DEFAULT_PROJECT_CRITERIA = '默认评分标准：\n功能完整性（50%）：核心功能是否全部实现，能否正常运行\n代码规范性（25%）：命名是否规范、注释是否完整、代码组织是否清晰\n健壮性（25%）：异常处理、输入校验、边界条件覆盖';
 
+/** 项目评审 system prompt（等价迁移自 projectGrader.gradeAI） */
+export const PROJECT_REVIEW_SYSTEM = '你是一名高校教师，正在进行工程项目批改。请根据标准工程和学生提交的代码，从代码质量、设计规范、功能完整性三个角度给出评分和评语。评分范围 0-100。';
+
+/**
+ * 构建项目评审 user message（等价迁移自 gradeAI）。
+ * @param {object} p
+ * @param {string} p.standardFiles 标准工程文件列表
+ * @param {string} p.submissionFiles 学生提交文件列表
+ * @param {string} [p.promptExtra] 教师自定义提示词
+ * @returns {string}
+ */
+export function buildProjectReviewUserMessage({ standardFiles, submissionFiles, promptExtra }) {
+  return '## 标准工程文件结构\n'
+    + (standardFiles || '(无标准工程)')
+    + '\n\n## 学生提交文件结构\n'
+    + (submissionFiles || '(无文件)')
+    + '\n\n## 评分要求\n请根据以下维度评分（满分100分）：\n- 代码质量（40分）：代码是否规范、命名是否合理、是否有适当的注释\n- 设计规范（30分）：项目结构是否合理、是否遵循设计模式\n- 功能完整性（30分）：是否实现了标准工程的核心功能\n\n'
+    + (promptExtra ? '## 教师附加要求\n' + promptExtra + '\n\n' : '')
+    + '请严格按以下 JSON 格式返回，不要包含任何其他文字：\n{"score": <0-100之间的整数>, "feedback": "详细的评语和改进建议..."}';
+}
+
 /** 构建试卷解析 user message（等价 parseExamPaper 内逻辑） */
 export function buildParseUserMessage(paperText) {
   return '现在开始提取以下试卷内容：\n---\n' + paperText + '\n---';

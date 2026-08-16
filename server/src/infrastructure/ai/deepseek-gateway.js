@@ -6,7 +6,7 @@
  * 依赖注入（configRepo / logger / fetchImpl）便于测试；原 deepseek.js 保持不动，P3 切换后删除。
  */
 
-import { buildSystemPrompt, buildGradingUserMessage, PARSE_ROLE, PARSE_RULES, buildParseUserMessage } from './prompt-builder.js';
+import { buildSystemPrompt, buildGradingUserMessage, PARSE_ROLE, PARSE_RULES, buildParseUserMessage, PROJECT_REVIEW_SYSTEM, buildProjectReviewUserMessage } from './prompt-builder.js';
 
 export const ABNORMAL_FEEDBACK = '请联系老师';
 
@@ -156,5 +156,48 @@ export class DeepSeekGateway {
       }
     }
     throw new Error('试卷解析全部重试失败');
+  }
+
+  /**
+   * 项目评审（等价迁移自 projectGrader.gradeAI，走 SystemConfigRepository 配置）。
+   * @param {object} p
+   * @param {string} p.standardFiles 标准工程文件列表（buildFileList 输出）
+   * @param {string} p.submissionFiles 学生提交文件列表
+   * @param {string} [p.promptExtra]
+   * @returns {Promise<{score: number, feedback: string}>} 失败时返回兜底（不抛出）
+   */
+  async gradeProject({ standardFiles, submissionFiles, promptExtra }) {
+    try {
+      const apiKey = await this.configRepo.getApiKey();
+      if (!apiKey) {
+        return { score: 0, feedback: 'AI 评审不可用：未配置 API Key' };
+      }
+      const model = await this.configRepo.getModel();
+      const { res, controller, timer } = await this.#request({
+        model,
+        messages: [
+          { role: 'system', content: PROJECT_REVIEW_SYSTEM },
+          { role: 'user', content: buildProjectReviewUserMessage({ standardFiles, submissionFiles, promptExtra }) },
+        ],
+        temperature: 0.3,
+        maxTokens: 4000,
+        timeoutMs: 120000,
+      });
+      if (!res.ok) {
+        clearTimeout(timer);
+        throw new Error('DeepSeek API 返回 ' + res.status);
+      }
+      const data = await res.json();
+      clearTimeout(timer);
+      const content = data.choices?.[0]?.message?.content || '';
+      const jsonMatch = content.match(/\{[\s\S]*"score"[\s\S]*"feedback"[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('返回格式不包含有效的 JSON');
+      const parsed = JSON.parse(jsonMatch[0]);
+      const score = Math.max(0, Math.min(100, parseInt(parsed.score) || 0));
+      return { score, feedback: parsed.feedback || '无评语' };
+    } catch (err) {
+      this.logger.error({ err }, 'AI评审异常');
+      return { score: 0, feedback: 'AI 评审失败: ' + (err.message || '未知错误') };
+    }
   }
 }
