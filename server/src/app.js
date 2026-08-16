@@ -9,6 +9,10 @@ import { fileURLToPath } from 'url';
 import logger from './utils/logger.js';
 import prisma from './utils/prisma.js';
 import { initSocket, notifyGraded } from './socket.js';
+import { ReviewUseCases } from './application/use-cases/review.use-cases.js';
+import { SubmissionRepository } from './infrastructure/persistence/submission.repository.js';
+import { SystemConfigRepository } from './infrastructure/persistence/system-config.repository.js';
+import { DeepSeekGateway } from './infrastructure/ai/deepseek-gateway.js';
 
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
@@ -22,6 +26,15 @@ import projectAssetGuard from './middleware/projectAssetGuard.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// ---- 组合根（P5 迁至 infrastructure/bootstrap/）：依赖装配，controller 经 app.locals 取用 ----
+const configRepo = new SystemConfigRepository({ prisma, logger });
+const aiGateway = new DeepSeekGateway({ configRepo, logger });
+app.locals.reviewUseCases = new ReviewUseCases({
+  submissionRepo: new SubmissionRepository({ prisma }),
+  aiGateway,
+  logger,
+});
 
 // 关键配置校验
 if (!process.env.DEEPSEEK_API_KEY) logger.warn('DEEPSEEK_API_KEY 未配置，AI 评分将不可用');

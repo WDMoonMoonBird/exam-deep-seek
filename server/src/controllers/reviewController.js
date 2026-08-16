@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
-import { gradeSubmission } from '../services/deepseek.js';
+// 评分链路已迁移至 ReviewUseCases（application/use-cases），经 req.app.locals.reviewUseCases 取用
 import { ABNORMAL_FEEDBACK } from '../constants.js';
 import { getVisibleClassIds } from './teamController.js';
 import { parseProjectAnswer, toTeacherView } from '../utils/projectView.js';
@@ -132,33 +132,12 @@ export const getSubmissionDetail = async (req, res) => {
 
 export const regradeSubmission = async (req, res) => {
   try {
-    const sub = await prisma.submission.findUnique({
-      where: { id: +req.params.id },
-      include: {
-        question: { select: { material: true, subQuestions: { orderBy: { sortOrder: 'asc' } } } },
-        subQuestion: true,
-      },
-    });
-    if (!sub) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
-
-    const sq = sub.subQuestion || sub.question?.subQuestions?.[0] || {};
-    const { score, feedback } = await gradeSubmission({
-      material: sub.question?.material || null,
-      subQuestionTitle: sq.title || '',
-      subQuestionContent: sq.content || '',
-      referenceAnswer: sq.referenceAnswer || '',
-      studentAnswer: sub.answer || '',
-      maxScore: sq.score || 100,
-      scoringCriteria: sq.scoringCriteria || null,
-    });
-
-    await prisma.submission.update({
-      where: { id: sub.id },
-      data: { aiScore: score, aiFeedback: feedback, status: 'ai_graded' },
-    });
-
-    res.json({ code: 0, message: '重新评分完成', data: { aiScore: score, aiFeedback: feedback } });
+    const { aiScore, aiFeedback } = await req.app.locals.reviewUseCases.regrade({ submissionId: +req.params.id });
+    res.json({ code: 0, message: '重新评分完成', data: { aiScore, aiFeedback } });
   } catch (err) {
+    if (err.name === 'EntityNotFoundError') {
+      return res.status(404).json({ code: 1004, message: err.message, data: null });
+    }
     logger.error({ err }, '重新评分失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
   }
@@ -168,32 +147,12 @@ export const updateScore = async (req, res) => {
   try {
     const id = +req.params.id;
     const { finalScore } = req.body;
-
-    const sub = await prisma.submission.findUnique({
-      where: { id },
-      select: { status: true, aiScore: true, aiFeedback: true, teacherFeedback: true, question: { select: { type: true } } },
-    });
-    if (!sub) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
-
-    const data = { finalScore: +finalScore };
-
-    if (sub.status === 'ai_graded') {
-      data.status = 'reviewed';
-      data.reviewedAt = new Date();
-      // R3：实训题 AI 评语绝不透传给学生，必须由教师手动填写 teacherFeedback
-      if (sub.question?.type !== 'project' && !sub.teacherFeedback) {
-        data.teacherFeedback = sub.aiFeedback || '';
-      }
-    }
-
-    if (sub.status === 'submitted') {
-      data.status = 'reviewed';
-      data.reviewedAt = new Date();
-    }
-
-    const updated = await prisma.submission.update({ where: { id }, data });
-    res.json({ code: 0, message: '分数已更新', data: { id, finalScore: updated.finalScore, status: updated.status, teacherFeedback: updated.teacherFeedback } });
+    const updated = await req.app.locals.reviewUseCases.manualAdjust({ submissionId: id, finalScore });
+    res.json({ code: 0, message: '分数已更新', data: updated });
   } catch (err) {
+    if (err.name === 'EntityNotFoundError') {
+      return res.status(404).json({ code: 1004, message: err.message, data: null });
+    }
     logger.error({ err }, '修改分数失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
   }
@@ -202,10 +161,7 @@ export const updateScore = async (req, res) => {
 export const reviewSubmission = async (req, res) => {
   try {
     const { finalScore, teacherFeedback } = req.body;
-    const data = { status: 'reviewed', reviewedAt: new Date() };
-    if (finalScore !== undefined) data.finalScore = finalScore;
-    if (teacherFeedback !== undefined) data.teacherFeedback = teacherFeedback;
-    await prisma.submission.update({ where: { id: +req.params.id }, data });
+    await req.app.locals.reviewUseCases.review({ submissionId: +req.params.id, finalScore, teacherFeedback });
     res.json({ code: 0, message: '审核成功', data: null });
   } catch (err) {
     logger.error({ err }, '审核提交失败');
