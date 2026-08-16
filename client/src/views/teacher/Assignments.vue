@@ -47,7 +47,11 @@
 
       <div v-if="step === 0">
         <a-input-search v-model:value="qKeyword" placeholder="搜索题目" class="mb20" @search="searchQuestions" />
-        <a-table :columns="qCols" :dataSource="questions" rowKey="id" size="small" :scroll="{ x: 'max-content' }" :rowSelection="{ selectedRowKeys: selectedQIds, onChange: onQSelect, type: 'radio' }" :pagination="false" />
+        <a-table :columns="qCols" :dataSource="questions" rowKey="id" size="small" :scroll="{ x: 'max-content' }" :rowSelection="{ selectedRowKeys: selectedQIds, onChange: onQSelect, type: 'radio' }" :pagination="false">
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.dataIndex === 'difficulty'">{{ difficultyText(record.difficulty) }}</template>
+          </template>
+        </a-table>
       </div>
 
       <div v-if="step === 1" class="class-pick">
@@ -109,7 +113,7 @@ import dateLocale from 'ant-design-vue/es/date-picker/locale/zh_CN';
 import request from '../../api/request.js';
 import { useUserStore } from '../../stores/user.js';
 import DataTable from '../../components/DataTable.vue';
-import { formatDateTime } from '../../domain/format.js';
+import { formatDateTime, difficultyText } from '../../domain/format.js';
 
 dayjs.locale('zh-cn');
 

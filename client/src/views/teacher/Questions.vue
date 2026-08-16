@@ -26,7 +26,7 @@
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
         <template v-if="column.dataIndex === 'difficulty'">
-          <a-tag :color="record.difficulty === 'easy' ? 'green' : record.difficulty === 'medium' ? 'orange' : 'red'">{{ record.difficulty }}</a-tag>
+          <a-tag :color="record.difficulty === 'easy' ? 'green' : record.difficulty === 'medium' ? 'orange' : 'red'">{{ difficultyText(record.difficulty) }}</a-tag>
         </template>
         <template v-if="column.key === 'type'">
           <a-tag :color="record.type === 'project' ? 'purple' : 'blue'">{{ record.type === 'project' ? '实训题' : '编程题' }}</a-tag>
@@ -51,7 +51,7 @@ import { message } from 'ant-design-vue';
 import { DownOutlined } from '@ant-design/icons-vue';
 import request from '../../api/request.js';
 import DataTable from '../../components/DataTable.vue';
-import { formatDateTime } from '../../domain/format.js';
+import { formatDateTime, difficultyText } from '../../domain/format.js';
 
 const router = useRouter();
 
