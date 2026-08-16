@@ -9,17 +9,19 @@ describe('题库 CRUD', () => {
     r = authReq(token);
   });
 
+  // 现行 API（teacherController.createQuestion）：code 类型每题必须显式填分（score 非空且 >0），
+  // maxScore 由各小题分值之和计算（不再校验与请求中的 maxScore 一致）。默认小题携带 score: 100。
   function makeQuestion(overrides = {}) {
     return {
       title: '默认标题',
       maxScore: 100,
       difficulty: 'easy',
-      subQuestions: [{ title: '题1', content: '<p>内容</p>', referenceAnswer: 'ans', language: 'python' }],
+      subQuestions: [{ title: '题1', content: '<p>内容</p>', referenceAnswer: 'ans', language: 'python', score: 100 }],
       ...overrides,
     };
   }
 
-  // Q1: 创建单小题题目
+  // Q1: 创建单小题题目（显式填分 100）
   it('Q1: 创建单小题题目 → subQuestions.length=1', async () => {
     const res = await r.post('/api/teacher/questions', makeQuestion({ title: '单小题测试' }));
     expect(res.body.code).toBe(0);
@@ -27,15 +29,15 @@ describe('题库 CRUD', () => {
     expect(res.body.data.subQuestions[0].score).toBe(100);
   });
 
-  // Q2: 创建 3 小题题目，分值均分
-  it('Q2: 创建3小题题目 → 分值均分', async () => {
+  // Q2: 创建 3 小题题目，每题显式填分（均分逻辑已移除，见 scoring.js）
+  it('Q2: 创建3小题题目 → 显式分值保存正确', async () => {
     const res = await r.post('/api/teacher/questions', makeQuestion({
       title: '3小题测试',
       maxScore: 90,
       subQuestions: [
-        { title: '题1', content: '<p>c1</p>', referenceAnswer: 'a1', language: 'python' },
-        { title: '题2', content: '<p>c2</p>', referenceAnswer: 'a2', language: 'python' },
-        { title: '题3', content: '<p>c3</p>', referenceAnswer: 'a3', language: 'python' },
+        { title: '题1', content: '<p>c1</p>', referenceAnswer: 'a1', language: 'python', score: 30 },
+        { title: '题2', content: '<p>c2</p>', referenceAnswer: 'a2', language: 'python', score: 30 },
+        { title: '题3', content: '<p>c3</p>', referenceAnswer: 'a3', language: 'python', score: 30 },
       ],
     }));
     expect(res.body.code).toBe(0);
@@ -60,17 +62,19 @@ describe('题库 CRUD', () => {
     expect(scores).toEqual([20, 30, 50]);
   });
 
-  // Q4: 分值总和不等于满分 → 400
-  it('Q4: 分值总和≠满分 → 400', async () => {
+  // Q4: 总分不再校验（与 scoring.js 强制填分语义同源，2649393 移除总和校验）
+  // 请求 maxScore=100，但小题分值之和=40 → 创建成功，maxScore 取小题分值之和
+  it('Q4: 分值总和≠满分 → 仍创建成功（总分不校验）', async () => {
     const res = await r.post('/api/teacher/questions', makeQuestion({
-      title: '错误分值题',
+      title: '分值自定题',
       subQuestions: [
         { title: '题1', content: '<p>c1</p>', referenceAnswer: 'a1', score: 20, language: 'python' },
         { title: '题2', content: '<p>c2</p>', referenceAnswer: 'a2', score: 20, language: 'python' },
       ],
     }));
-    expect(res.body.code).toBe(1001);
-    expect(res.body.message).toContain('分值总和');
+    expect(res.body.code).toBe(0);
+    expect(res.body.data.subQuestions.map(sq => sq.score)).toEqual([20, 20]);
+    expect(res.body.data.maxScore).toBe(40);
   });
 
   // Q5: 不填标题 → 400
@@ -146,16 +150,24 @@ describe('题库 CRUD', () => {
     expect(getRes.body.data.subQuestions[0].referenceAnswer).toBe('新答案');
   });
 
-  // Q9: 删除题目
-  it('Q9: 删除题目 → 200, GET 不再返回', async () => {
+  // Q9: 删除题目（软删除）
+  // 调查结论：deleteQuestion 置 deletedAt（teacherController.js:330），
+  // getQuestion/getQuestions 查询均带 deletedAt: null 过滤（:58 / :33）→ 删除后 GET 404 属现行正确行为，
+  // 基线中该用例失败为链式失败（makeQuestion 默认小题未填分导致创建 1001）。
+  it('Q9: 删除题目 → 200, GET 404, 列表不再返回', async () => {
     const createRes = await r.post('/api/teacher/questions', makeQuestion({ title: '待删除题' }));
     const id = createRes.body.data.id;
 
     const delRes = await r.delete(`/api/teacher/questions/${id}`);
     expect(delRes.body.code).toBe(0);
 
+    // 详情：软删除已过滤 → 404
     const getRes = await r.get(`/api/teacher/questions/${id}`);
     expect(getRes.status).toBe(404);
+
+    // 列表：同样过滤 deletedAt → 已删题目不出现
+    const listRes = await r.get('/api/teacher/questions');
+    expect(listRes.body.data.list.find(q => q.id === id)).toBeUndefined();
   });
 
   // Q10: 创建含材料
@@ -179,7 +191,8 @@ describe('题库 CRUD', () => {
     expect(res.body.data.list.length).toBeLessThanOrEqual(2);
   });
 
-  // Q12: 列表按关键词搜索
+  // Q12: 列表按关键词搜索（keyword → title contains 过滤，见 teacherController.getQuestions:35）
+  // 基线中该用例失败为 Q10 创建失败的链式失败（默认小题未填分），现已随 makeQuestion 修复
   it('Q12: 列表按关键词搜索 → 返回匹配项', async () => {
     await r.post('/api/teacher/questions', makeQuestion({ title: '期中考试专用题' }));
 

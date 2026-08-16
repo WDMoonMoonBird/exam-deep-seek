@@ -9,8 +9,9 @@ describe('学生管理', () => {
     r = authReq(token);
   });
 
-  // M1: 新增学生
-  it('M1: 新增学生 → 200, 班级关联正确', async () => {
+  // M1: 新增学生 —— 现行业务规则：username 存储为「学号@院校代码」
+  // （addStudent 按班级所属学校 officialCode 拼接，测试学校 officialCode=10001，见 server/test/setup.js）
+  it('M1: 新增学生 → 200, 用户名自动拼接为学号@院校代码', async () => {
     const { classId } = getTestData();
     const res = await r.post('/api/teacher/students', {
       username: 'test_new_stu',
@@ -18,14 +19,14 @@ describe('学生管理', () => {
       classId,
     });
     expect(res.body.code).toBe(0);
-    expect(res.body.data.username).toBe('test_new_stu');
+    expect(res.body.data.username).toBe('test_new_stu@10001');
   });
 
-  // 重复学号
+  // 重复学号（以完整「学号@院校代码」判重）
   it('M1补充: 重复学号 → 400', async () => {
     const { classId } = getTestData();
     const res = await r.post('/api/teacher/students', {
-      username: 'test_new_stu',
+      username: 'test_new_stu@10001',
       realName: '重复学生',
       classId,
     });

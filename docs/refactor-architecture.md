@@ -310,11 +310,13 @@ flowchart TD
 ### P2 端口落地与适配器（agent-infra-db + agent-infra-ai）
 - Prisma 仓储适配器 + Mapper（记录 ↔ 领域对象），查询行为与现状完全一致
 - 拆分 `deepseek.js`：`PromptBuilder` + `DeepSeekGateway` + 装饰器，**行为不变、接口收敛**
+- 拆分依据（已侦察）：`deepseek.js`（541 行）三大块——① 配置读取（loadConfig/getConfig，DB 优先 ENV 兜底，1 分钟缓存）→ 迁 `SystemConfigRepository`；② `gradeSubmission()`（L66，评分调用 + prompt 构建）→ `PromptBuilder` + `DeepSeekGateway.grade`；③ `parseExamPaper()`（L231，试卷解析，独立角色 prompt）→ 独立端口 `AiGateway.parsePaper` 或独立适配器；并发控制 `getConcurrency()` → `RateLimitedAiGateway` 装饰器；`clearConfigCache()` 随配置仓储迁移
 - ✅ 验收：应用层零 Prisma 引用；现有集成测试全绿
 
 ### P3 评分链路用例化（agent-app + agent-infra-ai）
 - 从 `reviewController`（739 行）抽出 `ReviewUseCases`：评分编排 / 重评 / 人工调整
 - `gradingWorker` 改造为命令模式消费；Socket 通知改走 `NotificationPort`
+- 拆分依据（已侦察）：`reviewController.js`（739 行）混装 ① 查询构建/数据丰富（buildFilter/enrichWithSchool）② AI 评分调用（import gradeSubmission from deepseek.js）③ 文件系统读取（fs/path/projectView/projectPaths）④ **跨 controller 耦合**（import getVisibleClassIds from teamController.js——重构需一并消除）⑤ 直接 Prisma 操作。拆分后 controller 仅保留参数解析与响应映射
 - ✅ 验收：reviewController 只剩路由翻译；评分集成测试与 `GRADING_BENCHMARK.md` 基准持平
 
 ### P4 上帝控制器绞杀（agent-app + agent-http）

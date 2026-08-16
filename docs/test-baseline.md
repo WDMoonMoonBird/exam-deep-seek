@@ -14,11 +14,11 @@
 
 ## 基线统计（2026-08-16）
 
-| 套件 | 结果 |
-|---|---|
-| unit（4 suites） | 2 failed / 2 passed；**108/118 通过，10 失败** |
-| integration（7 suites） | 2 failed / 5 passed；**54/61 通过，7 失败** |
-| e2e（Playwright） | 未运行（需前端构建 + 浏览器环境，待补充） |
+| 套件 | P0 基线（2026-08-16） | P1 结果（2026-08-16） |
+|---|---|---|
+| unit（6 suites） | 108/118 通过，10 失败 | **132/134 通过，2 失败**（仅剩 E4/E6，P2 处置） |
+| integration（7 suites） | 54/61 通过，7 失败 | **61/61 全部通过** ✅ |
+| e2e（Playwright） | 未运行（需前端构建 + 浏览器环境，待补充） | 未运行（P3 前补充） |
 
 ## 失败明细与根因
 
@@ -33,6 +33,12 @@
 | integration/question | Q12 | 搜索『期中』返回 0 条 | 链式失败（Q10 创建失败导致无数据） | 随 Q10 修复 |
 | integration/student | M1 | 期待 username=test_new_stu，实收 test_new_stu@10001 | 新业务规则『学号@院校代码』，测试未同步 | 更新测试断言 |
 
+### A 类处置记录（P1 已完成，全部清零 ✅）
+
+- scoring 8 个：测试已按现行语义重写（agent-test-sync + 决策日志）；领域版单测见 `server/test/unit/domain/scoring.service.test.js`（15 用例全过）
+- question 6 个：`makeQuestion` 默认小题补 `score: 100` 根治链式失败；Q4 改期待成功（总分不校验）；Q9 软删除过滤实现正确（getQuestion/getQuestions 均带 `deletedAt: null`），404 断言保留并新增列表过滤断言
+- student 1 个：M1 断言对齐『学号@院校代码』规则
+
 ### B. 环境差异（1 个）
 
 | 套件 | 用例 | 现象 | 根因 | 处置建议 |
@@ -43,7 +49,16 @@
 
 | 套件 | 用例 | 现象 | 根因 | 处置建议 |
 |---|---|---|---|---|
-| unit/filename-decode | E6 | `.git/config` 解压后目录名仍带前导点 | 隐藏目录清洗语义未恢复（注释称『语义恢复』但实现缺失） | 确认是否为回归，P2 修复或更新测试 |
+| unit/filename-decode | E6 | `.git/config` 解压后目录名仍带前导点 | **测试过时**（已查证）：设计已从『解压落盘+读取端过滤』演进为『解压端直接过滤』——projectArchive.js 的 shouldIgnorePath 在清洗前命中 `.git` 直接跳过不落盘（第 139-144 行），sanitizeSegment 保留前导点仅作通用清洗语义 | P2 更新断言：期待 `.git` 不落盘、fileCount 不含该文件 |
+
+## 已决策事项（决策日志）
+
+| 日期 | 决策 | 决策人 | 影响 |
+|---|---|---|---|
+| 2026-08-16 | ScoringService 语义**以现行实现为准**：强制每题填分（score 必填且 >0），不恢复均分/总分校验 | 用户（产品决策） | P1 提取领域层时保持行为不变；scoring/question 测试同步更新断言 |
+| 2026-08-16 | E6（.git 前导点）定性为**测试过时**：设计已演进为『解压端直接过滤隐藏目录』（projectArchive.js shouldIgnorePath 先行），测试断言过时 | 架构师查证 | P2 更新测试断言，期待 .git 不落盘 |
+| 2026-08-16 | E4（Path traversal）定性为 **Node 22 环境差异**：path.relative 对非规范路径直接抛错 | 架构师查证 | P2 迁移 utils 时捕获并转换为领域错误 |
+| 2026-08-16 | **附带发现（真实缺陷，未修）**：teacherController.js:470 createAssignment 的 question 查询漏过滤 `deletedAt`，软删除题目仍可被选入作业 | agent-test-sync 调查 | P4 迁移 teacher 用例时一并修复并补测试 |
 
 ## 红线规则
 
