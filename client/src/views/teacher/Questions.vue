@@ -7,7 +7,7 @@
         <template #overlay>
           <a-menu @click="onNewQuestion">
             <a-menu-item key="code">编程题</a-menu-item>
-            <a-menu-item key="project"><span>实训题 <a-tag color="orange" size="small" style="font-size:10px;line-height:14px;padding:0 4px;margin-inline-start:2px;transform:translateY(-1px);">BETA</a-tag></span></a-menu-item>
+            <a-menu-item key="project"><span>实训题 <a-tag color="orange" size="small">BETA</a-tag></span></a-menu-item>
           </a-menu>
         </template>
       </a-dropdown>

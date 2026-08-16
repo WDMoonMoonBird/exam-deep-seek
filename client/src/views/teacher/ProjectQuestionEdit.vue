@@ -6,6 +6,7 @@
         <!-- 教师模式：可编辑 / 学生模式：只读 -->
         <a-input v-if="isTeacher" v-model:value="form.title" :placeholder="isEdit?'编辑实训题':'新建实训题'" style="width:260px;font-size:18px;font-weight:700;" />
         <span v-else style="font-size:18px;font-weight:700;">{{ form.title || '实训题' }}</span>
+        <a-tag color="orange" size="small" style="margin:0;">BETA</a-tag>
 
         <a-select v-if="isTeacher" v-model:value="form.difficulty" style="width:100px;">
           <a-select-option value="easy">简单</a-select-option>
@@ -20,7 +21,6 @@
         <a-input-number v-if="isTeacher" v-model:value="form.maxScore" :min="1" :step="5" style="width:80px;" />
         <span v-else style="font-weight:700;color:var(--blue);">{{ form.maxScore }} 分</span>
       </a-space>
-      <span class="beta-badge">BETA</span>
       <a-space>
         <a-button @click="openDescModal">题目描述</a-button>
         <a-button @click="openRubricModal">评分标准</a-button>
@@ -480,12 +480,6 @@ onBeforeUnmount(() => {
 .page { max-width:100%; height:100%; display:flex; flex-direction:column; overflow:hidden; }
 .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-shrink:0; }
 .page-header h2 { font-size:28px; margin:0; }
-/* 实训题 BETA 迷你角标（2026-08-16） */
-.beta-badge {
-  font-size:10px; line-height:14px; padding:0 5px; border-radius:4px;
-  background:#ff7a00; color:#fff; font-weight:600; letter-spacing:0.5px;
-  align-self:flex-start; margin-top:4px; flex-shrink:0; user-select:none;
-}
 
 .kind-pick-switch-enter-active,.kind-pick-switch-leave-active { transition: all .25s ease; }
 .kind-pick-switch-enter-from,.kind-pick-switch-leave-to { opacity:0; transform:scale(.9); }
