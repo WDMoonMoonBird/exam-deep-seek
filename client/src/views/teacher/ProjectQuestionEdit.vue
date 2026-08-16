@@ -149,8 +149,10 @@ const route = useRoute();
 const isEdit = computed(() => !!route.params.id);
 const submitting = ref(false);
 const hasUploaded = ref(false);
-/** 上传过滤统计（"已过滤依赖，保留 X 个文件"，阶段二展示） */
+/** 上传过滤统计（"已过滤依赖，保留 X 个文件"，阶段二展示 + 成功 message） */
 const uploadStats = ref('');
+const uploadKeptCount = ref(0);
+const uploadKeptBytes = ref(0);
 const editorContainerRef = ref(null);
 const showDescModal = ref(false);
 const showRubricModal = ref(false);
@@ -327,8 +329,10 @@ async function onZipReady({ tree, fileContents: fc, keptCount, keptBytes }) {
   fc.forEach((v, k) => fileContents.set(k, v));
   // 传给阶段二 sidebar 组件显示（外部树优先，picker 自动隐藏）
   externalTree.value = tree;
-  // 恢复"已过滤依赖"统计提示（阶段切换后由阶段二组件显示）
+  // 记录过滤统计（阶段二小字 + 上传/提交成功 message）
   uploadStats.value = `已过滤依赖，保留 ${keptCount} 个代码文件（${(keptBytes / 1024).toFixed(0)}KB）`;
+  uploadKeptCount.value = keptCount;
+  uploadKeptBytes.value = keptBytes;
   hasUploaded.value = true;
 
   if (isTeacher.value && form.packageFile) {
@@ -354,7 +358,7 @@ async function teacherUpload(blob, name) {
     formData.append('file', blob, name);
     const r = await uploadPackage(formData);
     form.tempId = r.data?.tempId || '';
-    message.success('上传成功，标准工程包已保存');
+    message.success(`上传成功（已过滤依赖），保留 ${uploadKeptCount.value} 个代码文件 ${(uploadKeptBytes.value / 1024).toFixed(0)}KB`);
   } catch (err) {
     form.tempId = '';
     message.error('上传失败：' + (err.response?.data?.message || err.message) + '（保存前请重新上传）');
@@ -402,7 +406,7 @@ async function handleSubmit() {
       const first = findFirstFile(data.files.tree);
       if (first) openFile(first.path, first.name, first.language);
     }
-    message.success(`提交成功，已生成第 ${data.version ?? '新'} 个版本`);
+    message.success(`提交成功（已过滤依赖），保留 ${uploadKeptCount.value} 个代码文件 ${(uploadKeptBytes.value / 1024).toFixed(0)}KB，已生成第 ${data.version ?? '新'} 个版本`);
     submitting.value = false;
   } catch (e) {
     message.error('提交失败：' + (e.response?.data?.message || e.message));
