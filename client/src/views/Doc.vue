@@ -88,7 +88,7 @@
                 </section>
 
                 <section id="project" class="doc-section">
-                    <h2 class="section-title">实训题管理 <span class="doc-tag" style="background:#ff7a00;color:#fff;border:none;">BETA</span></h2>
+                    <h2 class="section-title">7. 实训题管理 <span class="doc-tag" style="background:#ff7a00;color:#fff;border:none;">BETA</span></h2>
                     <div class="section-body">
                         <p>实训题 = 完整工程项目实践任务（如「用户管理系统（前端）」）。学生上传项目压缩包，系统自动进行 <b>AI 对比评分</b>（以教师上传的标准工程包为参照）。</p>
 
@@ -136,7 +136,7 @@
 
                 <!-- 8. AI 评分流程（交互式步骤条） -->
                 <section id="aiflow" class="doc-section">
-                    <h2 class="section-title">8. AI 评分流程</h2>
+                    <h2 class="section-title">9. AI 评分流程</h2>
                     <div class="section-body">
                         <h3>8.1 评分流程</h3>
                         <p>学生提交代码后，评分流程自动触发：</p>
@@ -159,7 +159,7 @@
 
                 <!-- 9. 性能优势 -->
                 <section id="performance" class="doc-section">
-                    <h2 class="section-title">9. 性能优势</h2>
+                    <h2 class="section-title">10. 性能优势</h2>
                     <div class="section-body">
                         <div class="a-alert a-alert-info">⚡ 本系统采用<b>多并发 AI 评分架构</b>，专为大规模考试场景设计。</div>
                         <h3>高并发批改能力</h3>
@@ -405,7 +405,7 @@ const sections2to7 = [
   `},
 
     {
-        id: 'assignments', title: '7. 作业管理', content: `
+        id: 'assignments', title: '8. 作业管理', content: `
     <h3>7.1 布置作业</h3>
     <p>点击「布置作业」进入三步向导：</p>
     <div class="a-alert a-alert-info">💡 本系统每份作业只包含<b>一道题目</b>（可含多道小题）。如需布置多道题目，请分别创建多份作业。</div>
@@ -429,7 +429,7 @@ const sections2to7 = [
 
 const sections9to10 = [
     {
-        id: 'review', title: '10. 评分审核', content: `
+        id: 'review', title: '11. 评分审核', content: `
     <h3>9.1 审核列表</h3>
     <p>进入「评分审核」页面，选择班级后查看所有作业的审核状态。</p>
     <table class="doc-table">
@@ -466,7 +466,7 @@ const sections9to10 = [
   `},
 
     {
-        id: 'faq', title: '11. 常见问题', content: `
+        id: 'faq', title: '12. 常见问题', content: `
     <h3>Q: 学生说看不到作业？</h3>
     <p>请检查：① 作业起止时间——若当前时间早于开始时间，学生端显示 <span class="doc-tag doc-tag-orange">未开始</span>；② 是否选对了班级——作业只对布置时选中的班级学生可见。</p>
 
@@ -490,7 +490,7 @@ const sections9to10 = [
   `},
 
     {
-        id: 'opensource', title: '12. 开源', content: `
+        id: 'opensource', title: '13. 开源', content: `
     <p>本项目完全开源，代码托管在 <a href="https://gitee.com/WD_MoonMoonBird/exam-deep-seek" target="_blank">Gitee</a>，欢迎 Star、Fork 和 PR。</p>
     <div style="text-align:center;padding:32px 20px;margin:24px 0;background:linear-gradient(135deg,#f9f0ff,#e6f4ff);border-radius:12px;">
       <p style="font-size:18px;font-weight:600;color:#333;margin-bottom:8px;">"From each according to his ability, to each according to his needs."</p>
@@ -505,10 +505,10 @@ const allSections = [
     { id: 'intro', title: '1. 系统简介' },
     ...sections2to5.value,
     { id: 'questions', title: '6. 题库管理' },
-    { id: 'project', title: '实训题管理（BETA）' },
+    { id: 'project', title: '7. 实训题管理（BETA）' },
     ...sections7.value,
-    { id: 'aiflow', title: '8. AI 评分流程' },
-    { id: 'performance', title: '9. 性能优势' },
+    { id: 'aiflow', title: '9. AI 评分流程' },
+    { id: 'performance', title: '10. 性能优势' },
     ...sections9to10,
 ];
 const anchors = allSections.map(s => ({
