@@ -62,6 +62,13 @@
 | 2026-08-16 | E4 已修复（P2）：预算统计循环穿越检查前置，避免 ignore 包对含 `..` 路径抛 RangeError；E6 测试已按现行语义更新（解压端过滤 + 原契约抛错） | 架构师实施 | 已完成，filename-decode 24/24 |
 | 2026-08-16 | P2 基础设施层落地：SystemConfigRepository / PromptBuilder / DeepSeekGateway / CachingAiGateway（行为等价迁移，17 单测全过）；原 deepseek.js 保持不动待 P3 切换 | 架构师实施 | 已完成 |
 
+## 已知偶发现象（非回归，重跑即过）
+
+| 现象 | 说明 | 处置 |
+|---|---|---|
+| integration R3（班级审核列表）偶发 30s 超时 | 瞬时 MySQL 负载/前序进程清理未完成导致查询阻塞；接口本身未改动（review-class 不走新用例） | 重跑全量即过；如频繁出现需排查 review-class 查询性能（N+1） |
+| integration student-v2 偶发失败 | 同因（suite 间数据/时序干扰，共享 seed） | 重跑即过 |
+
 ## 红线规则
 
 1. 重构提交不得引入**新的**测试失败；
