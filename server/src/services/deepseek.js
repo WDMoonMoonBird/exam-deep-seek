@@ -463,6 +463,46 @@ const DEFAULT_PROJECT_CRITERIA = '默认评分标准：\n功能完整性（50%�
  * @param {string} params.studentFiles - 学生提交源码（格式化字符串）
  * @returns {Promise<{totalScore:number, breakdown:Array, highlights:Array, issues:Array, overallComment:string}>}
  */
+/**
+ * 从模型响应中提取项目评分 JSON（增强解析，2026-08-16 生产问题修复）：
+ *  1) 直接匹配含 "totalScore" 的 JSON 对象（首个 { 到末个 }）
+ *  2) 剥离 markdown 代码块围栏后重试（模型常包裹 ```json）
+ *  3) 宽容补全：JSON 可能被 max_tokens 截断（finish_reason=length），尝试补尾部 }
+ * @param {string} content 模型原始响应
+ * @returns {object|null} 解析成功的对象；无法解析返回 null
+ */
+function extractProjectGradeJson(content) {
+  if (!content) return null;
+  const tryParse = (s) => {
+    const m = s.match(/\{[\s\S]*"totalScore"[\s\S]*\}/);
+    if (!m) return null;
+    try { return JSON.parse(m[0]); } catch { return null; }
+  };
+  // 1) 直接匹配
+  let parsed = tryParse(content);
+  if (parsed) return parsed;
+  // 2) 剥离 markdown 围栏
+  const cleaned = content.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim();
+  parsed = tryParse(cleaned);
+  if (parsed) return parsed;
+  // 3) 宽容补全：截断场景按括号栈补齐缺失闭合符（从内到外 } / ]）
+  const first = cleaned.indexOf('{');
+  if (first >= 0) {
+    const candidate = cleaned.slice(first);
+    if (candidate.includes('totalScore')) {
+      try { return JSON.parse(candidate); } catch { /* 截断，继续补全 */ }
+      const stack = [];
+      for (const ch of candidate) {
+        if (ch === '{' || ch === '[') stack.push(ch);
+        else if ((ch === '}' && stack[stack.length - 1] === '{') || (ch === ']' && stack[stack.length - 1] === '[')) stack.pop();
+      }
+      const suffix = stack.slice().reverse().map((ch) => (ch === '{' ? '}' : ']')).join('');
+      try { return JSON.parse(candidate + suffix); } catch { /* 放弃 */ }
+    }
+  }
+  return null;
+}
+
 export async function gradeProject({ title, description, scoringRubric, standardFiles, studentFiles }) {
   const criteria = scoringRubric || DEFAULT_PROJECT_CRITERIA;
 
@@ -522,11 +562,18 @@ ${studentFiles}
       if (!res.ok) throw new Error(`DeepSeek API ${res.status}`);
 
       const data = await res.json();
-      const content = data.choices?.[0]?.message?.content || '';
-      const jsonMatch = content.match(/\{[\s\S]*"totalScore"[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('返回格式不包含有效的 JSON');
-
-      const parsed = JSON.parse(jsonMatch[0]);
+      const choice = data.choices?.[0] || {};
+      const content = choice.message?.content || '';
+      const parsed = extractProjectGradeJson(content);
+      if (!parsed) {
+        // 诊断增强：记录截断信号与响应片段（2026-08-16 生产问题修复）
+        logger.warn({
+          finishReason: choice.finish_reason,
+          contentLength: content.length,
+          snippet: content.slice(0, 300),
+        }, '项目评分响应解析失败，记录响应片段');
+        throw new Error('返回格式不包含有效的 JSON');
+      }
       logger.info({ totalScore: parsed.totalScore }, '项目评分完成');
       return parsed;
 

@@ -1,4 +1,4 @@
-import { gradeSubmission } from '../../src/services/deepseek.js';
+import { gradeSubmission, gradeProject } from '../../src/services/deepseek.js';
 import { ABNORMAL_FEEDBACK } from '../../src/constants.js';
 
 // Mock 全局 fetch
@@ -287,4 +287,54 @@ describe('gradeSubmission — 重试与兜底', () => {
     expect(result.score).toBe(0);
     expect(result.feedback).toBe(ABNORMAL_FEEDBACK);
   }, 15000);
+});
+
+// ==================== gradeProject — 解析增强（2026-08-16 生产问题修复） ====================
+
+describe('gradeProject — 解析增强', () => {
+  const gradeArgs = {
+    title: '用户管理系统',
+    description: '前端项目',
+    scoringRubric: '',
+    standardFiles: '// 标准源码',
+    studentFiles: '// 学生源码',
+  };
+
+  const okRes = (content, finishReason = 'stop') => mockJsonRes({
+    choices: [{ message: { content }, finish_reason: finishReason }],
+  });
+
+  it('G1: 正常裸 JSON → 解析成功', async () => {
+    mockFetch(okRes('{"totalScore":85,"breakdown":[],"highlights":[],"issues":[],"overallComment":"不错"}'));
+    const r = await gradeProject(gradeArgs);
+    expect(r.totalScore).toBe(85);
+  });
+
+  it('G2: markdown 代码块包裹 → 解析成功', async () => {
+    mockFetch(okRes('```json\n{"totalScore":72,"breakdown":[],"highlights":[],"issues":[],"overallComment":"尚可"}\n```'));
+    const r = await gradeProject(gradeArgs);
+    expect(r.totalScore).toBe(72);
+  });
+
+  it('G3: 前后带说明文字 → 解析成功', async () => {
+    mockFetch(okRes('评分结果如下：\n{"totalScore":66,"breakdown":[],"highlights":[],"issues":[],"overallComment":"及格"}\n以上为最终结果'));
+    const r = await gradeProject(gradeArgs);
+    expect(r.totalScore).toBe(66);
+  });
+
+  it('G4: JSON 被截断（无尾括号，finish_reason=length）→ 补全解析成功', async () => {
+    mockFetch(okRes('{"totalScore":58,"breakdown":[{"item":"功能"', 'length'));
+    const r = await gradeProject(gradeArgs);
+    expect(r.totalScore).toBe(58);
+  });
+
+  it('G5: 纯文本响应（无 totalScore）→ 重试后抛错', async () => {
+    mockFetch(okRes('这是一段纯文本评语，模型拒绝输出 JSON'));
+    await expect(gradeProject(gradeArgs)).rejects.toThrow('返回格式不包含有效的 JSON');
+  }, 12000);
+
+  it('G6: 有 JSON 但无 totalScore 字段（结构不符）→ 抛错', async () => {
+    mockFetch(okRes('{"score":80,"comment":"别的结构"}'));
+    await expect(gradeProject(gradeArgs)).rejects.toThrow('返回格式不包含有效的 JSON');
+  }, 12000);
 });
