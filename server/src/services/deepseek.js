@@ -485,12 +485,22 @@ function extractProjectGradeJson(content) {
   const cleaned = content.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim();
   parsed = tryParse(cleaned);
   if (parsed) return parsed;
-  // 3) 宽容补全：截断场景按括号栈补齐缺失闭合符（从内到外 } / ]）
+  // 3) 宽容补全：截断场景——先修剪到最后一个完整字符串边界，再按括号栈补齐闭合符
   const first = cleaned.indexOf('{');
   if (first >= 0) {
-    const candidate = cleaned.slice(first);
+    let candidate = cleaned.slice(first);
     if (candidate.includes('totalScore')) {
       try { return JSON.parse(candidate); } catch { /* 截断，继续补全 */ }
+      // 字符串中间截断修剪：从后往前找最后一个成对的引号；
+      // 若其后的残余字符不是 JSON 结构字符（:,} ] 空白），说明截断点在字符串内部，
+      // 裁剪到该引号之后（丢弃未闭合字符串的残余）
+      const lastQuote = candidate.lastIndexOf('"');
+      if (lastQuote > 0) {
+        const tail = candidate.slice(lastQuote + 1);
+        if (!/^[\s:,}\]]*$/.test(tail)) {
+          candidate = candidate.slice(0, lastQuote + 1);
+        }
+      }
       const stack = [];
       for (const ch of candidate) {
         if (ch === '{' || ch === '[') stack.push(ch);
