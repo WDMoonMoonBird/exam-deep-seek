@@ -1,59 +1,34 @@
 /**
  * 仓储端口 —— 领域层定义的数据访问契约（由基础设施层 Prisma 适配器实现）。
- * 应用层只依赖这些接口，不依赖 Prisma/MySQL。
+ * DSGN-001/BUG-011 处置（2026-08-16）：以应用层实际消费面重写，删除无实现无消费的空想契约；
+ * 未实现仓储（Assignment/ReviewResult/User/Project/ProjectSubmission）从契约移除，列入 DSGN-018 排期。
  */
 
 /**
- * @typedef {object} QuestionRepository 题目仓储
- * @property {(id: number|string) => Promise<object|null>} findById 按 ID 查询（含小题）
- * @property {(ids: Array<number|string>) => Promise<Array<object>>} findByIds 批量查询
- * @property {(q: object) => Promise<void>} save 保存（创建/更新）
- * @property {(criteria: {teacherId?: number, schoolId?: number, keyword?: string, page?: number, pageSize?: number}) => Promise<{list: Array, total: number}>} search 分页搜索
+ * @typedef {object} SubmissionRepository 提交仓储（SubmissionUseCases/ReviewUseCases 消费）
+ * @property {(id: number) => Promise<object|null>} findById 按 ID 查询（含题目材料/小题）
+ * @property {(id: number) => Promise<object|null>} findScoreContext 评分上下文（status/aiScore/aiFeedback/teacherFeedback/question.type）
+ * @property {(id: number, data: object) => Promise<object>} update 更新提交字段
+ * @property {(assignmentId: number) => Promise<object|null>} findAssignmentContext 作业提交上下文（endTime/allowResubmit/mode/maxAttempts/locked）
+ * @property {(assignmentId: number, studentId: number, questionId: number, subQuestionId?: number|null) => Promise<object|null>} findByAssignmentAndQuestion 学生某题提交
+ * @property {(data: object) => Promise<object>} create 创建提交
+ * @property {(assignmentId: number, studentId: number) => Promise<object>} resetByAssignment 重置为草稿（练习重答）
  */
 
 /**
- * @typedef {object} AssignmentRepository 作业仓储
- * @property {(id: number|string) => Promise<object|null>} findById
- * @property {(a: object) => Promise<void>} save
- * @property {(teacherId: number, schoolId: number) => Promise<Array<object>>} listByTeacher
+ * @typedef {object} QuestionRepository 题目仓储（QuestionUseCases 消费）
+ * @property {(data: {teacherId: number, title: string, maxScore: number, difficulty?: string, material?: string, attachmentUrl?: string, objectiveSettings?: object, subQuestions: Array}) => Promise<object>} create 创建题目（含小题）
+ * @property {(id: number) => Promise<object|null>} findById 按 ID 查询（含小题；已实现，待用例接入）
  */
 
 /**
- * @typedef {object} SubmissionRepository 提交仓储
- * @property {(s: object) => Promise<void>} save
- * @property {(id: number|string) => Promise<object|null>} findById
- * @property {(assignmentId: number|string, studentId: number|string) => Promise<object|null>} findByAssignmentAndStudent
- * @property {(assignmentId: number|string) => Promise<Array<object>>} listByAssignment
- */
-
-/**
- * @typedef {object} ReviewResultRepository 评分结果仓储
- * @property {(r: object) => Promise<void>} save
- * @property {(submissionId: number|string) => Promise<Array<object>>} findBySubmissionId
- */
-
-/**
- * @typedef {object} UserRepository 用户仓储
- * @property {(username: string) => Promise<object|null>} findByUsername
- * @property {(id: number|string) => Promise<object|null>} findById
- * @property {(u: object) => Promise<void>} save
- */
-
-/**
- * @typedef {object} SystemConfigRepository 系统配置仓储（AI key/model 等，敏感值由基础设施层处理）
- * @property {(key: string) => Promise<string|null>} get
- * @property {(key: string, value: string) => Promise<void>} set
- */
-
-/**
- * @typedef {object} ProjectRepository 实训项目仓储
- * @property {(id: number|string) => Promise<object|null>} findById
- * @property {(p: object) => Promise<void>} save
- */
-
-/**
- * @typedef {object} ProjectSubmissionRepository 实训项目提交仓储
- * @property {(id: number|string) => Promise<object|null>} findById
- * @property {(ps: object) => Promise<void>} save
- * @property {(projectId: number|string) => Promise<Array<object>>} listByProject
+ * @typedef {object} SystemConfigRepository 系统配置仓储（DeepSeekGateway 等消费）
+ * @property {(key: string) => Promise<string|null>} get 读取配置（DB 优先）
+ * @property {(key: string, value: string) => Promise<void>} set 写入配置并失效缓存
+ * @property {() => void} clearCache 清缓存（管理端改配置后调用）
+ * @property {() => Promise<string|null>} getApiKey
+ * @property {() => Promise<string>} getBaseUrl
+ * @property {() => Promise<string>} getModel
+ * @property {() => Promise<number>} getConcurrency
+ * @property {() => Promise<object>} loadAll 全量加载（1 分钟缓存）
  */

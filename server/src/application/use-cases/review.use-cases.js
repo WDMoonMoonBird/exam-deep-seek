@@ -4,7 +4,7 @@
  * 依赖注入仓储与 AI 网关端口；不依赖 HTTP/Prisma。
  */
 
-import { EntityNotFoundError } from '../../domain/errors.js';
+import { DomainError, EntityNotFoundError } from '../../domain/errors.js';
 
 export class ReviewUseCases {
   /**
@@ -52,6 +52,12 @@ export class ReviewUseCases {
    * @throws {EntityNotFoundError} 提交不存在
    */
   async manualAdjust({ submissionId, finalScore }) {
+    // BUG-017 修复：分值必须为有限非负数，拒绝负数/NaN/字符串注入
+    const scoreNum = Number(finalScore);
+    if (!Number.isFinite(scoreNum) || scoreNum < 0) {
+      throw new DomainError('分数不合法：必须是有限非负数', 'INVALID_SCORE');
+    }
+    finalScore = scoreNum;
     const sub = await this.submissionRepo.findScoreContext(submissionId);
     if (!sub) throw new EntityNotFoundError('提交不存在');
 

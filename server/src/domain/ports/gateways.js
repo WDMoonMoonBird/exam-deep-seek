@@ -13,7 +13,7 @@
 /**
  * 编译/分析执行器：机器校验（编译检查、AST 分析），child_process 封装。
  * @typedef {object} ExecutorPort
- * @property {(dir: string, language: 'java'|'python') => Promise<{passed: boolean, score: number, feedback: string, details?: object}>} checkCompile 编译检查
+ * @property {(dir: string, config?: {checkCompile?: boolean}) => Promise<{passed: boolean, score: number, feedback: string, details?: object}>} compileCheck 编译检查（对齐 CompileExecutor.compileCheck 签名，BUG-010 处置）
  */
 
 /**

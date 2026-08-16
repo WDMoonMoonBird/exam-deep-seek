@@ -66,7 +66,11 @@ export function toStudentView(submission, _question) {
     feedback: showScore ? (submission.teacherFeedback ?? null) : null,
     // 仅 submitted 态暴露后台评分进度；ai_graded 对学生映射为 submitted，
     // 但此时已在后台完成，无需展示进度。grading.failed 时前端提示"评分异常，稍候"。
-    gradingState: submission.status === 'submitted' ? (env.grading?.state || 'pending') : null,
+    // BUG-017-adj（6③ 裁决）：parseProjectAnswer 会把缺省 grading 补成 'none'，
+    // 导致 || 'pending' 永不生效——学生视图语义应为「无任务 = 待评分 pending」
+    gradingState: submission.status === 'submitted'
+      ? (env.grading?.state && env.grading.state !== 'none' ? env.grading.state : 'pending')
+      : null,
   };
 }
 

@@ -25,13 +25,12 @@ export default async function () {
   if (!adminToken) throw new Error('Admin login failed: ' + JSON.stringify(adminLogin));
   console.log('E2E setup: admin logged in');
 
-  // 2. 确保学校存在
+  // 2. 学校：admin 仅可读学校列表（无 POST /schools 端点），复用库中第一个学校，
+  //    并把实际名称写入 state 供 spec 动态引用（严禁 spec 硬编码学校名）。
   let schools = await get('/admin/schools', adminToken);
   let schoolId = schools.data?.[0]?.id;
-  if (!schoolId) {
-    const s = await post('/admin/schools', { name: 'E2E测试大学' }, adminToken);
-    schoolId = s.data?.id;
-  }
+  const schoolName = schools.data?.[0]?.name || '';
+  if (!schoolId) throw new Error('E2E setup: 库中无学校，无法继续（admin 不可创建学校，需先以 jest seed 建学校）');
   // 确保学校有 officialCode
   const school = schools.data?.find(s => s.id === schoolId);
   if (school && !school.officialCode) {
@@ -54,11 +53,12 @@ export default async function () {
   }
   console.log('E2E setup: teacher ready');
 
-  // 4. 确保班级存在
+  // 4. 确保班级存在（固定名 E2E测试班）
   let classes = await get(`/teacher/classes?schoolId=${schoolId}`, teacherToken);
-  let classId = classes.data?.[0]?.id;
+  let classId = classes.data?.find((c) => c.name === 'E2E测试班')?.id;
   if (!classId) {
-    const c = await post('/teacher/classes', { name: 'E2E测试班' }, teacherToken);
+    // createClass 从 req.query.schoolId 取值（teacherController.js:13 getSchoolId），必须带 query
+    const c = await post(`/teacher/classes?schoolId=${schoolId}`, { name: 'E2E测试班' }, teacherToken);
     classId = c.data?.id;
   }
 
@@ -101,7 +101,7 @@ export default async function () {
     admin: { username: 'admin', password: '***REDACTED***' },
     teacher: { username: 'e2e_teacher', password: 'e2e_teacher' },
     student: { username: studentUsername, password: studentPassword },
-    schoolId, classId, questionId, assignmentId,
+    schoolId, schoolName, classId, questionId, assignmentId,
   };
 
   fs.writeFileSync(path.join(__dirname, '.e2e-state.json'), JSON.stringify(state, null, 2));

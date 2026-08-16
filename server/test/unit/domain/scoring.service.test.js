@@ -72,3 +72,27 @@ describe('ScoringService.isAbnormal（AI 兜底异常判定）', () => {
     expect(isAbnormal(undefined)).toBe(true);
   });
 });
+
+describe('ScoringService.weightedTotal 边界（分值不变量观测）', () => {
+  it('全 0 → 0', () => {
+    expect(weightedTotal(0, 0, 0)).toBe(0);
+  });
+
+  it('NaN 按 0 计（falsy 兜底语义）', () => {
+    expect(weightedTotal(NaN, NaN, NaN)).toBe(0);
+  });
+
+  it('自定义权重缺省字段回退默认 0.3/0.4', () => {
+    expect(weightedTotal(100, 0, 0, { machine: 0.5 })).toBe(50);
+  });
+
+  it('负分透传不校验（观测行为，见 DSGN：加权总分缺分值不变量）', () => {
+    expect(weightedTotal(-10, 0, 0)).toBe(-3);
+  });
+});
+
+describe('ScoringService.resolveSubQuestionScores 边界', () => {
+  it('score: undefined 与 null 等价 → 报未设置分值', () => {
+    expect(() => resolveSubQuestionScores([{ score: undefined }])).toThrow('第1小题未设置分值');
+  });
+});
