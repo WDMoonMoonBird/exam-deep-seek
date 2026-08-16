@@ -25,9 +25,6 @@
                 <a-menu-item key="/teacher/review"><template #icon>
                         <SafetyCertificateOutlined />
                     </template><span>评分审核</span></a-menu-item>
-                <a-menu-item key="/teacher/projects"><template #icon>
-                        <ExperimentOutlined />
-                    </template><span>实训任务</span></a-menu-item>
             </a-menu>
         </a-layout-sider>
         <a-layout>

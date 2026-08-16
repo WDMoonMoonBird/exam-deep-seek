@@ -194,6 +194,7 @@
 | 2026-08-16 | 学生实训作业提交按钮锁死 | ProjectQuestionEdit.vue | `a97f582` | 提交一次（status 非 draft）即禁用提交按钮，避免「不能重复提交/请先上传项目文件」误导提示；练习模式的多版本交互留待后续完善（未实现） |
 | 2026-08-16 | 学生端代码预览动效 | ProjectQuestionEdit.vue | `bc10002` | 学生端切换文件预览代码时，与教师审核页一致的 0.15s 淡入上移动效（CSS animation 重放，不重建 Monaco 容器） |
 | 2026-08-16 | 代码预览字体统一 | style.css / CodeEditor.vue / ProjectQuestionEdit.vue / ProjectReviewNew.vue | `4f0e3cf` | 全部 Monaco 代码预览使用 Monaco.ttf（字体移至 client/src/assets/fonts/，@font-face 注册 MonacoDSH，三处编辑器配置 fontFamily），回退 monospace |
+| 2026-08-16 | 实训任务旧链路清理 + BETA 标记 | Layout.vue / router/index.js / Questions.vue / ProjectQuestionEdit.vue / 删除 4 页面 | 待提交 | ① 删除侧边栏「实训任务」菜单项与旧链路 4 页面（Projects/ProjectEdit/ProjectSubmissions/ProjectReview——历史遗留死链路，DSGN-020 落地）；② 题库新增下拉「实训题」选项加 BETA 标签；③ 实训题新增/编辑页标题区加 BETA 标签（教师/学生模式均显示） |
 
 ## 8. 变更后 UI 状态提示
 

@@ -36,11 +36,6 @@ const routes = [
       { path: 'teams/:id', component: () => import('../views/teacher/TeamEdit.vue') },
       { path: 'review/:id', component: () => import('../views/teacher/ReviewDetail.vue') },
       { path: 'review/project/:submissionId', name: 'TeacherProjectReviewNew', component: () => import('../views/teacher/ProjectReviewNew.vue') },
-      { path: 'projects', name: 'TeacherProjects', component: () => import('../views/teacher/Projects.vue') },
-      { path: 'projects/new', name: 'TeacherProjectNew', component: () => import('../views/teacher/ProjectEdit.vue') },
-      { path: 'projects/:id/edit', name: 'TeacherProjectEdit', component: () => import('../views/teacher/ProjectEdit.vue') },
-      { path: 'projects/:id/submissions', name: 'TeacherProjectSubmissions', component: () => import('../views/teacher/ProjectSubmissions.vue') },
-      { path: 'projects/:id/review/:submissionId', name: 'TeacherProjectReview', component: () => import('../views/teacher/ProjectReview.vue') },
     ],
   },
   {

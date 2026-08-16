@@ -6,6 +6,7 @@
         <!-- 教师模式：可编辑 / 学生模式：只读 -->
         <a-input v-if="isTeacher" v-model:value="form.title" :placeholder="isEdit?'编辑实训题':'新建实训题'" style="width:260px;font-size:18px;font-weight:700;" />
         <span v-else style="font-size:18px;font-weight:700;">{{ form.title || '实训题' }}</span>
+        <a-tag color="orange" size="small" style="margin:0;">BETA</a-tag>
 
         <a-select v-if="isTeacher" v-model:value="form.difficulty" style="width:100px;">
           <a-select-option value="easy">简单</a-select-option>
