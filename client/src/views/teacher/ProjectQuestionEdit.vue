@@ -112,7 +112,7 @@
               <div class="tab-bar-fill"></div>
             </div>
             <div class="editor-body">
-              <div class="editor-container" ref="editorContainerRef"></div>
+              <div class="editor-container" ref="editorContainerRef" :class="{ 'pr-fade-in': fading }"></div>
               <div v-if="!openTabs.length" class="editor-empty">
                 <FileTextOutlined style="font-size:48px;color:#d9d9d9" />
                 <p>从左侧选择文件查看代码</p>
@@ -126,7 +126,7 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue';
+import { reactive, ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { LoadingOutlined, FileTextOutlined } from '@ant-design/icons-vue';
@@ -286,6 +286,13 @@ function openFile(path, name, language) {
   if (!openTabs.value.find(t => t.path === path)) openTabs.value.push({ path, name, language });
   switchTab(path);
 }
+
+// 代码预览切换动效（与教师审核页一致：0.15s 淡入上移，CSS animation 重放，不重建 Monaco 容器）
+const fading = ref(true);
+watch(activePath, () => {
+  fading.value = false;
+  nextTick(() => { fading.value = true; });
+});
 
 async function handleSave() {
   if (!form.title) return message.warn('请输入题目名称');
@@ -550,4 +557,11 @@ onBeforeUnmount(() => {
 
 <style>
 .desc-modal .ProseMirror { min-height:420px; }
+
+/* ===== 代码预览切换动效（2026-08-16，0.15s 淡入上移） ===== */
+.pr-fade-in { animation: prFadeIn 0.15s ease; }
+@keyframes prFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
 </style>
