@@ -5,6 +5,7 @@
       <a-button type="link" size="small" @click="$router.back()">← 返回</a-button>
       <h3 class="pr-title">{{ question.title }}</h3>
       <a-tag color="blue" size="small">实训题</a-tag>
+      <a-tag color="orange" size="small" style="margin:0;">BETA</a-tag>
       <span class="pr-student">{{ student.realName }} / {{ displayNo }}</span>
       <a-tag :color="statusColor">{{ statusText }}</a-tag>
     </div>
