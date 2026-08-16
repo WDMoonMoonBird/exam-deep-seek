@@ -8,8 +8,9 @@
     "start": "node src/app.js",
     "worker": "node src/worker.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest --config test/jest.config.js --runInBand --forceExit",
-    "test:unit": "NODE_OPTIONS=--experimental-vm-modules jest --config test/jest.config.js --runInBand --forceExit --testPathPattern=unit",
-    "test:integration": "NODE_OPTIONS=--experimental-vm-modules jest --config test/jest.config.js --runInBand --forceExit --testPathPattern=integration",
+    "test:unit": "NODE_OPTIONS=--experimental-vm-modules jest --config test/jest.config.js --runInBand --forceExit --testPathPatterns=unit",
+    "check:layers": "node scripts/check-layers.mjs",
+    "test:integration": "NODE_OPTIONS=--experimental-vm-modules jest --config test/jest.config.js --runInBand --forceExit --testPathPatterns=integration",
     "test:e2e": "cd test/e2e && npx playwright test --config=playwright.config.js"
   },
   "keywords": [],
