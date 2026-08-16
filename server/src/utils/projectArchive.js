@@ -66,6 +66,28 @@ export function sanitizeSegment(seg) {
   return s.length ? s : '_';
 }
 
+/** Q7 上传包校验上限（PRD 第 8 节 Q7 定案） */
+const MAX_ZIP_FILE_COUNT = 2000;                  // 解压后文件数上限
+const MAX_ZIP_EXPANDED_BYTES = 200 * 1024 * 1024; // 解压总展开大小上限 200MB（防 zip 炸弹）
+const MAX_ZIP_DIR_DEPTH = 20;                     // 目录层级上限（路径 segments 数）
+
+/**
+ * 判断 zip 条目是否为 Unix 符号链接（Q7：符号链接条目跳过，不写盘）。
+ *
+ * ZIP 外部文件属性（externalAttr，即 adm-zip 的 entry.header.attr）高 16 位为
+ * Unix 文件模式；类型位 S_IFMT = 0xF000，符号链接 S_IFLNK = 0xA000。
+ * adm-zip 对 symlink 的表现为 entry.isDirectory() === false 且 getData() 返回
+ * 链接目标路径字符串——若不识别，会把目标路径当普通文件内容落盘。
+ * 普通文件类型位 0x8000、目录 0x4000，均不会误判为符号链接。
+ *
+ * @param {object} entry adm-zip 条目
+ * @returns {boolean} 是否为符号链接
+ */
+function isSymlinkEntry(entry) {
+  const mode = (entry.header.attr >>> 16) & 0xffff;
+  return (mode & 0xf000) === 0xa000;
+}
+
 /**
  * 安全解压内存 zip 到目标目录（R7：版本目录隔离由调用方负责）。
  * 逐 entry 做路径穿越校验，含穿越则整包拒收并抛错。
@@ -74,6 +96,9 @@ export function sanitizeSegment(seg) {
  * （无 UTF-8 标志位的 GBK 包会被解成 U+FFFD 并写坏落盘文件名），
  * 改为取 entry.rawEntryName 原始字节后走 decodeEntryName 智能解码
  * （UTF-8 严格 → GBK 兜底 → latin1），再逐段 sanitizeSegment 清洗。
+ *
+ * Q7 上传包校验：解压前先做预算统计（文件数 ≤ 2000 / 展开大小 ≤ 200MB /
+ * 目录层级 ≤ 20），超限整包拒收且不写任何文件；符号链接条目跳过不写盘。
  *
  * @param {Buffer} buffer 压缩包二进制
  * @param {string} targetDir 绝对路径，应来自 projectPaths.submissionDir
@@ -87,10 +112,32 @@ export function extractZipSafely(buffer, targetDir) {
 
   const zip = new AdmZip(buffer);
   const entries = zip.getEntries();
+
+  // ---- Q7 预算校验：解压前先遍历全部条目统计，超限整包拒收（不写任何文件）----
+  // 统计口径：目录条目不落盘、不计文件数与展开大小；符号链接跳过不占预算；
+  // 展开大小以中央目录声明的未压缩大小 header.size 为准（解压前唯一依据）。
+  let budgetFileCount = 0;
+  let budgetBytes = 0;
+  let maxDepth = 0;
+  for (const entry of entries) {
+    if (isSymlinkEntry(entry)) continue;
+    const decoded = decodeEntryName(entry.rawEntryName).replace(/\\/g, '/');
+    const depth = decoded.split('/').filter(Boolean).length;
+    if (depth > maxDepth) maxDepth = depth;
+    if (decoded.endsWith('/')) continue; // 目录条目不计文件数与大小
+    budgetFileCount += 1;
+    budgetBytes += entry.header.size || 0;
+  }
+  if (budgetFileCount > MAX_ZIP_FILE_COUNT) throw new Error('压缩包文件数超过上限（2000）');
+  if (budgetBytes > MAX_ZIP_EXPANDED_BYTES) throw new Error('压缩包过大（解压后超过 200MB）');
+  if (maxDepth > MAX_ZIP_DIR_DEPTH) throw new Error('压缩包目录层级超过上限（20）');
+
   let fileCount = 0;
   let byteSize = 0;
 
   for (const entry of entries) {
+    // Q7：符号链接条目跳过，不写盘（避免把链接目标路径字符串当文件内容落盘）
+    if (isSymlinkEntry(entry)) continue;
     const decoded = decodeEntryName(entry.rawEntryName).replace(/\\/g, '/');
     const rel = decoded.split('/').map(sanitizeSegment).join('/');
     if (decoded.endsWith('/')) {

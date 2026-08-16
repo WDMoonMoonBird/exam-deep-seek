@@ -455,6 +455,24 @@ export const createAssignment = async (req, res) => {
       return res.status(400).json({ code: 1001, message: '参数错误', data: null });
     }
 
+    // Q9 强校验：作业包含实训题（type=project）时，该题必须已上传非空标准工程包，否则拒绝创建作业
+    const questions = await prisma.question.findMany({ where: { id: { in: questionIds } } });
+    for (const q of questions) {
+      if (q.type !== 'project') continue;
+      const standardDir = path.join(__dirname, '../../uploads/project-questions', String(q.id), 'standard');
+      let hasStandardPackage = false;
+      if (fs.existsSync(standardDir)) {
+        try {
+          hasStandardPackage = fs.readdirSync(standardDir).length > 0;
+        } catch {
+          hasStandardPackage = false;
+        }
+      }
+      if (!hasStandardPackage) {
+        return res.status(400).json({ code: 1001, message: `题目「${q.title}」未上传标准工程包，无法布置`, data: null });
+      }
+    }
+
     const assignment = await prisma.assignment.create({
       data: {
         teacherId: req.user.id,

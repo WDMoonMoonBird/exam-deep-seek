@@ -427,7 +427,7 @@ async function assertStudentInAssignment(assignmentId, studentId) {
 
   const assignment = await prisma.assignment.findFirst({
     where: { id: assignmentId },
-    select: { id: true, title: true, locked: true, mode: true, endTime: true, allowResubmit: true },
+    select: { id: true, title: true, locked: true, mode: true, startTime: true, endTime: true, allowResubmit: true, maxAttempts: true },
   });
   if (!assignment) return { ok: false, code: 1004, message: '作业不存在' };
   if (assignment.locked) return { ok: false, code: 1003, message: '作业已被锁定' };
@@ -585,6 +585,15 @@ export async function submitProjectCore(req, res) {
           .json({ code: guard.code, message: guard.message, data: null });
       }
 
+      // ---- Q5：提交窗口校验（startTime ≤ now ≤ endTime，超时提交返回 403）----
+      const submitNow = new Date();
+      if (submitNow < new Date(guard.assignment.startTime)) {
+        return res.status(403).json({ code: 1003, message: '作业尚未开始，不可提交', data: null });
+      }
+      if (submitNow > new Date(guard.assignment.endTime)) {
+        return res.status(403).json({ code: 1003, message: '已过截止时间，不可提交', data: null });
+      }
+
       const question = await findProjectQuestionInAssignment(assignmentId, questionId);
       if (!question) {
         return res.status(404).json({ code: 1004, message: '题目不存在', data: null });
@@ -596,6 +605,25 @@ export async function submitProjectCore(req, res) {
       });
       const prevEnvelope = parseProjectAnswer(existing?.answer);
       const version = prevEnvelope.currentVersion + 1;
+
+      // ---- Q5：审核锁定——reviewed / published 后禁止重交（教师撤回重审后重新开放）----
+      if (existing && (existing.status === 'reviewed' || existing.status === 'published')) {
+        return res.status(403).json({ code: 1003, message: '成绩已发布，如需重交请联系老师', data: null });
+      }
+
+      // ---- Q5：次数上限校验 ----
+      // allowResubmit=false：已有正式提交（status !== 'draft'）即不可再交
+      if (!guard.assignment.allowResubmit && existing && existing.status !== 'draft') {
+        return res.status(403).json({ code: 1003, message: '该作业不允许重复提交', data: null });
+      }
+      // maxAttempts > 0：attemptCount 达到上限即拒绝
+      if (
+        guard.assignment.maxAttempts != null &&
+        guard.assignment.maxAttempts > 0 &&
+        (existing?.attemptCount ?? 0) >= guard.assignment.maxAttempts
+      ) {
+        return res.status(403).json({ code: 1003, message: `已达最大提交次数（${guard.assignment.maxAttempts}次）`, data: null });
+      }
 
       // ---- 解压到版本目录（R7：新目录，不动旧版本）----
       versionDir = submissionDir(questionId, studentId, version);
@@ -629,6 +657,10 @@ export async function submitProjectCore(req, res) {
         answer: serializeProjectAnswer(envelope),
         attemptCount: version,
         submittedAt: now,
+        // Q5：新提交清空旧分（防止审核放分后旧分残留）
+        aiScore: null,
+        finalScore: null,
+        teacherFeedback: null,
       };
 
       const saved = existing
