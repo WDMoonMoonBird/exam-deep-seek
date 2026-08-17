@@ -41,16 +41,21 @@ describe('管理员删除教师（软删除）', () => {
     expect(r.body.code).toBe(1004);
   });
 
-  it('删除当前登录账号 → 400 拒绝', async () => {
-    const me = JSON.parse((await request().post('/api/auth/login').send({ username: 'admin', password: '***REDACTED***' })).body.data.token.split('.')[1] ? '{}' : '{}');
-    // 用 admin 列表找自己的 id（username=admin）
+  it('删除管理员账号 → 404（非教师角色不可删）；教师无权限调管理接口 → 1003', async () => {
+    // BUG-013：删除自身（400 分支）在真实权限模型下不可达——admin 为 super_admin 不满足 role=teacher；
+    // 验证真实可达分支：① 删除 super_admin → 404；② 教师调用管理删除接口 → 1003 无权限
+    const me = await request().post('/api/auth/login').send({ username: 'admin', password: '***REDACTED***' });
+    const adminId = me.body.data.user.id;
+    const r1 = await request().delete('/api/admin/teachers/' + adminId).set('Authorization', 'Bearer ' + adminToken);
+    expect(r1.body.code).toBe(1004); // role !== teacher → 教师不存在
+
+    const teacherLogin = await request().post('/api/auth/login').send({ username: 'test_teacher', password: 'test_teacher' });
+    const teacherToken2 = teacherLogin.body.data.token;
     const list = await request().get('/api/admin/teachers').set('Authorization', 'Bearer ' + adminToken);
-    const adminRow = list.body.data.find(t => t.username === 'admin');
-    if (adminRow) {
-      const r = await request().delete('/api/admin/teachers/' + adminRow.id).set('Authorization', 'Bearer ' + adminToken);
-      expect(r.body.code).toBe(1001);
-      expect(r.body.message).toContain('当前登录账号');
-    }
+    const someTeacher = list.body.data[0];
+    expect(someTeacher).toBeTruthy();
+    const r2 = await request().delete('/api/admin/teachers/' + someTeacher.id).set('Authorization', 'Bearer ' + teacherToken2);
+    expect(r2.body.code).toBe(1003); // teacher 无 admin 权限
   });
 
   it('删除后旧 token 立即失效（401）', async () => {

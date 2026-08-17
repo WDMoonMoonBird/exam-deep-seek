@@ -513,7 +513,7 @@ export const lockAssignment = async (req, res) => {
 export const getAllTeachers = async (req, res) => {
   try {
     const schoolId = getSchoolId(req);
-    const where = { role: 'teacher' };
+    const where = { role: 'teacher', deletedAt: null };
     if (schoolId) where.teacherSchools = { some: { schoolId } };
     const list = await prisma.user.findMany({
       where,

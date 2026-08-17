@@ -19,6 +19,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@babel/parser": "^7.29.8",
     "@prisma/client": "^5.22.0",
     "adm-zip": "^0.5.18",
     "bcryptjs": "^3.0.3",

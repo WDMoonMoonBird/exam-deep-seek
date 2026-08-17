@@ -55,7 +55,8 @@ describe('DeepSeekGateway.grade — 请求形状契约', () => {
     const body = JSON.parse(init.body);
     expect(body.model).toBe('test-model');
     expect(body.temperature).toBe(0.3);
-    expect(body.max_tokens).toBe(2000);
+    // 2026-08-17：V4-Flash 推理模型 max_tokens 含思考 token，2000 → 4000
+    expect(body.max_tokens).toBe(4000);
     expect(body.messages[0].role).toBe('system');
     expect(body.messages[0].content).toContain('评分标准');
     expect(body.messages[1].role).toBe('user');
@@ -159,7 +160,8 @@ describe('DeepSeekGateway.gradeProject — 请求形状与兜底', () => {
 
     const body = JSON.parse(calls[0].init.body);
     expect(body.temperature).toBe(0.3);
-    expect(body.max_tokens).toBe(4000);
+    // 2026-08-17：对齐 services 链路，推理模型输出预算 4000 → 8000
+    expect(body.max_tokens).toBe(8000);
     expect(body.messages[0].content).toBe(PROJECT_REVIEW_SYSTEM);
     expect(body.messages[1].content).toContain('## 标准工程文件结构');
     expect(body.messages[1].content).toContain('a.java');

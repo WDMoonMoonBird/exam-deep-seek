@@ -742,6 +742,10 @@ export const getSubmissionPrompt = async (req, res) => {
       },
     });
     if (!sub) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
+    // BUG-012：仅编程题（code）提交可查该提示词；project 提交走 /project/prompt，此处对称返回 400
+    if (sub.question?.type && sub.question.type !== 'code') {
+      return res.status(400).json({ code: 1001, message: '该提交不是编程题', data: null });
+    }
 
     const sq = sub.subQuestion || sub.question?.subQuestions?.[0] || {};
     const system = buildSystemPrompt(sq.scoringCriteria || null);

@@ -18,7 +18,16 @@ import fs from 'fs';
 import path from 'path';
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
-import { gradeProject } from './deepseek.js';
+import { gradeProject, selectImportantFiles, getProjectContextMode } from './deepseek.js';
+import {
+  buildFileTree,
+  filterProjectFiles,
+  buildFileTreeText,
+  extractSkeleton,
+  estimateTokens,
+  truncateToBudget,
+  BUDGET_TOKENS,
+} from './projectContextBuilder.js';
 import { ABNORMAL_FEEDBACK } from '../constants.js';
 import { standardDir, submissionDir } from '../utils/projectPaths.js';
 import { parseProjectAnswer, serializeProjectAnswer } from '../utils/projectView.js';
@@ -87,6 +96,199 @@ export function readDirFiles(dir) {
   return out;
 }
 
+// ===================== 评分上下文构建（2026-08-17 方案 v1.1） =====================
+
+/**
+ * 读取单个文件内容（不抛错；失败返回空字符串）。
+ */
+function readFileSafe(absPath) {
+  try {
+    return fs.readFileSync(absPath, 'utf-8');
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * 按 kept 列表读取文件正文（fold 折叠为占位行），与实评 readDirFiles 的格式保持一致。
+ * @param {Array<{path, fold, size}>} kept filterProjectFiles 的 kept 输出（仅文件）
+ * @param {string} base 根目录绝对路径
+ * @returns {string}
+ */
+function readKeptFiles(kept, base) {
+  return kept
+    .filter(f => !f.dir)
+    .map(f => (f.fold
+      ? "// 文件过大（" + f.path + "，" + (f.size / 1024 / 1024).toFixed(2) + " MB），已跳过评分内容"
+      : "// 文件名: " + f.path + "\n" + readFileSafe(path.join(base, f.path))))
+    .join('\n\n');
+}
+
+/**
+ * 构建实训题评分上下文（L0 过滤 + L1 两阶段，任一环节失败安全降级为全量注入）。
+ * @param {object} p
+ * @param {'off'|'filter'|'two-stage'} p.mode 配置开关（system_config.project_context_mode）
+ * @param {string} p.stdDir 标准包目录
+ * @param {string} p.stuDir 学生版本目录
+ * @param {object} p.question 题目（title/material/scoringRubric）
+ * @returns {Promise<{standardFiles: string, studentFiles: string, info: object}>}
+ */
+export async function buildGradingContext({ mode, stdDir, stuDir, question }) {
+  const fallback = () => ({
+    standardFiles: readDirFiles(stdDir).join('\n\n'),
+    studentFiles: readDirFiles(stuDir).join('\n\n'),
+    info: { mode: 'off', note: '降级全量' },
+  });
+
+  if (mode !== 'filter' && mode !== 'two-stage') return fallback();
+
+  try {
+    const stuTree = buildFileTree(stuDir);
+    if (!stuTree.length) return fallback();
+    const stdTree = buildFileTree(stdDir);
+
+    const stuFiltered = filterProjectFiles(stuTree, stuDir).kept;
+    const stdFiltered = filterProjectFiles(stdTree, stdDir).kept;
+
+    let standardText = readKeptFiles(stdFiltered, stdDir);
+    let studentText = readKeptFiles(stuFiltered, stuDir);
+    let pickedCount = 0;
+
+    if (mode === 'two-stage' && studentText) {
+      try {
+        const treeText = buildFileTreeText(stuFiltered, { withSizes: true });
+        const picked = await selectImportantFiles({
+          title: question.title || '未命名项目',
+          fileTreeText: treeText,
+          scoringRubric: question.scoringRubric || '',
+        });
+        const pickedPaths = new Set(picked.files);
+        // 学生包根目录名可能是学号/工程名，模型返回路径不带该前缀 → 后缀匹配兜底
+        const matchesPicked = (f) => pickedPaths.has(f.path)
+          || [...pickedPaths].some(p => p && f.path.endsWith('/' + p) || f.path === p);
+        const matchedList = stuFiltered.filter(f => !f.dir && matchesPicked(f));
+        // BUG-004：强制选中文件总大小 ≤ 60KB（模型软约束之外的硬限制，按原始顺序截断）
+        const pickedList = [];
+        let pickedBytes = 0;
+        for (const f of matchedList) {
+          if (pickedBytes + f.size > 60 * 1024) break;
+          pickedList.push(f);
+          pickedBytes += f.size;
+        }
+        if (pickedList.length > 0) {
+          pickedCount = pickedList.length;
+          const pickedText = readKeptFiles(pickedList, stuDir);
+          // 未选中文件以清单附在末尾（骨架行），模型可点名补看
+          const restSkeleton = stuFiltered
+            .filter(f => !f.dir && !matchesPicked(f))
+            .slice(0, 300)
+            .map(f => "// " + f.path + "（" + (f.size / 1024).toFixed(1) + "KB，未提供内容；如评分确需可说明理由）")
+            .join('\n');
+          // BUG-R2-B：被 60KB 硬拦的选中文件也要出现在清单（标注超限，模型可点名）
+          const blockedSkeleton = matchedList
+            .filter(f => !pickedList.includes(f))
+            .map(f => "// " + f.path + "（" + (f.size / 1024).toFixed(1) + "KB，超60KB上限未提供；如评分确需可说明理由）")
+            .join('\n');
+          studentText = pickedText + '\n\n/* 未提供内容的文件清单 */\n' + restSkeleton
+            + (blockedSkeleton ? '\n' + blockedSkeleton : '');
+        }
+      } catch (err) {
+        logger.warn({ err: err.message, questionId: question.id }, '文件选择失败，降级为 L0 过滤注入');
+      }
+    }
+
+    // 预算兜底（BUG-003/DSGN-001/DSGN-007）：双端 + 权重感知 + 骨架化，低权重文件优先牺牲
+    const budgetResult = enforceBudget({
+      standardText,
+      studentText,
+      stdFiltered,
+      stuFiltered,
+      stdBase: stdDir,
+      stuBase: stuDir,
+    });
+    standardText = budgetResult.standardText;
+    studentText = budgetResult.studentText;
+    if (budgetResult.truncated) {
+      logger.warn({ totalTokens: budgetResult.totalTokens }, '评分上下文超预算，已按权重压缩（骨架化/截断）');
+    }
+
+    if (!studentText.trim()) return fallback();
+
+    return {
+      standardFiles: standardText || '(无标准工程文件)',
+      studentFiles: studentText,
+      info: { mode, pickedCount },
+    };
+  } catch (err) {
+    logger.warn({ err: err.message }, '上下文构建异常，降级全量注入');
+    return fallback();
+  }
+}
+
+
+/**
+ * 预算兜底（BUG-003/DSGN-001/DSGN-007）：双端 + 权重感知 + 骨架化压缩。
+ * 低权重文件优先被骨架化/占位，高权重文件保持全文；学生与标准包共用预算（7:3）。
+ * @param {object} p
+ * @param {string} p.standardText 标准包全文
+ * @param {string} p.studentText 学生正文
+ * @param {Array} p.stdFiltered 标准包 kept 列表
+ * @param {Array} p.stuFiltered 学生 kept 列表
+ * @param {string} p.stdBase 标准包根目录
+ * @param {string} p.stuBase 学生根目录
+ * @returns {{standardText: string, studentText: string, truncated: boolean, totalTokens: number}}
+ */
+export function enforceBudget({ standardText, studentText, stdFiltered, stuFiltered, stdBase, stuBase }) {
+  const budget = BUDGET_TOKENS;
+  if (estimateTokens(studentText) + estimateTokens(standardText) <= budget) {
+    return { standardText, studentText, truncated: false, totalTokens: estimateTokens(studentText) + estimateTokens(standardText) };
+  }
+
+  // 权重感知压缩：高权重优先保全文（BUG-R2-C：降序，低权重最后被骨架化/占位）
+  const compress = (kept, base, capTokens) => {
+    const files = kept.filter(f => !f.dir).sort((a, b) => (b.weight ?? 1) - (a.weight ?? 1));
+    const parts = [];
+    let acc = 0;
+    for (const f of files) {
+      if (f.fold) {
+        const line = '// 文件过大（' + f.path + '，已跳过评分内容）';
+        parts.push(line); acc += estimateTokens(line);
+        continue;
+      }
+      const content = readFileSafe(path.join(base, f.path));
+      const full = '// 文件名: ' + f.path + '\n' + content;
+      const fullT = estimateTokens(full);
+      if (acc + fullT <= capTokens) { parts.push(full); acc += fullT; continue; }
+      // 骨架化兜底（DSGN-001：方案承诺的骨架链路）
+      const skel = extractSkeleton(content, f.ext);
+      const skelLine = '// 文件名: ' + f.path + '（骨架）\n' + skel;
+      const skelT = estimateTokens(skelLine);
+      if (acc + skelT <= capTokens) { parts.push(skelLine); acc += skelT; }
+      else {
+        const line = '// ' + f.path + '（预算限制未提供内容）';
+        parts.push(line); acc += estimateTokens(line);
+      }
+    }
+    return { text: parts.join('\n\n'), tokens: acc };
+  };
+
+  // 学生 70% 预算、标准包 30%（双端，BUG-003）
+  const stu = compress(stuFiltered || [], stuBase, Math.floor(budget * 0.7));
+  const std = compress(stdFiltered || [], stdBase, Math.floor(budget * 0.3));
+  let out = {
+    standardText: std.text || standardText,
+    studentText: stu.text || studentText,
+    truncated: true,
+    totalTokens: stu.tokens + std.tokens,
+  };
+  // 最终仍超 → 字符截断（学生侧）
+  if (out.totalTokens > budget) {
+    const t = truncateToBudget(out.studentText, Math.floor(budget * 0.8) - std.tokens);
+    out.studentText = t.text;
+    out.totalTokens = estimateTokens(t.text) + std.tokens;
+  }
+  return out;
+}
 // ===================== 评分核心 =====================
 
 /**
@@ -153,13 +355,24 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
 
     const stdDir = standardDir(questionId);
     const stuDir = submissionDir(questionId, studentId, version);
-    const standardFiles = readDirFiles(stdDir).join('\n\n');
-    const studentFiles = readDirFiles(stuDir).join('\n\n');
+
+    // 2026-08-17 上下文管理方案 v1.1：L0 过滤 + L1 两阶段（配置开关，失败自动降级）
+    const contextMode = await getProjectContextMode();
+    const ctx = await buildGradingContext({
+      mode: contextMode,
+      stdDir,
+      stuDir,
+      question: sub.question,
+    });
+    const { standardFiles, studentFiles } = ctx;
 
     if (!studentFiles) {
       logger.warn({ submissionId, stuDir }, '实训题评分：学生版本无可读文件，标记失败');
       await markFailed(submissionId, '学生提交无可读源文件');
       return;
+    }
+    if (ctx.info.mode !== 'off') {
+      logger.info({ submissionId, mode: ctx.info.mode, pickedCount: ctx.info.pickedCount || 0 }, '实训题评分：上下文构建完成');
     }
 
     let result;
@@ -179,11 +392,18 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
 
     // gradeProject 返回 { totalScore, breakdown[], highlights[], issues[], overallComment }
     const aiScore = Math.max(0, Math.min(sub.question.maxScore || 100, Math.round(Number(result.totalScore) || 0)));
+    // BUG-008：解析层强制输出约束（与提示词约束一致，超限截断，违规不落库）
+    const clampBreakdown = (b) => ({
+      item: String(b.item || '').slice(0, 50),
+      score: Number(b.score) || 0,
+      maxScore: Number(b.maxScore) || 0,
+      comment: String(b.comment || '').slice(0, 60),
+    });
     const aiFeedback = JSON.stringify({
-      breakdown: Array.isArray(result.breakdown) ? result.breakdown : [],
-      highlights: Array.isArray(result.highlights) ? result.highlights : [],
-      issues: Array.isArray(result.issues) ? result.issues : [],
-      overallComment: result.overallComment || '',
+      breakdown: (Array.isArray(result.breakdown) ? result.breakdown : []).slice(0, 8).map(clampBreakdown),
+      highlights: (Array.isArray(result.highlights) ? result.highlights : []).slice(0, 5).map(s => String(s).slice(0, 100)),
+      issues: (Array.isArray(result.issues) ? result.issues : []).slice(0, 5).map(s => String(s).slice(0, 100)),
+      overallComment: String(result.overallComment || '').slice(0, 300),
     });
 
     await updateEnvelopeGrading(submissionId, (env) => {

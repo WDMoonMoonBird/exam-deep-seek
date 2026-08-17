@@ -12,6 +12,7 @@ import { standardDir, submissionDir } from '../utils/projectPaths.js';
 import { toTeacherView, parseProjectAnswer, serializeProjectAnswer } from '../utils/projectView.js';
 import { enqueueProjectGrade, readDirFiles } from '../services/projectGrading.js';
 import { PROJECT_ROLE, buildProjectGradePrompt } from '../services/deepseek.js';
+import { buildFileTree, filterProjectFiles } from '../services/projectContextBuilder.js';
 import { buildTree, isIgnored } from '../utils/fileTree.js';
 import { MAX_TEXT_BYTES } from '../utils/projectArchive.js';
 import fs from 'fs';
@@ -60,6 +61,29 @@ function collectFiles(dir) {
     logger.warn({ err: e.message, dir }, '收集实训题文件失败');
     return { tree: [], contents: {} };
   }
+}
+
+// ===================== 提示词预览用过滤读取（DSGN-005：与实评 L0 过滤一致，所见即所用） =====================
+
+function readFileSafe(absPath) {
+  try {
+    return fs.readFileSync(absPath, 'utf-8');
+  } catch {
+    return '';
+  }
+}
+
+/** 按 L0 过滤（白名单/大小/未知探测）后的文件正文拼接，与实评 buildGradingContext 语义一致 */
+function readFilteredDir(dir) {
+  if (!dir || !fs.existsSync(dir)) return '';
+  const tree = buildFileTree(dir);
+  const { kept } = filterProjectFiles(tree, dir);
+  return kept
+    .filter(f => !f.dir)
+    .map(f => (f.fold
+      ? '// 文件过大（' + f.path + '，已跳过评分内容）'
+      : '// 文件名: ' + f.path + '\n' + readFileSafe(path.join(dir, f.path))))
+    .join('\n\n');
 }
 
 // ===================== 审核数据 =====================
@@ -148,6 +172,12 @@ export const regradeProjectSubmission = async (req, res) => {
       return res.status(400).json({ code: 1001, message: '非实训题提交', data: null });
     }
 
+    // BUG-014：重评幂等——教师重评已触发（grading.state=pending 且 prevStatus 有值）时拒绝重复触发
+    const curEnv = parseProjectAnswer(sub.answer);
+    if (curEnv.grading?.state === 'pending' && curEnv.grading?.prevStatus) {
+      return res.status(400).json({ code: 1001, message: '评分进行中，请稍候再试', data: null });
+    }
+
     // 重置版本信封的评分任务态，记录重评前状态（Worker 完成后恢复）
     const env = parseProjectAnswer(sub.answer);
     env.grading = {
@@ -196,7 +226,8 @@ export const getProjectQuestionPromptPreview = async (req, res) => {
       return res.status(400).json({ code: 1001, message: '该题目不是实训题', data: null });
     }
 
-    const standardFiles = readDirFiles(standardDir(q.id)).join('\n\n');
+    // DSGN-005：预览与实评一致，标准包走 L0 过滤
+    const standardFiles = readFilteredDir(standardDir(q.id));
     const user = buildProjectGradePrompt({
       title: q.title,
       description: q.material || '',
@@ -228,9 +259,10 @@ export const getProjectSubmissionPrompt = async (req, res) => {
 
     const env = parseProjectAnswer(sub.answer);
     const version = env.currentVersion;
-    const standardFiles = readDirFiles(standardDir(sub.questionId)).join('\n\n');
+    // DSGN-005：预览与实评一致，标准包/学生版本均走 L0 过滤
+    const standardFiles = readFilteredDir(standardDir(sub.questionId));
     const studentFiles = version > 0
-      ? readDirFiles(submissionDir(sub.questionId, sub.studentId, version)).join('\n\n')
+      ? readFilteredDir(submissionDir(sub.questionId, sub.studentId, version))
       : '【学生尚未提交有效版本】';
     const user = buildProjectGradePrompt({
       title: sub.question.title,
