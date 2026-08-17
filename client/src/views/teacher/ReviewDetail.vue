@@ -106,6 +106,7 @@
                 <span class="sq-review-label">AI 评分</span>
                 <span class="sq-review-score">{{ getSub(sq.id)?.aiScore ?? '—' }} / {{ sq.score }} 分</span>
                 <a-button size="small" :loading="regrading[sq.id]" @click="regrade(sq)">重新评分</a-button>
+                <a-button size="small" @click="showPrompt(sq)">提示词</a-button>
                 <a-button size="small" @click="useAiFeedback(sq.id)">使用 AI 评语</a-button>
                 <a-input-number
                   v-model:value="reviewScores[sq.id]"
@@ -184,6 +185,21 @@
       </div>
     </div>
   </div>
+
+  <!-- AI 提示词（该次评分的实际提示词，含学生答案） -->
+  <a-modal v-model:open="promptModalOpen" :title="'AI 提示词 — ' + (promptSubTitle || '')" :footer="null" width="820px">
+    <a-spin :spinning="promptLoading">
+      <template v-if="promptData">
+        <div class="prompt-block">
+          <div class="prompt-role-label">System（角色设定）</div>
+          <pre class="prompt-pre">{{ promptData.system }}</pre>
+          <div class="prompt-role-label">User（评分任务，含学生提交的答案）</div>
+          <pre class="prompt-pre">{{ promptData.user }}</pre>
+        </div>
+      </template>
+      <a-empty v-else-if="!promptLoading" description="暂无数据" :image="false" />
+    </a-spin>
+  </a-modal>
 </template>
 
 <script setup>
@@ -410,6 +426,29 @@ function subStatusText(sub) {
   return sub?.status || '';
 }
 
+// ===================== AI 提示词查看 =====================
+const promptModalOpen = ref(false);
+const promptLoading = ref(false);
+const promptData = ref(null);
+const promptSubTitle = ref('');
+
+async function showPrompt(sq) {
+  const sub = getSub(sq.id);
+  if (!sub) return;
+  promptSubTitle.value = (sq.title || '') + '（' + sub.id + '）';
+  promptModalOpen.value = true;
+  promptLoading.value = true;
+  promptData.value = null;
+  try {
+    const r = await request.get('/teacher/submissions/' + sub.id + '/prompt');
+    promptData.value = r.data;
+  } catch (e) {
+    message.error('获取提示词失败：' + (e.response?.data?.message || e.message));
+  } finally {
+    promptLoading.value = false;
+  }
+}
+
 // ===================== 审核操作 =====================
 // 格式化代码
 const editorRefs = {};
@@ -513,6 +552,16 @@ onMounted(fetch);
 </script>
 
 <style scoped>
+/* AI 提示词预览 */
+.prompt-block { margin-bottom: 12px; }
+.prompt-role-label { font-size: 12px; font-weight: 600; color: #666; margin: 8px 0 4px; }
+.prompt-pre {
+  margin: 0; padding: 10px 12px;
+  background: #f6f8fa; border: 1px solid #e8e8e8; border-radius: 6px;
+  font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-all;
+  max-height: 400px; overflow: auto;
+}
+
 .rp-page {
   display: flex; flex-direction: column;
   height: calc(100vh - 52px);

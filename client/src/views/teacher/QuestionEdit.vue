@@ -218,8 +218,28 @@
           </Transition>
           <div class="lc-footer" v-if="questionKind">
             <a-button size="large" @click="handleCancel">取消</a-button>
+            <a-button v-if="isEdit && questionKind === 'subjective'" @click="showPromptPreview">查看 AI 提示词</a-button>
             <a-button type="primary" size="large" :loading="saving" @click="handleSave">保存</a-button>
           </div>
+
+          <!-- AI 提示词预览 -->
+          <a-modal v-model:open="promptModalOpen" title="AI 提示词（与实评一致，学生代码以占位符显示）" :footer="null" width="760">
+            <a-spin :spinning="promptLoading">
+              <template v-if="promptPreviewData">
+                <a-collapse v-model:activeKey="promptActiveKeys">
+                  <a-collapse-panel v-for="(s, i) in promptPreviewData.subs" :key="s.id" :header="'小题 ' + (i + 1) + '：' + (s.title || '')">
+                    <div class="prompt-block">
+                      <div class="prompt-role-label">System（角色设定）</div>
+                      <pre class="prompt-pre">{{ s.system }}</pre>
+                      <div class="prompt-role-label">User（评分任务）</div>
+                      <pre class="prompt-pre">{{ s.user }}</pre>
+                    </div>
+                  </a-collapse-panel>
+                </a-collapse>
+              </template>
+              <a-empty v-else-if="!promptLoading" description="暂无数据" :image="false" />
+            </a-spin>
+          </a-modal>
         </div>
       </div>
     </div>
@@ -343,6 +363,28 @@ function sqDisplayLabel(sq,i){
   const n=`第${i+1}小题`;
   const tn=sqTypeName(sq);
   return tn?`${n} ${tn}`:n;
+}
+
+// AI 提示词预览（编辑页：模板预览，与实评共用构建函数）
+const promptModalOpen = ref(false);
+const promptLoading = ref(false);
+const promptPreviewData = ref(null);
+const promptActiveKeys = ref([]);
+
+async function showPromptPreview() {
+  if (!editId) return;
+  promptModalOpen.value = true;
+  promptLoading.value = true;
+  promptPreviewData.value = null;
+  try {
+    const r = await request.get('/teacher/questions/' + editId + '/prompt-preview');
+    promptPreviewData.value = r.data;
+    promptActiveKeys.value = (r.data.subs || []).map(s => s.id);
+  } catch (e) {
+    message.error('获取提示词失败：' + (e.response?.data?.message || e.message));
+  } finally {
+    promptLoading.value = false;
+  }
 }
 
 // 设置
@@ -898,5 +940,18 @@ const langs=['c','cpp','csharp','java','python','javascript','typescript','go','
 /* 主观题富文本编辑器 — 原始两倍高度 */
 .content-item :deep(.tiptap) {
   min-height: calc(100vh - 520px);
+}
+
+/* AI 提示词预览 */
+.prompt-block { margin-bottom: 12px; }
+.prompt-role-label {
+  font-size: 12px; font-weight: 600; color: #666;
+  margin: 8px 0 4px;
+}
+.prompt-pre {
+  margin: 0; padding: 10px 12px;
+  background: #f6f8fa; border: 1px solid #e8e8e8; border-radius: 6px;
+  font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-all;
+  max-height: 320px; overflow: auto;
 }
 </style>

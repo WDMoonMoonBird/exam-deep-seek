@@ -10,7 +10,7 @@ import {
 describe('parseProjectAnswer — answer JSON 解析', () => {
   it('null/undefined → 空信封', () => {
     const e = parseProjectAnswer(null);
-    expect(e).toEqual({ kind: 'project', currentVersion: 0, history: [], grading: { state: 'none', version: 0, attempts: 0, error: null } });
+    expect(e).toEqual({ kind: 'project', currentVersion: 0, history: [], grading: { state: 'none', version: 0, attempts: 0, error: null, prevStatus: null } });
     expect(parseProjectAnswer(undefined)).toEqual(e);
     expect(parseProjectAnswer('')).toEqual(e);
   });
@@ -30,7 +30,7 @@ describe('parseProjectAnswer — answer JSON 解析', () => {
 
   it('grading 字段缺省 → 默认 none/0', () => {
     const e = parseProjectAnswer(JSON.stringify({ currentVersion: 1, history: [] }));
-    expect(e.grading).toEqual({ state: 'none', version: 0, attempts: 0, error: null });
+    expect(e.grading).toEqual({ state: 'none', version: 0, attempts: 0, error: null, prevStatus: null });
   });
 
   it('字符串数字字段 → Number 归一', () => {
@@ -116,6 +116,6 @@ describe('toTeacherView — 教师视图字段齐全', () => {
     expect(v.aiFeedback).toBe('AI');
     expect(v.attemptCount).toBe(2);
     expect(v.version).toBe(1);
-    expect(v.grading).toEqual({ state: 'failed', version: 1, attempts: 3, error: 'timeout' });
+    expect(v.grading).toEqual({ state: 'failed', version: 1, attempts: 3, error: 'timeout', prevStatus: null });
   });
 });

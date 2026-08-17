@@ -8,6 +8,7 @@ import { getVisibleClassIds } from './teamController.js';
 import { parseProjectAnswer, toTeacherView } from '../utils/projectView.js';
 import { submissionDir, standardDir, ROOT } from '../utils/projectPaths.js';
 import { readProjectTree } from '../utils/projectFiles.js';
+import { buildSystemPrompt, buildGradingUserMessage } from '../infrastructure/ai/prompt-builder.js';
 
 /** 根据学校/班级/题目构建筛选条件 */
 async function buildFilter({ schoolId, classId, questionId, assignmentId, status }) {
@@ -693,3 +694,69 @@ export const reviewProjectSubmission = async (req, res) => {
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
   }
 };
+
+// ===================== AI 提示词查看（教师可见，与实评共用构建函数） =====================
+
+/**
+ * GET /api/teacher/questions/:id/prompt-preview — 编程题提示词模板预览（编辑页用）。
+ * 展示每个小题的 system + user 模板（不含学生代码，评分时才拼接）。
+ */
+export const getQuestionPromptPreview = async (req, res) => {
+  try {
+    const q = await prisma.question.findUnique({
+      where: { id: +req.params.id },
+      include: { subQuestions: { orderBy: { sortOrder: 'asc' } } },
+    });
+    if (!q) return res.status(404).json({ code: 1004, message: '题目不存在', data: null });
+
+    const subs = (q.subQuestions || []).map(sq => ({
+      id: sq.id,
+      title: sq.title,
+      system: buildSystemPrompt(sq.scoringCriteria || null),
+      user: buildGradingUserMessage({
+        material: q.material || null,
+        subQuestionTitle: sq.title || '',
+        subQuestionContent: sq.content || '',
+        referenceAnswer: sq.referenceAnswer || '',
+        studentAnswer: '【学生提交的答案将在此拼接】',
+        maxScore: sq.score || 100,
+      }),
+    }));
+    res.json({ code: 0, message: 'ok', data: { type: 'code', subs } });
+  } catch (err) {
+    logger.error({ err }, '获取提示词模板失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+/**
+ * GET /api/teacher/review/:submissionId/prompt — 该次评分的实际提示词（审核页用，含学生答案）。
+ */
+export const getSubmissionPrompt = async (req, res) => {
+  try {
+    const sub = await prisma.submission.findUnique({
+      where: { id: +req.params.id },
+      include: {
+        question: { include: { subQuestions: true } },
+        subQuestion: true,
+      },
+    });
+    if (!sub) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
+
+    const sq = sub.subQuestion || sub.question?.subQuestions?.[0] || {};
+    const system = buildSystemPrompt(sq.scoringCriteria || null);
+    const user = buildGradingUserMessage({
+      material: sub.question?.material || null,
+      subQuestionTitle: sq.title || '',
+      subQuestionContent: sq.content || '',
+      referenceAnswer: sq.referenceAnswer || '',
+      studentAnswer: sub.answer || '',
+      maxScore: sq.score || 100,
+    });
+    res.json({ code: 0, message: 'ok', data: { type: 'code', system, user } });
+  } catch (err) {
+    logger.error({ err }, '获取提交提示词失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+

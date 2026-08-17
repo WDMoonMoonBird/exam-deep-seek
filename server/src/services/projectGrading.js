@@ -52,7 +52,7 @@ function release() {
 
 // ===================== 文件收集（标准包 + 学生版本） =====================
 
-function readDirFiles(dir) {
+export function readDirFiles(dir) {
   const out = [];
   if (!dir || !fs.existsSync(dir)) return out;
   const walk = (base, rel = '') => {
@@ -106,8 +106,9 @@ export function enqueueProjectGrade(submissionId) {
           select: { questionId: true, studentId: true, answer: true, status: true },
         });
         if (!sub) return;
-        if (sub.status !== 'submitted') return; // 仅对刚提交/未评分的触发
         const env = parseProjectAnswer(sub.answer);
+        // 仅对刚提交/未评分触发；教师重评（grading 记录 prevStatus）时任意状态都放行
+        if (sub.status !== 'submitted' && !env.grading?.prevStatus) return;
         const version = env.currentVersion;
         if (!version || version < 1) return;
         await gradeProjectSubmission({ submissionId, questionId: sub.questionId, studentId: sub.studentId, version });
@@ -142,9 +143,11 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
       logger.warn({ submissionId, type: sub.question?.type }, '实训题评分：非 project 类型，跳过');
       return;
     }
-    // 幂等保护：若已被教师审核/发布，不再用 AI 结果覆盖最终分
-    if (sub.status === 'reviewed' || sub.status === 'published') {
-      logger.info({ submissionId, status: sub.status }, '实训题评分：已审核/发布，跳过');
+    // 幂等保护：非 pending 评分任务跳过；
+    // 教师重评（regrade 置 grading.state=pending 且记录 prevStatus）时，即使 reviewed/published 也继续评分
+    const gradingEnv = parseProjectAnswer(sub.answer).grading || {};
+    if (gradingEnv.state !== 'pending' && (sub.status === 'reviewed' || sub.status === 'published')) {
+      logger.info({ submissionId, status: sub.status }, '实训题评分：已审核/发布且无重评任务，跳过');
       return;
     }
 
@@ -188,12 +191,14 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
       return env;
     });
 
+    // 首次评分 submitted → ai_graded；教师重评恢复 prevStatus（reviewed/published 等不被降级）
+    const resumeStatus = gradingEnv.prevStatus || 'ai_graded';
     await prisma.submission.update({
       where: { id: submissionId },
       data: {
         aiScore,
         aiFeedback,
-        status: 'ai_graded',
+        status: resumeStatus === 'submitted' ? 'ai_graded' : resumeStatus,
         bestScore: Math.max(sub.bestScore ?? 0, aiScore),
       },
     });
@@ -214,15 +219,21 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
 
 async function markFailed(submissionId, error) {
   try {
+    // 教师重评失败时恢复 prevStatus，不把 reviewed/published 降级（学生可见成绩不受影响）
+    let resumeStatus = 'submitted';
+    try {
+      const cur = await prisma.submission.findUnique({ where: { id: submissionId }, select: { answer: true } });
+      resumeStatus = parseProjectAnswer(cur?.answer).grading?.prevStatus || 'submitted';
+    } catch (e) { /* 读取失败走默认 submitted */ }
     await updateEnvelopeGrading(submissionId, (env) => {
       env.grading = { ...env.grading, state: 'failed', finishedAt: new Date().toISOString(), error: String(error || 'unknown') };
       return env;
     });
-    // 保持 submitted，不向学生暴露失败细节（R6）
+    // 保持 submitted / 恢复 prevStatus，不向学生暴露失败细节（R6）
     await prisma.submission.update({
       where: { id: submissionId },
       data: {
-        status: 'submitted',
+        status: resumeStatus,
         aiScore: 0,
         aiFeedback: ABNORMAL_FEEDBACK,
       },

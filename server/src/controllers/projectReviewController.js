@@ -10,7 +10,8 @@ import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
 import { standardDir, submissionDir } from '../utils/projectPaths.js';
 import { toTeacherView, parseProjectAnswer, serializeProjectAnswer } from '../utils/projectView.js';
-import { enqueueProjectGrade } from '../services/projectGrading.js';
+import { enqueueProjectGrade, readDirFiles } from '../services/projectGrading.js';
+import { PROJECT_ROLE, buildProjectGradePrompt } from '../services/deepseek.js';
 import { buildTree, isIgnored } from '../utils/fileTree.js';
 import { MAX_TEXT_BYTES } from '../utils/projectArchive.js';
 import fs from 'fs';
@@ -125,13 +126,14 @@ export const getProjectReview = async (req, res) => {
 };
 
 
-// ===================== 重试评分（Q1 定案：教师一键重评） =====================
+// ===================== 重新评分（与编程题对齐：任意状态可重评） =====================
 
 /**
  * POST /teacher/submissions/:id/project/regrade
- * 教师一键重试/重评实训题：
- *   - 仅允许 submitted（含评分异常 grading.state=failed）与 ai_graded 状态；
- *   - 重评前清空旧分（aiScore/aiFeedback/finalScore），状态回 submitted，grading 重置 pending；
+ * 教师重新评分实训题（与编程题「重新评分」对齐）：
+ *   - 任意状态（submitted / ai_graded / reviewed / published）均可重评；
+ *   - 保留 status 与 finalScore（教师手动定案分不被清空），仅清 aiScore/aiFeedback，
+ *     grading 重置 pending 并记录 prevStatus 供 Worker 完成后恢复；
  *   - 复用 enqueueProjectGrade 异步投递（信号量并发 3、内部重试 2 次，R5 不阻塞响应）。
  */
 export const regradeProjectSubmission = async (req, res) => {
@@ -145,21 +147,23 @@ export const regradeProjectSubmission = async (req, res) => {
     if (sub.question?.type !== 'project') {
       return res.status(400).json({ code: 1001, message: '非实训题提交', data: null });
     }
-    if (sub.status !== 'submitted' && sub.status !== 'ai_graded') {
-      return res.status(400).json({ code: 1001, message: '当前状态不可重评（仅待评分/已评分可重评）', data: null });
-    }
 
-    // 重置版本信封的评分任务态
+    // 重置版本信封的评分任务态，记录重评前状态（Worker 完成后恢复）
     const env = parseProjectAnswer(sub.answer);
-    env.grading = { state: 'pending', version: env.currentVersion, startedAt: null, finishedAt: null, error: null };
+    env.grading = {
+      state: 'pending',
+      version: env.currentVersion,
+      startedAt: null,
+      finishedAt: null,
+      error: null,
+      prevStatus: sub.status,
+    };
 
     await prisma.submission.update({
       where: { id },
       data: {
-        status: 'submitted',
         aiScore: null,
         aiFeedback: null,
-        finalScore: null,
         answer: serializeProjectAnswer(env),
       },
     });
@@ -174,3 +178,71 @@ export const regradeProjectSubmission = async (req, res) => {
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
   }
 };
+
+// ===================== 实训题 AI 提示词查看（与实评共用构建函数） =====================
+
+/**
+ * GET /api/teacher/questions/:id/project-prompt-preview — 实训题提示词模板预览（编辑页用）。
+ * 展示 system（PROJECT_ROLE）+ user 模板（标准包真实内容，学生代码占位）。
+ */
+export const getProjectQuestionPromptPreview = async (req, res) => {
+  try {
+    const q = await prisma.question.findUnique({
+      where: { id: +req.params.id },
+      select: { id: true, title: true, material: true, scoringRubric: true, type: true },
+    });
+    if (!q) return res.status(404).json({ code: 1004, message: '题目不存在', data: null });
+    if (q.type !== 'project') {
+      return res.status(400).json({ code: 1001, message: '该题目不是实训题', data: null });
+    }
+
+    const standardFiles = readDirFiles(standardDir(q.id)).join('\n\n');
+    const user = buildProjectGradePrompt({
+      title: q.title,
+      description: q.material || '',
+      scoringRubric: q.scoringRubric || '',
+      standardFiles,
+      studentFiles: '【学生提交的工程文件将在此拼接（自动过滤依赖目录）】',
+    });
+    res.json({ code: 0, message: 'ok', data: { type: 'project', system: PROJECT_ROLE, user } });
+  } catch (err) {
+    logger.error({ err }, '获取实训题提示词模板失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+
+/**
+ * GET /api/teacher/review/:submissionId/project/prompt — 该次评分的实际实训题提示词（审核页用）。
+ */
+export const getProjectSubmissionPrompt = async (req, res) => {
+  try {
+    const id = +req.params.id;
+    const sub = await prisma.submission.findUnique({
+      where: { id },
+      include: { question: { select: { id: true, title: true, material: true, scoringRubric: true, type: true } } },
+    });
+    if (!sub) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
+    if (sub.question?.type !== 'project') {
+      return res.status(400).json({ code: 1001, message: '该提交不是实训题', data: null });
+    }
+
+    const env = parseProjectAnswer(sub.answer);
+    const version = env.currentVersion;
+    const standardFiles = readDirFiles(standardDir(sub.questionId)).join('\n\n');
+    const studentFiles = version > 0
+      ? readDirFiles(submissionDir(sub.questionId, sub.studentId, version)).join('\n\n')
+      : '【学生尚未提交有效版本】';
+    const user = buildProjectGradePrompt({
+      title: sub.question.title,
+      description: sub.question.material || '',
+      scoringRubric: sub.question.scoringRubric || '',
+      standardFiles,
+      studentFiles,
+    });
+    res.json({ code: 0, message: 'ok', data: { type: 'project', system: PROJECT_ROLE, user } });
+  } catch (err) {
+    logger.error({ err }, '获取实训题提交提示词失败');
+    res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
+  }
+};
+

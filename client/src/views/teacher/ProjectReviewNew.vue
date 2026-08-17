@@ -95,7 +95,25 @@
             <span class="ai-score-num">{{ aiScore ?? '—' }}<span v-if="maxScore && aiScore != null"> / {{ maxScore }}</span></span>
             <a-tag v-if="gradingState === 'failed'" color="red">评分异常</a-tag>
             <a-tag v-else-if="status === 'submitted' && !aiResult" color="orange">评分中</a-tag>
-            <a-button v-if="gradingState === 'failed'" size="small" danger :loading="regrading" @click.stop="onRegrade">重试评分</a-button>
+            <a-popconfirm
+              v-if="gradingState === 'failed'"
+              title="将重新调用 AI 评分，完成后自动刷新"
+              ok-text="重试"
+              cancel-text="取消"
+              @confirm="onRegrade"
+            >
+              <a-button size="small" danger :loading="regrading">重试评分</a-button>
+            </a-popconfirm>
+            <a-popconfirm
+              v-else
+              title="将重新调用 AI 评分并覆盖 AI 分（最终分保留），完成后自动刷新"
+              ok-text="重新评分"
+              cancel-text="取消"
+              @confirm="onRegrade"
+            >
+              <a-button size="small" :loading="regrading">重新评分</a-button>
+            </a-popconfirm>
+            <a-button size="small" style="margin-left:auto;" @click="showPrompt">查看提示词</a-button>
           </div>
 
           <div v-if="aiResult" class="ai-block">
@@ -155,6 +173,21 @@
       </Transition>
     </div>
   </div>
+
+  <!-- AI 提示词（该次评分的实际提示词，含学生工程源码） -->
+  <a-modal v-model:open="promptModalOpen" title="AI 提示词（与实评一致，含学生工程源码）" :footer="null" width="820px">
+    <a-spin :spinning="promptLoading">
+      <template v-if="promptData">
+        <div class="prompt-block">
+          <div class="prompt-role-label">System（角色设定）</div>
+          <pre class="prompt-pre">{{ promptData.system }}</pre>
+          <div class="prompt-role-label">User（评分任务，含标准工程与学生提交源码）</div>
+          <pre class="prompt-pre">{{ promptData.user }}</pre>
+        </div>
+      </template>
+      <a-empty v-else-if="!promptLoading" description="暂无数据" :image="false" />
+    </a-spin>
+  </a-modal>
 </template>
 
 <script setup>
@@ -166,6 +199,7 @@ import loader from '@monaco-editor/loader';
 import { getClassWithColor } from 'file-icons-js';
 import 'file-icons-js/css/style.css';
 import { getProjectReview, saveProjectReview, regradeProjectSubmission } from '../../api/projects.js';
+import request from '../../api/request.js';
 import { getLanguage } from '../../domain/fileLang.js';
 
 const route = useRoute();
@@ -400,39 +434,107 @@ async function onApprove() {
   }
 }
 
-/** Q1 定案：评分异常时教师一键重评 */
+// ===== AI 提示词查看（该次评分的实际提示词，含学生源码） =====
+const promptModalOpen = ref(false);
+const promptLoading = ref(false);
+const promptData = ref(null);
+
+async function showPrompt() {
+  promptModalOpen.value = true;
+  promptLoading.value = true;
+  promptData.value = null;
+  try {
+    const r = await request.get('/teacher/submissions/' + submissionId + '/project/prompt');
+    promptData.value = r.data;
+  } catch (e) {
+    message.error('获取提示词失败：' + (e.response?.data?.message || e.message));
+  } finally {
+    promptLoading.value = false;
+  }
+}
+
+/** 重新评分（与编程题对齐）：任意状态可触发；
+ * 请求期间（含后台评分期间）按钮保持 loading 防连点，评分完成后恢复，可无限次点击 */
 async function onRegrade() {
+  if (regrading.value) return; // 防连点
   regrading.value = true;
   try {
     await regradeProjectSubmission(submissionId);
     gradingState.value = 'pending';
-    message.success('已重新触发评分，稍后刷新查看结果');
+    message.success('已重新触发评分，完成后自动刷新');
+    startPolling();
   } catch (e) {
+    regrading.value = false; // 接口失败立即恢复
     message.error('重评失败：' + (e.response?.data?.message || e.message));
-  } finally {
-    regrading.value = false;
   }
+  // 成功时保持 loading，直到轮询到评分完成/失败/超时才恢复
+}
+
+// ===== 重评轮询：评分完成后自动刷新，无需手动刷新 =====
+
+let pollTimer = null;
+let pollCount = 0;
+const POLL_INTERVAL = 5000; // 5s
+const POLL_MAX = 72;        // 最长 6 分钟
+
+function startPolling() {
+  stopPolling();
+  pollCount = 0;
+  pollTimer = setInterval(async () => {
+    pollCount += 1;
+    if (pollCount > POLL_MAX) {
+      stopPolling();
+      regrading.value = false; // 超时恢复按钮
+      message.warning('重新评分等待超时，请手动刷新查看');
+      return;
+    }
+    try {
+      const r = await getProjectReview(submissionId);
+      const gs = r.data.submission?.grading?.state || 'none';
+      if (gs !== 'pending') {
+        stopPolling();
+        applyReviewData(r.data);
+        regrading.value = false; // 评分完成，恢复按钮（可再次点击）
+        if (gs === 'failed') {
+          message.error('重新评分失败：' + (r.data.submission?.grading?.error || '未知错误'));
+        } else {
+          message.success('重新评分完成');
+        }
+      }
+    } catch (e) { /* 单次轮询失败忽略，下轮继续 */ }
+  }, POLL_INTERVAL);
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+/** 应用审核数据（fetchData 与重评轮询共用；不重建 Monaco） */
+function applyReviewData(d) {
+  submission.value = d.submission || {};
+  question.value = d.question || {};
+  student.value = d.student || {};
+  version.value = d.version || 0;
+  maxScore.value = d.question?.maxScore ?? 100;
+  aiResult.value = d.aiResult || null;
+  gradingState.value = d.submission?.grading?.state || 'none';
+  gradingError.value = d.submission?.grading?.error || '';
+  finalScore.value = d.submission?.finalScore ?? d.submission?.aiScore ?? null;
+  teacherFeedback.value = d.submission?.teacherFeedback || '';
+  standardFiles.tree = d.standardFiles?.tree || [];
+  standardFiles.contents = d.standardFiles?.contents || {};
+  studentFiles.tree = d.studentFiles?.tree || [];
+  studentFiles.contents = d.studentFiles?.contents || {};
+  loaded.value = true;
 }
 
 async function fetchData() {
   try {
     const r = await getProjectReview(submissionId);
-    const d = r.data;
-    submission.value = d.submission || {};
-    question.value = d.question || {};
-    student.value = d.student || {};
-    version.value = d.version || 0;
-    maxScore.value = d.question?.maxScore ?? 100;
-    aiResult.value = d.aiResult || null;
-    gradingState.value = d.submission?.grading?.state || 'none';
-    gradingError.value = d.submission?.grading?.error || '';
-    finalScore.value = d.submission?.finalScore ?? d.submission?.aiScore ?? null;
-    teacherFeedback.value = d.submission?.teacherFeedback || '';
-    standardFiles.tree = d.standardFiles?.tree || [];
-    standardFiles.contents = d.standardFiles?.contents || {};
-    studentFiles.tree = d.studentFiles?.tree || [];
-    studentFiles.contents = d.studentFiles?.contents || {};
-    loaded.value = true;
+    applyReviewData(r.data);
 
     // 默认数据源 = 学生提交（activeTree 初值 'student'）
     applySource(activeTree.value);
@@ -453,6 +555,7 @@ async function fetchData() {
 onMounted(fetchData);
 
 onBeforeUnmount(() => {
+  stopPolling();
   Object.values(models).forEach(m => m.dispose());
   models = {};
   editor?.dispose();
@@ -520,6 +623,15 @@ onBeforeUnmount(() => {
 .teacher-section { width:460px; flex-shrink:0; padding:12px 16px; display:flex; flex-direction:column; gap:10px; overflow:auto; }
 
 .ai-head { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+/* AI 提示词预览 */
+.prompt-block { margin-bottom: 12px; }
+.prompt-role-label { font-size: 12px; font-weight: 600; color: #666; margin: 8px 0 4px; }
+.prompt-pre {
+  margin: 0; padding: 10px 12px;
+  background: #f6f8fa; border: 1px solid #e8e8e8; border-radius: 6px;
+  font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-all;
+  max-height: 400px; overflow: auto;
+}
 .ai-score-label { font-size:12px; color:#888; }
 .ai-score-num { font-size:22px; font-weight:700; color:#1677ff; }
 .ai-collapse { margin-bottom:6px; }

@@ -23,6 +23,8 @@ router.put('/classes/:id/switch-school', teacher.switchClassSchool);
 // 题库
 router.get('/questions', teacher.getQuestions);
 router.get('/questions/:id/project-files', teacher.getProjectFiles);
+router.get('/questions/:id/prompt-preview', review.getQuestionPromptPreview);
+router.get('/questions/:id/project-prompt-preview', projectReview.getProjectQuestionPromptPreview);
 router.get('/questions/:id', teacher.getQuestion);
 router.post('/questions', teacher.createQuestion);
 router.put('/questions/:id', teacher.updateQuestion);
@@ -44,6 +46,8 @@ router.get('/review-class/:classId', review.getReviewByClass);
 router.get('/review-questions', review.getReviewQuestions);
 router.get('/submissions', review.getSubmissions);
 router.get('/submissions/:id', review.getSubmissionDetail);
+router.get('/submissions/:id/prompt', review.getSubmissionPrompt);
+router.get('/submissions/:id/project/prompt', projectReview.getProjectSubmissionPrompt);
 router.put('/submissions/:id/score', review.updateScore);
 router.put('/submissions/:id/review', review.reviewSubmission);
 // 新实训题流程审核（Submission.type=project）：三栏审核数据

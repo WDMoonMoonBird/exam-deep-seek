@@ -5,7 +5,7 @@
  * 新增敏感列时黑名单会静默泄漏，白名单则编译期即可发现缺失字段。
  */
 
-const EMPTY_ENVELOPE = { kind: 'project', currentVersion: 0, history: [], grading: { state: 'none', version: 0, attempts: 0, error: null } };
+const EMPTY_ENVELOPE = { kind: 'project', currentVersion: 0, history: [], grading: { state: 'none', version: 0, attempts: 0, error: null, prevStatus: null } };
 
 /**
  * 将 Submission.answer（Text 字段，JSON 字符串）解析为版本信封对象。
@@ -22,8 +22,9 @@ export function parseProjectAnswer(answer) {
           version: Number(obj.grading.version) || 0,
           attempts: Number(obj.grading.attempts) || 0,
           error: obj.grading.error || null,
+          prevStatus: obj.grading.prevStatus || null, // 教师重评前状态（Worker 完成后恢复）
         }
-      : { state: 'none', version: 0, attempts: 0, error: null };
+      : { state: 'none', version: 0, attempts: 0, error: null, prevStatus: null };
     return {
       kind: obj.kind || 'project',
       currentVersion: Number(obj.currentVersion) || 0,

@@ -24,6 +24,7 @@
       <a-space>
         <a-button @click="openDescModal">题目描述</a-button>
         <a-button @click="openRubricModal">评分标准</a-button>
+        <a-button v-if="isTeacher && isEdit" @click="showPromptPreview">查看 AI 提示词</a-button>
         <a-button v-if="isTeacher" type="primary" @click="handleSave">保存</a-button>
           <a-button v-else type="primary" :disabled="!hasUploaded || submitting || (isStudent && studentSubmission && studentSubmission.status !== 'draft')" :loading="submitting" @click="handleSubmit">
           {{ submitting ? '提交中...' : '提交答案' }}
@@ -56,6 +57,21 @@
           <a-button type="primary" @click="confirmRubric">确定</a-button>
         </template>
       </template>
+    </a-modal>
+
+    <!-- AI 提示词预览（编辑页模板：标准包真实内容，学生代码占位） -->
+    <a-modal v-model:open="promptModalOpen" title="AI 提示词（与实评一致，学生代码以占位符显示）" :footer="null" width="820px">
+      <a-spin :spinning="promptLoading">
+        <template v-if="promptPreview">
+          <div class="prompt-block">
+            <div class="prompt-role-label">System（角色设定）</div>
+            <pre class="prompt-pre">{{ promptPreview.system }}</pre>
+            <div class="prompt-role-label">User（评分任务，含标准工程源码）</div>
+            <pre class="prompt-pre">{{ promptPreview.user }}</pre>
+          </div>
+        </template>
+        <a-empty v-else-if="!promptLoading" description="暂无数据" :image="false" />
+      </a-spin>
     </a-modal>
 
     <!-- 学生端：成绩卡片（实训题专用，R4 成绩唯一开关；未出分时仅显示提交状态） -->
@@ -154,6 +170,26 @@ const uploadKeptBytes = ref(0);
 const editorContainerRef = ref(null);
 const showDescModal = ref(false);
 const showRubricModal = ref(false);
+// AI 提示词预览（编辑页模板，与实评共用构建函数）
+const promptModalOpen = ref(false);
+const promptLoading = ref(false);
+const promptPreview = ref(null);
+
+async function showPromptPreview() {
+  const id = route.params.id;
+  if (!id) return;
+  promptModalOpen.value = true;
+  promptLoading.value = true;
+  promptPreview.value = null;
+  try {
+    const r = await request.get('/teacher/questions/' + id + '/project-prompt-preview');
+    promptPreview.value = r.data;
+  } catch (e) {
+    message.error('获取提示词失败：' + (e.response?.data?.message || e.message));
+  } finally {
+    promptLoading.value = false;
+  }
+}
 // 模态框草稿（确定才写回 form，取消即还原）
 const descDraft = ref('');
 const rubricDraft = ref('');
@@ -547,6 +583,16 @@ onBeforeUnmount(() => {
 
 .readonly-desc { padding: 12px; min-height: 200px; font-size: 14px; line-height: 1.8; }
 .readonly-rubric { padding: 12px; min-height: 100px; font-size: 14px; line-height: 2; white-space: pre-wrap; }
+
+/* AI 提示词预览 */
+.prompt-block { margin-bottom: 12px; }
+.prompt-role-label { font-size: 12px; font-weight: 600; color: #666; margin: 8px 0 4px; }
+.prompt-pre {
+  margin: 0; padding: 10px 12px;
+  background: #f6f8fa; border: 1px solid #e8e8e8; border-radius: 6px;
+  font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-all;
+  max-height: 400px; overflow: auto;
+}
 
 .grade-result { padding: 8px 0; }
 .grade-total { font-size: 24px; font-weight: 700; text-align: center; margin-bottom: 16px; }
