@@ -78,14 +78,14 @@ Deadpan 判题是一套面向高校编程类课程的 **AI 智能评分平台**�
 - **切换灵活**：模型名 / API 地址 / 并发数均可在管理端配置（DB 优先、ENV 兜底），灰度切换模型无需重启服务。
 ## 技术栈
 
-| 层级 | 技术 |
-|---|---|
-| 前端 | Vue 3 + Ant Design Vue 4 + Monaco Editor |
-| 后端 | Express 5 + Prisma ORM + JWT |
-| 数据库 | MySQL 8 |
-| AI 引擎 | DeepSeek（OpenAI 兼容接口） |
-| 实时通信 | Socket.io + WebSocket |
-| 部署 | Nginx + PM2 + 自签/正规 SSL |
+| 层级     | 技术                                     |
+| -------- | ---------------------------------------- |
+| 前端     | Vue 3 + Ant Design Vue 4 + Monaco Editor |
+| 后端     | Express 5 + Prisma ORM + JWT             |
+| 数据库   | MySQL 8                                  |
+| AI 引擎  | DeepSeek（OpenAI 兼容接口）              |
+| 实时通信 | Socket.io + WebSocket                    |
+| 部署     | Nginx + PM2 + 自签/正规 SSL              |
 
 ## 快速开始
 
