@@ -16,7 +16,7 @@ export const getChecker = async (req, res) => {
     });
     if (!q) return res.status(404).json({ code: 1004, message: '题目不存在', data: null });
     if (q.type !== 'project') {
-      return res.status(400).json({ code: 1001, message: '仅实训题支持评分脚本', data: null });
+      return res.status(400).json({ code: 1001, message: '仅实训题支持自动评分器', data: null });
     }
     const state = await getCheckerState(q.id);
     res.json({ code: 0, message: 'ok', data: state });
@@ -39,7 +39,7 @@ export const confirmCheckerHandler = async (req, res) => {
     });
     if (!q) return res.status(404).json({ code: 1004, message: '题目不存在', data: null });
     if (q.type !== 'project') {
-      return res.status(400).json({ code: 1001, message: '仅实训题支持评分脚本', data: null });
+      return res.status(400).json({ code: 1001, message: '仅实训题支持自动评分器', data: null });
     }
     const action = req.body && req.body.action;
     if (!action || typeof action !== 'string') {
@@ -71,7 +71,7 @@ export const rollbackCheckerHandler = async (req, res) => {
     });
     if (!q) return res.status(404).json({ code: 1004, message: '题目不存在', data: null });
     if (q.type !== 'project') {
-      return res.status(400).json({ code: 1001, message: '仅实训题支持评分脚本', data: null });
+      return res.status(400).json({ code: 1001, message: '仅实训题支持自动评分器', data: null });
     }
     const versionId = Number(req.body && req.body.ruleVersionId);
     if (!Number.isFinite(versionId) || versionId <= 0) {
@@ -100,7 +100,7 @@ export const generateCheckerHandler = async (req, res) => {
     });
     if (!q) return res.status(404).json({ code: 1004, message: '题目不存在', data: null });
     if (q.type !== 'project') {
-      return res.status(400).json({ code: 1001, message: '仅实训题支持评分脚本', data: null });
+      return res.status(400).json({ code: 1001, message: '仅实训题支持自动评分器', data: null });
     }
     // fire-and-forget：异步生成；幂等与陈旧状态重启由 generateChecker 内部保证
     generateChecker(id).catch(err => logger.error({ err, questionId: id }, '评分脚本生成异常'));
