@@ -1135,7 +1135,7 @@ export async function confirmChecker(questionId, body) {
   let nextStatus = q.checkerStatus;
 
   if (action === 'regenerate') {
-    generateChecker(id).catch((err) => logger.error({ err, questionId: id }, '评分脚本重新生成异常'));
+    generateChecker(id).catch((err) => logger.error({ err, questionId: id }, '自动评分器重新生成异常'));
     return { status: 'generating', script, meta };
   }
 

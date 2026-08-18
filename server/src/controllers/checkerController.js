@@ -1,5 +1,5 @@
 /**
- * checkerController.js — AI 评分脚本（确定性检查器）生成与状态接口
+ * checkerController.js — AI 自动评分器（确定性检查器）生成与状态接口
  */
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
@@ -21,7 +21,7 @@ export const getChecker = async (req, res) => {
     const state = await getCheckerState(q.id);
     res.json({ code: 0, message: 'ok', data: state });
   } catch (err) {
-    logger.error({ err }, '查询评分脚本状态失败');
+    logger.error({ err }, '查询自动评分器状态失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
   }
 };
@@ -53,7 +53,7 @@ export const confirmCheckerHandler = async (req, res) => {
     if (!state) return res.status(404).json({ code: 1004, message: '题目不存在', data: null });
     res.json({ code: 0, message: 'ok', data: state });
   } catch (err) {
-    logger.error({ err }, '评分脚本确认操作失败');
+    logger.error({ err }, '自动评分器确认操作失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
   }
 };
@@ -81,7 +81,7 @@ export const rollbackCheckerHandler = async (req, res) => {
     if (!state) return res.status(404).json({ code: 1004, message: '规则版本不存在', data: null });
     res.json({ code: 0, message: 'ok', data: state });
   } catch (err) {
-    logger.error({ err }, '评分脚本回滚失败');
+    logger.error({ err }, '自动评分器回滚失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
   }
 };
@@ -106,7 +106,7 @@ export const generateCheckerHandler = async (req, res) => {
     generateChecker(id).catch(err => logger.error({ err, questionId: id }, '评分脚本生成异常'));
     res.json({ code: 0, message: '已开始生成', data: { status: 'generating' } });
   } catch (err) {
-    logger.error({ err }, '触发评分脚本生成失败');
+    logger.error({ err }, '触发自动评分器生成失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
   }
 };
