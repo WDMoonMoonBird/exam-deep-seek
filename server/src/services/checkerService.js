@@ -862,10 +862,19 @@ export async function generateChecker(questionId) {
     data: { checkerMeta: meta },
   });
 
-  // 分项必须来自题干+评分标准：优先用 rubricItems 固定分项，无则提炼一次
+  // 分项必须来自题干+评分标准：优先用 rubricItems 固定分项，无则提炼一次并落库缓存
+  // （BUG-B-03 修复：提炼结果含 automation_level 三分类，必须写回 rubricItems，
+  //   否则每次生成重复提炼（成本+方差）且分类不可复查；评分标准变更时由前端清空重建）
   let fixedItems = Array.isArray(question.rubricItems) && question.rubricItems.length > 0 ? question.rubricItems : null;
   if (!fixedItems) {
     try { fixedItems = await summarizeRubricItems(rubric, maxScore); } catch { fixedItems = null; }
+    if (Array.isArray(fixedItems) && fixedItems.length > 0) {
+      try {
+        await prisma.question.update({ where: { id }, data: { rubricItems: fixedItems } });
+      } catch (err) {
+        logger.warn({ questionId: id, err: String(err && err.message ? err.message : err) }, 'checkerService: rubricItems 缓存写回失败（不影响生成）');
+      }
+    }
   }
 
   // 工程根（规则路径以此解析）与标准包文件树（第 1 轮生成与校准反馈共用的事实依据）
