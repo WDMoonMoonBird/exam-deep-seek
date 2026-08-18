@@ -26,11 +26,11 @@
         <a-button @click="openRubricModal">评分标准</a-button>
         <span v-if="isTeacher && isEdit" class="checker-btn-wrap">
           <a-button @click="openCheckerModal" :disabled="checkerStatus === 'generating' || checkerStatus === 'calibrating'">
-            <template v-if="checkerStatus === 'ready'"><CheckCircleFilled style="color:#52c41a;margin-right:6px;" />评分脚本</template>
-            <template v-else-if="checkerStatus === 'generating' || checkerStatus === 'calibrating'"><LoadingOutlined spin style="margin-right:6px;" />评分脚本生成中…</template>
-            <template v-else>评分脚本</template>
+            <template v-if="checkerStatus === 'ready'"><CheckCircleFilled style="color:#52c41a;margin-right:6px;" />自动评分器</template>
+            <template v-else-if="checkerStatus === 'generating' || checkerStatus === 'calibrating'"><LoadingOutlined spin style="margin-right:6px;" />自动评分器生成中…</template>
+            <template v-else>自动评分器</template>
           </a-button>
-          <a-tag v-if="checkerStatus === 'failed'" color="red" size="small" style="margin:0;">脚本校准失败</a-tag>
+          <a-tag v-if="checkerStatus === 'failed'" color="red" size="small" style="margin:0;">评分器生成失败</a-tag>
         </span>
         <a-button v-if="isTeacher" type="primary" @click="handleSave">保存</a-button>
           <a-button v-else type="primary" :disabled="!hasUploaded || submitting || (isStudent && studentSubmission && studentSubmission.status !== 'draft')" :loading="submitting" @click="handleSubmit">
@@ -66,13 +66,13 @@
       </template>
     </a-modal>
 
-    <!-- 评分脚本模态框（§十一 界面改造：三步向导，原型阶段 mock=true）
+    <!-- 自动评分器模态框（§十一 界面改造：三步向导，原型阶段 mock=true）
          交互规则：右上角 X 始终可关闭（生成/校准/确认阶段右下角均无按钮）；
          ESC 仅在非生成阶段可用，遮罩点击始终不可关；完成阶段右下角为「完成」；
          内容超高时滚动条在弹窗体内滚动 -->
     <a-modal
       v-model:open="checkerOpen"
-      title="评分脚本"
+      title="自动评分器"
       width="880px"
       :closable="true"
       :mask-closable="false"
@@ -201,7 +201,7 @@ function openRubricModal() { rubricDraft.value = form.scoringRubric; showRubricM
 function confirmDesc() { form.description = descDraft.value; showDescModal.value = false; }
 function confirmRubric() { form.scoringRubric = rubricDraft.value; showRubricModal.value = false; }
 
-// ===== 评分脚本（checker）=====
+// ===== 自动评分器（checker）=====
 const checkerOpen = ref(false);
 const checkerLoading = ref(false);
 const checkerData = ref({ status: 'none', script: '', meta: { rounds: 0, items: [], subjective: [], error: '', log: [] } });
@@ -211,12 +211,12 @@ const checkerStatus = computed(() => checkerData.value.status || 'none');
 const checkerMeta = computed(() => checkerData.value.meta || { rounds: 0, items: [], subjective: [], error: '', log: [] });
 // 生成/校准期间禁用 ESC（右上角 X 始终可用）；避免生成中误按键盘关闭
 const checkerCanClose = computed(() => checkerStatus.value !== 'generating' && checkerStatus.value !== 'calibrating');
-// 脚本状态是否已从后端加载（页面加载即拉取，供头部状态与保存守卫使用）
+// 评分器状态是否已从后端加载（页面加载即拉取，供头部状态与保存守卫使用）
 let checkerLoadedOnce = false;
-// 标准工程包更换后脚本过期标记（重新生成时清除）
+// 标准工程包更换后评分器过期标记（重新生成时清除）
 const checkerStale = ref(false);
 
-/** 页面加载时拉取一次脚本状态（后端真实数据；重进页面无需重新生成脚本） */
+/** 页面加载时拉取一次评分器状态（后端真实数据；重进页面无需重新生成评分器） */
 async function ensureCheckerState() {
   const id = route.params.id;
   if (!id) return;
@@ -247,7 +247,7 @@ async function fetchChecker() {
     };
     if (checkerStatus.value !== 'generating') stopCheckerPoll();
   } catch (e) {
-    message.error('获取评分脚本状态失败：' + (e.response?.data?.message || e.message));
+    message.error('获取自动评分器状态失败：' + (e.response?.data?.message || e.message));
     stopCheckerPoll();
   }
 }
@@ -442,30 +442,30 @@ watch(activePath, () => {
 async function handleSave() {
   if (!form.title) return message.warn('请输入题目名称');
 
-  // 保存守卫（2026-08-18）：实训题必须有已确认启用的评分脚本；新建题首次保存放行（脚本按题目 id 生成）
+  // 保存守卫（2026-08-18）：实训题必须有已确认启用的自动评分器；新建题首次保存放行（评分器按题目 id 生成）
   if (isEdit.value) {
     if (!checkerLoadedOnce) await ensureCheckerState();
     const st = checkerStatus.value;
     if (checkerStale.value) {
-      message.warning('标准工程包已更换，请重新生成评分脚本');
+      message.warning('标准工程包已更换，请重新生成自动评分器');
       openCheckerModal();
       return;
     }
     if (st === 'generating' || st === 'calibrating') {
-      message.warning('评分脚本生成中，请稍候再保存');
+      message.warning('自动评分器生成中，请稍候再保存');
       return;
     }
     if (st === 'review') {
-      message.warning('评分脚本已生成但未确认启用，请打开评分脚本完成确认');
+      message.warning('自动评分器已生成但未确认启用，请打开自动评分器完成确认');
       openCheckerModal();
       return;
     }
     if (st !== 'ready') {
-      message.warning('请先生成评分脚本（当前状态：' + st + '）');
+      message.warning('请先生成自动评分器（当前状态：' + st + '）');
       openCheckerModal();
       return;
     }
-    // 输入一致性：评分标准/满分/题目描述变更 → 脚本过期（描述为 HTML，双方去标签后比较）
+    // 输入一致性：评分标准/满分/题目描述变更 → 评分器过期（描述为 HTML，双方去标签后比较）
     const snap = checkerMeta.value?.inputsSnapshot;
     if (snap) {
       const stripHtml = (s) => String(s || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
@@ -474,7 +474,7 @@ async function handleSave() {
       if (Number(snap.maxScore) !== Number(form.maxScore)) changed.push('满分');
       if (stripHtml(snap.description) !== stripHtml(form.description)) changed.push('题目描述');
       if (changed.length) {
-        message.warning('已变更：' + changed.join('、') + '，请重新生成评分脚本');
+        message.warning('已变更：' + changed.join('、') + '，请重新生成自动评分器');
         openCheckerModal();
         return;
       }
@@ -490,7 +490,7 @@ async function handleSave() {
       if (!form.tempId) return message.warn('请先上传标准工程包');
       payload.tempId = form.tempId;
       await request.post('/teacher/questions', payload);
-      message.success('创建成功，请为该题生成评分脚本');
+      message.success('创建成功，请为该题生成自动评分器');
     }
     router.push('/teacher/questions');
   } catch (e) {
@@ -517,7 +517,7 @@ async function onZipReady({ tree, fileContents: fc, keptCount, keptBytes }) {
     await teacherUpload(form.packageFile.blob, form.packageFile.name);
   }
 
-  // 标准工程包更换 → 已有评分脚本视为过期（保存守卫拦截并引导重新生成）
+  // 标准工程包更换 → 已有自动评分器视为过期（保存守卫拦截并引导重新生成）
   if (checkerLoadedOnce && checkerData.value.status && checkerData.value.status !== 'none') {
     checkerStale.value = true;
   }
@@ -623,7 +623,7 @@ async function loadQuestion() {
           if (first) openFile(first.path, first.name, first.language);
         }
       }
-      // 脚本状态持久化在后端：页面加载即拉取（重进页面无需重新生成）
+      // 评分器状态持久化在后端：页面加载即拉取（重进页面无需重新生成）
       await ensureCheckerState();
       return;
     }
@@ -738,7 +738,7 @@ onBeforeUnmount(() => {
 .readonly-rubric { padding: 12px; min-height: 100px; font-size: 14px; line-height: 2; white-space: pre-wrap; }
 
 
-/* 评分脚本（checker） */
+/* 自动评分器（checker） */
 .checker-btn-wrap { display: inline-flex; align-items: center; gap: 6px; }
 .checker-desc { font-size: 13px; color: #666; line-height: 1.8; margin: 0; }
 .checker-actions { text-align: center; margin-top: 16px; }

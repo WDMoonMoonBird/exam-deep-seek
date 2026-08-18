@@ -81,6 +81,19 @@ const RULES_FORMAT = [
   '}',
 ].join('\n');
 
+/** 固定分项 automation_level 分类中文标签（prompt 固定分项段渲染用；旧数据缺失 → 无标注） */
+const AUTOMATION_LEVEL_LABELS = {
+  deterministic: '确定性',
+  semi: '半确定',
+  subjective: '主观',
+};
+
+/** 固定分项渲染分类标注：deterministic →（确定性）、semi →（半确定）、subjective →（主观）；缺失 → 空串（旧数据兜底） */
+function automationLabel(item) {
+  const label = AUTOMATION_LEVEL_LABELS[item && item.automation_level];
+  return label ? '（' + label + '）' : '';
+}
+
 /** fact 规则可用字段清单（prompt 注入；字段与 factExtractor 输出一致） */
 const FACTS_SCHEMA = [
   'language(字符串: "vue"/"node"/... 工程语言) / framework(字符串: 框架名)',
@@ -338,6 +351,39 @@ export function parseCheckerRules(output) {
   return { max_score: maxScore, objective_items: objectiveItems, subjective_items: subjectiveItems };
 }
 
+// ===================== 固定分项三分类校验（Team B 2026-08-18） =====================
+
+/** 规则描述中「固定分项名 + 分隔符 + 检查描述」式写法的分隔符（用于 item 匹配） */
+const RUBRIC_NAME_SEPARATORS = ['（', '(', ':', '：', ',', '，', ' '];
+
+/**
+ * 校验固定分项分类与生成规则的一致性（Rubric Analyzer 三分类）：
+ * automation_level=subjective 的固定分项不得被生成为 objective 客观规则（应原样放入
+ * subjective_items）。匹配依据（prompt 约定 objective 项 group=评分标准分项名）：
+ * objective 项的 group 或 item 与固定分项名完全一致，或 item 以「分项名 + 分隔符」开头。
+ * 旧 rubricItems（无 automation_level，normalizeRubricItems 兜底为 deterministic）天然不触发校验。
+ * @param {object} rules parseCheckerRules 结果
+ * @param {Array|null} fixedItems 固定分项（含 automation_level 字段）
+ * @returns {Array<string>} 被错误写入 objective_items 的「主观」分类分项名（空数组 = 通过）
+ */
+export function findMisplacedSubjective(rules, fixedItems) {
+  if (!rules || !Array.isArray(rules.objective_items)) return [];
+  const fixed = Array.isArray(fixedItems) ? fixedItems : [];
+  const subjectiveNames = fixed
+    .filter((it) => it && typeof it === 'object' && it.automation_level === 'subjective')
+    .map((it) => String(it.item || '').trim())
+    .filter((name) => name.length > 0);
+  if (subjectiveNames.length === 0) return [];
+  const objPairs = rules.objective_items
+    .filter((o) => o && typeof o === 'object')
+    .map((o) => [String(o.group || '').trim(), String(o.item || '').trim()]);
+  return subjectiveNames.filter((name) =>
+    objPairs.some(([group, item]) =>
+      group === name
+      || item === name
+      || RUBRIC_NAME_SEPARATORS.some((sep) => item.startsWith(name + sep))));
+}
+
 // ===================== 旧脚本沙箱执行（保留，历史兼容） =====================
 
 /**
@@ -463,7 +509,7 @@ async function callLlm(system, user, opts = {}) {
 export function buildGenerateUserPrompt(rubric, maxScore, fixedItems, stdFileTree, description) {
   const fixed = (Array.isArray(fixedItems) && fixedItems.length > 0)
     ? '\n\n【固定分项（必须逐项覆盖，不得增删改；满分合计 ' + maxScore + ' 分）】\n'
-      + fixedItems.map((it, i) => (i + 1) + '. ' + it.item + '（' + it.maxScore + ' 分）').join('\n')
+      + fixedItems.map((it, i) => (i + 1) + '. ' + it.item + automationLabel(it) + '（' + it.maxScore + ' 分）').join('\n')
     : '';
   const treeSection = stdFileTree
     ? '\n\n【标准工程包文件树（事实依据，请据此确定文件路径，不要猜测）】\n' + stdFileTree + '\n'
@@ -486,6 +532,7 @@ export function buildGenerateUserPrompt(rubric, maxScore, fixedItems, stdFileTre
     + '- 分组：评分标准的每个分项用 group 字段关联；多个客观项可同 group，group 内 max_score 之和必须等于该分项满分\n'
     + '- 分项必须严格来自评分标准，按评分标准自然拆分，不要人为合并或压缩；禁止自创评分标准未提及的检查项（如 README/test/eslint 等）\n'
     + '- 只有无法通过静态文件检查确定分数的项才放入 subjective_items，不要用规则判断主观项\n'
+    + '- 分类标注为（主观）的固定分项禁止生成 objective 规则，必须原样放入 subjective_items；分类标注为（确定性）的固定分项必须全部生成可执行客观规则（objective_items）；分类标注为（半确定）的固定分项允许客观规则与主观评分混合\n'
     + '- objective_items 总分 + subjective_items 总分必须恰好等于 max_score\n'
     + '- 只输出 JSON。';
 }
@@ -505,7 +552,7 @@ function buildCalibrateUserPrompt(feedback, stdFileTree, fixedItems, prevRules) 
     ? '\n\n【标准工程包文件树（事实依据：标准包实际存在的文件，请据此修正路径/正则等参数）】\n' + stdFileTree + '\n'
     : '';
   const fixedSection = Array.isArray(fixedItems) && fixedItems.length > 0
-    ? '\n\n【固定分项（必须严格逐项覆盖，不得增删改）】\n' + fixedItems.map((it, i) => (i + 1) + '. ' + it.item + '（' + it.maxScore + ' 分）').join('\n') + '\n'
+    ? '\n\n【固定分项（必须严格逐项覆盖，不得增删改）】\n' + fixedItems.map((it, i) => (i + 1) + '. ' + it.item + automationLabel(it) + '（' + it.maxScore + ' 分）').join('\n') + '\n'
     : '';
   const prevRulesSection = prevRules
     ? '\n\n【上一版规则（请基于它修正 rule_type/params/max_score，不要改写成代码）】\n' + JSON.stringify(prevRules, null, 2) + '\n'
@@ -860,6 +907,13 @@ export async function generateChecker(questionId) {
     }
     if (rules.objective_items.length === 0 && rules.subjective_items.length === 0) {
       throw new Error('规则解析失败：objective_items 与 subjective_items 全部无效。每项必须包含：item（规则中文描述，不是 name）、rule_type（白名单内）、params（对象）、max_score（正整数）；请按【规则格式】重新输出。');
+    }
+    // Team B 三分类校验：subjective 分类的固定分项不得被生成为 objective 规则
+    // （复用现有校准错误通道：抛错 → 下一轮校准反馈，错误信息指明具体分项名）
+    const misplaced = findMisplacedSubjective(rules, fixedItems);
+    if (misplaced.length > 0) {
+      throw new Error('规则校准校验失败：「主观」分类分项被错误生成为客观规则（objective_items），'
+        + '请将这些分项移除并原样放入 subjective_items：' + misplaced.join('、'));
     }
     // L1 路径白名单校验（§4.1 标准包缺陷候选机制，2026-08-18）：
     // 规则引用标准包不存在的文件 → 不判死整轮；标记为缺陷候选（评分标准要求但标准包未实现），

@@ -112,8 +112,8 @@
       <!-- Step 1 -->
       <template v-if="step === 1">
         <span class="cw-hint">生成后将自动进入校准，无需任何人工干预</span>
-        <a-popconfirm title="生成评分脚本？" description="约 1-3 分钟，期间可关闭弹窗稍后查看" ok-text="生成" cancel-text="取消" @confirm="handleGenerate">
-          <a-button type="primary">生成评分脚本</a-button>
+        <a-popconfirm title="生成自动评分器？" description="约 1-3 分钟，期间可关闭弹窗稍后查看" ok-text="生成" cancel-text="取消" @confirm="handleGenerate">
+          <a-button type="primary">生成自动评分器</a-button>
         </a-popconfirm>
       </template>
 
@@ -138,8 +138,8 @@
       <template v-else-if="step === 3">
         <span class="cw-hint" :class="{ warn: pendingCount }">{{ pendingCount ? '尚有失分项未处理' : '全部失分项已处理，可启用' }}</span>
         <a-space>
-          <a-popconfirm title="重新生成？" description="将重新执行多轮生成与校准，当前草稿保留为历史版本" ok-text="重新生成" cancel-text="取消" @confirm="handleRegenerate">
-            <a-button>重新生成</a-button>
+          <a-popconfirm title="重新生成评分器？" description="将重新执行多轮生成与校准，当前草稿保留为历史版本" ok-text="重新生成评分器" cancel-text="取消" @confirm="handleRegenerate">
+            <a-button>重新生成评分器</a-button>
           </a-popconfirm>
           <a-button @click="giveUp">放弃</a-button>
           <a-button type="primary" :loading="confirming" @click="handleConfirm">确认启用</a-button>

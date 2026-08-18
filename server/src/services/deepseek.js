@@ -780,11 +780,16 @@ ${fileTreeText}
 
 const RUBRIC_ROLE = '你是教学评分标准结构化工具。你的任务是把教师给出的评分标准原文，精简为固定分项列表，供 AI 逐项评分使用。';
 
+/** automation_level 合法取值（缺失/非法 → deterministic 兜底，兼容旧 rubricItems 缓存） */
+const AUTOMATION_LEVELS = ['deterministic', 'semi', 'subjective'];
+
 /**
  * 校验并规整分项列表：合计强制等于 maxScore（差额调整最后一项），非法项丢弃。
- * @param {Array} items 模型返回的分项数组 [{item, maxScore}]
+ * 每项附加 automation_level 三分类（deterministic/semi/subjective）：
+ * 旧数据（无 automation_level）或非法值按 deterministic 兜底，保证缓存兼容。
+ * @param {Array} items 模型返回的分项数组 [{item, maxScore, automation_level?}]
  * @param {number} maxScore 满分
- * @returns {Array|null} 规整后的 [{item, maxScore}]；为空返回 null
+ * @returns {Array|null} 规整后的 [{item, maxScore, automation_level}]；为空返回 null
  */
 export function normalizeRubricItems(items, maxScore = 100) {
   if (!Array.isArray(items) || items.length === 0) return null;
@@ -795,7 +800,8 @@ export function normalizeRubricItems(items, maxScore = 100) {
     const name = String(it.item || '').trim().slice(0, 20);
     const score = Math.max(1, Math.round(Number(it.maxScore) || 0));
     if (!name) continue;
-    out.push({ item: name, maxScore: score });
+    const automation_level = AUTOMATION_LEVELS.includes(it.automation_level) ? it.automation_level : 'deterministic';
+    out.push({ item: name, maxScore: score, automation_level });
     sum += score;
   }
   if (out.length === 0) return null;
@@ -817,19 +823,30 @@ export function normalizeRubricItems(items, maxScore = 100) {
 
 /**
  * 从评分标准文本提炼固定分项（一次轻量调用；失败抛错由调用方降级）。
+ * 每个分项附带 automation_level 三分类（deterministic/semi/subjective）：
+ * - deterministic：可静态检查证据化（文件/目录存在性、是否使用某库如 Router/Pinia、
+ *   CRUD/API 调用存在性、数量阈值、语法检查）
+ * - subjective：依赖人工判断（代码设计合理、可读性、用户体验、架构清晰、美观）
+ * - semi：介于两者（组件复用程度、健壮性等）
+ * 比例引导（prompt 提示，不硬约束）：确定性 70%~85%、主观 15%~30%。
  * @param {string} rubricText 教师评分标准（可空 → 默认维度）
  * @param {number} maxScore 满分
- * @returns {Promise<Array<{item: string, maxScore: number}>|null>}
+ * @returns {Promise<Array<{item: string, maxScore: number, automation_level: string}>|null>}
  */
 export async function summarizeRubricItems(rubricText, maxScore = 100) {
   const userMessage = '【评分标准原文】\n' + (rubricText || '（无，请使用通用维度：功能完整性/代码规范性/健壮性）')
     + '\n\n【满分】' + maxScore + ' 分\n'
-    + '请将评分标准精简为 3~12 个分项，要求：\n'
+    + '请将评分标准精简为 3~12 个分项，并为每个分项标注 automation_level 自动化分类：\n'
+    + '- deterministic（确定性）：可静态检查证据化的项，如文件/目录是否存在、是否使用某库（Router/Pinia 等）、CRUD/API 调用是否存在、数量阈值、语法检查等\n'
+    + '- subjective（主观）：依赖人工判断的项，如代码设计合理、可读性、用户体验、架构清晰、美观等\n'
+    + '- semi（半确定）：介于两者之间的项，如组件复用程度、健壮性等\n'
+    + '- 比例引导（仅供参考，不强求精确）：确定性 70%~85%，主观 15%~30%，其余为半确定\n'
     + '- item 用简洁名称（不超过 12 字）\n'
     + '- maxScore 为正整数，各项之和必须恰好等于 ' + maxScore + '\n'
     + '- 覆盖评分标准中的全部评分维度，不得合并关键项，不得新增标准外的项\n'
     + '- 原文无结构时使用通用维度\n\n'
-    + '严格 JSON 返回（不要任何其他文字）：\n{"items": [{"item": "项目初始化", "maxScore": 10}, {"item": "登录功能", "maxScore": 20}]}';
+    + '严格 JSON 返回（不要任何其他文字）：\n'
+    + '{"items": [{"item": "项目初始化", "maxScore": 10, "automation_level": "deterministic"}, {"item": "界面美观", "maxScore": 10, "automation_level": "subjective"}]}';
 
   let lastError = null;
   for (let attempt = 1; attempt <= 2; attempt++) {

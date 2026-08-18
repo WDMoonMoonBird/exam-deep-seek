@@ -4,12 +4,13 @@
  * 以及归一化逻辑（score 越界截断、非法项丢弃）。
  * 测新纯函数 parseCheckerRules（规则驱动）：完整规则 / 围栏 / id 补缺省 / 截断补全 / 非法输入 / 总和错误（validateRules）。
  * 另附 runCheckerScript 子进程沙箱执行的可选测试（成功 + 运行抛错，旧脚本流程保留）。
+ * Team B 2026-08-18 新增：findMisplacedSubjective（subjective 分类分项误入 objective_items 的校验）。
  * 不测 generateChecker（真实 LLM 调用）。
  */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parseCheckerResult, parseCheckerRules, runCheckerScript, attachNegativeFeedback } from '../../../src/services/checkerService.js';
+import { parseCheckerResult, parseCheckerRules, runCheckerScript, attachNegativeFeedback, findMisplacedSubjective } from '../../../src/services/checkerService.js';
 
 /** 创建临时目录（测试后清理） */
 function tmpdir() {
@@ -355,6 +356,67 @@ describe('runCheckerScript — 沙箱执行（可选，子进程真实执行）'
   });
 });
 
+
+describe('findMisplacedSubjective — subjective 分类项误入 objective_items 校验（Team B 三分类）', () => {
+  const fixedItems = [
+    { item: '登录功能', maxScore: 40, automation_level: 'deterministic' },
+    { item: '界面美观', maxScore: 20, automation_level: 'subjective' },
+    { item: '代码可读性', maxScore: 20, automation_level: 'subjective' },
+    { item: '组件复用', maxScore: 20, automation_level: 'semi' },
+  ];
+
+  it('subjective 分项以 group 名写入 objective_items → 命中并返回该分项名', () => {
+    const rules = {
+      max_score: 100,
+      objective_items: [
+        { id: 'a1', group: '登录功能', item: '存在 login.js', rule_type: 'file_exists', params: { path: 'login.js' }, max_score: 40 },
+        { id: 'a2', group: '界面美观', item: '界面颜色搭配合理', rule_type: 'contains_text', params: { path: 'src/main.js' }, max_score: 20 },
+      ],
+      subjective_items: [{ id: 's1', item: '代码可读性', max_score: 20 }, { id: 's2', item: '组件复用', max_score: 20 }],
+    };
+    expect(findMisplacedSubjective(rules, fixedItems)).toEqual(['界面美观']);
+  });
+
+  it('subjective 分项以「分项名（检查描述）」写入 objective_items.item → 命中', () => {
+    const rules = {
+      max_score: 100,
+      objective_items: [
+        { id: 'a1', group: '登录功能', item: '存在 login.js', rule_type: 'file_exists', params: { path: 'login.js' }, max_score: 60 },
+        { id: 'a2', group: '其他', item: '代码可读性（命名规范）', rule_type: 'contains_regex', params: { path: 'src' }, max_score: 20 },
+      ],
+      subjective_items: [{ id: 's1', item: '界面美观', max_score: 20 }],
+    };
+    expect(findMisplacedSubjective(rules, fixedItems)).toEqual(['代码可读性']);
+  });
+
+  it('subjective 分项全部在 subjective_items → 通过（空数组）；semi 项进 objective 不触发', () => {
+    const rules = {
+      max_score: 100,
+      objective_items: [
+        { id: 'a1', group: '登录功能', item: '存在 login.js', rule_type: 'file_exists', params: { path: 'login.js' }, max_score: 40 },
+        { id: 'a2', group: '组件复用', item: '组件数量达标', rule_type: 'count_regex', params: { path: 'src' }, max_score: 20 },
+      ],
+      subjective_items: [{ id: 's1', item: '界面美观', max_score: 20 }, { id: 's2', item: '代码可读性', max_score: 20 }],
+    };
+    expect(findMisplacedSubjective(rules, fixedItems)).toEqual([]);
+  });
+
+  it('旧数据（无 automation_level，兜底 deterministic）→ 不触发校验', () => {
+    const oldFixed = [{ item: '界面美观', maxScore: 20 }];
+    const rules = {
+      max_score: 100,
+      objective_items: [{ id: 'a1', group: '界面美观', item: '界面美观（颜色）', rule_type: 'contains_text', params: { path: 'a' }, max_score: 100 }],
+      subjective_items: [],
+    };
+    expect(findMisplacedSubjective(rules, oldFixed)).toEqual([]);
+  });
+
+  it('fixedItems 为 null / rules 非法 → 空数组（不抛错）', () => {
+    expect(findMisplacedSubjective({ max_score: 100, objective_items: [] }, null)).toEqual([]);
+    expect(findMisplacedSubjective(null, fixedItems)).toEqual([]);
+    expect(findMisplacedSubjective({ max_score: 100 }, fixedItems)).toEqual([]);
+  });
+});
 
 describe('attachNegativeFeedback — 负例验证反馈接线（Team A，纯函数）', () => {
   it('weakRules 非空时挂载到反馈对象，保留既有字段（result/deductions/defectItems）', () => {
