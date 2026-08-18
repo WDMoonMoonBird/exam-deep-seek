@@ -1,6 +1,6 @@
 /**
  * 项目类型检测 —— 从标准工程包文件树（路径集合）识别语言/框架。
- * 供评分脚本向导展示"已识别项目类型"（2026-08-18 起替代写死的 mock 值）。
+ * 供自动评分器向导展示"已识别项目类型"（2026-08-18 起替代写死的 mock 值）。
  * 规则：Java 系优先（pom/gradle/.java），其次 Vue/React/Node（package.json），
  * 再 Python（.py/requirements.txt）、Go（go.mod），未命中为通用工程。
  * @param {Array} tree antd tree 节点数组（{name, type, path, children}）

@@ -18,7 +18,7 @@
     <a-alert
       v-if="summary.suggestions"
       type="warning" show-icon class="rq-alert"
-      message="以下规则组被教师频繁改分，判定可能过严或过松，建议重新生成后重新确认（走评分脚本向导第 3 步）"
+      message="以下规则组被教师频繁改分，判定可能过严或过松，建议重新生成后重新确认（走自动评分器向导第 3 步）"
     />
 
     <a-table :columns="columns" :data-source="rows" :pagination="false" size="middle" row-key="id" :loading="loading">
@@ -43,7 +43,7 @@
     </a-table>
 
     <div class="rq-note">
-      说明：改分信号在教师审核保存 finalScore 时自动采集（零额外操作）；「查看规则」将进入该题评分脚本向导第 3 步重新确认。
+      说明：改分信号在教师审核保存 finalScore 时自动采集（零额外操作）；「查看规则」将进入该题自动评分器向导第 3 步重新确认。
       <a-divider type="vertical" />
       数据来源：grading_override_signals（重构方案 §4.3）
     </div>
@@ -92,9 +92,9 @@ async function load() {
 }
 
 function openQuestion(record) {
-  // 原型：跳转到题库并提示；正式版带 query 自动打开评分脚本向导第 3 步
+  // 原型：跳转到题库并提示；正式版带 query 自动打开自动评分器向导第 3 步
   router.push({ path: '/teacher/questions' });
-  message.info('正式版将打开题目 ' + record.questionId + ' 的评分脚本向导（第 3 步确认）');
+  message.info('正式版将打开题目 ' + record.questionId + ' 的自动评分器向导（第 3 步确认）');
 }
 
 function ignore(record) {
