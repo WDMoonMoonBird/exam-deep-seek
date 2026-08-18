@@ -18,7 +18,15 @@ import fs from 'fs';
 import path from 'path';
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
-import { gradeProject, selectImportantFiles, getProjectContextMode } from './deepseek.js';
+import {
+  gradeProject,
+  gradeSubjectiveItems,
+  selectImportantFiles,
+  getProjectContextMode,
+  summarizeRubricItems,
+  getConcurrency,
+} from './deepseek.js';
+import { runRules } from './ruleExecutor.js';
 import {
   buildFileTree,
   filterProjectFiles,
@@ -34,14 +42,30 @@ import { parseProjectAnswer, serializeProjectAnswer } from '../utils/projectView
 import { MAX_TEXT_BYTES } from '../utils/projectArchive.js';
 import { isIgnored } from '../utils/fileTree.js';
 
-// ===================== 并发信号量（D6：上限 3） =====================
+// ===================== 并发信号量（D6：并发数读管理端 ai_concurrency，默认 16，热更新） =====================
 let activeCount = 0;
-const MAX_CONCURRENT = 3;
+let maxConcurrent = 3; // 首次评分前由 refreshConcurrency 从配置刷新（默认 16）
 const waiters = [];
+
+/**
+ * 刷新并发上限（2026-08-17 并发修复）：读管理端 ai_concurrency 配置（getConfig 自带 1 分钟缓存）。
+ * 入队/评分前调用，配置变更 1 分钟内生效；失败保持当前值。
+ */
+export async function refreshConcurrency() {
+  try {
+    const v = await getConcurrency();
+    if (v !== maxConcurrent) {
+      logger.info({ old: maxConcurrent, new: v }, '实训题评分并发配置已更新');
+      maxConcurrent = v;
+    }
+  } catch (err) {
+    logger.warn({ err: err.message }, '读取并发配置失败，保持当前值');
+  }
+}
 
 function acquire() {
   return new Promise((resolve) => {
-    if (activeCount < MAX_CONCURRENT) {
+    if (activeCount < maxConcurrent) {
       activeCount += 1;
       resolve();
     } else {
@@ -52,7 +76,7 @@ function acquire() {
 
 function release() {
   activeCount = Math.max(0, activeCount - 1);
-  if (waiters.length && activeCount < MAX_CONCURRENT) {
+  if (waiters.length && activeCount < maxConcurrent) {
     activeCount += 1;
     const next = waiters.shift();
     next();
@@ -133,6 +157,100 @@ function readKeptFiles(kept, base) {
  * @param {object} p.question 题目（title/material/scoringRubric）
  * @returns {Promise<{standardFiles: string, studentFiles: string, info: object}>}
  */
+
+/**
+ * 评分标准固定分项（2026-08-17 评分一致性方案）：懒生成 + 并发安全 + 失败降级。
+ * 有缓存直接用；无缓存调 AI 提炼一次，写入 DB（UPDATE WHERE rubric_items IS NULL 防并发重复生成）；
+ * 提炼失败返回 null（评分降级为模型自由分项，不阻断）。
+ * @param {object} question 题目（id/scoringRubric/maxScore/rubricItems）
+ * @returns {Promise<Array<{item, maxScore}>|null>}
+ */
+
+/**
+ * 检查器评分链路（2026-08-17 方案）：确定性分项由 AI 生成脚本执行（零 token、零波动），
+ * 主观分项调 LLM（温度 0）。任一环节失败抛错，由调用方降级为原 LLM 全量评分。
+ * @param {object} p
+ * @param {object} p.question 题目（checkerScript/scoringRubric/maxScore 等）
+ * @param {string} p.stuDir 学生版本目录
+ * @param {string} p.standardFiles 标准包源码（L0 过滤后）
+ * @param {string} p.studentFiles 学生源码（L0 过滤后）
+ * @returns {Promise<{totalScore: number, breakdown: Array, highlights: Array, issues: Array, overallComment: string}>}
+ */
+async function gradeWithChecker({ question, stuDir, standardFiles, studentFiles }) {
+  // 1) 确定性检查：规则驱动执行器（2026-08-17 规则驱动方案：计分由确定性代码强制，不会溢出）
+  let rules;
+  try {
+    rules = typeof question.checkerScript === 'string'
+      ? JSON.parse(question.checkerScript)
+      : question.checkerScript;
+  } catch {
+    throw new Error('评分规则解析失败');
+  }
+  if (!rules || !Array.isArray(rules.objective_items)) throw new Error('评分规则格式非法');
+  const checkerRes = await runRules(rules, stuDir);
+  const checkerItems = (checkerRes.items || []).map(it => ({
+    item: String(it.item || '').slice(0, 50),
+    maxScore: Number(it.max_score) || 0,
+    score: Number(it.score) || 0,
+    comment: String(it.evidence || '').slice(0, 60),
+    kind: 'checker',
+  }));
+
+  // 2) 主观分项 LLM 评分（失败不降级：确定性结果保留，主观项按 0 分并记录）
+  const subjectiveList = Array.isArray(checkerRes.subjective) ? checkerRes.subjective : [];
+  let subjectiveItems = [];
+  if (subjectiveList.length > 0) {
+    try {
+      const sr = await gradeSubjectiveItems({
+        title: question.title || '未命名项目',
+        scoringRubric: question.scoringRubric || '',
+        standardFiles,
+        studentFiles,
+        subjectiveItems: subjectiveList,
+        checkerEvidence: JSON.stringify(checkerItems.map(i => ({ item: i.item, score: i.score, evidence: i.comment }))),
+      });
+      subjectiveItems = (sr.items || []).map(it => ({ ...it, kind: 'ai' }));
+    } catch (err) {
+      logger.warn({ err: err.message, submissionId: question.id }, '主观分项评分失败，按 0 分处理（确定性结果保留）');
+      subjectiveItems = subjectiveList.map(it => ({ item: it.item, maxScore: it.max_score, score: 0, comment: '主观评分失败', kind: 'ai' }));
+    }
+  }
+
+  const breakdown = [...checkerItems, ...subjectiveItems];
+  // 按分项汇总（clamp 到题目满分；脚本自身 totalScore 可能溢出，以分项为准）
+  const totalScore = Math.min(
+    Number(question.maxScore) || 100,
+    Math.max(0, breakdown.reduce((s, b) => s + (b.score || 0), 0)),
+  );
+  logger.info({ items: breakdown.length, checker: checkerItems.length, ai: subjectiveItems.length }, '检查器评分完成');
+  return { totalScore, breakdown, highlights: [], issues: [], overallComment: '' };
+}
+export async function ensureRubricItems(question) {
+  if (Array.isArray(question?.rubricItems) && question.rubricItems.length > 0) {
+    return question.rubricItems;
+  }
+  try {
+    const items = await summarizeRubricItems(question?.scoringRubric || '', question?.maxScore || 100);
+    if (!items || items.length === 0) return null;
+    // 并发安全：仅当仍为空时写入（其他并发任务可能已写入）；
+    // Prisma JSON 字段判空须用 DbNull（rubricItems: null 字面量会被拒）
+    const cur = await prisma.question.findUnique({
+      where: { id: question.id },
+      select: { rubricItems: true },
+    });
+    if (!Array.isArray(cur?.rubricItems) || cur.rubricItems.length === 0) {
+      await prisma.question.update({
+        where: { id: question.id },
+        data: { rubricItems: items },
+      });
+    }
+    logger.info({ questionId: question.id, items: items.length }, '评分标准固定分项已生成并缓存');
+    return items;
+  } catch (err) {
+    logger.warn({ err: err.message, questionId: question?.id }, '评分标准分项提炼失败，降级模型自由分项');
+    return null;
+  }
+}
 export async function buildGradingContext({ mode, stdDir, stuDir, question }) {
   const fallback = () => ({
     standardFiles: readDirFiles(stdDir).join('\n\n'),
@@ -303,6 +421,7 @@ export function enqueueProjectGrade(submissionId) {
   setImmediate(() => {
     (async () => {
       try {
+        await refreshConcurrency(); // 2026-08-17 并发修复：入队前刷新并发上限（配置变更热生效）
         const sub = await prisma.submission.findUnique({
           where: { id: submissionId },
           select: { questionId: true, studentId: true, answer: true, status: true },
@@ -335,7 +454,7 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
   try {
     const sub = await prisma.submission.findUnique({
       where: { id: submissionId },
-      include: { question: { select: { id: true, title: true, material: true, scoringRubric: true, maxScore: true, type: true } } },
+      include: { question: { select: { id: true, title: true, material: true, scoringRubric: true, maxScore: true, type: true, rubricItems: true, checkerScript: true, checkerStatus: true } } },
     });
     if (!sub) {
       logger.warn({ submissionId }, '实训题评分：提交记录不存在，跳过');
@@ -375,19 +494,55 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
       logger.info({ submissionId, mode: ctx.info.mode, pickedCount: ctx.info.pickedCount || 0 }, '实训题评分：上下文构建完成');
     }
 
+    // 评分标准固定分项（懒生成 + 缓存；失败降级为模型自由分项）
+    const fixedItems = await ensureRubricItems(sub.question);
+
+    // 2026-08-17 检查器方案：脚本就绪时走确定性链路（硬性分项零波动），失败降级原链路
+    const checkerReady = sub.question.checkerStatus === 'ready' && !!sub.question.checkerScript;
+
     let result;
     try {
-      result = await gradeProject({
-        title: sub.question.title || '未命名项目',
-        description: sub.question.material || '',
-        scoringRubric: sub.question.scoringRubric || '',
-        standardFiles,
-        studentFiles,
-      });
+      if (checkerReady) {
+        logger.info({ submissionId }, '实训题评分：使用确定性检查脚本');
+        result = await gradeWithChecker({
+          question: sub.question,
+          stuDir,
+          standardFiles,
+          studentFiles,
+        });
+      } else {
+        result = await gradeProject({
+          title: sub.question.title || '未命名项目',
+          description: sub.question.material || '',
+          scoringRubric: sub.question.scoringRubric || '',
+          standardFiles,
+          studentFiles,
+          fixedItems,
+        });
+      }
     } catch (aiErr) {
-      logger.error({ err: aiErr, submissionId }, '实训题评分：AI 调用失败，标记失败');
-      await markFailed(submissionId, 'AI 评分服务异常');
-      return;
+      if (checkerReady) {
+        // 检查器失败 → 降级原 LLM 链路（本次评分不中断）
+        logger.warn({ err: aiErr.message, submissionId }, '检查器评分失败，降级 LLM 全量评分');
+        try {
+          result = await gradeProject({
+            title: sub.question.title || '未命名项目',
+            description: sub.question.material || '',
+            scoringRubric: sub.question.scoringRubric || '',
+            standardFiles,
+            studentFiles,
+            fixedItems,
+          });
+        } catch (err2) {
+          logger.error({ err: err2, submissionId }, '实训题评分：AI 调用失败，标记失败');
+          await markFailed(submissionId, 'AI 评分服务异常');
+          return;
+        }
+      } else {
+        logger.error({ err: aiErr, submissionId }, '实训题评分：AI 调用失败，标记失败');
+        await markFailed(submissionId, 'AI 评分服务异常');
+        return;
+      }
     }
 
     // gradeProject 返回 { totalScore, breakdown[], highlights[], issues[], overallComment }
@@ -398,9 +553,13 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
       score: Number(b.score) || 0,
       maxScore: Number(b.maxScore) || 0,
       comment: String(b.comment || '').slice(0, 60),
+      kind: b.kind, // 检查器链路标记 'checker'/'ai'；原链路无该字段
     });
     const aiFeedback = JSON.stringify({
-      breakdown: (Array.isArray(result.breakdown) ? result.breakdown : []).slice(0, 8).map(clampBreakdown),
+      // 检查器链路（规则驱动）：明细全量保留；原 LLM 链路：固定分项按分项数，降级 8 项上限
+      breakdown: (Array.isArray(result.breakdown) ? result.breakdown : [])
+        .slice(0, checkerReady ? undefined : (Array.isArray(fixedItems) && fixedItems.length > 0 ? fixedItems.length : 8))
+        .map(clampBreakdown),
       highlights: (Array.isArray(result.highlights) ? result.highlights : []).slice(0, 5).map(s => String(s).slice(0, 100)),
       issues: (Array.isArray(result.issues) ? result.issues : []).slice(0, 5).map(s => String(s).slice(0, 100)),
       overallComment: String(result.overallComment || '').slice(0, 300),

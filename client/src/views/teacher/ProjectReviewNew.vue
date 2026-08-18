@@ -118,9 +118,11 @@
 
           <div v-if="aiResult" class="ai-block">
             <a-collapse v-if="aiResult.breakdown?.length" ghost size="small" class="ai-collapse">
-              <a-collapse-panel :header="'分项明细（' + aiResult.breakdown.length + ' 项）'" key="breakdown">
+              <a-collapse-panel :header="'评分标准（' + aiResult.breakdown.length + ' 项）'" key="breakdown">
                 <div v-for="(b, i) in aiResult.breakdown" :key="i" class="bd-row">
                   <span class="bd-name">{{ b.item }}</span>
+                  <a-tag v-if="b.kind === 'checker'" color="blue" size="small" style="font-size:10px;">检查</a-tag>
+                  <a-tag v-else-if="b.kind === 'ai'" color="orange" size="small" style="font-size:10px;">主观</a-tag>
                   <span class="bd-score">{{ b.score }} / {{ b.maxScore }}</span>
                   <span class="bd-comment">{{ b.comment }}</span>
                 </div>

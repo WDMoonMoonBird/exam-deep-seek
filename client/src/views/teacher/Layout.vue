@@ -25,6 +25,9 @@
                 <a-menu-item key="/teacher/review"><template #icon>
                         <SafetyCertificateOutlined />
                     </template><span>评分审核</span></a-menu-item>
+                <a-menu-item key="/teacher/rule-quality"><template #icon>
+                        <LineChartOutlined />
+                    </template><span>规则质量</span></a-menu-item>
             </a-menu>
         </a-layout-sider>
         <a-layout>
@@ -107,7 +110,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { useUserStore } from '../../stores/user.js';
 import request from '../../api/request.js';
 import { Modal, message } from 'ant-design-vue';
-import { QuestionCircleOutlined, UserOutlined, NodeIndexOutlined, UserSwitchOutlined, PoweroffOutlined, AppstoreOutlined, IdcardOutlined, DatabaseOutlined, FileTextOutlined, SafetyCertificateOutlined, TeamOutlined, BookOutlined, ExperimentOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
+import { QuestionCircleOutlined, UserOutlined, NodeIndexOutlined, UserSwitchOutlined, PoweroffOutlined, AppstoreOutlined, IdcardOutlined, DatabaseOutlined, FileTextOutlined, SafetyCertificateOutlined, TeamOutlined, BookOutlined, ExperimentOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined, LineChartOutlined } from '@ant-design/icons-vue';
 
 const router = useRouter(); const route = useRoute(); const userStore = useUserStore();
 const user = userStore.user;

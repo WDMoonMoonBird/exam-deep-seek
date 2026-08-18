@@ -144,6 +144,10 @@ model Question {
   attachmentUrl     String?    @map("attachment_url") @db.VarChar(500)
   objectiveSettings Json?      @map("objective_settings")
   scoringRubric     String?    @map("scoring_rubric") @db.Text
+  rubricItems       Json?      @map("rubric_items") // 评分标准固定分项缓存（[{item,maxScore}]，评分标准变更时清空重建）
+  checkerScript     String?    @map("checker_script") @db.Text // AI 生成的确定性检查脚本（Node.js）
+  checkerStatus     String?    @default("none") @map("checker_status") @db.VarChar(20) // none|generating|ready|failed
+  checkerMeta       Json?      @map("checker_meta") // {rounds, items, subjective, error, log[]}
   createdAt         DateTime   @default(now()) @map("created_at")
   deletedAt         DateTime?  @map("deleted_at")
 

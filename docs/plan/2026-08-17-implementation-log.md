@@ -1,11 +1,98 @@
 # 实训题评分上下文管理 — 操作记录
 
 > 项目：Deadpan 判题系统（Exam-DeepSeek）
-> 开始：2026-08-17 ｜ 状态：✅ 第三轮修复完成待回归（未提交 git，等待用户允许）
+> 开始：2026-08-17 ｜ 状态：✅ 事实提取（tree-sitter）+ 规则引擎完成（未提交 git，等待用户允许）
+> 全量回归 787/787（50+2 独立进程 suites）；check-layers 0 违规（63 文件）
+> 端到端：同代码学生评分完全一致（94/94/67），零波动、批改零 LLM（主观项小调用）
 > 第三轮验证：全量回归 677/677（48 suites，新增 r2-fixes 13 用例）；check-layers 0 违规；prompt-preview 一次偶发重跑即过
 > 测试团队入场条件：全量回归 664/664 通过、check-layers 0 违规
 
-### 测试团队回归（round2）→ 第三轮修复（2026-08-17）
+### 事实提取（tree-sitter）+ 规则引擎升级（2026-08-18）
+
+**背景**：正则匹配不可靠（axios.get 不在正则、路径猜错）。用户提出 Tree-sitter/Semgrep/JsonLogic 方案探讨，确认采用：Tree-sitter 事实提取 + 现有规则引擎判断。
+
+**多 Agent 分工**：
+- Subagent A：factExtractor.js（635 行，13 单测）——tree-sitter 提取统一事实 JSON（依赖/路由/Pinia/axios/语法错误等 19 字段）
+- Subagent B：ruleExecutor 升级（57 单测）——fact 规则类型（{fact, op, value}）+ syntax_check 换 tree-sitter
+- 主 Agent：生成 prompt 注入事实 schema；修复：includes 数组 value、gradeSubjectiveItems 解析器（items vs totalScore）、主观失败不降级、routes 变量引用/shorthand 解析、tree-sitter Parser 每次新建（旧树节点失效）、tree-sitter-vue ABI 冲突移除
+
+**关键修复**：
+1. gradeSubjectiveItems 用 extractProjectGradeJson（匹配 totalScore）解析 {items} 输出 → 永远失败 → 改用 extractFilesJson；且主观失败不再降级（确定性结果保留）
+2. tree-sitter 共享 Parser 连续 parse 旧树节点失效 → 每次新建 + 保持引用
+3. tree-sitter-vue（ABI 13）与 tree-sitter 0.25 二进制冲突污染进程 → 移除，Vue 统一 <script> 提取
+4. jest 单进程多套件复用 tree-sitter 原生模块状态破坏 → npm test 三段式独立进程（测试基建隔离）
+
+**端到端**（题目 353，全班 59 人，并发 64）：
+- 规则 69 项（含 fact 规则）校准 → 标准包客观 94/94（3 项标准包缺陷转主观 6 分）
+- 全班评分：1.zip 全员 94、2.zip 全员 94、3.zip 全员 67 —— 同代码同分、零波动、113 秒
+- 全量回归 787/787（三段独立进程）；check-layers 0 违规（63 文件）
+
+**背景**：AI 自由写 JS 脚本（检查器）11 轮实验证明模型写代码不稳定（校准常改坏脚本、分数溢出 103/100）。用户给出规则驱动方案：AI 只生成 JSON 规则（评分标准翻译成检查参数），计分由确定性执行器强制。
+
+**多 Agent 分工**：
+- Subagent A：ruleExecutor.js（7 种规则类型 + 约束校验 + 工程根探测 + 分组汇总，42 单测）
+- Subagent B：checkerService 改造（生成规则 JSON + parseCheckerRules + 参数式校准，35 单测）
+- Subagent C：前端预览改为「评分规则（JSON）」
+- 主 Agent：gradeWithChecker 切换 runRules、总和归一化、满分判定修复、明细截断修复、端到端验证
+
+**规则类型**：file_exists / dir_contains_file / contains_text / count_regex / contains_regex / file_count_in_dir / syntax_check（node --check 语法校验）
+
+**关键约束（执行器强制）**：每项 score ≤ max_score；totalScore 只累加客观项；validateRules 拒绝总和 ≠ 满分。
+
+**调试中修复**：
+1. 模型客观项总和常 ≠ 满分（105/100）→ normalizeCheckerRules 总和归一化兜底
+2. 满分判定含主观项偏差 → 改为 totalScore ≥ max_score - subjectiveSum
+3. 明细被 slice(0,9) 截断 → 检查器链路全量保留（57 条）
+4. 标准包缺陷：无 Axios 封装（评分标准要求但标准包没有）→ 该项转主观分（LLM 评），规则正则修正（axios.get 不在原正则）
+
+**端到端验证**（题目 353）：
+- 规则 57 项校准（83→95 分），人工修正 2 条规则后标准包客观项 97/97 全过 + 1 项主观 3 分
+- 学生评分：李芳02 与谢娜23（同代码）**均为 95 分，57 条明细完全一致**
+- 全量回归 759/759（51 suites，新增 rule-executor 42 + checker-service 35）；check-layers 0 违规（62 文件）
+
+**成本**：规则生成 1-2 轮 LLM（非思考模式）；学生批改 0 LLM 调用（纯执行器，毫秒级）或 1 次小调用（主观项）。
+
+**遗留**：标准包自身缺陷（Axios 未封装）已记录，建议教师完善标准包；主观项评分链路（gradeSubjectiveItems）已就绪，规则含主观项时自动启用。
+
+**多 Agent 分工**：Subagent A（checkerService 实现 + 24 单测）、Subagent B（前端编辑页评分脚本 UI）、主 Agent（接口层/评分链路/调优）。
+
+**架构**：
+- schema：questions 加 checker_script/checker_status/checker_meta
+- checkerService：AI 生成 Node.js 检查脚本 → 标准包自举校准 → 沙箱执行
+- 评分链路 gradeWithChecker：确定性分项（checker）+ 主观分项（LLM 温度 0）→ 降级原链路
+- 前端：编辑页「评分脚本」按钮/模态框（生成中轮询/校准日志/脚本预览/失败重试）
+
+**调优历程（13 次生成实验，关键结论）**：
+1. 思考模式长 prompt 空输出（finish=length）→ 脚本生成用**非思考模式**（实测 16K 字符稳定输出）
+2. 模型自创分项 → 注入 rubricItems 固定分项（分项来自题干+评分标准）
+3. 首轮不提供文件树导致路径猜测 → **首轮注入标准包文件树**（round 1 从 56→88 分）
+4. 修改式校准不稳定（模型常改坏脚本：0 分/语法错误）→ **多轮全新生成取最优**（round 2 达 103/100 → ready）
+5. 标准包文件树/代码片段注入校准 prompt、客观/主观分离、items+subjective=满分约束
+
+**端到端验证**（题目 353）：
+- 脚本就绪：2 轮生成（88 → 103 达标）
+- 学生评分：李芳02 与谢娜23（同代码）**均为 97 分，9 项完全一致**——波动归零 ✓
+- 全量回归 706/706（50 suites）；check-layers 0 违规（61 文件）
+
+**成本**：每题目一次脚本生成（2 轮 × 非思考 ~16K tokens）；学生评分 0 LLM 调用（全确定性，subjective 为空时）或 1 次小调用（有主观项时）。
+
+**问题**：同一包提交的相同代码评分差 35 分（李芳02=90 vs 谢娜23=55）——分项明细由模型每次评分自由生成（项数/满分漂移：谢娜23 那次 8 项满分 20/20/20/10/15/5/10/10 ≠ 评分标准 10/10/20/20/10/15/5/10/10）。
+
+**方案**（用户拍板：不新增教师配置，从教师评分标准提炼）：
+1. schema：questions 加 rubric_items（JSON 分项缓存，教师零配置）
+2. summarizeRubricItems：从评分标准提炼 3~12 分项（一次轻量调用，temperature 0.1，30s/2 重试），normalizeRubricItems 强制合计=满分
+3. ensureRubricItems：懒生成 + 并发安全（先查后写）+ 失败降级（模型自由分项）
+4. buildProjectGradePrompt 注入固定分项；gradeProject 输出 breakdown 强制映射分项结构
+5. 教师更新题目（评分标准变化）→ 清 rubric_items 缓存
+6. 前端审核页「分项明细」→「评分标准」
+7. 修复：BUG-008 的 slice(0,8) 会截掉固定分项第 9 项 → 固定分项模式下按分项数保留
+
+**验证**（题目 353，教师评分标准 9 项）：
+- 提炼落库：9 项 [项目初始化与运行 9/路由与跳转 9/登录 18/注册 18/Pinia 9/主页布局与权限 14/个人信息展示 5/管理员用户列表 9/代码规范与健壮性 9] 合计 100 ✓
+- 同代码重评对比：李芳02 83 vs 谢娜23 78（原 90 vs 55，35 分差收敛到 5 分），**分项结构完全一致**（9 项同组同满分）✓
+- 全量回归 682/682（49 suites，新增 rubric-items 5 用例）；check-layers 0 违规
+
+**遗留**：同代码分数仍有 ±5 波动（模型随机性），如需进一步收敛可上「多次评分取中位数」或 temperature 降低（排期可选）。
 
 测试团队 round2 报告：有条件通过，新发现 3 缺陷（BUG-R2-A/B/C）。已全部修复：
 
