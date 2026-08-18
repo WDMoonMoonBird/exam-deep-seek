@@ -9,7 +9,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parseCheckerResult, parseCheckerRules, runCheckerScript } from '../../../src/services/checkerService.js';
+import { parseCheckerResult, parseCheckerRules, runCheckerScript, attachNegativeFeedback } from '../../../src/services/checkerService.js';
 
 /** 创建临时目录（测试后清理） */
 function tmpdir() {
@@ -355,3 +355,39 @@ describe('runCheckerScript — 沙箱执行（可选，子进程真实执行）'
   });
 });
 
+
+describe('attachNegativeFeedback — 负例验证反馈接线（Team A，纯函数）', () => {
+  it('weakRules 非空时挂载到反馈对象，保留既有字段（result/deductions/defectItems）', () => {
+    const feedback = attachNegativeFeedback(
+      {
+        result: { totalScore: 80 },
+        defectItems: ['标准包缺陷候选（保留项）'],
+        deductions: [{ id: 'a1', item: '存在 package.json', score: 0, max_score: 5, evidence: '缺少' }],
+      },
+      [
+        { id: 'a1', item: '存在 package.json', reason: '缺陷变体上规则仍得 5/5 分：无法区分真实实现与表面实现' },
+        { id: 'a2', item: '依赖包含 vue', reason: '缺陷变体上规则仍得 5/5 分' },
+      ],
+    );
+    expect(feedback.weakRules).toHaveLength(2);
+    expect(feedback.weakRules[0]).toEqual({
+      id: 'a1',
+      item: '存在 package.json',
+      reason: '缺陷变体上规则仍得 5/5 分：无法区分真实实现与表面实现',
+    });
+    expect(feedback.result.totalScore).toBe(80);
+    expect(feedback.defectItems).toHaveLength(1);
+    expect(feedback.deductions).toHaveLength(1);
+  });
+
+  it('无 weakRules / 非数组 / null 反馈 → weakRules 恒为空数组，不污染既有反馈', () => {
+    const f1 = attachNegativeFeedback({ error: '规则解析失败' }, undefined);
+    expect(f1.weakRules).toEqual([]);
+    expect(f1.error).toBe('规则解析失败');
+    const f2 = attachNegativeFeedback({ deductions: [] }, 'not-an-array');
+    expect(f2.weakRules).toEqual([]);
+    expect(f2.deductions).toEqual([]);
+    const f3 = attachNegativeFeedback(null, null);
+    expect(f3).toEqual({ weakRules: [] });
+  });
+});

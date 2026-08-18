@@ -33,6 +33,7 @@ import { getBaseUrl, getApiKey, getModel, summarizeRubricItems } from './deepsee
 import { buildFileTree, filterProjectFiles, buildFileTreeText } from './projectContextBuilder.js';
 import { standardDir } from '../utils/projectPaths.js';
 import { validateRules, runRules, resolveProjectRoot } from './ruleExecutor.js';
+import { validateNegativeTests } from './ruleMutator.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -530,12 +531,34 @@ function buildCalibrateUserPrompt(feedback, stdFileTree, fixedItems, prevRules) 
     ? '\n【标准包缺陷候选（保留项，不要修改或删除）】以下规则引用的文件在标准包中不存在。若评分标准确实要求这些能力，请保留这些规则原样（标准包自身未实现，将交由教师确认处理）；它们不计入校准扣分。\n'
       + feedback.defectItems.map((x, i) => (i + 1) + '. ' + x).join('\n') + '\n'
     : '';
+  // 负例验证（Team A）：弱规则（区分度不足）进入修复反馈（Rule Repair）
+  const weakRulesSection = (feedback && Array.isArray(feedback.weakRules) && feedback.weakRules.length > 0)
+    ? '\n【弱规则（区分度不足）】以下规则在缺陷变体上仍通过，无法区分真实实现与表面实现，请改为更具体的检查（更精确的路径/内容/组合条件），不要删除该评分项：\n'
+      + feedback.weakRules.map((w) => '- ' + (w.item || ('规则 ' + w.id)) + '（' + w.id + '）：' + (w.reason || '')).join('\n') + '\n'
+    : '';
   return '以下评分规则在标准工程包上检查未得满分（缺陷候选除外）。标准工程包不应被扣分，说明其余规则参数有误（路径/正则/匹配方式/评分比例等）。'
     + '请基于上一版规则修正 rule_type/params/max_score，只针对以下扣分项调整，其他已正确的检查项不要改动，也不要改写成代码。\n'
     + PATH_RULES + '\n'
-    + '【扣分项】\n' + (failedItems || '（无扣分项，请检查 max_score 合计）') + defectSection
+    + '【扣分项】\n' + (failedItems || '（无扣分项，请检查 max_score 合计）') + defectSection + weakRulesSection
     + prevRulesSection + fixedSection + treeSection + '\n'
     + '输出修正后的完整规则 JSON（规则格式与满分合计保持不变）。';
+}
+
+// ===================== 负例验证反馈接线（Team A） =====================
+
+/**
+ * 把负例验证结果（weakRules）挂载到校准反馈对象上（纯函数，供单测）。
+ * 只在 lastFeedback 生成处调用；weakRules 为空数组时不添加任何段落（prompt 按空判断）。
+ * @param {object|null} lastFeedback 上一轮反馈（{ result, deductions, defectItems } 或 { error }）
+ * @param {Array|null} weakRules 负例验证弱规则 [{id, item, reason}]；非数组视为空
+ * @returns {object} 携带 weakRules 的新反馈对象（不修改入参）
+ */
+export function attachNegativeFeedback(lastFeedback, weakRules) {
+  const base = lastFeedback && typeof lastFeedback === 'object' && !Array.isArray(lastFeedback)
+    ? { ...lastFeedback }
+    : {};
+  base.weakRules = Array.isArray(weakRules) ? weakRules : [];
+  return base;
 }
 
 // ===================== 状态读取 =====================
@@ -897,13 +920,39 @@ export async function generateChecker(questionId) {
     const realDeductionSum = (Array.isArray(result.items) ? result.items : [])
       .filter((it) => it.score < it.max_score && !missingPathIds.has(it.id))
       .reduce((s, it) => s + (it.max_score - it.score), 0);
+    // 负例验证（Team A）：对标准包上通过的规则派生确定性缺陷变体，判定目标规则必失分（防过拟合）。
+    // 异常 catch 后跳过，绝不因负例验证失败而终止生成流程；weak 规则不阻塞达标判定，但进入修复反馈。
+    let neg = { covered: 0, skipped: [], weakRules: [], variantsRun: 0 };
+    const passedRules = (Array.isArray(result.items) ? result.items : []).filter((it) => it.score === it.max_score);
+    if (passedRules.length > 0) {
+      try {
+        neg = await validateNegativeTests(rules, projectRoot, { concurrency: 4 });
+      } catch (err) {
+        logger.warn(
+          { questionId: id, err: String(err && err.message ? err.message : err) },
+          'checkerService: 负例验证异常，跳过（不影响生成流程）',
+        );
+        neg = {
+          covered: 0,
+          skipped: [{ id: '*', reason: '负例验证异常：' + String(err && err.message ? err.message : err).slice(0, 200) }],
+          weakRules: [],
+          variantsRun: 0,
+        };
+      }
+    }
+    const negDetail = neg.weakRules.length > 0
+      ? '；负例验证：' + neg.weakRules.length + ' 条弱规则（覆盖 ' + neg.covered + '，跳过 ' + neg.skipped.length + '）'
+      : (neg.covered > 0 || neg.skipped.length > 0
+          ? '；负例验证：覆盖 ' + neg.covered + '，跳过 ' + neg.skipped.length
+          : '');
     meta.log.push({
       round,
       totalScore,
       detail: 'totalScore=' + totalScore + ' / ' + rules.max_score
         + '（objective ' + (Array.isArray(result.items) ? result.items.length : 0)
         + ' 项，subjective ' + (Array.isArray(result.subjective) ? result.subjective.length : 0) + ' 项'
-        + (defectItems.length ? '；缺陷候选 ' + defectItems.length + ' 项（豁免 ' + defectSum + ' 分）' : '') + '）',
+        + (defectItems.length ? '；缺陷候选 ' + defectItems.length + ' 项（豁免 ' + defectSum + ' 分）' : '') + '）'
+        + negDetail,
     });
     if (calibScore > bestScore) {
       bestScore = calibScore;
@@ -962,7 +1011,8 @@ export async function generateChecker(questionId) {
     }
     // 未达标：记录本轮规则与扣分项（附文件片段，L2，缺陷候选除外），下一轮让模型修正规则参数
     lastRules = rules;
-    lastFeedback = {
+    // 负例验证接线：weakRules（区分度不足）随反馈进入下一轮校准 prompt（若本轮无通过规则则为空数组）
+    lastFeedback = attachNegativeFeedback({
       result,
       defectItems: defectItems.map((i) => i.item + '（' + i.max_score + ' 分）'),
       deductions: enrichDeductionSnippets(
@@ -971,7 +1021,7 @@ export async function generateChecker(questionId) {
         (Array.isArray(result.items) ? result.items : [])
           .filter((it) => it.score < it.max_score && !missingPathIds.has(it.id)),
       ),
-    };
+    }, neg.weakRules);
   }
   // 多轮未满分：若最优规则的校准得分（含缺陷候选豁免）达到阈值 → review（教师确认/处理失分项）；否则 failed
   const threshold = meta.threshold || DEFAULT_THRESHOLD;
