@@ -25,7 +25,7 @@ export function parseProjectAnswer(answer) {
           prevStatus: obj.grading.prevStatus || null, // 教师重评前状态（Worker 完成后恢复）
           ruleVersionHash: obj.grading.ruleVersionHash || null, // 本次评分使用的规则版本（Team C 冻结）
         }
-      : { state: 'none', version: 0, attempts: 0, error: null, prevStatus: null };
+      : { state: 'none', version: 0, attempts: 0, error: null, prevStatus: null, ruleVersionHash: null };
     return {
       kind: obj.kind || 'project',
       currentVersion: Number(obj.currentVersion) || 0,
