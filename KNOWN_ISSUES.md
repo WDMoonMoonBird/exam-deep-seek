@@ -19,6 +19,18 @@
 2. **正则规则脆弱**：标准包写法差异即失分（如 pom.xml 依赖格式、方法链顺序），
    校准只能修参数，修不了"规则表达力"上限
 3. **研究方向**（未定稿）：
+
+## ✅ Team A 已交付（2026-08-18，规则验证升级）
+
+- **负例验证（Negative Test）**：ruleMutator.js 为每条在标准包上通过的规则派生确定性缺陷变体，
+  验证"标准包 Pass + 缺陷变体 Fail"（8 种 rule_type 全覆盖，fact 走 FACT_MUTATION 映射）；
+  weak 规则（区分度不足）进入校准反馈（Rule Repair）——防参考实现过拟合（方案 §11/§13/§14）
+- **修复 BUG-A-03（P1）**：ruleMutator 误用已解析 projectRoot 导致 runRules 二次下钻
+  （嵌套单子目录工程负例覆盖为 0）→ 改为 rootDir 语义 + 嵌套工程回归用例
+- **验收实测**：353 ready 100/100（负例覆盖 61）、355 review 96（负例覆盖 113）；3 轮上限内收敛
+- 全量测试 680 用例全绿（含 rule-mutator 21、checker-service 37）
+- 测试命令注意：套件1 位置参数前置；tree-sitter 套件必须独立进程（BUG-A-01/A-02 已修正 playbook）
+
    - 代码语义比对：AST 指纹 / 与标准包语义 diff / embedding 相似度
    - 规则生成 few-shot 示例库（用 353/355 成熟规则做样本）
    - 混合架构：确定性规则打底 + LLM 只评主观项（现状雏形，需打磨）
