@@ -921,12 +921,14 @@ export async function generateChecker(questionId) {
       .filter((it) => it.score < it.max_score && !missingPathIds.has(it.id))
       .reduce((s, it) => s + (it.max_score - it.score), 0);
     // 负例验证（Team A）：对标准包上通过的规则派生确定性缺陷变体，判定目标规则必失分（防过拟合）。
-    // 异常 catch 后跳过，绝不因负例验证失败而终止生成流程；weak 规则不阻塞达标判定，但进入修复反馈。
+    // 入参为**解压根目录 rootDir（未解析）**（BUG-A-03：传已解析的 projectRoot 会导致嵌套工程
+    // 二次下钻、规则路径全部失配、covered=0）；异常 catch 后跳过，绝不因负例验证失败而终止生成流程；
+    // weak 规则不阻塞达标判定，但进入修复反馈。
     let neg = { covered: 0, skipped: [], weakRules: [], variantsRun: 0 };
     const passedRules = (Array.isArray(result.items) ? result.items : []).filter((it) => it.score === it.max_score);
     if (passedRules.length > 0) {
       try {
-        neg = await validateNegativeTests(rules, projectRoot, { concurrency: 4 });
+        neg = await validateNegativeTests(rules, rootDir, { concurrency: 4 });
       } catch (err) {
         logger.warn(
           { questionId: id, err: String(err && err.message ? err.message : err) },

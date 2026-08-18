@@ -475,36 +475,42 @@ function mutateFact(item, params, root) {
 // ==================== 导出函数 ====================
 
 /**
- * 为指定规则派生缺陷变体：复制工程到 variantDir 并施加最小破坏性修改，
+ * 为指定规则派生缺陷变体：复制解压根目录到 variantDir 并施加最小破坏性修改，
  * 使该规则在变体上必然失分。
+ *
+ * BUG-A-03 修复：入参语义改为**解压根目录 rootDir（未解析）**，
+ * 内部 const projectRoot = resolveProjectRoot(variantDir) 解析变体工程根后在其上施加变异；
+ * 与 runRules(rules, variantDir) 的 resolution 完全一致，
+ * 避免「已解析的 projectRoot 传入后二次下钻」（如 standard/demo2 → demo2/src）导致规则路径全部失配。
  * @param {object} rules 完整规则 JSON
  * @param {string} ruleId 目标规则 id
- * @param {string} projectRoot 标准包工程根（resolveProjectRoot 结果）
+ * @param {string} rootDir 标准包解压根目录（未解析；复制与变异路径以内部解析的工程根为准）
  * @param {string} variantDir 变体输出目录（调用方创建）
  * @returns {{ok: boolean, reason?: string}} ok=false 表示该规则类型无通用变异策略（跳过）
  */
-export function mutateVariant(rules, ruleId, projectRoot, variantDir) {
+export function mutateVariant(rules, ruleId, rootDir, variantDir) {
   const items = Array.isArray(rules && rules.objective_items) ? rules.objective_items : [];
   const item = items.find((it) => it && it.id === ruleId);
   if (!item) return { ok: false, reason: '规则不存在：' + String(ruleId) };
-  if (typeof projectRoot !== 'string' || projectRoot.length === 0) {
-    return { ok: false, reason: 'projectRoot 无效' };
+  if (typeof rootDir !== 'string' || rootDir.length === 0) {
+    return { ok: false, reason: 'rootDir 无效' };
   }
   if (typeof variantDir !== 'string' || variantDir.length === 0) {
     return { ok: false, reason: 'variantDir 无效' };
   }
-  if (projectRoot === variantDir || variantDir.startsWith(projectRoot + path.sep)) {
-    return { ok: false, reason: 'variantDir 不能位于 projectRoot 之内' };
+  if (rootDir === variantDir || variantDir.startsWith(rootDir + path.sep)) {
+    return { ok: false, reason: 'variantDir 不能位于 rootDir 之内' };
   }
-  // 复制完整工程（含 node_modules —— 规则路径可能指向其中文件，保真第一）；
+  // 复制**解压根目录**（含嵌套工程目录如 demo2/ —— 规则路径相对其解析，保真第一）；
   // 先清掉调用方预建的空目录，保证 cpSync 结果干净（dest 已存在时语义为内容合并）
   try {
     fs.rmSync(variantDir, { recursive: true, force: true });
-    fs.cpSync(projectRoot, variantDir, { recursive: true });
+    fs.cpSync(rootDir, variantDir, { recursive: true });
   } catch (err) {
     return { ok: false, reason: '复制工程到变体目录失败：' + ((err && err.message) || String(err)) };
   }
-  // 变体根：与 runRules 采用同一解析（防止「单子目录含源码 → 下钻」不一致）
+  // 变体工程根：与 runRules(rules, variantDir) 采用同一解析（resolveProjectRoot 只下钻一层，
+  // 嵌套单子目录工程如 demo2/src 场景下基准与变体 resolution 语义完全一致）
   const root = resolveProjectRoot(variantDir);
   const params = item.params && typeof item.params === 'object' ? item.params : {};
   let r;
@@ -540,10 +546,10 @@ export function mutateVariant(rules, ruleId, projectRoot, variantDir) {
 }
 
 /** 单条规则的负例验证（内部）：派生变体 → 跑规则 → 判定目标规则得分 */
-async function runOneVariant(rules, task, projectRoot) {
+async function runOneVariant(rules, task, rootDir) {
   const variantDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rule-mutator-variant-'));
   try {
-    const mv = mutateVariant(rules, task.id, projectRoot, variantDir);
+    const mv = mutateVariant(rules, task.id, rootDir, variantDir);
     if (!mv.ok) {
       return { kind: 'skipped', id: task.id, item: task.item, reason: mv.reason };
     }
@@ -581,22 +587,28 @@ async function runOneVariant(rules, task, projectRoot) {
 
 /**
  * 全量负例验证：对每条「标准包上通过」的规则派生变体并执行 runRules。
+ *
+ * BUG-A-03 修复：入参语义改为**解压根目录 rootDir（未解析）**，
+ * 正向基准执行 runRules(rules, rootDir) 与 checkerService 外层校准 resolution 完全一致，
+ * 不再对已解析的 projectRoot 二次调用 resolveProjectRoot（如 standard/demo2 → demo2/src
+ * 导致规则路径全部失配、covered=0）；变体同样复制 rootDir，变体内再解析工程根。
  * @param {object} rules 完整规则 JSON
- * @param {string} projectRoot 标准包工程根（resolveProjectRoot 结果）
+ * @param {string} rootDir 标准包解压根目录（未解析）
  * @param {object} [opts] { concurrency?: number(默认4), onlyIds?: string[] }
  * @returns {Promise<{ covered: number, skipped: Array<{id, reason}>, weakRules: Array<{id, item, reason}>, variantsRun: number }>}
  */
-export async function validateNegativeTests(rules, projectRoot, opts = {}) {
+export async function validateNegativeTests(rules, rootDir, opts = {}) {
   const concurrencyRaw = Number(opts && opts.concurrency);
   const concurrency = Number.isFinite(concurrencyRaw) && concurrencyRaw > 0 ? concurrencyRaw : 4;
   const onlyIds = Array.isArray(opts && opts.onlyIds) && opts.onlyIds.length > 0
     ? new Set(opts.onlyIds)
     : null;
 
-  // 1. 标准包正向执行：只对「通过」的规则派生变体
+  // 1. 标准包正向执行：runRules(rules, rootDir) 与 checkerService 校准 resolution 一致
+  //    （resolveProjectRoot 只下钻一次；嵌套单子目录工程规则路径全部命中）
   let baseResult;
   try {
-    baseResult = runRules(rules, projectRoot);
+    baseResult = runRules(rules, rootDir);
   } catch (err) {
     const reason = '标准包 runRules 失败：' + ((err && err.message) || String(err));
     logger.error({ err: reason }, 'ruleMutator: 负例验证前置执行失败');
@@ -619,7 +631,7 @@ export async function validateNegativeTests(rules, projectRoot, opts = {}) {
     while (next < tasks.length) {
       const idx = next;
       next += 1;
-      outcomes[idx] = await runOneVariant(rules, tasks[idx], projectRoot);
+      outcomes[idx] = await runOneVariant(rules, tasks[idx], rootDir);
     }
   };
   const workerCount = Math.max(1, Math.min(concurrency, tasks.length));

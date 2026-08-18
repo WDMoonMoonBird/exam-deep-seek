@@ -4,7 +4,9 @@
  * 覆盖：
  *  - mutateVariant 逐规则类型：断言「标准包上满分（前置）→ 变体上目标规则 score===0」；
  *  - validateNegativeTests：正常规则不误报 weak；过拟合规则（干扰串占位符冲突，变体仍含
- *    目标文本）必报 weak；无变异映射的 fact 规则跳过并记录原因；onlyIds 过滤；变体目录清理。
+ *    目标文本）必报 weak；无变异映射的 fact 规则跳过并记录原因；onlyIds 过滤；变体目录清理；
+ *  - BUG-A-03 回归：嵌套单子目录工程（root/demo2/src/...）——入参语义为解压根目录，
+ *    基准与变体只 resolveProjectRoot 一次，负例验证必须正确覆盖（旧实现二次下钻 covered=0）。
  *
  * 注意（playbook 三段式）：本套件 import ruleMutator → ruleExecutor/factExtractor（tree-sitter），
  * 必须与 fact-extractor/rule-executor 套件分开进程跑（套件 3，独立 jest 进程）。
@@ -215,5 +217,65 @@ describe('validateNegativeTests — 正常规则不误报、过拟合规则必�
     await validateNegativeTests(allRules(), projectRoot, { concurrency: 4 });
     const after = listVariants();
     expect(after).toEqual(before);
+  });
+});
+
+describe('BUG-A-03 回归 — 嵌套单子目录工程（root/demo2/src/...）负例验证正确覆盖', () => {
+  // 结构：rootDir 仅含一个子目录 demo2（含源码）→ resolveProjectRoot(rootDir)=rootDir/demo2；
+  // demo2 仅含一个源码子目录 src → 对已解析的 demo2 二次 resolveProjectRoot 会钻到 demo2/src
+  // （旧实现 bug：规则路径 src/main/java/a.java 相对 demo2/src 全部失配 → covered=0）。
+  // 修复后入参为解压根目录，基准与变体都只下钻一次，语义一致。
+  const rootDir = tmpdir();
+  beforeAll(() => {
+    fs.mkdirSync(path.join(rootDir, 'demo2', 'src', 'main', 'java'), { recursive: true });
+    fs.writeFileSync(
+      path.join(rootDir, 'demo2', 'src', 'main', 'java', 'a.java'),
+      'public class A { public static void main(String[] args) { System.out.println(\"hi\"); } }\n',
+    );
+  });
+  afterAll(() => {
+    fs.rmSync(rootDir, { recursive: true, force: true });
+  });
+
+  /** 规则路径相对嵌套工程根 demo2/（与真实验收 355 的 src/main/java/... 同构） */
+  function nestedRules() {
+    return {
+      max_score: 100,
+      objective_items: [
+        { id: 'n1', item: '存在 a.java', rule_type: 'file_exists', params: { path: 'src/main/java/a.java' }, max_score: 30 },
+        { id: 'n2', item: 'a.java 含 public class', rule_type: 'contains_text', params: { path: 'src/main/java/a.java', text: 'public class' }, max_score: 30 },
+        { id: 'n3', item: 'java 目录含 .java 文件', rule_type: 'dir_contains_file', params: { dir: 'src/main/java', pattern: '*.java' }, max_score: 30 },
+      ],
+      subjective_items: [{ id: 's1', item: '主观项', max_score: 10 }],
+    };
+  }
+
+  it('前置：嵌套工程基准执行（rootDir 未解析，与 checkerService 一致）规则全部满分', () => {
+    const base = runRules(nestedRules(), rootDir);
+    for (const it of base.items) {
+      expect(it.score).toBe(it.max_score);
+    }
+  });
+
+  it('validateNegativeTests 正确覆盖（旧实现二次解析导致 covered=0 的回归）', async () => {
+    const neg = await validateNegativeTests(nestedRules(), rootDir, { concurrency: 2 });
+    expect(neg.covered).toBe(3);
+    expect(neg.weakRules).toEqual([]);
+    expect(neg.skipped).toEqual([]);
+    expect(neg.variantsRun).toBe(3);
+  });
+
+  it('mutateVariant 在嵌套工程变体上目标规则必失分（复制 rootDir，变体内解析工程根）', () => {
+    const variantDir = tmpdir();
+    try {
+      const mv = mutateVariant(nestedRules(), 'n1', rootDir, variantDir);
+      expect(mv.ok).toBe(true);
+      const res = runRules(nestedRules(), variantDir);
+      const target = res.items.find((it) => it.id === 'n1');
+      expect(target).toBeDefined();
+      expect(target.score).toBe(0);
+    } finally {
+      fs.rmSync(variantDir, { recursive: true, force: true });
+    }
   });
 });
