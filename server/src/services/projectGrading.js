@@ -16,6 +16,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import crypto from 'node:crypto';
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
 import {
@@ -454,7 +455,7 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
   try {
     const sub = await prisma.submission.findUnique({
       where: { id: submissionId },
-      include: { question: { select: { id: true, title: true, material: true, scoringRubric: true, maxScore: true, type: true, rubricItems: true, checkerScript: true, checkerStatus: true } } },
+      include: { question: { select: { id: true, title: true, material: true, scoringRubric: true, maxScore: true, type: true, rubricItems: true, checkerScript: true, checkerStatus: true, checkerMeta: true } } },
     });
     if (!sub) {
       logger.warn({ submissionId }, '实训题评分：提交记录不存在，跳过');
@@ -566,7 +567,15 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
     });
 
     await updateEnvelopeGrading(submissionId, (env) => {
-      env.grading = { ...env.grading, state: 'done', version, finishedAt: new Date().toISOString(), error: null };
+      // 2026-08-18 冻结版本（Team C）：评分完成时锁定本次规则版本，改规则不影响历史成绩归属
+      env.grading = {
+        ...env.grading,
+        state: 'done',
+        version,
+        finishedAt: new Date().toISOString(),
+        error: null,
+        ruleVersionHash: computeRuleVersionHash(sub.question),
+      };
       return env;
     });
 
@@ -620,6 +629,30 @@ async function markFailed(submissionId, error) {
   } catch (e) {
     logger.error({ err: e, submissionId }, '标记实训题评分失败记录时出错');
   }
+}
+
+/**
+ * 冻结版本 hash（2026-08-18 Team C）：评分时锁定本次使用的规则版本。
+ * 优先级：题目 checkerMeta.activeVersionId（格式 'vN'，与 checkerService versions 数组标签一致）
+ *   → 无版本号但有规则 JSON → 规则 JSON 的 sha1 前 12 位
+ *   → 无规则（LLM 直评遗留/旧记录）→ null
+ * 纯函数（导出供单测）；不改变既有评分逻辑与字段。
+ * @param {object|null} question 题目（含 checkerMeta/checkerScript）
+ * @returns {string|null}
+ */
+export function computeRuleVersionHash(question) {
+  const meta = question && question.checkerMeta && typeof question.checkerMeta === 'object'
+    ? question.checkerMeta
+    : null;
+  const activeVersionId = meta && meta.activeVersionId !== null && meta.activeVersionId !== undefined
+    ? meta.activeVersionId
+    : null;
+  if (activeVersionId !== null) return 'v' + activeVersionId;
+  const script = question && typeof question.checkerScript === 'string' ? question.checkerScript : null;
+  if (script && script.trim()) {
+    return crypto.createHash('sha1').update(script).digest('hex').slice(0, 12);
+  }
+  return null;
 }
 
 async function updateEnvelopeGrading(submissionId, mutator) {
