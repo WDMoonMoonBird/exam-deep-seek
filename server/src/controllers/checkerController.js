@@ -103,7 +103,7 @@ export const generateCheckerHandler = async (req, res) => {
       return res.status(400).json({ code: 1001, message: '仅实训题支持自动评分器', data: null });
     }
     // fire-and-forget：异步生成；幂等与陈旧状态重启由 generateChecker 内部保证
-    generateChecker(id).catch(err => logger.error({ err, questionId: id }, '评分脚本生成异常'));
+    generateChecker(id).catch(err => logger.error({ err, questionId: id }, '自动评分器生成异常'));
     res.json({ code: 0, message: '已开始生成', data: { status: 'generating' } });
   } catch (err) {
     logger.error({ err }, '触发自动评分器生成失败');
