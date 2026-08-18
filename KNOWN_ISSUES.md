@@ -29,7 +29,17 @@
   （嵌套单子目录工程负例覆盖为 0）→ 改为 rootDir 语义 + 嵌套工程回归用例
 - **验收实测**：353 ready 100/100（负例覆盖 61）、355 review 96（负例覆盖 113）；3 轮上限内收敛
 - 全量测试 680 用例全绿（含 rule-mutator 21、checker-service 37）
-- 测试命令注意：套件1 位置参数前置；tree-sitter 套件必须独立进程（BUG-A-01/A-02 已修正 playbook）
+- 测试命令注意：套件1 位置参数前置；tree-sitter 套件必须独立进程且**串行**（BUG-A-01/A-02/BUG-B-02 已修正 playbook）
+
+## ✅ Team B 已交付（2026-08-18，评分项三分类 + 教师文案）
+
+- **Rubric Analyzer 三分类**：summarizeRubricItems/normalizeRubricItems 输出 automation_level
+  （deterministic/semi/subjective，旧数据兜底 deterministic）；prompt 按分类引导
+  （主观项禁生成客观规则、确定性项必须全生成、semi 允许混合）；findMisplacedSubjective 校验误入
+- **BUG-B-03（P1）修复**：rubricItems 提炼结果写回缓存（此前只读不写，每次生成重复提炼且分类不可复查）
+- **文案**：全量「评分脚本」→「自动评分器」（client/src 0 残留、server 教师可见消息 0 残留）
+- **验收实测**：353 rubricItems 落库 7 deterministic + 2 subjective，主观分类项零误入客观规则
+- 全量测试 694 用例全绿（含 rubric-items +4、checker-service +5）
 
    - 代码语义比对：AST 指纹 / 与标准包语义 diff / embedding 相似度
    - 规则生成 few-shot 示例库（用 353/355 成熟规则做样本）
