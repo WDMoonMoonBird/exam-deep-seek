@@ -41,6 +41,16 @@
 - **验收实测**：353 rubricItems 落库 7 deterministic + 2 subjective，主观分类项零误入客观规则
 - 全量测试 694 用例全绿（含 rubric-items +4、checker-service +5）
 
+## ✅ Team C 已交付（2026-08-18，实验证据 + 冻结版本）
+
+- **方差实验**（docs/experiments/variance-report.md，作业 311 真实数据）：LLM 直评同工程 ×5
+  **同分率 0.0%**、std 区间 [0.45, 7.66]、mean vs 确定性平均绝对偏差 10.64；
+  确定性评分（runRules）恒定同分 → RQ6 证据（方案 §26）
+- **冻结版本**：评分信封 grading 段写入 ruleVersionHash（activeVersionId 'vN' → 规则 sha1 前 12 位 → null 兼容旧记录）；
+  白名单同步（projectView.js）教师视图可回显
+- **修复**：BUG-C-01（白名单断言同步）、BUG-C-02（fallback 对称）；BUG-C-03 确认已有覆盖
+- 全量测试 702 用例全绿（project-view 同步后 569+13+57+21+42）
+
    - 代码语义比对：AST 指纹 / 与标准包语义 diff / embedding 相似度
    - 规则生成 few-shot 示例库（用 353/355 成熟规则做样本）
    - 混合架构：确定性规则打底 + LLM 只评主观项（现状雏形，需打磨）
