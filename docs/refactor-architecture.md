@@ -367,7 +367,7 @@ flowchart TD
 | 1 | **大爆炸式重构翻车** | 高 | 绞杀者策略：每步独立可发布；行为基线测试先行；禁止"边重构边加功能" |
 | 2 | **领域对象与 Prisma 记录漂移** | 高 | Mapper 收敛 + Mapper 单测；lint 禁止业务代码直接 `import prisma` |
 | 3 | **循环依赖（反向依赖悄悄出现）** | 中 | dependency-cruiser CI 门禁；端口只能定义在 domain；Code Review 检查清单 |
-| 4 | **AI 评分质量波动**（prompt 拆分/重排引入回归） | 中 | prompt 快照测试；`GRADING_BENCHMARK.md` 基准回归；装饰器开关做灰度 |
+| 4 | **AI 评分质量波动**（prompt 拆分/重排引入回归） | 中 | prompt 快照测试；评分基准回归（原 GRADING_BENCHMARK.md 已归档删除，基准见 docs/test-results 回归基线）；装饰器开关做灰度 |
 | 5 | **事务边界破坏**（主进程与 worker 分离后的原子性） | 中 | UoW 边界文档化；worker 按命令幂等键去重；失败入死信队列可重放 |
 | 6 | **多 agent 并行开发冲突** | 中 | 契约先行（P0 冻结接口）；按模块边界分工（见第 7 节）；每日集成并跑基线 |
 | 7 | **过度设计 / 抽象泛滥** | 中 | YAGNI 规则：每个端口必须 ≥ 2 个实现或测试替身才允许抽象；新抽象需架构评审 |

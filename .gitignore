@@ -6,6 +6,13 @@ dist
 ssl.key
 ssl.crt
 ssl.pfx
+# 证书与私钥（含阿里云证书 zip 包）
+*.pem
+*.key
+*.crt
+*_nginx.zip
+# 服务端环境变量（client/.env.development 与 .env.production 为公开 URL 配置，保留跟踪）
+server/.env.*
 DEV_LOG.md
 server/test/e2e/.e2e-state.json
 server/test-results/
