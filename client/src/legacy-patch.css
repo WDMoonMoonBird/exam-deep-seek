@@ -1,0 +1,33 @@
+/* legacy-patch.css — 旧浏览器（Chrome < 88）样式补丁
+ *
+ * 由 App.vue 静态 import 加载（所有浏览器都会下载，体积极小）；
+ * 规则以 html.legacy 为前缀（main.js 首帧前根据 isLegacyBrowser() 添加），
+ * 仅旧浏览器匹配生效，现代浏览器零影响。
+ *
+ * 背景：Chrome < 88 不支持 :where()，antd cssinjs 需以 hash-priority="high"
+ * 注入样式才能生效；但 high 模式下 antd 默认样式优先级提升且后插入，
+ * 会覆盖项目自定义样式（antd .ant-layout-header 默认深色 #001529）。
+ * 逻辑属性（inset 等）已由 legacyLogicalPropertiesTransformer 自动转换，
+ * 本文件只负责用 !important 兜底被 antd 反覆盖的关键自定义样式。
+ *
+ * 选择器约定：.app-topbar 为三端 Layout 共享的契约类名（跨文件稳定），
+ * 颜色可用 CSS 变量覆盖（--topbar-bg/--topbar-ink/--topbar-muted/--topbar-shadow），
+ * 默认值与三端 scoped 样式一致。
+ */
+
+html.legacy .app-topbar {
+  background: var(--topbar-bg, rgba(255, 255, 255, 0.92)) !important;
+  color: var(--topbar-ink, var(--ink)) !important;
+  box-shadow: var(--topbar-shadow, 0 1px 6px rgba(0, 0, 0, 0.15)) !important;
+}
+html.legacy .app-topbar .user-name,
+html.legacy .app-topbar .user-info,
+html.legacy .app-topbar .user-school {
+  color: var(--topbar-muted, var(--ink)) !important;
+}
+html.legacy .app-topbar .user-caret {
+  color: var(--topbar-muted, var(--ink-muted)) !important;
+}
+html.legacy .app-topbar .trigger {
+  color: var(--topbar-ink, var(--ink)) !important;
+}

@@ -11,7 +11,7 @@
       </a-menu>
     </a-layout-sider>
     <a-layout>
-      <a-layout-header class="topbar">
+      <a-layout-header class="topbar app-topbar">
         <div class="topbar-left">
           <MenuUnfoldOutlined v-if="collapsed" class="trigger" @click="collapsed = false" />
           <MenuFoldOutlined v-else class="trigger" @click="collapsed = true" />

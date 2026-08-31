@@ -1,6 +1,4 @@
-/**
- * 时间格式化工具 — 全项目统一使用
- */
+// 时间/难度显示格式化工具（全项目统一使用）
 export function formatDateTime(d) {
   if (!d) return '';
   const date = new Date(d);

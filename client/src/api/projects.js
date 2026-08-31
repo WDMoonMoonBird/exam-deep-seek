@@ -76,7 +76,7 @@ export function saveProjectReview(submissionId, data) {
   return request.put(`/teacher/submissions/${submissionId}/project/review`, data);
 }
 
-/** 教师一键重评实训题（Q1 定案：评分异常后重试） */
+/** 教师一键重评实训题（评分异常后重试） */
 export function regradeProjectSubmission(submissionId) {
   return request.post(`/teacher/submissions/${submissionId}/project/regrade`);
 }

@@ -148,6 +148,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { LoadingOutlined, FileTextOutlined } from '@ant-design/icons-vue';
 import loader from '@monaco-editor/loader';
+import { applyMonacoCompat } from '../../infrastructure/monaco/legacyLoaderCompat';
 import RichEditor from '../../components/RichEditor.vue';
 import DOMPurify from 'dompurify';
 import request from '../../api/request.js';
@@ -286,6 +287,9 @@ function registerExtraLanguages() {
 
 async function initMonaco() {
   if (monaco) return;
+  // 旧浏览器（:where() 不可用即 Chrome < 88，或可选链不可用即 Chrome < 80）：
+  // Monaco 0.55+ 产物无法解析，降级 0.24.0（判定与版本口径以 domain/browserCompat.js 为准）
+  applyMonacoCompat(loader);
   monaco = await loader.init();
   registerExtraLanguages();
   editor = monaco.editor.create(editorContainerRef.value, {
@@ -578,7 +582,7 @@ onBeforeUnmount(() => {
 .tab-bar-fill { flex:1; background:#ececec; border-bottom:2px solid #ececec; height:35px; }
 .editor-body { flex:1; position:relative; display:flex; min-height:0; overflow:hidden; }
   .editor-container { flex:1; overflow:hidden; background:#fff; }
-.editor-empty { position:absolute; inset:0; background:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#bfbfbf; gap:12px; }
+.editor-empty { position:absolute; top:0; right:0; bottom:0; left:0; background:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#bfbfbf; gap:12px; }
 .editor-empty p { margin:0; }
 
 .readonly-desc { padding: 12px; min-height: 200px; font-size: 14px; line-height: 1.8; }
@@ -611,7 +615,7 @@ onBeforeUnmount(() => {
 <style>
 .desc-modal .ProseMirror { min-height:420px; }
 
-/* ===== 代码预览切换动效（2026-08-16，0.15s 淡入上移） ===== */
+/* ===== 代码预览切换动效（0.15s 淡入上移） ===== */
 .pr-fade-in { animation: prFadeIn 0.15s ease; }
 @keyframes prFadeIn {
   from { opacity: 0; transform: translateY(6px); }

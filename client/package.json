@@ -44,9 +44,14 @@
     "vue-router": "^4.6.4",
     "xlsx": "^0.18.5"
   },
+  "browserslist": [
+    "chrome >= 69"
+  ],
   "devDependencies": {
     "@playwright/test": "^1.60.0",
+    "@vitejs/plugin-legacy": "^8.2.3",
     "@vitejs/plugin-vue": "^6.0.6",
-    "vite": "^8.0.12"
+    "terser": "^5.51.2",
+    "vite": "^8.1.4"
   }
 }

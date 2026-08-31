@@ -196,6 +196,7 @@ import { useRoute } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { FileTextOutlined, FolderOutlined } from '@ant-design/icons-vue';
 import loader from '@monaco-editor/loader';
+import { applyMonacoCompat } from '../../infrastructure/monaco/legacyLoaderCompat';
 import { getClassWithColor } from 'file-icons-js';
 import 'file-icons-js/css/style.css';
 import { getProjectReview, saveProjectReview, regradeProjectSubmission } from '../../api/projects.js';
@@ -229,8 +230,8 @@ const studentFiles = reactive({ tree: [], contents: {} });
 
 const activeTree = ref('student'); // 'student' | 'standard'
 const editorContainerRef = ref(null);
-// 双数据源各自的 IDE 状态（2026-08-16 交互优化：切换源不丢选中/打开的文件）
-// 必须 reactive：computed setter 写普通对象不会触发响应（ui-guard 复核发现）
+// 双数据源各自的 IDE 状态（切换源不丢选中/打开的文件）
+// 必须 reactive：computed setter 写普通对象不会触发响应
 const sourceState = reactive({
   student: { openTabs: [], activePath: '', expandedKeys: [] },
   standard: { openTabs: [], activePath: '', expandedKeys: [] },
@@ -283,6 +284,9 @@ const displayNo = computed(() => {
 
 async function initMonaco() {
   if (monaco) return;
+  // 旧浏览器（:where() 不可用即 Chrome < 88，或可选链不可用即 Chrome < 80）：
+  // Monaco 0.55+ 产物无法解析，降级 0.24.0（判定与版本口径以 domain/browserCompat.js 为准）
+  applyMonacoCompat(loader);
   monaco = await loader.init();
   editor = monaco.editor.create(editorContainerRef.value, {
     value: '', language: 'plaintext', readOnly: true,
@@ -357,7 +361,7 @@ function collectDirKeys(nodes, acc = []) {
   return acc;
 }
 
-/** 切换数据源：重灌树与内容缓存；保留各源 openTabs/选中状态，切回即恢复（2026-08-16 交互优化） */
+/** 切换数据源：重灌树与内容缓存；保留各源 openTabs/选中状态，切回即恢复 */
 function applySource(key) {
   const source = key === 'standard' ? standardFiles : studentFiles;
   // 只重建当前源的内容缓存，另一源不受影响
@@ -398,7 +402,7 @@ function findFirstFile(nodes) {
 
 // ===== 评分面板交互 =====
 
-/** Q6 定案：一键引用 AI 评语到教师评语框（可删改后再审核） */
+/** 一键引用 AI 评语到教师评语框（可删改后再审核） */
 function quoteAiComment() {
   const text = aiResult.value?.overallComment;
   if (!text) return;
@@ -602,7 +606,7 @@ onBeforeUnmount(() => {
 /* editor-container 常驻挂载，空态以浮层覆盖，保证 Monaco 容器 ref 始终可用 */
 .editor-body { flex:1; position:relative; display:flex; min-height:0; overflow:hidden; }
 .editor-container { flex:1; overflow:hidden; background:#fff; }
-.pr-code-empty { position:absolute; inset:0; background:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#bfbfbf; gap:12px; }
+.pr-code-empty { position:absolute; top:0; right:0; bottom:0; left:0; background:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#bfbfbf; gap:12px; }
 .pr-code-empty p { margin:0; }
 
 /* ===== 底部评分面板（方案A） ===== */
@@ -655,7 +659,7 @@ onBeforeUnmount(() => {
 .t-actions { display:flex; align-items:center; gap:10px; margin-top:auto; padding-top:8px; }
 .t-hint { flex:1; font-size:12px; color:#999; }
 
-/* ===== 数据源/内容切换动效（2026-08-16 交互优化，0.15s 淡入上移） ===== */
+/* ===== 数据源/内容切换动效（0.15s 淡入上移） ===== */
 .pr-fade-enter-active { transition: opacity 0.15s ease, transform 0.15s ease; }
 .pr-fade-leave-active { transition: opacity 0.1s ease; }
 .pr-fade-enter-from { opacity: 0; transform: translateY(6px); }

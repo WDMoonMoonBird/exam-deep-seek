@@ -1,6 +1,4 @@
-/**
- * fileLang.js — 文件后缀 → Monaco Editor 语言 ID 映射
- */
+// 文件后缀 → 代码编辑器语言 ID 映射
 
 export const EXT_TO_LANG = {
   '.java':      'java',
@@ -51,11 +49,7 @@ export const EXT_TO_LANG = {
   '.dockerfile':'dockerfile',
 };
 
-/**
- * 根据文件名获取 Monaco Editor 语言 ID
- * @param {string} filename - 文件名
- * @returns {string} Monaco 语言 ID
- */
+// 根据文件后缀获取代码编辑器语言 ID
 export function getLanguage(filename) {
   const dotIdx = filename.lastIndexOf('.');
   if (dotIdx === -1) return 'plaintext';

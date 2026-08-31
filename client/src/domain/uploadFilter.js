@@ -1,14 +1,4 @@
-/**
- * uploadFilter.js（前端版）— 上传前过滤依赖/构建产物/二进制，重打包为纯代码 zip
- *
- * 背景：教学批改只关注代码。原始 zip（如 Vue 项目）里 node_modules 等依赖占 99% 体积，
- * 前端先过滤再上传：依赖内容全程不解压，只上传代码文件，大幅减少带宽与服务端负载，
- * 同时保证小体积代码包不会触发服务端 50MB 上传限制。
- *
- * 过滤清单与服务端 fileTree.js 的 Set 强规则对齐（保守子集）：
- * 前端只做路径层过滤，漏网条目由服务端 uploadFilter（规则文件 + 内容层）权威兜底，
- * 因此这里不会误删任何代码文件。
- */
+// 上传前过滤依赖/构建产物/二进制，重打包为纯代码 zip（前端路径层过滤，服务端 uploadFilter 权威兜底）
 
 import JSZip from 'jszip';
 import { getLanguage } from './fileLang.js';
@@ -18,7 +8,7 @@ import { getLanguage } from './fileLang.js';
 /** 忽略目录（依赖/构建产物/IDE 等） */
 export const IGNORED_DIRS = new Set([
   'node_modules', '.git', '__pycache__', '.idea', '.vscode',
-  '.DS_Store', 'venv', '.venv', 'env', '.env', 'build',
+  '.DS_Store', 'venv', '.venv', 'env', '.env', 'build', 'dist',
   'target', '.next', '.nuxt',
   'vendor', 'third_party', 'thirdparty',
   '.gradle', '.dart_tool', '.pytest_cache', '.mypy_cache',
@@ -71,23 +61,7 @@ function sanitizeZipPath(p) {
 
 // ==================== 过滤 + 重打包 ====================
 
-/**
- * 过滤并重打包 zip：
- *   1. 解析 zip（UTF-8 严格 → GBK 兜底解码条目名）
- *   2. 跳过依赖/构建产物/二进制条目（不解压其内容，只读路径）
- *   3. 统计保留文件的展开字节数
- *   4. 重打包为纯代码 zip（DEFLATE）
- *
- * @param {File} file 原始 zip 文件
- * @returns {Promise<{
- *   blob: Blob,            // 重打包后的纯代码 zip
- *   name: string,          // 上传文件名（原文件名-code.zip）
- *   tree: Array,           // 过滤后文件树（本地预览用）
- *   fileContents: Map,     // 过滤后文件内容（>1MB 折叠为占位）
- *   keptBytes: number,     // 保留文件展开字节数
- *   keptCount: number,     // 保留文件数
- * }>}
- */
+// 过滤并重打包 zip：解析 → 跳过依赖/二进制 → 重打包为纯代码 zip
 export async function filterAndRepackZip(file) {
   const zip = await JSZip.loadAsync(file, { decodeFileName: robustZipFileName });
   /** @type {{path:string,name:string,content:Buffer}[]} */

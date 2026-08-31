@@ -95,7 +95,8 @@ const tableCols = ref(3);
 const editor = useEditor({
   content: props.modelValue,
   extensions: [
-    StarterKit,
+    // Tiptap 3 的 StarterKit 已内置 link/underline，需显式禁用避免重复注册警告
+    StarterKit.configure({ link: false, underline: false }),
     Placeholder.configure({ placeholder: props.placeholder }),
     Underline,
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
@@ -226,7 +227,7 @@ onUnmounted(() => {
 
 /* 表格弹窗 */
 .table-dialog-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 9999;
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: rgba(0,0,0,0.3); z-index: 9999;
   display: flex; align-items: center; justify-content: center;
 }
 .table-dialog {
