@@ -116,7 +116,7 @@ const FUNC_LINE_RE = /(?:public|private|protected|static|final|abstract|async|ex
 /** 正则兜底的类声明行模式 */
 const CLASS_LINE_RE = /(?:public\s+|abstract\s+|final\s+|export\s+)?(?:class|interface|trait)\s+[A-Za-z_$][\w$]*/;
 
-/** Go 方法接收者模式：func (r Receiver) Serve(...)（BUG-011） */
+/** Go 方法接收者模式：func (r Receiver) Serve(...) */
 const GO_METHOD_RE = /func\s*\([^)]*\)\s*[A-Za-z_$][\w$]*\s*\(/;
 
 // ==================== 内部工具 ====================
@@ -379,7 +379,7 @@ function renderTree(children, prefix, withSizes, lines) {
     const weight = typeof child.weight === 'number'
       ? child.weight
       : computeWeight(child.path || '', child.name || '', child.dir === true);
-    // BUG-007：文件名可能含换行/控制字符（注入面），转义为字面量再入 prompt
+    // 文件名可能含换行/控制字符（注入面），转义为字面量再入 prompt
     const safeName = String(child.name || '').replace(/[\r\n\t]+/g, ' ').trim();
     let label = (isDir ? safeName + '/' : safeName);
     if (withSizes) {

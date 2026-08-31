@@ -28,7 +28,7 @@ const PORT = process.env.PORT || 3000;
 // ---- 组合根：依赖装配集中在 infrastructure/bootstrap/compose.js，结果挂 app.locals ----
 Object.assign(app.locals, compose({ prisma, logger }));
 
-// BUG-006 修复（用户决策）：未配置 JWT_SECRET 时启动期生成随机密钥（重启即全员重登），
+// 未配置 JWT_SECRET 时启动期生成随机密钥（重启即全员重登），
 // 杜绝硬编码兜底密钥被伪造身份；配置了 JWT_SECRET 则保持稳定
 if (!process.env.JWT_SECRET) {
   process.env.JWT_SECRET = randomBytes(32).toString('hex');

@@ -96,7 +96,7 @@ export function readDirFiles(dir) {
   return out;
 }
 
-// ===================== 评分上下文构建（2026-08-17 方案 v1.1） =====================
+// ===================== 评分上下文构建 =====================
 
 /**
  * 读取单个文件内容（不抛错；失败返回空字符串）。
@@ -167,7 +167,7 @@ export async function buildGradingContext({ mode, stdDir, stuDir, question }) {
         const matchesPicked = (f) => pickedPaths.has(f.path)
           || [...pickedPaths].some(p => p && f.path.endsWith('/' + p) || f.path === p);
         const matchedList = stuFiltered.filter(f => !f.dir && matchesPicked(f));
-        // BUG-004：强制选中文件总大小 ≤ 60KB（模型软约束之外的硬限制，按原始顺序截断）
+        // 强制选中文件总大小 ≤ 60KB（模型软约束之外的硬限制，按原始顺序截断）
         const pickedList = [];
         let pickedBytes = 0;
         for (const f of matchedList) {
@@ -184,7 +184,7 @@ export async function buildGradingContext({ mode, stdDir, stuDir, question }) {
             .slice(0, 300)
             .map(f => "// " + f.path + "（" + (f.size / 1024).toFixed(1) + "KB，未提供内容；如评分确需可说明理由）")
             .join('\n');
-          // BUG-R2-B：被 60KB 硬拦的选中文件也要出现在清单（标注超限，模型可点名）
+          // 被 60KB 硬拦的选中文件也要出现在清单（标注超限，模型可点名）
           const blockedSkeleton = matchedList
             .filter(f => !pickedList.includes(f))
             .map(f => "// " + f.path + "（" + (f.size / 1024).toFixed(1) + "KB，超60KB上限未提供；如评分确需可说明理由）")
@@ -197,7 +197,7 @@ export async function buildGradingContext({ mode, stdDir, stuDir, question }) {
       }
     }
 
-    // 预算兜底（BUG-003/DSGN-001/DSGN-007）：双端 + 权重感知 + 骨架化，低权重文件优先牺牲
+    // 预算兜底：双端 + 权重感知 + 骨架化，低权重文件优先牺牲
     const budgetResult = enforceBudget({
       standardText,
       studentText,
@@ -227,7 +227,7 @@ export async function buildGradingContext({ mode, stdDir, stuDir, question }) {
 
 
 /**
- * 预算兜底（BUG-003/DSGN-001/DSGN-007）：双端 + 权重感知 + 骨架化压缩。
+ * 预算兜底：双端 + 权重感知 + 骨架化压缩。
  * 低权重文件优先被骨架化/占位，高权重文件保持全文；学生与标准包共用预算（7:3）。
  * @param {object} p
  * @param {string} p.standardText 标准包全文
@@ -244,7 +244,7 @@ export function enforceBudget({ standardText, studentText, stdFiltered, stuFilte
     return { standardText, studentText, truncated: false, totalTokens: estimateTokens(studentText) + estimateTokens(standardText) };
   }
 
-  // 权重感知压缩：高权重优先保全文（BUG-R2-C：降序，低权重最后被骨架化/占位）
+  // 权重感知压缩：高权重优先保全文（降序，低权重最后被骨架化/占位）
   const compress = (kept, base, capTokens) => {
     const files = kept.filter(f => !f.dir).sort((a, b) => (b.weight ?? 1) - (a.weight ?? 1));
     const parts = [];
@@ -259,7 +259,7 @@ export function enforceBudget({ standardText, studentText, stdFiltered, stuFilte
       const full = '// 文件名: ' + f.path + '\n' + content;
       const fullT = estimateTokens(full);
       if (acc + fullT <= capTokens) { parts.push(full); acc += fullT; continue; }
-      // 骨架化兜底（DSGN-001：方案承诺的骨架链路）
+      // 骨架化兜底（低权重文件转为骨架表示）
       const skel = extractSkeleton(content, f.ext);
       const skelLine = '// 文件名: ' + f.path + '（骨架）\n' + skel;
       const skelT = estimateTokens(skelLine);
@@ -272,7 +272,7 @@ export function enforceBudget({ standardText, studentText, stdFiltered, stuFilte
     return { text: parts.join('\n\n'), tokens: acc };
   };
 
-  // 学生 70% 预算、标准包 30%（双端，BUG-003）
+  // 学生 70% 预算、标准包 30%（双端）
   const stu = compress(stuFiltered || [], stuBase, Math.floor(budget * 0.7));
   const std = compress(stdFiltered || [], stdBase, Math.floor(budget * 0.3));
   let out = {
@@ -356,7 +356,7 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
     const stdDir = standardDir(questionId);
     const stuDir = submissionDir(questionId, studentId, version);
 
-    // 2026-08-17 上下文管理方案 v1.1：L0 过滤 + L1 两阶段（配置开关，失败自动降级）
+    // 上下文管理方案：L0 过滤 + L1 两阶段（配置开关，失败自动降级）
     const contextMode = await getProjectContextMode();
     const ctx = await buildGradingContext({
       mode: contextMode,
@@ -392,7 +392,7 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
 
     // gradeProject 返回 { totalScore, breakdown[], highlights[], issues[], overallComment }
     const aiScore = Math.max(0, Math.min(sub.question.maxScore || 100, Math.round(Number(result.totalScore) || 0)));
-    // BUG-008：解析层强制输出约束（与提示词约束一致，超限截断，违规不落库）
+    // 解析层强制输出约束（与提示词约束一致，超限截断，违规不落库）
     const clampBreakdown = (b) => ({
       item: String(b.item || '').slice(0, 50),
       score: Number(b.score) || 0,

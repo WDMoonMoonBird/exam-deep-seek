@@ -67,13 +67,13 @@ export function sanitizeSegment(seg) {
   return s.length ? s : '_';
 }
 
-/** Q7 上传包校验上限（PRD 第 8 节 Q7 定案） */
+/** 上传包校验上限 */
 const MAX_ZIP_FILE_COUNT = 2000;                  // 解压后文件数上限
 const MAX_ZIP_EXPANDED_BYTES = 200 * 1024 * 1024; // 解压总展开大小上限 200MB（防 zip 炸弹）
 const MAX_ZIP_DIR_DEPTH = 20;                     // 目录层级上限（路径 segments 数）
 
 /**
- * 判断 zip 条目是否为 Unix 符号链接（Q7：符号链接条目跳过，不写盘）。
+ * 判断 zip 条目是否为 Unix 符号链接（符号链接条目跳过，不写盘）。
  *
  * ZIP 外部文件属性（externalAttr，即 adm-zip 的 entry.header.attr）高 16 位为
  * Unix 文件模式；类型位 S_IFMT = 0xF000，符号链接 S_IFLNK = 0xA000。
@@ -98,7 +98,7 @@ function isSymlinkEntry(entry) {
  * 改为取 entry.rawEntryName 原始字节后走 decodeEntryName 智能解码
  * （UTF-8 严格 → GBK 兜底 → latin1），再逐段 sanitizeSegment 清洗。
  *
- * Q7 上传包校验：解压前先做预算统计（文件数 ≤ 2000 / 展开大小 ≤ 200MB /
+ * 上传包校验：解压前先做预算统计（文件数 ≤ 2000 / 展开大小 ≤ 200MB /
  * 目录层级 ≤ 20），超限整包拒收且不写任何文件；符号链接条目跳过不写盘。
  *
  * @param {Buffer} buffer 压缩包二进制
@@ -114,7 +114,7 @@ export function extractZipSafely(buffer, targetDir) {
   const zip = new AdmZip(buffer);
   const entries = zip.getEntries();
 
-  // ---- Q7 预算校验：解压前先遍历全部条目统计，超限整包拒收（不写任何文件）----
+  // ---- 预算校验：解压前先遍历全部条目统计，超限整包拒收（不写任何文件）----
   // 统计口径：目录条目不落盘、不计文件数与展开大小；符号链接跳过不占预算；
   // 展开大小以中央目录声明的未压缩大小 header.size 为准（解压前唯一依据）。
   let budgetFileCount = 0;
@@ -145,7 +145,7 @@ export function extractZipSafely(buffer, targetDir) {
   const MAX_EXPANDED_BYTES = 200 * 1024 * 1024; // 与预算一致：写盘时按实际字节二次限流（防声明大小欺骗）
 
   for (const entry of entries) {
-    // Q7：符号链接条目跳过，不写盘（避免把链接目标路径字符串当文件内容落盘）
+    // 符号链接条目跳过，不写盘（避免把链接目标路径字符串当文件内容落盘）
     if (isSymlinkEntry(entry)) continue;
     const decoded = decodeEntryName(entry.rawEntryName).replace(/\\/g, '/');
     // 穿越校验基于未清洗的 decoded，避免清洗把 '..' 变成 '_' 后校验失效（整包拒收语义不变）

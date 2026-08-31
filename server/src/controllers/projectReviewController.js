@@ -63,7 +63,7 @@ function collectFiles(dir) {
   }
 }
 
-// ===================== 提示词预览用过滤读取（DSGN-005：与实评 L0 过滤一致，所见即所用） =====================
+// ===================== 提示词预览用过滤读取（与实评 L0 过滤一致，所见即所用） =====================
 
 function readFileSafe(absPath) {
   try {
@@ -172,7 +172,7 @@ export const regradeProjectSubmission = async (req, res) => {
       return res.status(400).json({ code: 1001, message: '非实训题提交', data: null });
     }
 
-    // BUG-014：重评幂等——教师重评已触发（grading.state=pending 且 prevStatus 有值）时拒绝重复触发
+    // 重评幂等——教师重评已触发（grading.state=pending 且 prevStatus 有值）时拒绝重复触发
     const curEnv = parseProjectAnswer(sub.answer);
     if (curEnv.grading?.state === 'pending' && curEnv.grading?.prevStatus) {
       return res.status(400).json({ code: 1001, message: '评分进行中，请稍候再试', data: null });
@@ -226,7 +226,7 @@ export const getProjectQuestionPromptPreview = async (req, res) => {
       return res.status(400).json({ code: 1001, message: '该题目不是实训题', data: null });
     }
 
-    // DSGN-005：预览与实评一致，标准包走 L0 过滤
+    // 预览与实评一致，标准包走 L0 过滤
     const standardFiles = readFilteredDir(standardDir(q.id));
     const user = buildProjectGradePrompt({
       title: q.title,
@@ -259,7 +259,7 @@ export const getProjectSubmissionPrompt = async (req, res) => {
 
     const env = parseProjectAnswer(sub.answer);
     const version = env.currentVersion;
-    // DSGN-005：预览与实评一致，标准包/学生版本均走 L0 过滤
+    // 预览与实评一致，标准包/学生版本均走 L0 过滤
     const standardFiles = readFilteredDir(standardDir(sub.questionId));
     const studentFiles = version > 0
       ? readFilteredDir(submissionDir(sub.questionId, sub.studentId, version))

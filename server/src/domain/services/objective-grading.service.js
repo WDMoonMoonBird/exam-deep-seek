@@ -1,17 +1,6 @@
-/**
- * ObjectiveGradingService —— 客观题评分领域服务（纯函数，零依赖）。
- * 等价迁移自 server/src/services/gradingWorker.js 的 gradeOne 客观题分支与 AI 分数归一化。
- */
+// 客观题评分领域服务（纯函数，零依赖）
 
-/**
- * 逐项客观题评分（objective 类型小题：choice/multi_choice/judge/fill 混合）。
- * @param {object} p
- * @param {Array<{key: number, type: string, score?: number, answer?: string|Array}>} p.items 题目项
- * @param {Array<{key: number, answer?: string}>} p.answers 学生答案
- * @param {number} p.sqScore 小题满分
- * @param {object} [p.objectiveSettings] 多选评分策略（multiChoiceScoring: partial|all-or-nothing）
- * @returns {{score: number, feedback: string, correctCount: number, itemCount: number}}
- */
+// 逐项客观题评分（choice/multi_choice/judge/fill 混合，多选支持 partial 部分给分）
 export function gradeObjectiveItems({ items, answers, sqScore, objectiveSettings }) {
   let totalScore = 0;
   let correctCount = 0;
@@ -76,15 +65,7 @@ export function gradeObjectiveItems({ items, answers, sqScore, objectiveSettings
   return { score, feedback, correctCount, itemCount };
 }
 
-/**
- * 扁平客观题评分（单小题 choice/multi_choice/judge/fill，无逐项结构）。
- * @param {object} p
- * @param {string} p.type 题型
- * @param {string} p.studentAnswer
- * @param {string} p.referenceAnswer
- * @param {number} p.score 满分
- * @returns {{score: number, feedback: string, correct: boolean}}
- */
+// 扁平客观题评分（单小题，无逐项结构）
 export function gradeFlatObjective({ type, studentAnswer, referenceAnswer, score }) {
   const sa = (studentAnswer || '').trim();
   const ra = (referenceAnswer || '').trim();
@@ -108,12 +89,7 @@ export function gradeFlatObjective({ type, studentAnswer, referenceAnswer, score
   return { score: correct ? (score || 0) : 0, feedback, correct };
 }
 
-/**
- * AI 分数归一化（对齐 gradingWorker：AI 分异常偏高时按满分比例折算）。
- * @param {number} score AI 原始分
- * @param {number} max 小题满分
- * @returns {number} 归一化后分数
- */
+// AI 分数归一化：原始分异常偏高时按满分比例折算
 export function normalizeAiScore(score, max) {
   if (score > max * 2 && max < 100) {
     return Math.round(score * max / 100);

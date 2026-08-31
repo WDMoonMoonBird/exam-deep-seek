@@ -1,7 +1,6 @@
 /**
  * InMemoryRateLimiter —— 进程内限流器（实现 RateLimiterPort 契约）。
- * BUG-009 修复（2026-08-16）：固定窗口 → 滑动窗口（失败时间戳数组，窗口内计数，
- * 最早失败过期即解除，杜绝窗口边界绕过）。
+ * 固定窗口 → 滑动窗口：记录失败时间戳数组，窗口内计数，最早失败过期即解除，杜绝窗口边界绕过。
  */
 
 export class InMemoryRateLimiter {

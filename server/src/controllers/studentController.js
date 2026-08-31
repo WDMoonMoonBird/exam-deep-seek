@@ -565,7 +565,7 @@ export async function submitProjectCore(req, res) {
           .json({ code: guard.code, message: guard.message, data: null });
       }
 
-      // ---- Q5：提交窗口校验（startTime ≤ now ≤ endTime，超时提交返回 403）----
+      // ---- 提交窗口校验（startTime ≤ now ≤ endTime，超时提交返回 403）----
       const submitNow = new Date();
       if (submitNow < new Date(guard.assignment.startTime)) {
         return res.status(403).json({ code: 1003, message: '作业尚未开始，不可提交', data: null });
@@ -592,12 +592,12 @@ export async function submitProjectCore(req, res) {
         const prevEnvelope = parseProjectAnswer(existing?.answer);
         const version = prevEnvelope.currentVersion + 1;
 
-        // ---- Q5：审核锁定——reviewed / published 后禁止重交（教师撤回重审后重新开放）----
+        // ---- 审核锁定——reviewed / published 后禁止重交（教师撤回重审后重新开放）----
         if (existing && (existing.status === 'reviewed' || existing.status === 'published')) {
           return res.status(403).json({ code: 1003, message: '成绩已发布，如需重交请联系老师', data: null });
         }
 
-        // ---- Q5：次数上限校验 ----
+        // ---- 次数上限校验 ----
         // allowResubmit=false：已有正式提交（status !== 'draft'）即不可再交
         if (!guard.assignment.allowResubmit && existing && existing.status !== 'draft') {
           return res.status(403).json({ code: 1003, message: '该作业不允许重复提交', data: null });
@@ -643,7 +643,7 @@ export async function submitProjectCore(req, res) {
           answer: serializeProjectAnswer(envelope),
           attemptCount: version,
           submittedAt: now,
-          // Q5：新提交清空旧分（防止审核放分后旧分残留）
+          // 新提交清空旧分（防止审核放分后旧分残留）
           aiScore: null,
           finalScore: null,
           teacherFeedback: null,

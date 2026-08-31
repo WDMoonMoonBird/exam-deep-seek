@@ -73,7 +73,7 @@ export class DeepSeekGateway {
             { role: 'user', content: userMessage },
           ],
           temperature: 0.3,
-          // 2026-08-17：V4-Flash 推理模型 max_tokens 含思考 token，2000 偏紧 → 4000
+          // V4-Flash 推理模型 max_tokens 含思考 token，2000 偏紧 → 4000
           maxTokens: 4000,
           timeoutMs: GRADE_TIMEOUT_MS,
         });
@@ -181,7 +181,7 @@ export class DeepSeekGateway {
           { role: 'user', content: buildProjectReviewUserMessage({ standardFiles, submissionFiles, promptExtra }) },
         ],
         temperature: 0.3,
-        // 2026-08-17：对齐 services 链路，推理模型输出预算 4000 → 8000
+        // 对齐 services 链路，推理模型输出预算 4000 → 8000
         maxTokens: 8000,
         timeoutMs: 120000,
       });

@@ -52,7 +52,7 @@ export class ReviewUseCases {
    * @throws {EntityNotFoundError} 提交不存在
    */
   async manualAdjust({ submissionId, finalScore }) {
-    // BUG-017 修复：分值必须为有限非负数，拒绝负数/NaN/字符串注入
+    // 分值必须为有限非负数，拒绝负数/NaN/字符串注入
     const scoreNum = Number(finalScore);
     if (!Number.isFinite(scoreNum) || scoreNum < 0) {
       throw new DomainError('分数不合法：必须是有限非负数', 'INVALID_SCORE');
