@@ -34,6 +34,7 @@ import { buildFileTree, filterProjectFiles, buildFileTreeText } from './projectC
 import { standardDir } from '../utils/projectPaths.js';
 import { validateRules, runRules, resolveProjectRoot } from './ruleExecutor.js';
 import { validateNegativeTests } from './ruleMutator.js';
+import { extractFacts } from './factExtractor.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -94,16 +95,45 @@ function automationLabel(item) {
   return label ? '（' + label + '）' : '';
 }
 
-/** fact 规则可用字段清单（prompt 注入；字段与 factExtractor 输出一致） */
-const FACTS_SCHEMA = [
-  'language(字符串: "vue"/"node"/... 工程语言) / framework(字符串: 框架名)',
-  'hasPackageJson(布尔) / dependencies(字符串数组) / entryFiles(字符串数组)',
+/** 公共 fact 字段（所有语言可用；prompt 注入） */
+const FACTS_SCHEMA_COMMON = [
+  'language(字符串: "javascript"/"java"/"python"/... 工程语言) / framework(字符串: 框架名)',
+  'dependencies(字符串数组: 清单文件依赖名) / entryFiles(字符串数组)',
+  'syntaxErrors(数字: 语法错误数) / syntaxErrorFiles(字符串数组)',
+].join('\n');
+
+/** JS/Vue 语言 fact 字段（P0-1 起按语言注入） */
+const FACTS_SCHEMA_JS = [
+  'hasPackageJson(布尔)',
   'vueFiles(数字: Vue 文件数) / jsFiles(数字: JS 文件数) / components(字符串数组)',
   'routes(数字: 路由数) / routePaths(字符串数组) / hasCreateRouter(布尔) / hasVueRouter(布尔)',
   'hasPinia(布尔) / stores(字符串数组) / apiCalls(数字: 接口调用次数)',
   'hasAxiosWrapper(布尔: axios 封装) / hasAxios(布尔)',
-  'syntaxErrors(数字: 语法错误数) / syntaxErrorFiles(字符串数组)',
 ].join('\n');
+
+/** Java 语言 fact 字段（P0-1） */
+const FACTS_SCHEMA_JAVA = [
+  'javaFiles(数字: Java 文件数) / javaClasses(字符串数组: 类名) / javaImports(字符串数组: import 包路径)',
+  'packageNames(字符串数组: 包名) / controllers(字符串数组: @RestController/@Controller 类名)',
+  'apiMappings(字符串数组: @GetMapping/@PostMapping/@RequestMapping 等路径)',
+  'hasSpringBoot(布尔) / hasSpringMvc(布尔) / hasMyBatis(布尔) / hasJpa(布尔) / hasLombok(布尔)',
+  'hasPomXml(布尔) / hasGradle(布尔)',
+].join('\n');
+
+/** Python 语言 fact 字段（P0-1） */
+const FACTS_SCHEMA_PYTHON = [
+  'pyFiles(数字: Python 文件数) / pyClasses(字符串数组: 类名) / pyFunctions(字符串数组: 函数名)',
+  'pyImports(字符串数组: import 模块名) / flaskRoutes(字符串数组: @app.route 路径)',
+  'hasFlask(布尔) / hasDjango(布尔) / hasFastAPI(布尔) / hasPydantic(布尔)',
+  'hasRequirementsTxt(布尔) / hasPyproject(布尔)',
+].join('\n');
+
+/** 按语言选择 fact 字段清单（未知语言回退 JS 清单，兼容旧题） */
+function factsSchemaFor(language) {
+  if (language === 'java') return FACTS_SCHEMA_COMMON + '\n' + FACTS_SCHEMA_JAVA;
+  if (language === 'python') return FACTS_SCHEMA_COMMON + '\n' + FACTS_SCHEMA_PYTHON;
+  return FACTS_SCHEMA_COMMON + '\n' + FACTS_SCHEMA_JS;
+}
 
 /** 生成规则的系统提示词（只产 JSON 参数，不产代码 —— 2026-08-17 教训 1） */
 const GENERATE_SYSTEM = '你是一个高校实训题评分规则生成器。你的任务是根据评分标准与标准工程包文件树，'
@@ -504,9 +534,10 @@ async function callLlm(system, user, opts = {}) {
  * @param {Array|null} fixedItems 固定分项（rubricItems 注入）
  * @param {string} stdFileTree 标准包文件树文本
  * @param {string} description 题目描述（2026-08-18 起参与生成）
+ * @param {string} [language] 工程语言（javascript/java/python；P0-1 按语言注入 fact 字段，缺省 JS 兼容旧题）
  * @returns {string}
  */
-export function buildGenerateUserPrompt(rubric, maxScore, fixedItems, stdFileTree, description) {
+export function buildGenerateUserPrompt(rubric, maxScore, fixedItems, stdFileTree, description, language) {
   const fixed = (Array.isArray(fixedItems) && fixedItems.length > 0)
     ? '\n\n【固定分项（必须逐项覆盖，不得增删改；满分合计 ' + maxScore + ' 分）】\n'
       + fixedItems.map((it, i) => (i + 1) + '. ' + it.item + automationLabel(it) + '（' + it.maxScore + ' 分）').join('\n')
@@ -523,12 +554,13 @@ export function buildGenerateUserPrompt(rubric, maxScore, fixedItems, stdFileTre
     + treeSection + '\n\n'
     + '【规则格式（严格 JSON，仅此一种输出）】\n' + RULES_FORMAT + '\n\n'
     + '【示例（仅格式参考）】\n' + RULES_EXAMPLE + '\n\n'
-    + '【fact 规则可用字段（params: {fact, op, value}，op: >= > <= < == != includes not_includes）】\n' + FACTS_SCHEMA + '\n'
+    + '【fact 规则可用字段（params: {fact, op, value}，op: >= > <= < == != includes not_includes）】\n' + factsSchemaFor(language) + '\n'
     + '要求：\n'
     + '- 输出严格 JSON：{ max_score, objective_items, subjective_items }；只输出 JSON 本身，不要任何解释、代码块围栏或多余文字\n'
     + '- 字段名必须是 item（规则中文描述），绝对不要用 name；subjective_items 必须输出，无主观项时输出空数组 []\n'
     + '- objective_items 覆盖所有可确定性检查的评分点，每项含 id/group/item/rule_type/params/max_score；params 必须具体可执行（真实文件路径、正则表达式等）\n'
     + '- rule_type 只能使用白名单类型：' + RULE_TYPES.join(' / ') + '\n'
+    + '- P0-2 语义级规则优先（抗格式差异）：ast_pattern{path, pattern} 按 AST 节点类型链匹配（如 "class_declaration > method_declaration"，无视空格/换行/引号差异，适合检查类/方法/接口是否存在）；count_imports{path, module, min} 统计 import/require/from/include 行中模块出现次数（无视引号风格，适合检查依赖是否引入）；normalized_text{path, text} 归一化（去空白）后包含匹配（适合检查声明/配置内容）；仅当语义级规则无法表达时才用 contains_text/contains_regex/count_regex 文本级规则\n'
     + '- 分组：评分标准的每个分项用 group 字段关联；多个客观项可同 group，group 内 max_score 之和必须等于该分项满分\n'
     + '- 分项必须严格来自评分标准，按评分标准自然拆分，不要人为合并或压缩；禁止自创评分标准未提及的检查项（如 README/test/eslint 等）\n'
     + '- 只有无法通过静态文件检查确定分数的项才放入 subjective_items，不要用规则判断主观项\n'
@@ -883,6 +915,14 @@ export async function generateChecker(questionId) {
   const projectRoot = resolveProjectRoot(rootDir);
   const stdTree = buildFileTree(projectRoot);
   const stdTreeText = buildFileTreeText(filterProjectFiles(stdTree, projectRoot).kept, { withSizes: false });
+  // P0-1：标准包语言检测（决定 prompt 注入的 fact 字段清单；失败/未知回退 JS 兼容旧题）
+  let stdLanguage = 'javascript';
+  try {
+    const stdFacts = extractFacts(rootDir);
+    if (stdFacts && (stdFacts.language === 'java' || stdFacts.language === 'python')) stdLanguage = stdFacts.language;
+  } catch (err) {
+    logger.warn({ questionId: id, err: String(err && err.message ? err.message : err) }, 'checkerService: 标准包语言检测失败，回退 JS fact 清单');
+  }
   // L1：路径白名单（一次性构建，每轮校验）
   const projectPaths = collectProjectPaths(projectRoot);
 
@@ -940,7 +980,7 @@ export async function generateChecker(questionId) {
     const fresh = round === 1 || stuckCount >= STUCK_ROUNDS;
     if (fresh) stuckCount = 0;
     const promptForRound = fresh
-      ? buildGenerateUserPrompt(rubric, maxScore, fixedItems, stdTreeText, stripHtml(question.material))
+      ? buildGenerateUserPrompt(rubric, maxScore, fixedItems, stdTreeText, stripHtml(question.material), stdLanguage)
       : buildCalibrateUserPrompt(lastFeedback, stdTreeText, fixedItems, lastRules);
     logger.info({ questionId: id, round, fresh: fresh && round > 1 }, 'checkerService: 第 ' + round + ' 轮生成规则');
     if (fresh && round > 1) logger.info({ questionId: id, round }, 'checkerService: 卡死 ≥' + STUCK_ROUNDS + ' 轮，改为全新生成');

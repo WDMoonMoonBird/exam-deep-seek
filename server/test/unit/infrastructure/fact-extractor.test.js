@@ -148,6 +148,32 @@ describe('extractFacts — 空目录与缺省', () => {
         hasAxios: false,
         syntaxErrors: 0,
         syntaxErrorFiles: [],
+        // ---- v2 Java 扩展字段（P0-1：Schema v2 全字段缺省）----
+        javaFiles: 0,
+        javaClasses: [],
+        javaImports: [],
+        packageNames: [],
+        hasSpringBoot: false,
+        hasSpringMvc: false,
+        hasMyBatis: false,
+        hasJpa: false,
+        hasLombok: false,
+        controllers: [],
+        apiMappings: [],
+        hasPomXml: false,
+        hasGradle: false,
+        // ---- v2 Python 扩展字段 ----
+        pyFiles: 0,
+        pyClasses: [],
+        pyFunctions: [],
+        pyImports: [],
+        hasFlask: false,
+        hasDjango: false,
+        hasFastAPI: false,
+        hasPydantic: false,
+        flaskRoutes: [],
+        hasRequirementsTxt: false,
+        hasPyproject: false,
       });
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
@@ -423,6 +449,147 @@ describe('resolveProjectRoot — 与 ruleExecutor 同语义', () => {
       fs.mkdirSync(path.join(dir, 'public'), { recursive: true });
       fs.writeFileSync(path.join(dir, 'src', 'index.js'), 'const a = 1;\n');
       expect(resolveProjectRoot(dir)).toBe(dir);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ==================== P0-1：多语言事实提取（Java / Python） ====================
+
+/**
+ * 构造 Java Spring Boot 工程：pom.xml（spring-boot-starter-web + mybatis + lombok）
+ * + src/main/java/com/example/demo/UserController.java（@RestController + @GetMapping）。
+ * 注意：pom.xml 是工程根强信号，resolveProjectRoot 不得下钻到 src/。
+ * @param {string} dir - 工程根
+ */
+function buildJavaProject(dir) {
+  fs.mkdirSync(path.join(dir, 'src', 'main', 'java', 'com', 'example', 'demo'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'pom.xml'), [
+    '<?xml version="1.0"?>',
+    '<project>',
+    '  <dependencies>',
+    '    <dependency><artifactId>spring-boot-starter-web</artifactId></dependency>',
+    '    <dependency><artifactId>mybatis-spring-boot-starter</artifactId></dependency>',
+    '    <dependency><artifactId>lombok</artifactId></dependency>',
+    '  </dependencies>',
+    '</project>',
+  ].join('\n'));
+  fs.writeFileSync(
+    path.join(dir, 'src', 'main', 'java', 'com', 'example', 'demo', 'UserController.java'),
+    [
+      'package com.example.demo;',
+      'import org.springframework.web.bind.annotation.*;',
+      'import lombok.RequiredArgsConstructor;',
+      '@RestController',
+      '@RequestMapping("/api")',
+      'public class UserController {',
+      '  @GetMapping("/users")',
+      '  public String list() { return "ok"; }',
+      '  @PostMapping(value = "/users")',
+      '  public String create() { return "ok"; }',
+      '}',
+    ].join('\n'),
+  );
+}
+
+/**
+ * 构造 Python Flask 工程：requirements.txt（flask）+ app.py（import os / from flask import Flask
+ * + @app.route('/users') + class UserService）。
+ * @param {string} dir - 工程根
+ */
+function buildPythonProject(dir) {
+  fs.writeFileSync(path.join(dir, 'requirements.txt'), 'flask==3.0.0\n');
+  fs.writeFileSync(path.join(dir, 'app.py'), [
+    'import os',
+    'from flask import Flask',
+    '',
+    'app = Flask(__name__)',
+    '',
+    "@app.route('/users')",
+    'def list_users():',
+    "    return 'ok'",
+    '',
+    'class UserService:',
+    '    def get_user(self, user_id):',
+    '        return user_id',
+  ].join('\n'));
+}
+
+describe('extractFacts — Java 工程（P0-1）', () => {
+  it('Java：语言/框架、pom 依赖、类名/控制器/映射路径/包名、框架标志、语法错误', () => {
+    const dir = tmpdir();
+    try {
+      buildJavaProject(dir);
+      const facts = extractFacts(dir);
+      expect(facts.language).toBe('java');
+      expect(facts.framework).toBe('spring-boot');
+      expect(facts.javaFiles).toBe(1);
+      expect(facts.hasPomXml).toBe(true);
+      expect(facts.dependencies).toEqual(expect.arrayContaining([
+        'spring-boot-starter-web', 'mybatis-spring-boot-starter', 'lombok',
+      ]));
+      expect(facts.javaClasses).toContain('UserController');
+      expect(facts.controllers).toContain('UserController');
+      expect(facts.apiMappings).toEqual(expect.arrayContaining(['/api', '/users']));
+      expect(facts.packageNames).toContain('com.example.demo');
+      expect(facts.javaImports).toEqual(expect.arrayContaining([
+        'org.springframework.web.bind.annotation.*', 'lombok.RequiredArgsConstructor',
+      ]));
+      expect(facts.hasSpringBoot).toBe(true);
+      expect(facts.hasMyBatis).toBe(true);
+      expect(facts.hasLombok).toBe(true);
+      expect(facts.syntaxErrors).toBe(0);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('Java：坏文件 → syntaxErrors > 0 且 syntaxErrorFiles 有相对路径', () => {
+    const dir = tmpdir();
+    try {
+      buildJavaProject(dir);
+      fs.writeFileSync(path.join(dir, 'src', 'main', 'java', 'com', 'example', 'demo', 'Broken.java'),
+        'package com.example.demo;\npublic class {\n');
+      const facts = extractFacts(dir);
+      expect(facts.syntaxErrors).toBeGreaterThan(0);
+      expect(facts.syntaxErrorFiles.some((p) => p.endsWith('Broken.java'))).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('extractFacts — Python 工程（P0-1）', () => {
+  it('Python：语言/框架、依赖、类/函数/import/Flask 路由、语法错误', () => {
+    const dir = tmpdir();
+    try {
+      buildPythonProject(dir);
+      const facts = extractFacts(dir);
+      expect(facts.language).toBe('python');
+      expect(facts.framework).toBe('flask');
+      expect(facts.pyFiles).toBe(1);
+      expect(facts.hasRequirementsTxt).toBe(true);
+      expect(facts.dependencies).toEqual(expect.arrayContaining(['flask']));
+      expect(facts.pyClasses).toContain('UserService');
+      expect(facts.pyFunctions).toEqual(expect.arrayContaining(['list_users', 'get_user']));
+      expect(facts.pyImports).toEqual(expect.arrayContaining(['os', 'flask']));
+      expect(facts.hasFlask).toBe(true);
+      expect(facts.flaskRoutes).toContain('/users');
+      expect(facts.syntaxErrors).toBe(0);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('Python：坏文件 → syntaxErrors > 0 且 syntaxErrorFiles 有相对路径', () => {
+    const dir = tmpdir();
+    try {
+      buildPythonProject(dir);
+      fs.writeFileSync(path.join(dir, 'broken.py'), 'def broken(\n    pass\n');
+      const facts = extractFacts(dir);
+      expect(facts.syntaxErrors).toBeGreaterThan(0);
+      expect(facts.syntaxErrorFiles).toContain('broken.py');
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

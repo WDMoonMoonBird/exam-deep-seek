@@ -134,6 +134,9 @@ describe('validateRules — 规则校验', () => {
       'file_count_in_dir',
       'syntax_check',
       'fact',
+      'ast_pattern',
+      'count_imports',
+      'normalized_text',
     ]);
   });
 });
@@ -888,5 +891,107 @@ describe('runRules — 工程根探测集成与 groupSummary', () => {
     const r = runRules(rules, path.join(os.tmpdir(), 'no-such-rule-exec-dir-xyz'));
     expect(r.items[0].score).toBe(0);
     expect(r.totalScore).toBe(0);
+  });
+});
+
+describe('P0-2 语义级规则（ast_pattern / count_imports / normalized_text）', () => {
+  /** 构造含格式差异的 Java 文件（混乱空格/换行/缩进） */
+  function buildMessyJava(dir) {
+    fs.writeFileSync(path.join(dir, 'UserController.java'), [
+      'package  com.example.demo ;',
+      '',
+      'import   org.springframework.web.bind.annotation.*;',
+      'import lombok.RequiredArgsConstructor;',
+      '',
+      '@RestController',
+      'public class   UserController {',
+      '   public   String   listUsers( ) {',
+      '       return "ok" ;',
+      '   }',
+      '}',
+    ].join('\n'));
+  }
+
+  it('ast_pattern：Java 类与方法存在（无视混乱格式）→ 满分；不存在 → 0 分', () => {
+    const dir = tmpdir();
+    try {
+      buildMessyJava(dir);
+      const ok = runRules({
+        max_score: 20,
+        objective_items: [
+          { id: 'a1', item: '存在类', rule_type: 'ast_pattern', params: { path: 'UserController.java', pattern: 'class_declaration' }, max_score: 10 },
+          { id: 'a2', item: '类内有方法', rule_type: 'ast_pattern', params: { path: 'UserController.java', pattern: 'class_declaration > method_declaration' }, max_score: 10 },
+        ],
+        subjective_items: [],
+      }, dir);
+      expect(ok.totalScore).toBe(20);
+      // 反例：Java 文件用 Python 节点类型 → 失分
+      const no = runRules({
+        max_score: 5,
+        objective_items: [{ id: 'a1', item: 'x', rule_type: 'ast_pattern', params: { path: 'UserController.java', pattern: 'class_definition' }, max_score: 5 }],
+        subjective_items: [],
+      }, dir);
+      expect(no.totalScore).toBe(0);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('count_imports：统计 import 行（跨语言，无视引号风格）；不存在 → 0 分', () => {
+    const dir = tmpdir();
+    try {
+      buildMessyJava(dir);
+      const ok = runRules({
+        max_score: 10,
+        objective_items: [
+          { id: 'a1', item: 'lombok import', rule_type: 'count_imports', params: { path: 'UserController.java', module: 'lombok', min: 1 }, max_score: 5 },
+          { id: 'a2', item: 'spring import', rule_type: 'count_imports', params: { path: 'UserController.java', module: 'org.springframework', min: 1 }, max_score: 5 },
+        ],
+        subjective_items: [],
+      }, dir);
+      expect(ok.totalScore).toBe(10);
+      const no = runRules({
+        max_score: 5,
+        objective_items: [{ id: 'a1', item: 'django', rule_type: 'count_imports', params: { path: 'UserController.java', module: 'django', min: 1 }, max_score: 5 }],
+        subjective_items: [],
+      }, dir);
+      expect(no.totalScore).toBe(0);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('normalized_text：归一化后包含（无视空白差异）→ 满分；缺失 → 0 分', () => {
+    const dir = tmpdir();
+    try {
+      buildMessyJava(dir);
+      const ok = runRules({
+        max_score: 5,
+        objective_items: [{ id: 'a1', item: '包声明', rule_type: 'normalized_text', params: { path: 'UserController.java', text: 'package com.example.demo;' }, max_score: 5 }],
+        subjective_items: [],
+      }, dir);
+      expect(ok.totalScore).toBe(5);
+      const no = runRules({
+        max_score: 5,
+        objective_items: [{ id: 'a1', item: '无此包', rule_type: 'normalized_text', params: { path: 'UserController.java', text: 'package com.other;' }, max_score: 5 }],
+        subjective_items: [],
+      }, dir);
+      expect(no.totalScore).toBe(0);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('validateRules：三种新规则类型通过校验；未知类型拒绝', () => {
+    const ok = validateRules({
+      max_score: 15,
+      objective_items: [
+        { id: 'a1', item: 'a', rule_type: 'ast_pattern', params: { path: 'x.java', pattern: 'class_declaration' }, max_score: 5 },
+        { id: 'a2', item: 'b', rule_type: 'count_imports', params: { path: 'x.py', module: 'flask', min: 1 }, max_score: 5 },
+        { id: 'a3', item: 'c', rule_type: 'normalized_text', params: { path: 'x.txt', text: 'abc' }, max_score: 5 },
+      ],
+      subjective_items: [],
+    });
+    expect(ok.ok).toBe(true);
   });
 });

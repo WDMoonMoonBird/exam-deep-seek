@@ -63,6 +63,17 @@ const FACT_MUTATION = {
   hasVueRouter: { dep: 'vue-router', fileNeedle: 'vue-router' },
   hasPinia: { dep: 'pinia', fileNeedle: /(?:from\s+['"]pinia['"]|\bdefineStore\b|\bcreatePinia\b)/, storesDir: 'src/stores' },
   hasCreateRouter: { fileNeedle: /\bcreateRouter\b/ },
+  // ---- Java（P0-1）----
+  hasSpringBoot: { fileNeedle: /\bspring-boot-starter\b/ },
+  hasSpringMvc: { fileNeedle: /\borg\.springframework\.web\b/ },
+  hasMyBatis: { fileNeedle: /\bmybatis\b/ },
+  hasJpa: { fileNeedle: /\b(?:javax|jakarta)\.persistence\b/ },
+  hasLombok: { fileNeedle: /\blombok\b/ },
+  // ---- Python（P0-1）----
+  hasFlask: { fileNeedle: /\bflask\b/ },
+  hasDjango: { fileNeedle: /\bdjango\b/ },
+  hasFastAPI: { fileNeedle: /\bfastapi\b/ },
+  hasPydantic: { fileNeedle: /\bpydantic\b/ },
 };
 
 // ==================== 内部工具（与 ruleExecutor 同语义，本模块自包含） ====================
@@ -539,10 +550,67 @@ export function mutateVariant(rules, ruleId, rootDir, variantDir) {
     case 'fact':
       r = mutateFact(item, params, root);
       break;
+    case 'ast_pattern':
+      r = mutateDeleteFile(params, root);
+      break;
+    case 'count_imports':
+      r = mutateCountImports(params, root);
+      break;
+    case 'normalized_text':
+      r = mutateDeleteFile(params, root);
+      break;
     default:
       r = { ok: false, reason: '不支持的规则类型：' + String(item.rule_type) };
   }
   return r;
+}
+
+// ==================== P0-2 语义级规则变异（解决正则脆弱） ====================
+
+/**
+ * ast_pattern / normalized_text 通用变异：删除目标文件（结构消失必失分）。
+ */
+function mutateDeleteFile(params, root) {
+  const p = params.path;
+  if (typeof p !== 'string' || p.length === 0) return { ok: false, reason: '缺少参数 path' };
+  const abs = resolveWithinRoot(root, p);
+  if (!abs) return { ok: false, reason: '路径无效或越界：' + p };
+  if (!fs.existsSync(abs)) return { ok: false, reason: '文件不存在（标准包上规则本不应通过）' };
+  try {
+    fs.rmSync(abs, { force: true });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: '删除文件失败：' + ((err && err.message) || String(err)) };
+  }
+}
+
+/**
+ * count_imports 变异：删除包含目标模块名的 import 行（行扫描，跨语言）。
+ */
+function mutateCountImports(params, root) {
+  const p = params.path;
+  const moduleName = params.module;
+  if (typeof p !== 'string' || p.length === 0) return { ok: false, reason: '缺少参数 path' };
+  if (typeof moduleName !== 'string' || moduleName.length === 0) return { ok: false, reason: '缺少参数 module' };
+  const abs = resolveWithinRoot(root, p);
+  if (!abs) return { ok: false, reason: '路径无效或越界：' + p };
+  const r = readFileUtf8(abs);
+  if (!r.ok) return { ok: false, reason: '无法读取 ' + p + '：' + r.error };
+  const lines = String(r.content).split('\n');
+  const kept = [];
+  let removed = 0;
+  for (const line of lines) {
+    const t = line.trim();
+    if (/^(import|require|from|include)\b/.test(t) && t.includes(moduleName)) {
+      removed += 1;
+      continue;
+    }
+    kept.push(line);
+  }
+  if (removed === 0) return { ok: false, reason: '未找到包含模块名的 import 行（标准包上规则本不应通过）' };
+  const w = writeFileUtf8(abs, kept.join('\n'));
+  if (!w.ok) return { ok: false, reason: '写入 ' + p + ' 失败：' + w.error };
+  return { ok: true };
 }
 
 /** 单条规则的负例验证（内部）：派生变体 → 跑规则 → 判定目标规则得分 */

@@ -19,6 +19,8 @@ import { createRequire } from 'node:module';
 import Parser from 'tree-sitter';
 import JS from 'tree-sitter-javascript';
 import { extractFacts } from './factExtractor.js';
+import { getJavaParser } from './factExtractors/java.js';
+import { getPythonParser } from './factExtractors/python.js';
 import logger from '../utils/logger.js';
 
 // tree-sitter-vue 的旧版原生绑定（build/Release/*.node）在部分运行时（如 Jest 的模块解析器）
@@ -40,6 +42,10 @@ export const RULE_TYPES = [
   'file_count_in_dir',
   'syntax_check',
   'fact',
+  // P0-2：语义级规则（解决正则脆弱 —— 写法差异即失分）
+  'ast_pattern',      // {path, pattern}   —— tree-sitter 解析后按节点类型序列匹配（无视空白/引号/顺序）
+  'count_imports',    // {path, module, min} —— 统计 import/require/from 语句中模块出现次数
+  'normalized_text',  // {path, text}     —— 归一化（去全部空白）后包含匹配
 ];
 
 /**
@@ -91,6 +97,32 @@ const FACT_LABELS = {
   hasAxios: 'axios 使用',
   syntaxErrors: '语法错误数',
   syntaxErrorFiles: '语法错误文件',
+  // ---- Java（P0-1）----
+  javaFiles: 'Java 文件数量',
+  javaClasses: 'Java 类',
+  javaImports: 'Java import',
+  packageNames: 'Java 包名',
+  hasSpringBoot: 'Spring Boot 使用',
+  hasSpringMvc: 'Spring MVC 使用',
+  hasMyBatis: 'MyBatis 使用',
+  hasJpa: 'JPA 使用',
+  hasLombok: 'Lombok 使用',
+  controllers: 'Controller 类',
+  apiMappings: '接口映射路径',
+  hasPomXml: 'pom.xml',
+  hasGradle: 'Gradle 构建文件',
+  // ---- Python（P0-1）----
+  pyFiles: 'Python 文件数量',
+  pyClasses: 'Python 类',
+  pyFunctions: 'Python 函数',
+  pyImports: 'Python import',
+  hasFlask: 'Flask 使用',
+  hasDjango: 'Django 使用',
+  hasFastAPI: 'FastAPI 使用',
+  hasPydantic: 'Pydantic 使用',
+  flaskRoutes: 'Flask 路由路径',
+  hasRequirementsTxt: 'requirements.txt',
+  hasPyproject: 'pyproject.toml/setup.py/Pipfile',
 };
 
 /** 数值比较失败时 evidence 展示的真实关系（如 routes>=3 实际 2 → "路由数量 2 < 3"） */
@@ -609,6 +641,148 @@ function execFact(item, params, facts) {
   };
 }
 
+// ==================== P0-2 语义级规则（解决正则脆弱） ====================
+
+/**
+ * 按扩展名选择语言解析器（vue 走 <script> 提取 + JS 解析，与 syntax_check 同语义）。
+ * @param {string} absPath - 文件绝对路径
+ * @returns {object|null} { parser, source } | null
+ */
+function parserForFile(absPath) {
+  const ext = extOf(absPath);
+  if (ext === 'vue') {
+    let content;
+    try { content = fs.readFileSync(absPath, 'utf8'); } catch { return null; }
+    const m = /<script[^>]*>([\s\S]*?)<\/script>/i.exec(content);
+    if (!m) return null;
+    const parser = getJSParser();
+    return { parser, source: m[1] };
+  }
+  if (ext === 'js' || ext === 'mjs' || ext === 'cjs' || ext === 'jsx' || ext === 'ts' || ext === 'tsx') {
+    return { parser: getJSParser(), source: null };
+  }
+  if (ext === 'java') return { parser: getJavaParser(), source: null };
+  if (ext === 'py') return { parser: getPythonParser(), source: null };
+  return null;
+}
+
+/**
+ * 收集 AST 中与 pattern 匹配的节点类型路径序列。
+ * pattern 格式：以 '>' 分隔的节点类型链（如 'class_declaration > method_declaration'），
+ * 匹配 AST 中任意「祖先→后代」链上的类型序列（忽略空白/换行/引号等格式差异）。
+ * @param {object} root - tree-sitter 根节点
+ * @param {string[]} types - pattern 拆出的类型数组
+ * @returns {number} 匹配到的链数量
+ */
+function countAstPatternMatches(root, types) {
+  if (!types || types.length === 0) return 0;
+  let count = 0;
+  const walk = (node) => {
+    if (node.type === types[0]) {
+      if (types.length === 1) {
+        count += 1;
+      } else {
+        const subWalk = (n, depth) => {
+          if (depth >= types.length) return;
+          if (n.type === types[depth]) {
+            if (depth === types.length - 1) count += 1;
+            else for (const c of n.namedChildren) subWalk(c, depth + 1);
+          }
+          for (const c of n.namedChildren) subWalk(c, depth);
+        };
+        for (const c of node.namedChildren) subWalk(c, 1);
+      }
+    }
+    for (const c of node.namedChildren) walk(c);
+  };
+  walk(root);
+  return count;
+}
+
+/**
+ * ast_pattern：{path, pattern} —— tree-sitter 解析后按节点类型链匹配。
+ * pattern 形如 'class_declaration > method_declaration'（> 分隔，忽略格式差异）。
+ * 匹配 ≥ 1 条链 → 满分；否则 0 分。
+ * @returns {{score: number, evidence: string}}
+ */
+function execAstPattern(item, params, projectRoot) {
+  const p = params.path;
+  const pattern = params.pattern;
+  if (typeof p !== 'string' || p.length === 0) return { score: 0, evidence: '缺少参数 path' };
+  if (typeof pattern !== 'string' || pattern.length === 0) return { score: 0, evidence: '缺少参数 pattern' };
+  const abs = resolveWithinRoot(projectRoot, p);
+  if (!abs) return { score: 0, evidence: '路径无效或越界：' + p };
+  const pff = parserForFile(abs);
+  if (!pff) return { score: 0, evidence: '不支持解析该文件类型：' + extOf(abs) };
+  try {
+    let content = pff.source;
+    if (content === null) {
+      const r = readFileUtf8(abs);
+      if (!r.ok) return { score: 0, evidence: '无法读取 ' + p + '：' + r.error };
+      content = r.content;
+    }
+    const tree = pff.parser.parse(content);
+    const types = pattern.split('>').map((x) => x.trim()).filter(Boolean);
+    const count = countAstPatternMatches(tree.rootNode, types);
+    if (count > 0) return { score: item.max_score, evidence: 'AST 匹配 ' + count + ' 处（' + pattern + '）' };
+    return { score: 0, evidence: 'AST 未匹配（' + pattern + '）' };
+  } catch {
+    return { score: 0, evidence: 'AST 解析失败：' + p };
+  }
+}
+
+/**
+ * normalized_text：{path, text} —— 文件内容归一化（去全部空白）后包含 text（同样归一化）。
+ * 解决空格/换行/缩进差异导致的误失分。
+ * @returns {{score: number, evidence: string}}
+ */
+function execCountImports(item, params, projectRoot) {
+  const p = params.path;
+  const moduleName = params.module;
+  if (typeof p !== 'string' || p.length === 0) return { score: 0, evidence: '缺少参数 path' };
+  if (typeof moduleName !== 'string' || moduleName.length === 0) return { score: 0, evidence: '缺少参数 module' };
+  const abs = resolveWithinRoot(projectRoot, p);
+  if (!abs) return { score: 0, evidence: '路径无效或越界：' + p };
+  const r = readFileUtf8(abs);
+  if (!r.ok) return { score: 0, evidence: '无法读取 ' + p + '：' + r.error };
+  // 跨语言 import 语句行扫描（正则字面量，零转义问题）：
+  //   JS: import x from 'm' / require('m') / import('m')
+  //   Java: import m.x.y;
+  //   Python: import m / from m import x
+  //   C/C++: #include <m.h>
+  let count = 0;
+  const srcLines = String(r.content).split('\n');
+  for (const line of srcLines) {
+    const t = line.trim();
+    if (/^(import|require|from|include)\b/.test(t) && t.includes(moduleName)) count += 1;
+  }
+  const min = Number(params.min);
+  const minValue = Number.isFinite(min) ? min : 1;
+  const evidence = 'import 命中 ' + count + ' 次（需 ≥' + minValue + '）';
+  if (count >= minValue) return { score: item.max_score, evidence };
+  if (params.partial === true && minValue > 0) {
+    return { score: Math.round((item.max_score * count) / minValue), evidence };
+  }
+  return { score: 0, evidence };
+}
+
+function execNormalizedText(item, params, projectRoot) {
+  const p = params.path;
+  const text = params.text;
+  if (typeof p !== 'string' || p.length === 0) return { score: 0, evidence: '缺少参数 path' };
+  if (typeof text !== 'string' || text.length === 0) return { score: 0, evidence: '缺少参数 text' };
+  const abs = resolveWithinRoot(projectRoot, p);
+  if (!abs) return { score: 0, evidence: '路径无效或越界：' + p };
+  const r = readFileUtf8(abs);
+  if (!r.ok) return { score: 0, evidence: '无法读取 ' + p + '：' + r.error };
+  const normContent = r.content.replace(/\s+/g, '');
+  const normText = text.replace(/\s+/g, '');
+  if (normContent.includes(normText)) {
+    return { score: item.max_score, evidence: '包含（归一化后）' + text };
+  }
+  return { score: 0, evidence: '未包含（归一化后）' + text };
+}
+
 /**
  * 按 rule_type 分派到对应执行器。
  * @param {object} item - 规则项（已通过校验）
@@ -635,6 +809,12 @@ function executeItem(item, projectRoot, facts) {
       return execSyntaxCheck(item, params, projectRoot);
     case 'fact':
       return execFact(item, params, facts);
+    case 'ast_pattern':
+      return execAstPattern(item, params, projectRoot);
+    case 'count_imports':
+      return execCountImports(item, params, projectRoot);
+    case 'normalized_text':
+      return execNormalizedText(item, params, projectRoot);
     default:
       // 已通过 validateRules，理论不可达；防御性兜底
       return { score: 0, evidence: '不支持的规则类型：' + String(item.rule_type) };
@@ -785,6 +965,17 @@ export function resolveProjectRoot(rootDir) {
     return rootDir;
   }
   if (subdirs.length !== 1) return rootDir;
+
+  // P0-1：清单文件是「工程根」的强信号 —— rootDir 自身含清单（package.json/pom.xml/
+  // build.gradle/requirements.txt/pyproject.toml 等）时，即使只有唯一源码子目录也**不**下钻。
+  // 否则典型 Java 工程（pom.xml + src/）会被误下钻到 src/，清单路径全部失配
+  // （JS 工程 package.json + src/ 同理，属既有潜在缺陷一并修复）。
+  const MANIFEST_NAMES = ['package.json', 'pom.xml', 'build.gradle', 'build.gradle.kts',
+    'requirements.txt', 'pyproject.toml', 'setup.py', 'Pipfile'];
+  const hasRootManifest = MANIFEST_NAMES.some((name) => {
+    try { return fs.statSync(path.join(root, name)).isFile(); } catch { return false; }
+  });
+  if (hasRootManifest) return rootDir;
 
   const candidate = path.join(root, subdirs[0]);
   const hasSource = collectFiles(candidate).some((f) => {

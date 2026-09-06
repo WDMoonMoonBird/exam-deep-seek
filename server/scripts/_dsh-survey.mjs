@@ -1,0 +1,21 @@
+import fs from 'fs';
+import mysql from 'mysql2/promise';
+const env = fs.readFileSync(new URL('../.env', import.meta.url), 'utf8');
+const url = env.match(/DATABASE_URL=([^\s]+)/)[1];
+const conn = await mysql.createConnection({ uri: url });
+const [t1] = await conn.query("SELECT COUNT(*) AS n FROM submissions s JOIN questions q ON s.question_id=q.id WHERE q.type='project'");
+console.log('project submissions:', t1[0].n);
+const [t2] = await conn.query("SELECT q.id, LEFT(q.title,30) AS title, COUNT(s.id) AS subs FROM questions q LEFT JOIN submissions s ON s.question_id=q.id WHERE q.type='project' GROUP BY q.id, q.title ORDER BY subs DESC LIMIT 8");
+console.log('project questions:', JSON.stringify(t2));
+const [t3] = await conn.query('SELECT COUNT(*) AS n FROM submissions');
+console.log('total submissions:', t3[0].n);
+const [t4] = await conn.query('SELECT COUNT(*) AS n FROM submissions WHERE ai_score IS NOT NULL AND ai_score > 0');
+console.log('with ai_score>0:', t4[0].n);
+const [t5] = await conn.query("SELECT q.id AS qid, COUNT(DISTINCT s.student_id) AS students, COUNT(s.id) AS subs FROM questions q JOIN submissions s ON s.question_id=q.id WHERE q.type='project' GROUP BY q.id HAVING subs > 0 ORDER BY subs DESC LIMIT 5");
+console.log('top project q:', JSON.stringify(t5));
+const [t6] = await conn.query("SELECT id, question_id, student_id, status, ai_score FROM submissions WHERE ai_score IS NOT NULL AND ai_score>0 ORDER BY id DESC LIMIT 5");
+console.log('sample scored:', JSON.stringify(t6));
+// 有没有重复提交同一答案的（同 student 同 question 多版本）
+const [t7] = await conn.query("SELECT question_id, COUNT(*) AS dup FROM (SELECT question_id, student_id, answer FROM submissions WHERE question_id IS NOT NULL GROUP BY question_id, student_id, answer HAVING COUNT(*)>1) x GROUP BY question_id LIMIT 5");
+console.log('duplicate answers:', JSON.stringify(t7));
+await conn.end();

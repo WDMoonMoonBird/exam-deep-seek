@@ -13,11 +13,35 @@
 
 ## 🔴 P0 待研究（"脚本功能不满意"的核心）
 
-1. **fact 提取仅 JS（tree-sitter-javascript）**：Java/Python/Go 题没有事实维度，
-   prompt 事实字段清单全是 JS 向 → 模型只能硬写文件/正则规则，质量波动大
-   （355 曾 8 轮最高 61/100 failed；也出现过 100/100 ready，取决于模型发挥）
-2. **正则规则脆弱**：标准包写法差异即失分（如 pom.xml 依赖格式、方法链顺序），
-   校准只能修参数，修不了"规则表达力"上限
+1. ~~**fact 提取仅 JS**~~ → ✅ **P0-1 已交付（2026-08-31，多语言插件架构）**：
+   - factExtractor.js 重构为注册中心：语言检测（扩展名统计 + 清单文件加权）→ 按语言分派 adapter；
+   - 新增 factExtractors/{common,javascript,java,python}.js：javascript 为 v1 逻辑迁入（行为不变，
+     13 原用例全绿）；java（tree-sitter-java：类名/import/包名/@Controller/@RequestMapping 映射/
+     SpringBoot·MyBatis·JPA·Lombok 标志）；python（tree-sitter-python：类/函数/import/@app.route
+     路由/Flask·Django·FastAPI·Pydantic 标志）；
+   - Schema v2：v1 字段全保留 + 24 个语言扩展字段（空目录断言已同步）；
+   - 接线：ruleExecutor.FACT_LABELS 扩展、checkerService FACTS_SCHEMA 按语言注入
+     （buildGenerateUserPrompt 新增 language 参数，generateChecker 检测标准包语言）、
+     ruleMutator.FACT_MUTATION 扩展（9 个新布尔事实变异映射）；
+   - 修复 resolveProjectRoot：清单文件 = 工程根强信号，否则 Java 工程（pom.xml + src/）
+     被误下钻到 src/ 导致清单失配（JS 工程同理，属既有缺陷一并修复）；
+   - 测试：fact-extractor 17/17、rule-executor 57/57、rule-mutator 21/21、checker-service 42/42、
+     全量 736/736（51 suites）全绿；
+   - 遗留：Go 等语言仍无 adapter；355 Java 题真实重测待环境就绪后执行。
+2. ~~**正则规则脆弱**~~ → ✅ **P0-2 已交付（2026-08-31，语义级规则原语）**：
+   - ruleExecutor 新增 3 种语义级规则类型（RULE_TYPES +3）：
+     * ast_pattern{path, pattern}：tree-sitter 解析后按节点类型链匹配（如 "class_declaration > method_declaration"），
+       无视空格/换行/引号/缩进差异——解决方法链顺序、格式风格导致的误失分；
+     * count_imports{path, module, min}：跨语言 import/require/from/include 行统计（行扫描），
+       无视引号风格——解决 pom.xml 依赖格式、import 写法差异；
+     * normalized_text{path, text}：归一化（去空白）后包含匹配——解决声明/配置内容的格式差异；
+   - 多语言解析器复用 P0-1（JS/Vue/Java/Python 自动分派）；
+   - ruleMutator 负例变异扩展：ast_pattern/normalized_text → 删除目标文件；count_imports → 删除 import 行；
+   - checkerService 生成提示词补充语义级规则使用说明（优先于文本级规则）；
+   - 测试：rule-executor 61/61（+4 新用例：格式差异匹配/跨语言 import/归一化/白名单）、
+     rule-mutator 21/21、checker-service 42/42、fact-extractor 17/17、全量 736/736 全绿；
+   - 遗留：AST 语义 diff/embedding 相似度（研究方向 3）未做；ast_pattern 目前匹配节点类型链，
+     不做语义等价判定（两个方法体不同但同名仍匹配）。
 3. **研究方向**（未定稿）：
 
 ## ✅ Team A 已交付（2026-08-18，规则验证升级）

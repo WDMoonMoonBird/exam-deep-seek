@@ -40,7 +40,9 @@
     "qrcode": "^1.5.4",
     "socket.io": "^4.8.3",
     "tree-sitter": "^0.25.1",
+    "tree-sitter-java": "^0.23.5",
     "tree-sitter-javascript": "^0.25.0",
+    "tree-sitter-python": "^0.25.0",
     "tree-sitter-vue": "^0.2.1"
   },
   "devDependencies": {
