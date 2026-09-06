@@ -19,6 +19,7 @@ import path from 'path';
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
 import { gradeProject, selectImportantFiles, getProjectContextMode } from './deepseek.js';
+import { gradeProjectTrustJudge } from './trustJudgeGrader.js';
 import {
   buildFileTree,
   filterProjectFiles,
@@ -375,17 +376,22 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
       logger.info({ submissionId, mode: ctx.info.mode, pickedCount: ctx.info.pickedCount || 0 }, '实训题评分：上下文构建完成');
     }
 
+    // GRADING_MODE 开关：trustjudge → TrustJudge sidecar（sidecar 故障自动降级 legacy）；默认 legacy
+    const gradingMode = process.env.GRADING_MODE === 'trustjudge' ? 'trustjudge' : 'legacy';
+    const gradeArgs = {
+      title: sub.question.title || '未命名项目',
+      description: sub.question.material || '',
+      scoringRubric: sub.question.scoringRubric || '',
+      standardFiles,
+      studentFiles,
+    };
     let result;
     try {
-      result = await gradeProject({
-        title: sub.question.title || '未命名项目',
-        description: sub.question.material || '',
-        scoringRubric: sub.question.scoringRubric || '',
-        standardFiles,
-        studentFiles,
-      });
+      result = gradingMode === 'trustjudge'
+        ? await gradeProjectTrustJudge(gradeArgs)
+        : await gradeProject(gradeArgs);
     } catch (aiErr) {
-      logger.error({ err: aiErr, submissionId }, '实训题评分：AI 调用失败，标记失败');
+      logger.error({ err: aiErr, submissionId, gradingMode }, '实训题评分：AI 调用失败，标记失败');
       await markFailed(submissionId, 'AI 评分服务异常');
       return;
     }
@@ -424,7 +430,7 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
     });
 
     logger.info(
-      { submissionId, aiScore, elapsed: `${Date.now() - start}ms` },
+      { submissionId, aiScore, gradingMode, elapsed: `${Date.now() - start}ms` },
       '实训题 AI 评分完成',
     );
   } catch (err) {

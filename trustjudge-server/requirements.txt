@@ -1,0 +1,8 @@
+# TrustJudge scoring sidecar — lightweight API-mode dependencies only.
+# Intentionally NO vllm / torch / transformers: grading runs through the
+# DeepSeek OpenAI-compatible API with logprobs/top_logprobs.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+openai>=1.40
+python-dotenv>=1.0
+httpx>=0.27
