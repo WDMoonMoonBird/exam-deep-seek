@@ -54,9 +54,21 @@
 | 前置 | rebase 到 master（`152ec99`） | ✅ 已完成 |
 | **Wave 0** | 令牌 + antd 主题桥 + 全局覆盖层（视觉零变化） | ✅ 已完成 |
 | **试点页** | 教师端「作业管理」（KPI / 服务端筛选 / 真实进度 / 状态语义） | ✅ 已完成，真实运行验证通过 |
-| Wave 1 | AppShell + PageShell + ListPage，迁移 13 个列表页；侧栏分组与待审核徽标；切全局尺度（14px / 圆角 12） | 🔄 进行中（团队 `ui-wave1`，6 任务；契约见 [09-wave1-brief.md](./09-wave1-brief.md)，T1 已抽验通过） |
+| Wave 1 | AppShell + PageShell + ListPage，迁移 13 个列表页；侧栏分组与待审核徽标；切全局尺度（14px / 圆角 12） | 🔄 进行中（团队 `ui-wave1`；契约见 [09-wave1-brief.md](./09-wave1-brief.md)；T1/T2/T3/T5/T7/T8/T9 已抽验通过，剩 T4 管理端 5 页 + T6 独立验收） |
 | Wave 2 | 表单页模板 + ConfirmDialog + 自动保存统一 | ⏳ |
 | Wave 3 | 工作台/作答页（Monaco 三页，先冻交互契约） | ⏳ |
 | Wave 4 | Doc/Login、深色模式、移动端断点收尾 | ⏳ |
 
 **验收方式**：`cd Exam-DeepSeek-ui/client && npm run dev` → 打开 http://localhost:5174/exam/ 用教师账号进入「作业管理」；5173 是同机的旧 UI，可直接对比。
+
+## 收口池（captain 维护 · 已知但**有意暂缓**的项）
+
+> 这些是各任务执行中暴露、但**不属于当前批次**的问题。集中记在这里，避免散落在各成员的 output 里被遗忘。
+
+| # | 项 | 来源 | 归属 |
+|---|---|---|---|
+| R-1 | `api/request.js` 提供 `silent` 选项，替换 Layout 中派生的 axios 实例（约 15 行重复鉴权逻辑）；同时解决试点页 KPI 请求失败仍弹提示的问题 | T2 契约边界限制 | Wave 2 |
+| R-2 | 顶栏容器与折叠按钮的文字色未走令牌（沿用 antd 默认 `rgba(0,0,0,.88)`）——实测写成 `--text-primary` 反而会与 legacy 产生偏差，故暂不强制 | T8 实测结论 | Wave 4 令牌纯度 |
+| R-3 | 逐页 legacy（Chrome 69）像素级扫描：学生页内容区曾出现 1 字节截图差异（12 项计算样式一致 → 判定瞬态） | T8 顺带发现 | Wave 4（页面冻结后） |
+| R-4 | 时间格式统一为 `YYYY-MM-DD HH:mm`（现为 `2026/8/24 19:01`）；`formatDateTime` 被 20+ 页使用，需一次性切换 | Wave 0 已知差异 | Wave 1 收尾 / Wave 4 |
+| R-5 | P1-7（7 个列表接口服务端分页）到位后，切换 admin 4 页与 teacher classes/students/teams 的前端切片（代码中已标 `TODO(P1-7)`） | 后端未交付 | 依赖后端 |
