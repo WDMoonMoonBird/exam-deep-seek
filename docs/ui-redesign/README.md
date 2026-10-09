@@ -80,4 +80,5 @@
 | R-11 | 剩余等值令牌字号：`RichEditor.vue` 6 处 + `ProjectZipUploader.vue` 6 处（未纳入任何 Wave 2 任务） | captain 全站扫描 | Wave 3/4 |
 | R-12 | `useConfirm` 缺可选参数 `width` / `maskClosable` / `closable`：QuestionEdit 两处确认框因此丢失 `width:560`（分值表仍正常渲染，默认 520 与原 560 差异极小） | t14 声明 | Wave 3 或收尾（届时页面回收该设置） |
 | R-13 | 字阶下沿缺口：`10px×2` 与 `11px×6` 无对应令牌（按规则保留字面量）；评估是否新增 `--fs-caption-sm` 之类 | t14 字号清单 | Wave 4 评估 |
-| R-14 | Modal 宽度未收敛到设计三档（小 480 / 中 640 / 大 820）且存在字符串写法（`"720px"`/`"820px"`，设计稿明令禁止混写）：QuestionEdit 760/520、ProjectQuestionEdit 720px、ReviewDetail 820px、ProjectReviewNew 820px、teacher/Layout 420/1040（1040 为 AI 评分流程内容型弹窗，评估是否保留为例外） | captain 抽验 t14/t15 时发现 | Wave 3 一并收口（Wave 3 会动后两者） |
+| R-14 | Modal 宽度未收敛到设计三档（小 480 / 中 640 / 大 820）且存在字符串写法（\"720px\"/\"820px\"，设计稿明令禁止混写）：QuestionEdit 760/520、ProjectQuestionEdit 720px、ReviewDetail 820px、ProjectReviewNew 820px、teacher/Layout 420/1040（1040 为 AI 评分流程内容型弹窗，评估是否保留为例外） | captain 抽验 t14/t15 时发现 | Wave 3 一并收口（Wave 3 会动后两者） |
+| R-15 | 对话框文案未全程动词化：6 处声明式 \`a-modal\` 的 \`ok-text="确定"\`（admin/Students:37、admin/Teachers:48、admin/Classes:43、teacher/Students:67、teacher/Classes:51、teacher/Teams:51）+ teacher/Classes:62「确定切换」+ QuestionEdit:66/135 两处 popconfirm \`title="确定删除？" ok-text="确定"\` | T16 §13①② | Wave 3 一并收口 |
