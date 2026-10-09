@@ -74,7 +74,17 @@
       </div>
       <!-- 右侧评分面板（Workbench 壳：≥1200px 常驻右栏；<1200px 抽屉化） -->
       <aside class="wb-right pr-panel" :class="{ 'is-collapsed': collapsed, open: panelOpen }" aria-label="评分面板">
-      <div class="panel-header" @click="collapsed = !collapsed">
+      <div
+        class="panel-header"
+        role="button"
+        tabindex="0"
+        :aria-expanded="collapsed ? 'false' : 'true'"
+        aria-controls="pr-score-panel"
+        @mousedown.prevent
+        @click="collapsed = !collapsed"
+        @keydown.enter.prevent="collapsed = !collapsed"
+        @keydown.space.prevent="collapsed = !collapsed"
+      >
         <span class="panel-arrow" :class="{ open: !collapsed }">▸</span>
         <span class="panel-title">评分面板</span>
         <a-tag v-if="aiScore != null" color="green" size="small">AI {{ aiScore }} 分</a-tag>
@@ -85,7 +95,7 @@
       </div>
 
       <Transition name="panel-slide">
-      <div class="panel-body" v-if="!collapsed">
+      <div class="panel-body" v-show="!collapsed" id="pr-score-panel">
         <!-- 左：AI 区（只读） -->
         <div class="ai-section">
           <div class="ai-head">
@@ -709,6 +719,7 @@ onBeforeUnmount(() => {
 .wb-mid { flex: 1 1 auto; min-width: 0; }
 .wb-right {
   flex: 0 0 384px; width: 384px; min-width: 0;
+  transition: flex-basis var(--duration-base) var(--ease-out), width var(--duration-base) var(--ease-out);
   background: var(--bg-surface);
   border-top: none; border-left: 1px solid var(--border-default);
   overflow: hidden;
@@ -719,6 +730,10 @@ onBeforeUnmount(() => {
 .wb-right.is-collapsed .panel-header .ant-tag,
 .wb-right.is-collapsed .panel-header .panel-title,
 .wb-right.is-collapsed .panel-header .panel-toggle { display: none; }
+/* 折叠/展开：Vue Transition（.panel-slide-*）+ 列宽过渡，时长与缓动走令牌 */
+.panel-slide-enter-active, .panel-slide-leave-active { transition: opacity var(--duration-base) var(--ease-out); }
+.panel-slide-enter-from, .panel-slide-leave-to { opacity: 0; }
+.panel-header:focus { outline: none; box-shadow: var(--ring-focus); }
 /* 384px 栏宽内竖排（纯布局，不改任何交互与请求） */
 .wb-right .panel-body { flex: 1; min-height: 0; height: auto; flex-direction: column; overflow-y: auto; }
 .wb-right .ai-section { flex: 0 0 auto; width: 100%; border-right: none; border-bottom: 1px solid var(--border-subtle); }

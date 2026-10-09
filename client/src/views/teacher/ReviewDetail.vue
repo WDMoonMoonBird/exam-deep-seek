@@ -156,12 +156,22 @@
       </div>
 
       <!-- 右侧评分面板（Workbench 壳：≥1200px 常驻右栏；<1200px 抽屉化） -->
-      <aside class="wb-right" :class="{ open: panelOpen }" aria-label="评分面板">
+      <aside class="wb-right" :class="{ open: panelOpen, 'is-collapsed': collapsed }" aria-label="评分面板">
         <div class="wb-right-head">
           <span class="wb-right-title">评分面板</span>
-          <a-button type="link" size="small" @click="panelOpen = false">收起</a-button>
+          <button
+            type="button"
+            class="wb-collapse-btn"
+            :aria-expanded="collapsed ? 'false' : 'true'"
+            aria-controls="rp-score-panel"
+            :aria-label="collapsed ? '展开评分面板' : '收起评分面板'"
+            @mousedown.prevent
+            @click="collapsed = !collapsed"
+          >{{ collapsed ? '展开' : '收起' }}</button>
+          <a-button v-if="narrow" type="link" size="small" @click="panelOpen = false">关闭</a-button>
         </div>
-        <div class="wb-right-body">
+        <Transition name="wb-panel">
+        <div v-show="!collapsed" id="rp-score-panel" class="wb-right-body">
           <template v-for="(sq, i) in subQuestions" :key="'pn-' + sq.id">
             <div v-if="(sq.type === 'code' || !sq.type) && getSub(sq.id)" class="wb-panel-section">
               <div class="wb-panel-head">第 {{ i + 1 }} 小题 · {{ sq.score }} 分</div>
@@ -197,9 +207,10 @@
             </div>
           </template>
         </div>
+        </Transition>
       </aside>
 
-      <button v-if="narrow" type="button" class="wb-drawer-toggle" @click="panelOpen = !panelOpen">
+      <button v-if="narrow" type="button" class="wb-drawer-toggle" aria-controls="rp-score-panel" :aria-expanded="panelOpen ? 'true' : 'false'" @click="panelOpen = !panelOpen">
         {{ panelOpen ? '收起评分面板' : '评分面板' }}
       </button>
     </div>
@@ -237,6 +248,8 @@ const { confirm } = useConfirm();
 /** Workbench 壳：<1200px 时右栏评分面板抽屉化（纯布局，不改任何交互与请求） */
 const narrow = ref(false);
 const panelOpen = ref(false);
+/** 右栏评分面板折叠（≥1200px 生效；宽度方向过渡，终值 384 → 44） */
+const collapsed = ref(false);
 let shellMq = null;
 function onShellMq(e) { narrow.value = e.matches; if (!e.matches) panelOpen.value = false; }
 
@@ -898,6 +911,7 @@ onUnmounted(() => {
 .wb-mid { flex: 1 1 auto; min-width: 0; }
 .wb-right {
   flex: 0 0 384px; width: 384px; min-width: 0;
+  transition: flex-basis var(--duration-base) var(--ease-out), width var(--duration-base) var(--ease-out);
   display: flex; flex-direction: column;
   background: var(--bg-surface);
   border-left: 1px solid var(--border-default);
@@ -911,6 +925,23 @@ onUnmounted(() => {
 .wb-right-title { font-size: var(--fs-body-sm); font-weight: 600; color: var(--text-secondary); }
 .wb-right-head .ant-btn { margin-left: auto; }
 .wb-right-body { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-3); }
+.wb-right.is-collapsed { flex: 0 0 44px; width: 44px; }
+.wb-right.is-collapsed .wb-right-head { flex-direction: column; align-items: center; padding: 10px 6px; }
+.wb-right.is-collapsed .wb-right-title { display: none; }
+.wb-collapse-btn {
+  margin-left: auto;
+  height: var(--control-h-sm);
+  padding: 0 var(--space-2);
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--fs-caption);
+  cursor: pointer;
+}
+.wb-collapse-btn:hover { background: var(--bg-hover); }
+.wb-panel-enter-active, .wb-panel-leave-active { transition: opacity var(--duration-base) var(--ease-out); }
+.wb-panel-enter-from, .wb-panel-leave-to { opacity: 0; }
 .wb-panel-section + .wb-panel-section { margin-top: var(--space-3); }
 .wb-panel-head { margin-bottom: 6px; font-size: var(--fs-caption); font-weight: 600; color: var(--text-tertiary); }
 .wb-final-score { width: 90px; margin-left: auto; }
@@ -927,6 +958,9 @@ onUnmounted(() => {
     box-shadow: var(--shadow-lg);
   }
   .wb-right.open { transform: translateX(0); }
+  .wb-right.is-collapsed { flex: none; width: 384px; }
+  .wb-right.is-collapsed .wb-right-head { flex-direction: row; align-items: center; padding: 10px 14px; }
+  .wb-right.is-collapsed .wb-right-title { display: inline; }
   .wb-drawer-toggle {
     display: inline-flex; align-items: center; gap: var(--space-1);
     position: fixed; right: var(--space-4); bottom: var(--space-4); z-index: var(--z-sticky);
