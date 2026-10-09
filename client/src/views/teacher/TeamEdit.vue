@@ -1,11 +1,10 @@
 <template>
-  <div class="page">
-    <div class="page-header">
-      <a-button type="link" @click="$router.push('/teacher/teams')" class="back-btn">← 返回</a-button>
-      <h2>{{ team.name }}</h2>
-    </div>
-
-    <a-card class="page-card" :bodyStyle="{ padding: '24px' }">
+  <FormPage
+    :title="team.name || '教学团队'"
+    description="维护团队成员与共享班级；改动会自动保存。"
+    :back="{ text: '返回教学团队', to: '/teacher/teams' }"
+  >
+    <a-card class="team-card" :bodyStyle="{ padding: 'var(--space-6)' }">
       <a-tabs v-model:activeKey="tab">
         <a-tab-pane key="teachers" tab="教师管理">
           <div class="mb16">
@@ -14,7 +13,7 @@
               mode="multiple"
               showSearch
               placeholder="搜索并添加同校教师"
-              style="width:100%"
+              class="w-full"
               :filterOption="filterTeacher"
               :options="teacherOptions"
               :maxTagCount="0"
@@ -25,10 +24,10 @@
           <a-table :columns="tCols" :dataSource="team.teachers || []" rowKey="teacherId" size="small" :pagination="false">
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'name'">{{ record.teacher?.realName }}</template>
-              <template v-if="column.key === 'username'">{{ record.teacher?.username }}</template>
-              <template v-if="column.key === 'role'">{{ record.teacherId === team.createdBy ? '创建者' : '教师' }}</template>
-              <template v-if="column.key === 'action'">
-                <a-popconfirm title="确定移除该教师？" ok-text="确定" cancel-text="取消" @confirm="removeTeacher(record.teacherId)" :disabled="record.teacherId === team.createdBy">
+              <template v-else-if="column.key === 'username'">{{ record.teacher?.username }}</template>
+              <template v-else-if="column.key === 'role'">{{ record.teacherId === team.createdBy ? '创建者' : '教师' }}</template>
+              <template v-else-if="column.key === 'action'">
+                <a-popconfirm title="确定移除该教师？" ok-text="移除" cancel-text="取消" @confirm="removeTeacher(record.teacherId)" :disabled="record.teacherId === team.createdBy">
                   <a-button type="link" danger size="small" :disabled="record.teacherId === team.createdBy">移除</a-button>
                 </a-popconfirm>
               </template>
@@ -43,7 +42,7 @@
               mode="multiple"
               showSearch
               placeholder="搜索并添加班级"
-              style="width:100%"
+              class="w-full"
               :filterOption="filterClass"
               :options="classOptions"
               :maxTagCount="0"
@@ -54,12 +53,12 @@
           <a-table :columns="cCols" :dataSource="team.classes || []" rowKey="classId" size="small" :pagination="false">
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'cname'">{{ record.class?.name }}</template>
-              <template v-if="column.key === 'cowner'">
-                <a-tag v-if="record.classId && !myClassIds.includes(record.classId)" color="purple" size="small">他人</a-tag>
-                <span v-else style="color:var(--ink-muted)">自己</span>
+              <template v-else-if="column.key === 'cowner'">
+                <StatusTag v-if="record.classId && !myClassIds.includes(record.classId)" tone="accent" text="他人" />
+                <span v-else class="dim-text">自己</span>
               </template>
-              <template v-if="column.key === 'action'">
-                <a-popconfirm title="确定移除该班级？" ok-text="确定" cancel-text="取消" @confirm="removeClass(record.classId)">
+              <template v-else-if="column.key === 'action'">
+                <a-popconfirm title="确定移除该班级？" ok-text="移除" cancel-text="取消" @confirm="removeClass(record.classId)">
                   <a-button type="link" danger size="small">移除</a-button>
                 </a-popconfirm>
               </template>
@@ -68,18 +67,27 @@
         </a-tab-pane>
       </a-tabs>
     </a-card>
-  </div>
+
+    <template #actionbar>
+      <span class="save-status" role="status" aria-live="polite">{{ statusText }}</span>
+    </template>
+  </FormPage>
 </template>
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
-import { message, Modal } from 'ant-design-vue';
+import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
 import { useUserStore } from '../../stores/user.js';
+import { useConfirm } from '../../composables/useConfirm.js';
+import { useDraftAutosave } from '../../composables/useDraftAutosave.js';
+import FormPage from '../../components/FormPage.vue';
+import StatusTag from '../../components/StatusTag.vue';
 
 const route = useRoute();
 const userStore = useUserStore();
+const { confirm } = useConfirm();
 const team = reactive({ name: '', teachers: [], classes: [], createdBy: null });
 const tab = ref('teachers');
 
@@ -98,12 +106,12 @@ const tCols = [
   { title: '姓名', key: 'name', width: 120 },
   { title: '工号', key: 'username', width: 140 },
   { title: '角色', key: 'role', width: 80 },
-  { title: '操作', key: 'action', width: 80 },
+  { title: '操作', key: 'action', width: 80, align: 'right' },
 ];
 const cCols = [
   { title: '班级名称', key: 'cname', width: 180, ellipsis: true },
   { title: '归属教师', key: 'cowner', width: 100 },
-  { title: '操作', key: 'action', width: 80 },
+  { title: '操作', key: 'action', width: 80, align: 'right' },
 ];
 
 async function fetch() {
@@ -122,30 +130,31 @@ async function loadClasses() {
   myClassIds.value = (r.data || []).filter(c => !c.isTeamClass).map(c => c.id);
 }
 
-let teacherTimer = null;
-function scheduleSaveTeachers() {
-  clearTimeout(teacherTimer);
-  teacherTimer = setTimeout(async () => {
-    const ids = [...new Set([team.createdBy, ...selectedTeachers.value])];
-    await request.put(`/teacher/teams/${route.params.id}`, { teacherIds: ids });
-    message.success('教师已更新');
-    fetch();
-  }, 300);
+/** 教师名单保存（原 300ms 防抖 → useDraftAutosave，delay 原样保留） */
+async function saveTeachers() {
+  const ids = [...new Set([team.createdBy, ...selectedTeachers.value])];
+  await request.put(`/teacher/teams/${route.params.id}`, { teacherIds: ids });
+  message.success('教师已更新');
+  fetch();
 }
+const teacherSaver = useDraftAutosave({ save: saveTeachers, delay: 300 });
+
+/** 共享班级保存（同上） */
+async function saveClasses() {
+  await request.put(`/teacher/teams/${route.params.id}`, { classIds: selectedClasses.value });
+  message.success('班级已更新');
+  fetch();
+}
+const classSaver = useDraftAutosave({ save: saveClasses, delay: 300 });
+
+function scheduleSaveTeachers() { teacherSaver.schedule(); }
+function scheduleSaveClasses() { classSaver.schedule(); }
+
 function removeTeacher(tid) {
   selectedTeachers.value = selectedTeachers.value.filter(id => id !== tid);
   scheduleSaveTeachers();
 }
 
-let classTimer = null;
-function scheduleSaveClasses() {
-  clearTimeout(classTimer);
-  classTimer = setTimeout(async () => {
-    await request.put(`/teacher/teams/${route.params.id}`, { classIds: selectedClasses.value });
-    message.success('班级已更新');
-    fetch();
-  }, 300);
-}
 function removeClass(cid) {
   selectedClasses.value = selectedClasses.value.filter(id => id !== cid);
   scheduleSaveClasses();
@@ -154,14 +163,39 @@ function removeClass(cid) {
 function onTeacherSelect() { scheduleSaveTeachers(); }
 function onClassSelect() { scheduleSaveClasses(); }
 
+/** 动作条状态文本：任一通道同步中/失败优先，否则显示最近一次成功时间 */
+const statusText = computed(() => {
+  const states = [teacherSaver.status.value, classSaver.status.value];
+  if (states.includes('saving')) return '同步中…';
+  if (states.includes('error')) return '同步失败';
+  const last = [teacherSaver.lastSavedAt.value, classSaver.lastSavedAt.value].filter(Boolean).sort((a, b) => b - a)[0];
+  if (last) return '已同步 ' + last.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  return '改动会自动保存';
+});
+
+function teacherLabel(id) {
+  return (team.teachers || []).find(t => t.teacherId === id)?.teacher?.realName
+    || allTeachers.value.find(t => t.id === id)?.realName
+    || '该教师';
+}
+function classLabel(id) {
+  return (team.classes || []).find(c => c.classId === id)?.class?.name
+    || avalClasses.value.find(c => c.id === id)?.name
+    || '该班级';
+}
+
 // 拦截下拉框取消选中，弹确认后走表格移除逻辑
 watch(selectedTeachers, (nv, ov) => {
   if (nv.length < ov.length) {
     const removed = ov.find(id => !nv.includes(id));
     if (removed) {
       selectedTeachers.value = ov; // 先恢复
-      Modal.confirm({
-        title: '确定移除该教师？',
+      confirm({
+        title: '移除团队教师',
+        content: `将把「${teacherLabel(removed)}」移出本团队，其对团队共享班级与题库的权限立即失效（可随时重新添加）。`,
+        okText: '移除教师',
+        cancelText: '取消',
+        danger: true,
         onOk: () => { removeTeacher(removed); },
       });
     }
@@ -169,11 +203,15 @@ watch(selectedTeachers, (nv, ov) => {
 });
 watch(selectedClasses, (nv, ov) => {
   if (nv.length < ov.length) {
-    const removed = ov.find(id => !nv.includes(id));
+    const removed = ov.find(n => !nv.includes(n));
     if (removed) {
       selectedClasses.value = ov;
-      Modal.confirm({
-        title: '确定移除该班级？',
+      confirm({
+        title: '移除共享班级',
+        content: `将把「${classLabel(removed)}」移出本团队，团队教师不再共享该班级的数据（可随时重新添加）。`,
+        okText: '移除班级',
+        cancelText: '取消',
+        danger: true,
         onOk: () => { removeClass(removed); },
       });
     }
@@ -184,10 +222,20 @@ onMounted(() => { fetch(); loadTeachers(); loadClasses(); });
 </script>
 
 <style scoped>
-.page { max-width: 1400px; }
-.page-header { display: flex; align-items: center; gap: 16px; margin-bottom: 32px; }
-.page-header h2 { font-size: 28px; margin: 0; }
-.page-card { border: 1px solid var(--hairline); }
-.mb16 { margin-bottom: 16px; }
-.back-btn { font-size: 16px; padding: 0; }
+.team-card {
+  border: 1px solid var(--card-bd);
+}
+.mb16 {
+  margin-bottom: var(--space-4);
+}
+.w-full {
+  width: 100%;
+}
+.dim-text {
+  color: var(--text-tertiary);
+}
+.save-status {
+  font-size: var(--fs-body-sm);
+  color: var(--text-tertiary);
+}
 </style>

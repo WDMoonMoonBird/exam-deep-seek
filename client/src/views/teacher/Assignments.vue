@@ -128,7 +128,7 @@
       </template>
     </ListPage>
 
-    <a-modal title="布置作业" :open="visible" @cancel="visible = false" :width="1040" :footer="null" :destroyOnClose="true" wrap-class-name="assign-modal">
+    <a-modal title="布置作业" :open="visible" @cancel="visible = false" :width="820" :footer="null" :destroyOnClose="true" wrap-class-name="assign-modal">
       <a-steps :current="step" class="steps">
         <a-step title="选题" /><a-step title="选班" /><a-step title="设置时间" />
       </a-steps>
@@ -193,7 +193,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, h } from 'vue';
-import { message, Modal } from 'ant-design-vue';
+import { message } from 'ant-design-vue';
 import { CheckOutlined, LockOutlined } from '@ant-design/icons-vue';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
@@ -202,9 +202,13 @@ import request from '../../api/request.js';
 import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
 import StatusTag from '../../components/StatusTag.vue';
+import { useConfirm } from '../../composables/useConfirm.js';
 import { formatDateTime, difficultyText, deadlineInfo, timeStatus } from '../../domain/format.js';
 
 dayjs.locale('zh-cn');
+
+/** 命令式确认框（Wave 2 构件 useConfirm）：替代原 antd 命令式调用，行为等价 */
+const { confirm } = useConfirm();
 
 // ===================== 列表（Wave 1 试点：服务端筛选 + 真实进度 + 状态语义） =====================
 const loading = ref(false);
@@ -407,7 +411,7 @@ async function submit() {
     if (resp?.code !== 1007 || !resp?.data?.requiresConfirmation) return;
     const warnings = resp.data.warnings || [];
     const names = warnings.map(w => w.title).join('、');
-    Modal.confirm({
+    confirm({
       title: '确认按开放性题目布置',
       content: h('div', { style: 'line-height:1.7' }, [
         h('div', '以下题目未上传标准工程包，AI 将仅依据评分标准做评价式评分（不与参考答案对比）：' + names + '。确认按开放性题目布置？'),
@@ -461,12 +465,12 @@ function onPracticeToggle(checked) {
     ),
   ]);
 
-  Modal.confirm({
+  confirm({
     title: '开启练习模式',
     content,
-    okText: '确定开启',
+    okText: '开启练习模式',
     cancelText: '取消',
-    width: 480,
+    danger: true,   // 开启后无法切回考试模式（不可逆）
     onOk: () => { timeForm.isPractice = true; },
   });
 }
@@ -482,7 +486,7 @@ onMounted(async () => {
 .kpi-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); margin-bottom: var(--space-4); }
 .kpi { padding: 16px 18px; background: var(--card-bg); border: 1px solid var(--card-bd); border-radius: var(--card-radius); }
 .kpi-label { font-size: var(--fs-body-sm); color: var(--text-secondary); }
-.kpi-value { margin-top: 6px; font-size: 26px; line-height: 1.2; font-weight: 600; letter-spacing: -0.02em; color: var(--text-strong); }
+.kpi-value { margin-top: 6px; font-size: var(--fs-display-2); line-height: 1.2; font-weight: 600; letter-spacing: -0.02em; color: var(--text-strong); }
 .kpi-value.tone-warn { color: var(--amber-700); }
 .kpi-value small { margin-left: 4px; font-size: var(--fs-body-sm); font-weight: 400; color: var(--text-tertiary); }
 .kpi-sub { margin-top: 4px; font-size: var(--fs-caption); color: var(--text-tertiary); }
@@ -499,7 +503,7 @@ onMounted(async () => {
 .cell-title { display: flex; align-items: center; gap: 6px; font-weight: 500; color: var(--text-strong); }
 .cell-title .ellipsis { max-width: 200px; }
 .cell-sub { margin-top: 3px; font-size: var(--fs-caption); color: var(--text-tertiary); }
-.lock-icon { color: var(--red-600); font-size: 12px; }
+.lock-icon { color: var(--red-600); font-size: var(--fs-caption); }
 
 /* 超出 2 个班级后的「+N」计数片（不是状态，走描边样式） */
 .chip-more { display: inline-flex; align-items: center; height: var(--tag-h); padding: 0 var(--tag-pad-x); margin-right: 4px; border-radius: var(--tag-radius); border: 1px solid var(--border-strong); color: var(--text-secondary); font-size: var(--tag-fs); white-space: nowrap; }
@@ -526,11 +530,11 @@ onMounted(async () => {
 .step-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 32px; }
 .class-pick { display: flex; gap: 12px; }
 .pick-panel { flex: 1; min-width: 0; }
-.pick-panel-title { font-weight: 600; margin-bottom: 8px; font-size: 14px; }
+.pick-panel-title { font-weight: 600; margin-bottom: 8px; font-size: var(--fs-body); }
 .pick-list { margin-top: 8px; max-height: 260px; overflow-y: auto; }
-.pick-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; cursor: pointer; border-radius: var(--radius-xs); font-size: 13px; }
+.pick-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; cursor: pointer; border-radius: var(--radius-xs); font-size: var(--fs-body-sm); }
 .pick-item:hover { background: var(--brand-50); }
 .pick-item.on { background: var(--brand-50); color: var(--brand-700); }
-.pick-check { font-size: 12px; }
+.pick-check { font-size: var(--fs-caption); }
 .pick-team { font-size: var(--fs-caption); }
 </style>

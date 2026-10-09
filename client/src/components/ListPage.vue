@@ -12,7 +12,7 @@
     <a-table
       class="tbl"
       :columns="columns"
-      :data-source="dataSource"
+      :data-source="errorMessage ? [] : dataSource"
       :row-key="rowKey"
       :loading="loading"
       :pagination="false"
@@ -23,9 +23,21 @@
         <slot name="bodyCell" v-bind="cellProps || {}" />
       </template>
 
-      <!-- 空态三件套（标题 / 描述 / 主操作），emptyActionText 为空时只显示文案 -->
+      <!-- 错误态优先（传 error 才出现；表头保留、表体换成「错误文案 + 重试」），
+           未传 error 时走下面的空态三件套，与 Wave 1 行为完全一致 -->
       <template #emptyText>
-        <div class="empty">
+        <template v-if="errorMessage">
+          <slot name="error" :message="errorMessage" :retry="retry">
+            <div class="errored" role="alert">
+              <div class="errored-title">{{ errorMessage }}</div>
+              <div class="errored-desc">数据加载失败，可重试或稍后再试。</div>
+              <a-button @click="retry">重试</a-button>
+            </div>
+          </slot>
+        </template>
+
+        <!-- 空态三件套（标题 / 描述 / 主操作），emptyActionText 为空时只显示文案 -->
+        <div v-else class="empty">
           <div class="empty-title">{{ emptyTitle }}</div>
           <div v-if="emptyDesc" class="empty-desc">{{ emptyDesc }}</div>
           <a-button v-if="emptyActionText" type="primary" @click="emit('empty-action')">
@@ -35,15 +47,17 @@
       </template>
     </a-table>
 
-    <div class="table-foot">
+    <div v-if="showFoot" class="table-foot">
       <span>第 {{ current }} 页 · 每页 {{ pageSize }} 条</span>
       <a-pagination
         :current="current"
         :page-size="pageSize"
         :total="total"
-        :show-size-changer="false"
+        :show-size-changer="showSizeChanger"
+        :page-size-options="pageSizeOptions"
         size="small"
         @change="onPageChange"
+        @showSizeChange="onSizeChange"
       />
     </div>
   </div>
@@ -60,8 +74,16 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
  * props：columns / dataSource / loading / rowKey / total / current / pageSize
  *        / emptyTitle / emptyDesc / emptyActionText
  *        / stickyContainer（选择器字符串 或 HTMLElement；默认 null → 解析 '.content'）
+ *        / showSizeChanger（每页条数切换，默认 false）· pageSizeOptions（默认 [20,50,100]）
+ *        / hideOnSinglePage（单页时整条分页栏不渲染，默认 false）
+ *        / error（Wave 2 R-10：传错误文案即启用页内错误态 + 重试，空/不传 = 关闭）
  * slots：toolbar(左) / toolbar-right(右) / bodyCell(原样透传给 a-table)
+ *        / error（错误态自定义，作用域参数 { message, retry }）
  * events：page-change(页码) / empty-action / change(a-table 的 pagination, filters, sorter 原样透传)
+ *        / size-change(新每页条数, 新页码) · update:pageSize(支持 v-model:page-size) · retry(错误态重试)
+ *
+ * **向后兼容**：showSizeChanger / hideOnSinglePage / error 三项默认关闭，13 个列表页不传即保持
+ * Wave 1 行为（分页栏常显、无每页条数切换、空态三件套不变）。
  * 说明：**不内置任何请求逻辑**，只通过 @page-change 抛出页码，由页面自行取数。
  *
  * 粘性表头：走 antd 的 :sticky，显式传 getContainer（本应用滚动宿主是 Layout 的
@@ -83,12 +105,43 @@ const props = defineProps({
   emptyActionText: { type: String, default: '' },
   /** 粘性表头的滚动宿主：选择器字符串 / HTMLElement / null（默认 null → 解析 '.content'） */
   stickyContainer: { type: [String, Object], default: null },
+  /** 每页条数切换（R-9）：默认 false —— 13 个列表页现状不变 */
+  showSizeChanger: { type: Boolean, default: false },
+  /** 可选每页条数（R-9）；admin/Schools 传 [20, 50, 100, 200] 即接回原页面的兜底 a-select */
+  pageSizeOptions: { type: Array, default: () => [20, 50, 100] },
+  /** 单页时隐藏整条分页栏（R-9）：默认 false —— 现状不变 */
+  hideOnSinglePage: { type: Boolean, default: false },
+  /**
+   * 错误态（R-10）：传错误文案（字符串）或 true 即启用「表体换错误提示 + 重试按钮」，表头保留；
+   * 空字符串 / 不传 = 关闭，行为与 Wave 1 完全一致。配合 request 的 { silent: true } 使用。
+   */
+  error: { type: [String, Boolean], default: '' },
 });
 
-const emit = defineEmits(['page-change', 'empty-action', 'change']);
+const emit = defineEmits(['page-change', 'size-change', 'empty-action', 'change', 'retry', 'update:pageSize']);
 
 function onPageChange(page) {
   emit('page-change', page);
+}
+
+/** 每页条数变化：抛 update:pageSize（支持 v-model:page-size）与 size-change(size, page) 供页面同步 */
+function onSizeChange(page, size) {
+  emit('update:pageSize', size);
+  emit('size-change', size, page);
+}
+
+/** 错误态文案：字符串取原文案，true 取通用文案，其余（空串/false）视为未启用 */
+const errorMessage = computed(() => {
+  if (typeof props.error === 'string') return props.error.trim();
+  return props.error ? '数据加载失败' : '';
+});
+
+/** 单页时隐藏分页栏（hideOnSinglePage 关闭时恒为 true，保持现状） */
+const showFoot = computed(() => !(props.hideOnSinglePage && props.total <= props.pageSize));
+
+/** 错误态重试：只抛事件，不内置请求逻辑 */
+function retry() {
+  emit('retry');
 }
 
 /** a-table 的 change 原样透传（排序/筛选）：(pagination, filters, sorter) 三参不改写 */
@@ -277,6 +330,22 @@ onBeforeUnmount(() => {
   padding: 12px var(--card-pad);
   border-top: 1px solid var(--border-subtle);
   font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+}
+
+/* ===== 错误态（R-10：请求失败的表体占位，与 .empty 同排版、标题用危险色） ===== */
+.errored {
+  padding: 32px 16px;
+  text-align: center;
+}
+.errored-title {
+  font-size: var(--fs-title-3);
+  font-weight: 600;
+  color: var(--status-danger-fg);
+}
+.errored-desc {
+  margin: 6px 0 16px;
+  font-size: var(--fs-body-sm);
   color: var(--text-tertiary);
 }
 

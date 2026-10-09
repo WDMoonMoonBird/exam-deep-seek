@@ -88,7 +88,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { message, Modal } from 'ant-design-vue';
+import { message } from 'ant-design-vue';
 import { io } from 'socket.io-client';
 import request from '../../api/request.js';
 import { useUserStore } from '../../stores/user.js';
@@ -97,6 +97,10 @@ import { exportReviewXlsx } from '../../infrastructure/export.js';
 import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
 import StatusTag from '../../components/StatusTag.vue';
+import { useConfirm } from '../../composables/useConfirm.js';
+
+/** 命令式确认框（Wave 2 构件 useConfirm）：替代原 antd 命令式调用，行为等价 */
+const { confirm } = useConfirm();
 
 const route = useRoute();
 const router = useRouter();
@@ -255,11 +259,12 @@ async function batchReview() {
   } finally { reviewing.value = false; }
 }
 async function batchPublish() {
-  Modal.confirm({
+  confirm({
     title: '确认一键发布全班？',
-    content: '发布后学生将能看到分数和评语。发布后仍可修改分数，修改后重新发布即可。',
-    okText: '确定发布',
+    content: '发布后全班学生将能看到分数和评语；分数仍可修改，改完重新发布即可。',
+    okText: '发布全班成绩',
     cancelText: '取消',
+    danger: true,   // 全班成绩公开（批量发布）
     onOk: async () => {
       publishing.value = true;
       try {

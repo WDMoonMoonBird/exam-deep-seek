@@ -14,22 +14,13 @@
       :total="total"
       :current="schoolPage.current"
       :page-size="schoolPage.pageSize"
+      :show-size-changer="true"
+      :page-size-options="pageSizeOptions"
       empty-title="还没有学校数据"
       empty-desc="学校名单由部署时导入「教育部全国高等学校名单」生成，导入后这里会列出全部院校。"
       @page-change="onPageChange"
+      @size-change="onPageSizeChange"
     >
-      <template #toolbar-right>
-        <!-- 保留改前 DataTable 的每页条数切换（20/50/100/200） -->
-        <a-select
-          v-model:value="schoolPage.pageSize"
-          :options="pageSizeOptions"
-          size="small"
-          class="page-size"
-          aria-label="每页显示条数"
-          @change="onPageSizeChange"
-        />
-      </template>
-
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'province'">{{ record.province || '—' }}</template>
         <template v-else-if="column.key === 'city'">{{ record.city || '—' }}</template>
@@ -55,7 +46,8 @@ const list = ref([]);
 const total = ref(0);
 const schoolPage = reactive({ current: 1, pageSize: 50 });
 
-const pageSizeOptions = [20, 50, 100, 200].map((v) => ({ value: v, label: `每页 ${v} 条` }));
+/** 每页条数选项（20/50/100/200，与改前 DataTable 一致）—— 交给 ListPage 的每页条数切换渲染 */
+const pageSizeOptions = [20, 50, 100, 200];
 
 const columns = [
   { title: '院校代码', key: 'code', width: 140 },
@@ -80,9 +72,10 @@ function onPageChange(p) {
   schoolPage.current = p;
 }
 
-/** 每页条数变化后回到第 1 页（与改前 DataTable 的 showSizeChange 行为一致） */
-function onPageSizeChange() {
-  schoolPage.current = 1;
+/** 每页条数变化：写入新条数并回到第 1 页（与改前 DataTable 的 showSizeChange 行为一致） */
+function onPageSizeChange(size, page) {
+  schoolPage.pageSize = size;
+  schoolPage.current = page || 1;
 }
 
 async function fetch() {
@@ -95,9 +88,3 @@ async function fetch() {
 
 onMounted(fetch);
 </script>
-
-<style scoped>
-.page-size {
-  width: 120px;
-}
-</style>

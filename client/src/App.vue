@@ -12,7 +12,12 @@
 </template>
 
 <script setup>
-import zhCN from 'ant-design-vue/locale/zh_CN';
+// 必须走 es/ 路径：包根 'ant-design-vue/locale/zh_CN' 是 CJS 文件，经 Vite 的 CJS interop 后
+// 默认导入拿到的是包装对象 { default: 真实 locale }，ConfigProvider 取不到 locale.Pagination 等键，
+// 全站 antd 内置文案会静默回落英文（分页「/ page」与「跳至」、Table「No data」、DatePicker 占位、
+// Empty / Select「No Data」…）。es 版的默认导出就是 locale 对象，与仓库其余 antd locale 导入
+// （views/teacher/Assignments.vue 的 dateLocale）保持一致。
+import zhCN from 'ant-design-vue/es/locale/zh_CN';
 import { StyleProvider, legacyLogicalPropertiesTransformer } from 'ant-design-vue';
 import { isLegacyBrowser } from './domain/browserCompat';
 import './legacy-patch.css';
@@ -22,8 +27,8 @@ import { createAntdTheme } from './styles/antd-theme';
 // 行为与未加 StyleProvider 时完全一致（还原头部导航栏等自定义样式）。
 // 旧浏览器（Chrome < 88）:where 不可用，antd 默认样式会被浏览器丢弃，
 // 需 high 模式注入；副作用是 antd 默认样式可能反覆盖自定义样式，
-// 由 legacy-patch.css 用 !important 兜底关键样式（静态加载，规则以 html.legacy
-// 为前缀，仅对旧浏览器匹配生效）。
+// 由 legacy-patch.css 用强制优先级规则兜底关键样式（该文件约定允许，静态加载，
+// 规则以 html.legacy 为前缀，仅对旧浏览器匹配生效）。
 const legacyMode = isLegacyBrowser();
 
 // 主题值统一来自设计令牌（styles/tokens.css → styles/antd-theme.js）。

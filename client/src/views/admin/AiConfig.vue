@@ -1,96 +1,110 @@
 <template>
-  <div class="page">
-    <div class="page-header">
-      <h2>AI 配置</h2>
-    </div>
+  <FormPage
+    title="AI 配置"
+    description="配置 AI 评分所用的模型与并发数；并发数修改后自动保存，约 1 分钟内生效。"
+  >
+    <!-- 保存反馈：页内 aria-live 状态区（05-page-specs.md §admin/AiConfig 要求），不再依赖全局 message -->
+    <template #actions>
+      <span class="save-status" :class="'is-' + saveFeedback.kind" role="status" aria-live="polite">{{ saveFeedback.text }}</span>
+    </template>
 
-    <!-- 模型配置 -->
-    <a-card title="🤖 模型配置" size="small" class="config-card">
-      <a-form layout="vertical" style="max-width:600px;">
-        <a-form-item label="API Key">
-          <a-input-password
-            v-model:value="form.apiKey"
-            placeholder="输入 DeepSeek API Key"
-            :visibilityToggle="true"
-            style="width:380px;"
-          />
-        </a-form-item>
-        <a-form-item label="模型">
-          <a-select
-            v-model:value="form.model"
-            :options="modelOptions"
-          />
-        </a-form-item>
-        <a-form-item label="Base URL">
-          <a-input v-model:value="form.baseUrl" placeholder="https://api.deepseek.com" />
-        </a-form-item>
-        <a-form-item>
-          <a-space>
-            <a-button type="primary" :loading="saving" @click="saveModel">保存配置</a-button>
-            <a-button :loading="testing" @click="testConnection">测试连接</a-button>
-          </a-space>
-        </a-form-item>
-      </a-form>
-    </a-card>
+    <div class="config-body">
+      <!-- 模型配置 -->
+      <a-card title="🤖 模型配置" size="small" class="config-card">
+        <a-form layout="vertical" style="max-width:600px;">
+          <a-form-item label="API Key">
+            <a-input-password
+              v-model:value="form.apiKey"
+              placeholder="输入 DeepSeek API Key"
+              :visibilityToggle="true"
+              style="width:380px;"
+            />
+          </a-form-item>
+          <a-form-item label="模型">
+            <a-select
+              v-model:value="form.model"
+              :options="modelOptions"
+            />
+          </a-form-item>
+          <a-form-item label="Base URL">
+            <a-input v-model:value="form.baseUrl" placeholder="https://api.deepseek.com" />
+          </a-form-item>
+          <a-form-item>
+            <a-space>
+              <a-button type="primary" :loading="saving" @click="saveModel">保存配置</a-button>
+              <a-button :loading="testing" @click="testConnection">测试连接</a-button>
+            </a-space>
+          </a-form-item>
+        </a-form>
+      </a-card>
 
-    <!-- 并发设置 -->
-    <a-card title="⚡ AI 评分并发" size="small" class="config-card">
-      <a-form layout="vertical" style="max-width:600px;">
-        <a-form-item label="并发数">
-          <a-select
-            v-model:value="form.concurrency"
-            :options="concurrencyOptions"
-            @change="onConcurrencyChange"
-            style="width:220px;"
-          />
-        </a-form-item>
-        <a-form-item>
-          <span style="font-size:12px;color:var(--ink-muted);">
-            当前生效并发数：<b style="color:var(--ink-base);">{{ form.concurrency }}</b> |
-            修改后自动保存，约 1 分钟内生效（Worker 每 60 秒刷新配置）
-          </span>
-        </a-form-item>
-      </a-form>
-    </a-card>
+      <!-- 并发设置 -->
+      <a-card title="⚡ AI 评分并发" size="small" class="config-card">
+        <a-form layout="vertical" style="max-width:600px;">
+          <a-form-item label="并发数">
+            <a-select
+              v-model:value="form.concurrency"
+              :options="concurrencyOptions"
+              @change="onConcurrencyChange"
+              style="width:220px;"
+            />
+          </a-form-item>
+          <a-form-item>
+            <span class="hint">
+              当前生效并发数：<b class="hint-strong">{{ form.concurrency }}</b> |
+              修改后自动保存，约 1 分钟内生效（Worker 每 60 秒刷新配置）
+            </span>
+          </a-form-item>
+        </a-form>
+      </a-card>
 
-    <!-- 预估时间 -->
-    <a-card title="⏱️ 评分耗时预估" size="small" class="config-card">
-      <p style="font-size:13px;color:var(--ink-muted);margin-bottom:16px;">
-        按每题 AI 评分平均耗时 <b>5 秒</b> 估算（含网络往返 + 模型推理）。实际时间受网络波动、DeepSeek 服务端负载影响。
-      </p>
-      <a-table
-        :columns="timeColumns"
-        :dataSource="timeData"
-        :pagination="false"
-        size="small"
-        :rowClassName="(r) => r.key === +form.concurrency ? 'concurrency-active-row' : ''"
-      >
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.key !== 'label'">
-            <span>{{ record[column.dataIndex] }}</span>
+      <!-- 预估时间 -->
+      <a-card title="⏱️ 评分耗时预估" size="small" class="config-card">
+        <p class="est-note">
+          按每题 AI 评分平均耗时 <b>5 秒</b> 估算（含网络往返 + 模型推理）。实际时间受网络波动、DeepSeek 服务端负载影响。
+        </p>
+        <a-table
+          :columns="timeColumns"
+          :dataSource="timeData"
+          :pagination="false"
+          size="small"
+          :rowClassName="(r) => r.key === +form.concurrency ? 'concurrency-active-row' : ''"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key !== 'label'">
+              <span>{{ record[column.dataIndex] }}</span>
+            </template>
           </template>
-        </template>
-      </a-table>
-      <a-alert
-        :type="concurrencyLevel.type"
-        :show-icon="true"
-        style="margin-top:16px;"
-      >
-        <template #message>{{ concurrencyLevel.message }}</template>
-      </a-alert>
-    </a-card>
-  </div>
+        </a-table>
+        <a-alert
+          :type="concurrencyLevel.type"
+          :show-icon="true"
+          style="margin-top:16px;"
+        >
+          <template #message>{{ concurrencyLevel.message }}</template>
+        </a-alert>
+      </a-card>
+    </div>
+  </FormPage>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
-import { message, Modal } from 'ant-design-vue';
+import { Modal } from 'ant-design-vue';
 import request from '../../api/request.js';
+import FormPage from '../../components/FormPage.vue';
 
 const saving = ref(false);
 const testing = ref(false);
 const form = reactive({ apiKey: '', model: '', baseUrl: '', concurrency: '16' });
 const sysInfo = reactive({ cpus: 2, totalMemGB: 4, recommended: 16 });
+
+/** 保存反馈（页内 aria-live）：kind = idle | saved | error，text 直接播报 */
+const saveFeedback = reactive({ kind: 'idle', text: '' });
+function setFeedback(kind, text) {
+  saveFeedback.kind = kind;
+  saveFeedback.text = text;
+}
 
 const modelOptions = [
   { label: 'deepseek-v4-flash（推荐，快速）', value: 'deepseek-v4-flash' },
@@ -185,9 +199,9 @@ async function saveModel() {
       deepseek_model: form.model,
       deepseek_base_url: form.baseUrl,
     });
-    message.success('模型配置已保存，1分钟内生效');
+    setFeedback('saved', '模型配置已保存，1 分钟内生效');
   } catch {
-    message.error('保存失败');
+    setFeedback('error', '保存失败');
   }
   saving.value = false;
 }
@@ -201,15 +215,17 @@ async function testConnection() {
       Modal.success({
         title: '连接成功 ✅',
         content: `DeepSeek API 连接正常，响应延时 ${d.latency}。`,
+        width: 480,
       });
     } else {
       Modal.error({
         title: '连接失败 ❌',
         content: `无法连接 DeepSeek API。\n\n错误：${d.error}\n延时：${d.latency || '—'}`,
+        width: 480,
       });
     }
   } catch {
-    Modal.error({ title: '测试失败', content: '请求发送失败，请检查网络。' });
+    Modal.error({ title: '测试失败', content: '请求发送失败，请检查网络。', width: 480 });
   }
   testing.value = false;
 }
@@ -217,9 +233,9 @@ async function testConnection() {
 async function onConcurrencyChange(val) {
   try {
     await request.put('/admin/settings', { ai_concurrency: +val });
-    message.success(`并发数已设为 ${val}，约 1 分钟内生效`);
+    setFeedback('saved', `并发数已设为 ${val}，约 1 分钟内生效`);
   } catch {
-    message.error('保存失败');
+    setFeedback('error', '保存失败');
   }
 }
 
@@ -227,12 +243,44 @@ onMounted(loadConfig);
 </script>
 
 <style scoped>
-.page { max-width: 1000px; }
-.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-.page-header h2 { font-size: 28px; margin: 0; }
-.config-card { margin-bottom: 16px; }
-</style>
-<style>
-.concurrency-active-row { background: #e6f4ff !important; }
-.concurrency-active-row td { font-weight: 600; }
+/* 页面主体阅读宽度：保持改前 1000px（FormPage 契约不含 maxWidth prop，组件属 T12 边界） */
+.config-body {
+  max-width: 1000px;
+}
+
+/* 保存反馈：页头右上角的 aria-live 状态文本 */
+.save-status {
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+}
+.save-status.is-saved {
+  color: var(--status-success-fg);
+}
+.save-status.is-error {
+  color: var(--status-danger-fg);
+}
+
+.config-card {
+  margin-bottom: var(--space-4);
+}
+
+.hint {
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+}
+.hint-strong {
+  color: var(--text-primary);
+}
+.est-note {
+  font-size: var(--fs-body-sm);
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-4);
+}
+
+/* 当前并发行高亮：原为非 scoped 全局样式（含十六进制色值与强制覆盖，05-page-specs.md 点名问题），
+   现收进 scoped 并用 :deep() + --table-row-selected 令牌 */
+:deep(.concurrency-active-row > td) {
+  background: var(--table-row-selected);
+  font-weight: var(--fw-semibold);
+}
 </style>

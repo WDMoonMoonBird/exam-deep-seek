@@ -1,17 +1,21 @@
 <template>
-  <div class="lc-page">
+  <FormPage
+    :title="isEdit ? '编辑题目' : '新建题目'"
+    description="支持主观题与客观题；保存前会核对各小题分值。"
+    :back="{ text: '返回题库管理', to: '/teacher/questions' }"
+  >
     <div class="lc-page-inner">
       <!-- 顶部基本信息 -->
       <div class="lc-top">
         <a-form layout="inline" :model="form">
-          <a-form-item><a-input v-model:value="form.title" placeholder="大题标题" style="width:260px;font-size:18px;font-weight:700;" /></a-form-item>
+          <a-form-item><a-input v-model:value="form.title" placeholder="大题标题" style="width:260px;font-size:var(--fs-title-2);font-weight:700;" /></a-form-item>
           <a-form-item><a-select v-model:value="form.difficulty" style="width:100px;">
             <a-select-option value="easy">简单</a-select-option>
             <a-select-option value="medium">中等</a-select-option>
             <a-select-option value="hard">困难</a-select-option>
           </a-select></a-form-item>
           <a-form-item label="总分">
-            <span style="font-size:16px;font-weight:700;color:var(--blue);">{{computedMaxScore}} 分</span>
+            <span style="font-size:var(--fs-title-3);font-weight:700;color:var(--brand-600);">{{computedMaxScore}} 分</span>
           </a-form-item>
           <a-form-item>
             <a-button @click="showUploadExam = true" size="small">上传试卷</a-button>
@@ -43,7 +47,7 @@
             <div class="material-toggle" @click="showMaterial = !showMaterial">
               <span>题目材料</span>
               <a-tag v-if="hasMaterial" color="blue" size="small">已填写</a-tag>
-              <a-tag v-else size="small" style="color:#999;border-color:#d9d9d9;">未填写</a-tag>
+              <a-tag v-else size="small" style="color:var(--text-tertiary);border-color:var(--border-strong);">未填写</a-tag>
               <span class="material-arrow" :class="{ open: showMaterial }">▼</span>
             </div>
             <Transition name="collapse">
@@ -94,10 +98,10 @@
                   <a-form layout="vertical" :model="form">
                     <a-row :gutter="16">
                       <a-col :span="16">
-                        <a-form-item><a-input v-model:value="form.sqTitle" placeholder="小题标题（选填）" style="font-size:13px;" /></a-form-item>
+                        <a-form-item><a-input v-model:value="form.sqTitle" placeholder="小题标题（选填）" style="font-size:var(--fs-body-sm);" /></a-form-item>
                       </a-col>
                       <a-col :span="8">
-                        <a-form-item><a-input-number v-model:value="form.sqScore" :min="0" :step="0.5" placeholder="分值" style="width:100%;font-size:13px;" /></a-form-item>
+                        <a-form-item><a-input-number v-model:value="form.sqScore" :min="0" :step="0.5" placeholder="分值" style="width:100%;font-size:var(--fs-body-sm);" /></a-form-item>
                       </a-col>
                     </a-row>
                     <a-form-item class="content-item">
@@ -118,15 +122,15 @@
                       <a-button size="small" type="dashed">+ 添加小问</a-button>
                       <template #overlay><a-menu @click="onAddItem"><a-menu-item key="choice">单选题</a-menu-item><a-menu-item key="multi_choice">多选题</a-menu-item><a-menu-item key="judge">判断题</a-menu-item><a-menu-item key="fill">填空题</a-menu-item></a-menu></template>
                     </a-dropdown>
-                    <span v-if="form.objectiveItems.length" style="font-size:12px;color:var(--ink-muted);">共 {{form.objectiveItems.length}} 小问</span>
-                    <span style="font-size:14px;font-weight:600;color:var(--blue);margin-left:auto;">小题 {{computedObjSqScore}} 分</span>
+                    <span v-if="form.objectiveItems.length" style="font-size:var(--fs-caption);color:var(--text-tertiary);">共 {{form.objectiveItems.length}} 小问</span>
+                    <span style="font-size:var(--fs-body);font-weight:600;color:var(--brand-600);margin-left:auto;">小题 {{computedObjSqScore}} 分</span>
                   </div>
                   <div class="obj-items-scroll">
                     <TransitionGroup name="item-list" tag="div" class="obj-items-list">
                       <div v-for="(item,idx) in form.objectiveItems" :key="item.key" :class="['obj-item-card',{'obj-item-focus':previewFocusKey===item.key}]" @click="onEditCardClick(item.key,$event)">
                         <div class="obj-item-head">
                           <a-tag :color="itemTypeColor(item.type)" size="small">{{itemTypeLabel(item.type)}}</a-tag>
-                          <span style="font-size:12px;color:var(--ink-muted);">第{{idx+1}}小问</span>
+                          <span style="font-size:var(--fs-caption);color:var(--text-tertiary);">第{{idx+1}}小问</span>
                           <a-input-number v-model:value="item.score" :min="0" :step="0.01" :precision="2" placeholder="均分" size="small" style="width:70px;margin-left:auto;" @change="onItemScoreChange(item)" />分
                           <a-popconfirm title="确定删除？" ok-text="确定" cancel-text="取消" @confirm="removeItem(idx)"><a-button size="small" type="text" danger @click.stop>×</a-button></a-popconfirm>
                         </div>
@@ -136,7 +140,7 @@
                             <div v-for="(opt,oi) in item.options" :key="opt.key" class="obj-option-row">
                               <a-radio v-if="item.type==='choice'" :checked="item.answer===opt.key" @change="item.answer=opt.key" />
                               <a-checkbox v-else :checked="(item.answer||'').split(',').includes(opt.key)" @change="toggleMultiAnswer(item,opt.key)" />
-                              <span style="font-weight:600;font-size:13px;width:18px;">{{opt.key}}.</span>
+                              <span style="font-weight:600;font-size:var(--fs-body-sm);width:18px;">{{opt.key}}.</span>
                               <a-input v-model:value="opt.text" :placeholder="'选项 '+opt.key" size="small" style="flex:1" />
                               <a-button size="small" type="text" danger @click="removeOption(item,oi)" :disabled="item.options.length<=2">×</a-button>
                             </div>
@@ -146,10 +150,10 @@
                         <div v-if="item.type==='judge'" style="margin-top:6px"><a-radio-group v-model:value="item.answer" size="small"><a-radio value="true">✓ 正确</a-radio><a-radio value="false">✗ 错误</a-radio></a-radio-group></div>
                         <div v-if="item.type==='fill'" style="margin-top:6px">
                           <div v-for="(bp, bi) in (item._blankParts||[])" :key="bi" style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-                            <span style="font-size:11px;color:#999;min-width:50px;">第{{bi+1}}空答案</span>
+                            <span style="font-size:11px;color:var(--text-tertiary);min-width:50px;">第{{bi+1}}空答案</span>
                             <a-input v-model:value="bp.answer" @change="onFillBlankChange(item)" :placeholder="'第'+(bi+1)+'空'" size="small" style="flex:1;" />
                           </div>
-                          <div v-if="!(item._blankParts||[]).length" style="font-size:11px;color:#ccc;">请填写题干，系统自动识别空数</div>
+                          <div v-if="!(item._blankParts||[]).length" style="font-size:11px;color:var(--text-disabled);">请填写题干，系统自动识别空数</div>
                         </div>
                       </div>
                     </TransitionGroup>
@@ -166,7 +170,7 @@
         <!-- 右 -->
         <div class="lc-right">
           <Transition name="kind-pick-switch" mode="out-in">
-            <div v-if="!questionKind" key="empty" style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--ink-muted);font-size:14px;">选择题目类型后开始编辑</div>
+            <div v-if="!questionKind" key="empty" style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-tertiary);font-size:var(--fs-body);">选择题目类型后开始编辑</div>
             <div v-else key="editor" class="lc-right-inner">
             <Transition name="panel-switch" mode="out-in">
               <div :key="activeIndex + '_' + sqKind" style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;">
@@ -179,7 +183,7 @@
                     <div class="lc-editor-actions">
                       <a-select v-model:value="form.language" size="small" style="width:120px;"><a-select-option v-for="l in langs" :key="l" :value="l">{{l}}</a-select-option></a-select>
                       <a-button size="small" type="text" @click="formatCode" title="格式化代码">
-                        <template #icon><span style="font-size:14px;">&#x26A1;</span></template>
+                        <template #icon><span style="font-size:var(--fs-body);">&#x26A1;</span></template>
                       </a-button>
                     </div>
                   </div>
@@ -192,7 +196,6 @@
                   <div class="lc-editor-header">
                     <span class="lc-editor-label">实时预览</span>
                     <a-tag color="blue" style="margin-left:6px;">第 {{activeIndex+1}} 小题</a-tag>
-                    <span v-if="draftStatus" class="draft-status">{{draftStatus}}</span>
                   </div>
                   <div class="lc-editor-wrap preview-scroll">
                     <div v-if="form.objectiveItems.length" class="preview-obj-list">
@@ -204,9 +207,9 @@
                         <div v-if="item.type==='judge'" class="preview-judge"><a-radio-group :value="item.answer" disabled><a-radio value="true">✓ 正确</a-radio><a-radio value="false">✗ 错误</a-radio></a-radio-group><span class="preview-answer-tag">答案: {{item.answer==='true'?'正确':'错误'}}</span></div>
                         <div v-if="item.type==='fill'" class="preview-fill">
                       <div v-for="(bp,bi) in (item._blankParts||[])" :key="bi"><a-input :placeholder="bp.answer||'答案未设'" disabled size="small" style="margin-bottom:4px;" /></div>
-                      <span v-if="!(item._blankParts||[]).length" style="color:#ccc;font-size:11px;">未检测到填空</span>
+                      <span v-if="!(item._blankParts||[]).length" style="color:var(--text-disabled);font-size:11px;">未检测到填空</span>
                     </div>
-                        <div style="font-size:11px;color:var(--ink-muted);margin-top:2px;">分值: {{item.score||0}} 分</div>
+                        <div style="font-size:11px;color:var(--text-tertiary);margin-top:2px;">分值: {{item.score||0}} 分</div>
                       </div>
                     </div>
                     <a-empty v-else description="暂无小问" :image="false" />
@@ -216,11 +219,6 @@
             </Transition>
             </div>
           </Transition>
-          <div class="lc-footer" v-if="questionKind">
-            <a-button size="large" @click="handleCancel">取消</a-button>
-            <a-button v-if="isEdit && questionKind === 'subjective'" @click="showPromptPreview">查看 AI 提示词</a-button>
-            <a-button type="primary" size="large" :loading="saving" @click="handleSave">保存</a-button>
-          </div>
 
           <!-- AI 提示词预览 -->
           <a-modal v-model:open="promptModalOpen" title="AI 提示词（与实评一致，学生代码以占位符显示）" :footer="null" width="760">
@@ -268,7 +266,7 @@
       <a-alert type="info" show-icon style="margin-bottom:16px;">
         <template #message>AI 试卷提取说明</template>
         <template #description>
-          <ul style="margin:4px 0;padding-left:16px;font-size:13px;">
+          <ul style="margin:4px 0;padding-left:16px;font-size:var(--fs-body-sm);">
             <li>支持 Word (.docx) 和 Excel (.xlsx) 格式</li>
             <li>系统将文件内容发送给 AI 进行题目提取</li>
             <li>AI 仅做提取，不修改任何题目内容</li>
@@ -278,7 +276,7 @@
       </a-alert>
       <div :class="{ 'upload-disabled': uploadAnalyzing }">
         <a-upload-dragger v-model:fileList="uploadFileList" :beforeUpload="handleUploadExam" accept=".docx,.xlsx" :maxCount="1" :showUploadList="false" :disabled="uploadAnalyzing">
-          <p class="ant-upload-drag-icon"><inbox-outlined style="color:var(--blue);font-size:48px;" /></p>
+          <p class="ant-upload-drag-icon"><inbox-outlined style="color:var(--brand-600);font-size:48px;" /></p>
           <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
           <p class="ant-upload-hint">仅支持 .docx / .xlsx 格式</p>
         </a-upload-dragger>
@@ -286,20 +284,30 @@
       <Transition name="upload-status">
         <div v-if="uploadAnalyzing" key="analyzing" style="text-align:center;padding:24px;">
           <a-spin />
-          <p style="margin-top:12px;color:var(--ink-muted);">正在解析试卷...</p>
-          <p v-if="uploadProgress>0" style="margin-top:4px;font-size:12px;color:var(--ink-muted);">已接收 {{ uploadProgress }} 字符</p>
+          <p style="margin-top:12px;color:var(--text-tertiary);">正在解析试卷...</p>
+          <p v-if="uploadProgress>0" style="margin-top:4px;font-size:var(--fs-caption);color:var(--text-tertiary);">已接收 {{ uploadProgress }} 字符</p>
         </div>
-        <div v-else-if="uploadResult" key="result" style="margin-top:12px;text-align:center;padding:12px;background:#f6ffed;border-radius:8px;color:#52c41a;">✓ 解析完成，共提取 {{uploadResult}} 道题目，请核对</div>
-        <div v-else-if="uploadError" key="error" style="margin-top:12px;text-align:center;padding:12px;background:#fff2f0;border-radius:8px;color:#ff4d4f;">{{uploadError}}</div>
+        <div v-else-if="uploadResult" key="result" style="margin-top:12px;text-align:center;padding:12px;background:var(--status-success-bg);border-radius:var(--radius-md);color:var(--status-success-fg);">✓ 解析完成，共提取 {{uploadResult}} 道题目，请核对</div>
+        <div v-else-if="uploadError" key="error" style="margin-top:12px;text-align:center;padding:12px;background:var(--status-danger-bg);border-radius:var(--radius-md);color:var(--status-danger-fg);">{{uploadError}}</div>
       </Transition>
     </a-modal>
-  </div>
+
+    <!-- 底部动作条：保存状态（role=status）+ 操作，FormPage 契约 -->
+    <template #actionbar>
+      <span class="save-status" role="status" aria-live="polite">{{ statusText }}</span>
+      <div v-if="questionKind" class="actionbar-actions">
+        <a-button size="large" @click="handleCancel">取消</a-button>
+        <a-button v-if="isEdit && questionKind === 'subjective'" @click="showPromptPreview">查看 AI 提示词</a-button>
+        <a-button type="primary" size="large" :loading="saving" @click="handleSave">保存</a-button>
+      </div>
+    </template>
+  </FormPage>
 </template>
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick, h } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { message, Modal } from 'ant-design-vue';
+import { message } from 'ant-design-vue';
 import { CodeOutlined, InboxOutlined } from '@ant-design/icons-vue';
 import DOMPurify from 'dompurify';
 const _sanHtml = (s) => DOMPurify.sanitize(s, {
@@ -311,8 +319,12 @@ import * as XLSX from 'xlsx';
 import request from '../../api/request.js';
 import CodeEditor from '../../components/CodeEditor.vue';
 import RichEditor from '../../components/RichEditor.vue';
+import FormPage from '../../components/FormPage.vue';
+import { useConfirm } from '../../composables/useConfirm.js';
+import { useDraftAutosave } from '../../composables/useDraftAutosave.js';
 
 const router = useRouter(); const route = useRoute();
+const { confirm } = useConfirm();
 const editId = route.params.id || null; const isEdit = !!editId;
 const saving = ref(false);
 const codeEditorRef = ref(null);
@@ -406,8 +418,7 @@ const uploadProgress = ref(0);
 
 // 预览
 const previewFocusKey = ref(-1);
-const draftStatus = ref('');
-let draftTimer = null; let draftChanged = false;
+let draftChanged = false;
 
 // AI 生成参考答案
 const genRunning = ref(false);
@@ -665,10 +676,16 @@ function fillFromParsed(qs){
   message.success(`已填充 ${qs.length} 道题目，请核对修改`);
 }
 
-// 草稿
+// 草稿：saveDraft 是本地「左栏表单 → 当前小题」同步（不发请求），原 2s 防抖节拍不变，改用 useDraftAutosave
 function markDraftChanged(){draftChanged=true;}
-function autoSave(){if(!draftChanged)return;draftStatus.value='保存中…';clearTimeout(draftTimer);draftTimer=setTimeout(async()=>{saveDraft();draftChanged=false;draftStatus.value='已保存';setTimeout(()=>{draftStatus.value='';},2000);},2000);}
-watch(()=>[form.content,form.referenceAnswer,form.objectiveItems,form.sqScore,form.scoringCriteria],()=>{if(isEdit)autoSave();},{deep:true});
+const draftSaver = useDraftAutosave({
+  save: async () => { saveDraft(); draftChanged = false; },
+  delay: 2000,
+  enabled: () => draftChanged,
+});
+/** 动作条状态文本（role="status" aria-live="polite" 由模板提供） */
+const statusText = computed(() => ({ idle: '', saving: '保存中…', saved: '已保存', error: '保存失败' }[draftSaver.status.value] || ''));
+watch(()=>[form.content,form.referenceAnswer,form.objectiveItems,form.sqScore,form.scoringCriteria],()=>{if(isEdit)draftSaver.schedule();},{deep:true});
 // AI 标记：手动编辑参考答案时自动清除
 watch(()=>form.referenceAnswer,(newVal,oldVal)=>{if(aiTag.value&&!genRunning.value&&newVal!==oldVal)aiTag.value='';});
 
@@ -705,14 +722,14 @@ function buildScoreSummary(){
   let rows='';
   sqs.forEach((sq,i)=>{
     const label=sq.sqKind==='subjective'?'编程题':sq.objectiveItems?.length&&objectiveSettings.classificationMode==='flat'?(itemTypeLabel(sq.objectiveItems[0].type)||'客观题'):'客观题';
-    const scoreLabel=sq.score&&sq.score>0?`${sq.score} 分`:`<span style="color:#ff4d4f;">未设置</span>`;
-    rows+=`<tr><td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;">第${i+1}题</td><td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;">${label}</td><td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;">${scoreLabel}</td></tr>`;
+    const scoreLabel=sq.score&&sq.score>0?`${sq.score} 分`:`<span style="color:var(--status-danger-fg);">未设置</span>`;
+    rows+=`<tr><td style="padding:6px 12px;border-bottom:1px solid var(--border-subtle);">第${i+1}题</td><td style="padding:6px 12px;border-bottom:1px solid var(--border-subtle);">${label}</td><td style="padding:6px 12px;border-bottom:1px solid var(--border-subtle);">${scoreLabel}</td></tr>`;
   });
-  const html=`<table style="width:100%;border-collapse:collapse;font-size:13px;">
-    <thead><tr style="background:#fafafa;"><th style="padding:8px 12px;text-align:left;border-bottom:2px solid #e8e8e8;">小题</th><th style="padding:8px 12px;text-align:left;border-bottom:2px solid #e8e8e8;">题型</th><th style="padding:8px 12px;text-align:left;border-bottom:2px solid #e8e8e8;">设定分值</th></tr></thead>
+  const html=`<table style="width:100%;border-collapse:collapse;font-size:var(--fs-body-sm);">
+    <thead><tr style="background:var(--bg-surface-2);"><th style="padding:8px 12px;text-align:left;border-bottom:2px solid var(--border-default);">小题</th><th style="padding:8px 12px;text-align:left;border-bottom:2px solid var(--border-default);">题型</th><th style="padding:8px 12px;text-align:left;border-bottom:2px solid var(--border-default);">设定分值</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
-  <p style="margin-top:12px;font-size:13px;color:#666;">大题总分：<b>${computedMaxScore.value}</b> 分</p>`;
+  <p style="margin-top:12px;font-size:var(--fs-body-sm);color:var(--text-secondary);">大题总分：<b>${computedMaxScore.value}</b> 分</p>`;
   return {html,total,withZero};
 }
 
@@ -739,13 +756,11 @@ async function aiGenerateRefs(missing){
 
 function promptAiGenerate(missing){
   let rows='';
-  missing.forEach(({sq,i})=>{rows+=`<tr><td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;">第${i+1}小题</td><td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;">${(sq.content||'').replace(/<[^>]*>/g,'').slice(0,50)}</td><td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;color:#ff4d4f;">未设置</td></tr>`;});
-  const tableHtml=`<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#fafafa;"><th style="padding:8px 12px;text-align:left;border-bottom:2px solid #e8e8e8;">小题</th><th style="padding:8px 12px;text-align:left;border-bottom:2px solid #e8e8e8;">题干</th><th style="padding:8px 12px;text-align:left;border-bottom:2px solid #e8e8e8;">参考答案</th></tr></thead><tbody>${rows}</tbody></table>`;
-  Modal.confirm({
+  missing.forEach(({sq,i})=>{rows+=`<tr><td style="padding:6px 12px;border-bottom:1px solid var(--border-subtle);">第${i+1}小题</td><td style="padding:6px 12px;border-bottom:1px solid var(--border-subtle);">${(sq.content||'').replace(/<[^>]*>/g,'').slice(0,50)}</td><td style="padding:6px 12px;border-bottom:1px solid var(--border-subtle);color:var(--status-danger-fg);">未设置</td></tr>`;});
+  const tableHtml=`<table style="width:100%;border-collapse:collapse;font-size:var(--fs-body-sm);"><thead><tr style="background:var(--bg-surface-2);"><th style="padding:8px 12px;text-align:left;border-bottom:2px solid var(--border-default);">小题</th><th style="padding:8px 12px;text-align:left;border-bottom:2px solid var(--border-default);">题干</th><th style="padding:8px 12px;text-align:left;border-bottom:2px solid var(--border-default);">参考答案</th></tr></thead><tbody>${rows}</tbody></table>`;
+  confirm({
     title:`${missing.length} 道主观题未设参考答案`,
-    width:560,
-    maskClosable:true,closable:true,
-    content:()=>h('div',{innerHTML:_sanHtml(`<p style="margin-bottom:8px;color:#666;">以下主观题尚未编写参考答案：</p>${tableHtml}<p style="margin-top:8px;color:#faad14;font-size:13px;">可由 AI 根据题目内容和评分标准自动生成参考答案，生成后请核对修改。</p>`)}),
+    content:()=>h('div',{innerHTML:_sanHtml(`<p style="margin-bottom:8px;color:var(--text-secondary);">以下主观题尚未编写参考答案：</p>${tableHtml}<p style="margin-top:8px;color:var(--status-warning-fg);font-size:var(--fs-body-sm);">可由 AI 根据题目内容和评分标准自动生成参考答案，生成后请核对修改。</p>`)}),
     okText:'AI 生成参考答案',
     cancelText:'暂不生成',
     onOk:async()=>{await aiGenerateRefs(missing);},
@@ -793,11 +808,9 @@ async function handleSave(){
   }
 
   const {html}=buildScoreSummary();
-  Modal.confirm({
+  confirm({
     title:'确认保存',
-    width:560,
-    maskClosable:true,closable:true,
-    content:()=>h('div',{innerHTML:_sanHtml(`<p style="margin-bottom:8px;color:#666;">请确认各小题分值是否正确：</p>${html}<p style="margin-top:8px;color:#666;font-size:13px;">所有小题已设定分值，确认无误可保存。</p>`)}),
+    content:()=>h('div',{innerHTML:_sanHtml(`<p style="margin-bottom:8px;color:var(--text-secondary);">请确认各小题分值是否正确：</p>${html}<p style="margin-top:8px;color:var(--text-secondary);font-size:var(--fs-body-sm);">所有小题已设定分值，确认无误可保存。</p>`)}),
     okText:'确认保存',
     cancelText:'返回修改',
     onOk:doSave,
@@ -828,20 +841,20 @@ const langs=['c','cpp','csharp','java','python','javascript','typescript','go','
 </script>
 
 <style scoped>
-.lc-page{display:flex;flex-direction:column;height:calc(100vh - 52px);margin:-28px -48px -40px;padding:0;background:var(--canvas-parchment);}
-.lc-page-inner{flex:1;display:flex;flex-direction:column;padding:12px;min-height:0;gap:12px;}
-.lc-top{flex-shrink:0;background:#fff;border-radius:12px;padding:12px 20px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+/* 工作区：视口 − 顶栏(56) − 内容内距(2×20) − 页头/返回条/动作条（约 200px） */
+.lc-page-inner{height:calc(100vh - 300px);min-height:480px;display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-3);}
+.lc-top{flex-shrink:0;background:var(--bg-surface);border-radius:var(--radius-lg);padding:12px 20px;box-shadow:var(--shadow-sm);}
 .lc-top :deep(.ant-form-inline){display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .lc-top :deep(.ant-form-item){margin-bottom:0;}
 .lc-main{flex:1;display:flex;overflow:hidden;gap:12px;min-height:0;}
-.lc-left{width:50%;min-width:380px;background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden;display:flex;flex-direction:column;min-height:0;}
-.lc-right{flex:1;display:flex;flex-direction:column;background:#fff;min-width:400px;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden;min-height:0;}
+.lc-left{width:50%;min-width:380px;background:var(--bg-surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);overflow:hidden;display:flex;flex-direction:column;min-height:0;}
+.lc-right{flex:1;display:flex;flex-direction:column;background:var(--bg-surface);min-width:400px;border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);overflow:hidden;min-height:0;}
 
 /* 初始选类型 */
 .kind-picker{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;}
-.kind-add-btn{width:56px;height:56px;border-radius:50%;border:2px dashed #d9d9d9;background:#fafafa;font-size:24px;color:#999;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;}
-.kind-add-btn:hover{border-color:#1677ff;color:#1677ff;background:#e6f4ff;}
-.kind-hint{font-size:13px;color:var(--ink-muted);}
+.kind-add-btn{width:56px;height:56px;border-radius:50%;border:2px dashed var(--border-strong);background:var(--bg-surface-2);font-size:24px;color:var(--text-tertiary);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;}
+.kind-add-btn:hover{border-color:var(--brand-600);color:var(--brand-600);background:var(--brand-50);}
+.kind-hint{font-size:var(--fs-body-sm);color:var(--text-tertiary);}
 .lc-left-editor{flex:1;display:flex;flex-direction:column;min-height:0;}
 
 /* 题型选择 ↔ 编辑器切换动画 */
@@ -849,34 +862,34 @@ const langs=['c','cpp','csharp','java','python','javascript','typescript','go','
 .kind-pick-switch-enter-from{opacity:0;transform:scale(.9);}
 .kind-pick-switch-leave-to{opacity:0;transform:scale(.9);}
 
-.material-toggle{display:flex;align-items:center;gap:8px;padding:8px 16px;font-size:13px;font-weight:500;color:#666;cursor:pointer;user-select:none;border-bottom:1px solid var(--hairline);background:#fafafa;}
-.material-toggle:hover{background:#f0f0f0;}
+.material-toggle{display:flex;align-items:center;gap:8px;padding:8px 16px;font-size:var(--fs-body-sm);font-weight:500;color:var(--text-secondary);cursor:pointer;user-select:none;border-bottom:1px solid var(--border-subtle);background:var(--bg-surface-2);}
+.material-toggle:hover{background:var(--border-subtle);}
 .material-arrow{margin-left:auto;font-size:10px;transition:transform .2s;}
 .material-arrow.open{transform:rotate(180deg);}
-.material-body{overflow:hidden;border-bottom:1px solid var(--hairline);}
+.material-body{overflow:hidden;border-bottom:1px solid var(--border-subtle);}
 .material-body-inner{padding:16px 20px;}
 .collapse-enter-active,.collapse-leave-active{transition:all .25s ease;}
 .collapse-enter-from,.collapse-leave-to{opacity:0;max-height:0;}
 .collapse-enter-to,.collapse-leave-from{opacity:1;max-height:600px;}
 
-.lc-left-tabs{display:flex;align-items:center;border-bottom:1px solid var(--hairline);background:#fafafa;flex-shrink:0;}
-.tab-scroll-btn{flex-shrink:0;width:24px;height:100%;border:none;background:transparent;cursor:pointer;font-size:18px;color:#999;display:flex;align-items:center;justify-content:center;transition:color .15s;padding:0;}
-.tab-scroll-btn:hover{color:#1677ff;}
+.lc-left-tabs{display:flex;align-items:center;border-bottom:1px solid var(--border-subtle);background:var(--bg-surface-2);flex-shrink:0;}
+.tab-scroll-btn{flex-shrink:0;width:24px;height:100%;border:none;background:transparent;cursor:pointer;font-size:var(--fs-title-2);color:var(--text-tertiary);display:flex;align-items:center;justify-content:center;transition:color .15s;padding:0;}
+.tab-scroll-btn:hover{color:var(--brand-600);}
 .lc-left-tabs-scroll{flex:1;display:flex;align-items:center;gap:4px;padding:8px 4px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;}
 .lc-left-tabs-scroll::-webkit-scrollbar{display:none;}
-.sq-tab{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 12px;border:1px solid transparent;border-radius:6px;background:transparent;cursor:pointer;font-size:13px;color:#666;white-space:nowrap;transition:all .15s;}
-.sq-tab:hover{background:#e8e8e8;}
-.sq-tab.active{background:#fff;border-color:#d9d9d9;color:#1677ff;font-weight:500;}
-.sq-del{font-size:14px;color:#ccc;line-height:1;margin-left:2px;}
-.sq-del:hover{color:#ff4d4f;}
-.sq-add{width:28px;height:28px;padding:0;border:none;font-size:16px;color:#999;display:inline-flex;align-items:center;justify-content:center;}
-.sq-add:hover{color:#1677ff;background:#e0edff;}
+.sq-tab{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 12px;border:1px solid transparent;border-radius:var(--radius-sm);background:transparent;cursor:pointer;font-size:var(--fs-body-sm);color:var(--text-secondary);white-space:nowrap;transition:all .15s;}
+.sq-tab:hover{background:var(--border-default);}
+.sq-tab.active{background:var(--bg-surface);border-color:var(--border-strong);color:var(--brand-600);font-weight:500;}
+.sq-del{font-size:var(--fs-body);color:var(--text-disabled);line-height:1;margin-left:2px;}
+.sq-del:hover{color:var(--status-danger-fg);}
+.sq-add{width:28px;height:28px;padding:0;border:none;font-size:var(--fs-title-3);color:var(--text-tertiary);display:inline-flex;align-items:center;justify-content:center;}
+.sq-add:hover{color:var(--brand-600);background:var(--brand-50);}
 
 .lc-left-body{padding:12px 16px;flex:1;overflow-y:auto;min-height:0;display:flex;flex-direction:column;}
 .panel-wrap{min-height:0;display:flex;flex-direction:column;flex:1;}
 .sq-top-row{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
 
-.obj-add-bar{flex-shrink:0;padding:8px 0;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f0f0f0;margin-bottom:4px;position:sticky;top:0;z-index:2;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.06);}
+.obj-add-bar{flex-shrink:0;padding:8px 0;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border-subtle);margin-bottom:4px;position:sticky;top:0;z-index:2;background:var(--bg-surface);box-shadow:var(--shadow-md);}
 
 .upload-disabled{position:relative;opacity:.5;pointer-events:none;user-select:none;}
 
@@ -889,31 +902,31 @@ const langs=['c','cpp','csharp','java','python','javascript','typescript','go','
 
 .obj-items-scroll{flex:1;overflow-y:auto;min-height:0;}
 .obj-items-list{display:flex;flex-direction:column;gap:10px;padding-top:4px;position:relative;}
-.obj-item-card{border:1px solid #e8e8e8;border-radius:8px;padding:10px 12px;cursor:pointer;transition:border-color .2s,box-shadow .2s;}
-.obj-item-card:hover{border-color:#1677ff;}
-.obj-item-focus{border-color:#1677ff;box-shadow:0 0 0 2px rgba(22,119,255,.15);}
+.obj-item-card{border:1px solid var(--border-default);border-radius:var(--radius-md);padding:10px 12px;cursor:pointer;transition:border-color .2s,box-shadow .2s;}
+.obj-item-card:hover{border-color:var(--brand-600);}
+.obj-item-focus{border-color:var(--brand-600);box-shadow:var(--ring-focus);}
 .obj-item-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
 .obj-options{margin-top:8px;}
 .obj-option-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
 
-.lc-editor-header{display:flex;align-items:center;padding:0 16px;height:36px;border-bottom:1px solid var(--hairline);background:#fafafa;flex-shrink:0;}
-.lc-editor-label{font-size:13px;font-weight:600;color:var(--ink-muted);}
+.lc-editor-header{display:flex;align-items:center;padding:0 16px;height:36px;border-bottom:1px solid var(--border-subtle);background:var(--bg-surface-2);flex-shrink:0;}
+.lc-editor-label{font-size:var(--fs-body-sm);font-weight:600;color:var(--text-tertiary);}
 .lc-editor-actions{display:flex;align-items:center;gap:6px;margin-left:auto;}
-.draft-status{font-size:12px;color:var(--ink-muted);margin-left:12px;}
+.save-status{font-size:var(--fs-caption);color:var(--text-tertiary);}
+.actionbar-actions{display:flex;align-items:center;gap:var(--space-3);margin-left:auto;}
 .lc-editor-wrap{flex:1;overflow:hidden;min-height:0;}
 .lc-right-inner{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;}
 .lc-right-inner .lc-editor-wrap{overflow:hidden;}
-.preview-scroll{overflow-y:auto !important;padding:16px;}
-.lc-footer{display:flex;align-items:center;gap:16px;padding:12px 20px;border-top:1px solid var(--hairline);background:#fafafa;flex-shrink:0;justify-content:flex-end;}
+.lc-right-inner .preview-scroll{overflow-y:auto;padding:var(--space-4);}
 
 .preview-obj-list{display:flex;flex-direction:column;gap:16px;}
-.preview-obj-item{padding:12px;border:1px solid #f0f0f0;border-radius:8px;transition:background .3s;}
-.preview-obj-highlight{background:#fffbe6;border-color:#ffd666;}
-.preview-obj-num{font-weight:600;font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:6px;}
-.preview-stem{font-size:14px;line-height:1.7;margin-bottom:8px;}
-.preview-stem-code{font-family:monospace;font-size:13px;background:#f5f5f5;padding:8px 12px;border-radius:6px;white-space:pre-wrap;}
+.preview-obj-item{padding:12px;border:1px solid var(--border-subtle);border-radius:var(--radius-md);transition:background .3s;}
+.preview-obj-highlight{background:var(--status-warning-bg);border-color:var(--status-warning-bd);}
+.preview-obj-num{font-weight:600;font-size:var(--fs-body);margin-bottom:6px;display:flex;align-items:center;gap:6px;}
+.preview-stem{font-size:var(--fs-body);line-height:1.7;margin-bottom:8px;}
+.preview-stem-code{font-family:monospace;font-size:var(--fs-body-sm);background:var(--bg-sunken);padding:8px 12px;border-radius:var(--radius-sm);white-space:pre-wrap;}
 .preview-choice,.preview-judge,.preview-fill{margin-top:8px;}
-.preview-answer-tag{display:inline-block;margin-top:6px;font-size:11px;color:#52c41a;background:#f6ffed;padding:1px 6px;border-radius:4px;}
+.preview-answer-tag{display:inline-block;margin-top:6px;font-size:11px;color:var(--status-success-fg);background:var(--status-success-bg);padding:1px 6px;border-radius:var(--radius-xs);}
 
 /* 动效 */
 .sq-list-enter-active,.sq-list-leave-active,.sq-list-move{transition:all .2s ease;}
@@ -939,19 +952,19 @@ const langs=['c','cpp','csharp','java','python','javascript','typescript','go','
 
 /* 主观题富文本编辑器 — 原始两倍高度 */
 .content-item :deep(.tiptap) {
-  min-height: calc(100vh - 520px);
+  min-height: calc(100vh - 720px);
 }
 
 /* AI 提示词预览 */
 .prompt-block { margin-bottom: 12px; }
 .prompt-role-label {
-  font-size: 12px; font-weight: 600; color: #666;
+  font-size:var(--fs-caption); font-weight: 600; color: var(--text-secondary);
   margin: 8px 0 4px;
 }
 .prompt-pre {
   margin: 0; padding: 10px 12px;
-  background: #f6f8fa; border: 1px solid #e8e8e8; border-radius: 6px;
-  font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-all;
+  background: var(--bg-sunken); border: 1px solid var(--border-default); border-radius:var(--radius-sm);
+  font-size:var(--fs-caption); line-height: 1.6; white-space: pre-wrap; word-break: break-all;
   max-height: 320px; overflow: auto;
 }
 </style>

@@ -113,10 +113,12 @@ import { ref, reactive, computed, watch, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useUserStore } from '../../stores/user.js';
 import request from '../../api/request.js';
-import { Modal, message } from 'ant-design-vue';
+import { message } from 'ant-design-vue';
+import { useConfirm } from '../../composables/useConfirm.js';
 import { QuestionCircleOutlined, UserOutlined, NodeIndexOutlined, UserSwitchOutlined, PoweroffOutlined, AppstoreOutlined, IdcardOutlined, DatabaseOutlined, FileTextOutlined, SafetyCertificateOutlined, TeamOutlined, BookOutlined, ExperimentOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
 
 const router = useRouter(); const route = useRoute(); const userStore = useUserStore();
+const { confirm } = useConfirm();
 const user = userStore.user;
 const collapsed = ref(false);
 
@@ -136,33 +138,9 @@ const changingPwd = ref(false);
 // ===== 侧栏「评分审核」待审核徽标 =====
 /**
  * 数据源：GET /teacher/pending-summary（Batch1 P0-1，与「评分审核」页、作业管理 KPI 同源）。
- * 静默要求：徽标是辅助信息，失败不得弹错误提示打断教师。
- * 而 request 实例的全局响应拦截器会对所有失败弹 message.error（见 api/request.js），
- * 本任务的文件边界又不含 api/request.js —— 因此这里用 request.create() 派生一个实例：
- * 它继承 baseURL/timeout，但不继承拦截器；鉴权头、schoolId 参数、以及「调用方拿到的是响应体」
- * 这三件事都按 api/request.js 的同一规则补齐，区别只是失败时只 reject、不弹提示。
+ * Wave 2 t13 / R-1：徽标是辅助信息，失败不得弹提示打断教师 —— 走统一请求入口 + silent 开关
+ * （api/request.js 的响应拦截器对 silent 请求只 reject、不弹全局 message）。
  */
-const badgeRequest = request.create();
-badgeRequest.interceptors.request.use((config) => {
-  try {
-    const token = localStorage.getItem('token');
-    if (token) config.headers.Authorization = `Bearer ${token}`;
-    const u = JSON.parse(localStorage.getItem('user') || 'null');
-    if (u?.role === 'teacher' && u?.currentSchool?.id) {
-      config.params = { ...config.params, schoolId: u.currentSchool.id };
-    }
-  } catch { /* localStorage 不可用 */ }
-  return config;
-});
-badgeRequest.interceptors.response.use(
-  (res) => {
-    // 与 api/request.js 一致：成功时把响应体交给调用方；业务错误码只 reject（静默）
-    if (res.data?.code !== 0) return Promise.reject(new Error(res.data?.message || 'pending-summary failed'));
-    return res.data;
-  },
-  (err) => Promise.reject(err)
-);
-
 const pendingReview = ref(0);
 const pendingBadge = computed(() => (pendingReview.value > 99 ? '99+' : String(pendingReview.value)));
 const pendingTitle = computed(() => `待审核 ${pendingReview.value} 条`);
@@ -170,7 +148,7 @@ const pendingTitle = computed(() => `待审核 ${pendingReview.value} 条`);
 /** 进入 Layout 拉取一次 + 每次路由切换后刷新；失败保留上一次数值并静默 */
 async function refreshPendingReview() {
   try {
-    const r = await badgeRequest.get('/teacher/pending-summary');
+    const r = await request.get('/teacher/pending-summary', { silent: true });
     pendingReview.value = Number(r.data?.pendingReview) || 0;
   } catch (e) { /* 静默：不弹提示、不打断当前页面 */ }
 }
@@ -234,7 +212,13 @@ function handleMenu ({ key }) {
     if (key === 'profile') {
         showProfile.value = true;
     } else if (key === 'logout') {
-        Modal.confirm({ title: '确定退出登录？', content: '退出后需重新输入用户名和密码', okText: '确定', cancelText: '取消', onOk: () => { userStore.logout(); router.push('/login'); } });
+        confirm({
+            title: '确定退出登录？',
+            content: '退出后需重新输入用户名和密码',
+            okText: '退出登录',
+            cancelText: '取消',
+            onOk: () => { userStore.logout(); router.push('/login'); },
+        });
     }
 }
 </script>

@@ -65,7 +65,7 @@
         <template v-else-if="column.key === 'action'">
           <div class="row-actions">
             <a-button type="link" @click="editQuestion(record)">编辑</a-button>
-            <a-popconfirm title="确定删除？" ok-text="确定" cancel-text="取消" @confirm="del(record.id)">
+            <a-popconfirm title="确认删除该题目？" description="删除后该题目将从题库移除，已布置作业中的历史记录保留。" ok-text="删除题目" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="del(record.id)">
               <a-button type="link" danger>删除</a-button>
             </a-popconfirm>
           </div>

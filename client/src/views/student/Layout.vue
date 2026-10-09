@@ -68,11 +68,13 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useUserStore } from '../../stores/user.js';
-import { Modal, message } from 'ant-design-vue';
+import { message } from 'ant-design-vue';
+import { useConfirm } from '../../composables/useConfirm.js';
 import request from '../../api/request.js';
 import { ReadOutlined, TrophyOutlined, UserOutlined, PoweroffOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
 
 const router = useRouter(); const route = useRoute(); const userStore = useUserStore();
+const { confirm } = useConfirm();
 const user = userStore.user;
 const collapsed = ref(false);
 
@@ -149,7 +151,13 @@ async function openProfile() {
 function handleMenu({ key }) {
   if (key === 'profile') { openProfile(); return; }
   if (key === 'logout') {
-    Modal.confirm({ title: '确定退出登录？', content: '退出后需重新输入用户名和密码', okText: '确定', cancelText: '取消', onOk: () => { userStore.logout(); router.push('/login'); } });
+    confirm({
+      title: '确定退出登录？',
+      content: '退出后需重新输入用户名和密码',
+      okText: '退出登录',
+      cancelText: '取消',
+      onOk: () => { userStore.logout(); router.push('/login'); },
+    });
   }
 }
 </script>

@@ -40,7 +40,7 @@
           <div class="row-actions">
             <a-button type="link" @click="openEdit(record)" :disabled="record.isTeamClass">编辑</a-button>
             <a-button v-if="mySchools.length > 1" type="link" @click="openSwitchSchool(record)" :disabled="record.isTeamClass">切换学校</a-button>
-            <a-popconfirm title="确定删除？" ok-text="确定" cancel-text="取消" @confirm="del(record.id)" :disabled="record.isTeamClass">
+            <a-popconfirm title="确认删除该班级？" description="删除后该班级的学生/教师关联与作业布置记录一并移除，不可撤销。" ok-text="删除班级" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="del(record.id)" :disabled="record.isTeamClass">
               <a-button type="link" danger :disabled="record.isTeamClass">删除</a-button>
             </a-popconfirm>
           </div>
@@ -48,7 +48,7 @@
       </template>
     </ListPage>
 
-    <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" ok-text="确定" cancel-text="取消" :width="1040" wrap-class-name="form-modal">
+    <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" ok-text="确定" cancel-text="取消" :width="640" wrap-class-name="form-modal">
       <a-form :model="form">
         <a-form-item label="班级名称"><a-input v-model:value="form.name" /></a-form-item>
         <a-form-item label="指定教学团队">
@@ -59,7 +59,7 @@
       </a-form>
     </a-modal>
 
-    <a-modal :title="switchTitle" :open="switchVisible" @ok="handleSwitch" @cancel="switchVisible = false" ok-text="确定切换" cancel-text="取消" :width="520">
+    <a-modal :title="switchTitle" :open="switchVisible" @ok="handleSwitch" @cancel="switchVisible = false" ok-text="确定切换" cancel-text="取消" :width="640">
       <div class="switch-body">
         <p>将班级 <strong>{{ switchingClass?.name }}</strong> 从</p>
         <p class="switch-pair">

@@ -69,6 +69,7 @@
     </a-spin>
 
     <!-- 前端切片分页（/student/assignments 对 keyword 命中结果全量返回）：与改前 DataTable 行为一致，仅在超过一页时出现 -->
+    <!-- TODO(P1-7): 接口支持服务端分页后切换（/student/assignments 目前全量返回，沿用前端切片） -->
     <div v-if="filteredList.length > listPage.pageSize" class="card table-foot">
       <span>第 {{ listPage.current }} 页 · 每页 {{ listPage.pageSize }} 条</span>
       <a-pagination

@@ -37,10 +37,10 @@
         <template v-else-if="column.key === 'action'">
           <div class="row-actions">
             <a-button type="link" @click="$router.push(`/teacher/teams/${record.id}`)">管理</a-button>
-            <a-popconfirm v-if="record.createdBy === userStore.user?.id" title="确定删除该团队？" ok-text="确定" cancel-text="取消" @confirm="del(record.id)">
+            <a-popconfirm v-if="record.createdBy === userStore.user?.id" title="确认删除该团队？" description="删除后团队成员将失去该团队及其班级的访问权限，不可撤销。" ok-text="删除团队" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="del(record.id)">
               <a-button type="link" danger>删除</a-button>
             </a-popconfirm>
-            <a-popconfirm v-else title="确定退出该团队？" ok-text="确定" cancel-text="取消" @confirm="leave(record.id)">
+            <a-popconfirm v-else title="确认退出该团队？" description="退出后你将无法查看该团队的班级与成员。" ok-text="退出团队" cancel-text="取消" @confirm="leave(record.id)">
               <a-button type="link">退出</a-button>
             </a-popconfirm>
           </div>
@@ -48,7 +48,7 @@
       </template>
     </ListPage>
 
-    <a-modal title="创建团队" :open="createVisible" @ok="handleCreate" @cancel="createVisible = false" ok-text="确定" cancel-text="取消" :width="400" wrap-class-name="form-modal">
+    <a-modal title="创建团队" :open="createVisible" @ok="handleCreate" @cancel="createVisible = false" ok-text="确定" cancel-text="取消" :width="480" wrap-class-name="form-modal">
       <a-form><a-form-item label="团队名称"><a-input v-model:value="createName" /></a-form-item></a-form>
     </a-modal>
   </PageShell>

@@ -1,11 +1,15 @@
 <template>
-  <div class="page">
-    <!-- Header -->
-    <div class="page-header">
+  <FormPage
+    :title="isTeacher ? (isEdit ? '编辑实训题' : '新建实训题') : (form.title || '实训题')"
+    :description="isTeacher ? '实训题支持上传标准工程包；不上传即开放性题目，AI 按评价式评分。' : ''"
+    :back="isTeacher ? { text: '返回题库管理', to: '/teacher/questions' } : null"
+  >
+    <!-- 基本信息（原页头左组：标题 / 难度 / 满分） -->
+    <div class="meta-row">
       <a-space>
         <!-- 教师模式：可编辑 / 学生模式：只读 -->
-        <a-input v-if="isTeacher" v-model:value="form.title" :placeholder="isEdit?'编辑实训题':'新建实训题'" style="width:260px;font-size:18px;font-weight:700;" />
-        <span v-else style="font-size:18px;font-weight:700;">{{ form.title || '实训题' }}</span>
+        <a-input v-if="isTeacher" v-model:value="form.title" :placeholder="isEdit?'编辑实训题':'新建实训题'" style="width:260px;font-size:var(--fs-title-2);font-weight:700;" />
+        <span v-else style="font-size:var(--fs-title-2);font-weight:700;">{{ form.title || '实训题' }}</span>
         <a-tag color="orange" size="small" style="margin:0;">BETA</a-tag>
 
         <a-select v-if="isTeacher" v-model:value="form.difficulty" style="width:100px;">
@@ -17,20 +21,21 @@
           {{ form.difficulty === 'easy' ? '简单' : form.difficulty === 'hard' ? '困难' : '中等' }}
         </a-tag>
 
-        <span style="font-size:14px;color:var(--ink-muted);white-space:nowrap;">满分</span>
+        <span style="font-size:var(--fs-body);color:var(--text-tertiary);white-space:nowrap;">满分</span>
         <a-input-number v-if="isTeacher" v-model:value="form.maxScore" :min="1" :step="5" style="width:80px;" />
-        <span v-else style="font-weight:700;color:var(--blue);">{{ form.maxScore }} 分</span>
-      </a-space>
-      <a-space>
-        <a-button @click="openDescModal">题目描述</a-button>
-        <a-button @click="openRubricModal">评分标准</a-button>
-        <a-button v-if="isTeacher && isEdit" @click="showPromptPreview">查看 AI 提示词</a-button>
-        <a-button v-if="isTeacher" type="primary" @click="handleSave">保存</a-button>
-          <a-button v-else type="primary" :disabled="!hasUploaded || submitting || (isStudent && studentSubmission && studentSubmission.status !== 'draft')" :loading="submitting" @click="handleSubmit">
-          {{ submitting ? '提交中...' : '提交答案' }}
-        </a-button>
+        <span v-else style="font-weight:700;color:var(--brand-600);">{{ form.maxScore }} 分</span>
       </a-space>
     </div>
+
+    <template #actions>
+      <a-button @click="openDescModal">题目描述</a-button>
+      <a-button @click="openRubricModal">评分标准</a-button>
+      <a-button v-if="isTeacher && isEdit" @click="showPromptPreview">查看 AI 提示词</a-button>
+      <a-button v-if="isTeacher" type="primary" @click="handleSave">保存</a-button>
+      <a-button v-else type="primary" :disabled="!hasUploaded || submitting || (isStudent && studentSubmission && studentSubmission.status !== 'draft')" :loading="submitting" @click="handleSubmit">
+        {{ submitting ? '提交中...' : '提交答案' }}
+      </a-button>
+    </template>
 
     <!-- 题目描述模态框 -->
     <a-modal v-model:open="showDescModal" :title="isTeacher ? '题目描述' : '题目描述（只读）'" width="720px" wrap-class-name="desc-modal">
@@ -49,7 +54,7 @@
     <a-modal v-model:open="showRubricModal" :title="isTeacher ? '评分标准' : '评分标准（只读）'" width="640px">
       <a-textarea v-if="isTeacher" v-model:value="rubricDraft" :rows="12" placeholder="建议逐条写明必须完成的功能并注明分值，AI 会逐条核对。" />
       <div v-else class="readonly-rubric">{{ form.scoringRubric || '未填写，使用默认标准：功能完整性50% + 代码规范25% + 健壮性25%' }}</div>
-      <div v-if="isTeacher" style="margin-top:8px;font-size:12px;color:#999;">不填写则使用默认标准：功能完整性50% + 代码规范25% + 健壮性25%</div>
+      <div v-if="isTeacher" style="margin-top:8px;font-size:var(--fs-caption);color:var(--text-tertiary);">不填写则使用默认标准：功能完整性50% + 代码规范25% + 健壮性25%</div>
       <template #footer>
         <a-button v-if="!isTeacher" @click="showRubricModal = false">关闭</a-button>
         <template v-else>
@@ -137,7 +142,7 @@
             <div class="editor-body">
               <div class="editor-container" ref="editorContainerRef" :class="{ 'pr-fade-in': fading }"></div>
               <div v-if="!openTabs.length" class="editor-empty">
-                <FileTextOutlined style="font-size:48px;color:#d9d9d9" />
+                <FileTextOutlined style="font-size:48px;color:var(--border-strong)" />
                 <p>从左侧选择文件查看代码</p>
               </div>
             </div>
@@ -145,7 +150,7 @@
         </div>
       </div>
     </Transition>
-  </div>
+  </FormPage>
 </template>
 
 <script setup>
@@ -161,6 +166,7 @@ import request from '../../api/request.js';
 import { uploadPackage } from '../../api/projects.js';
 import { getLanguage } from '../../domain/fileLang.js';
 import ProjectZipUploader from '../../components/ProjectZipUploader.vue';
+import FormPage from '../../components/FormPage.vue';
 
 const props = defineProps({ mode: { type: String, default: 'teacher' } });
 const isTeacher = computed(() => props.mode === 'teacher');
@@ -259,7 +265,7 @@ const form = reactive({
 // 学生端只读渲染题目描述：教师 RichEditor 产出的 HTML 可能携带脚本，渲染前必须用 DOMPurify 净化
 const safeDescriptionHtml = computed(() => {
   const html = form.description || '';
-  if (!html) return '<p style="color:#999">暂无题目描述</p>';
+  if (!html) return '<p style="color:var(--text-tertiary)">暂无题目描述</p>';
   return DOMPurify.sanitize(html);
 });
 
@@ -531,96 +537,94 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.page { max-width:100%; height:100%; display:flex; flex-direction:column; overflow:hidden; }
-.page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-shrink:0; }
-.page-header h2 { font-size:28px; margin:0; }
+.meta-row { display:flex; align-items:center; gap:var(--space-3); margin-bottom:var(--space-3); flex-wrap:wrap; }
 
 .kind-pick-switch-enter-active,.kind-pick-switch-leave-active { transition: all .25s ease; }
 .kind-pick-switch-enter-from,.kind-pick-switch-leave-to { opacity:0; transform:scale(.9); }
 
 .kind-picker { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; }
-.kind-add-btn { width:56px; height:56px; border-radius:50%; border:2px dashed #d9d9d9; background:#fafafa; font-size:24px; color:#999; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .2s; }
-.kind-add-btn:hover { border-color:#1677ff; color:#1677ff; background:#e6f4ff; }
+.kind-add-btn { width:56px; height:56px; border-radius:50%; border:2px dashed var(--border-strong); background:var(--bg-surface-2); font-size:24px; color:var(--text-tertiary); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .2s; }
+.kind-add-btn:hover { border-color:var(--brand-600); color:var(--brand-600); background:var(--brand-50); }
 .kind-add-btn:disabled { cursor:not-allowed; opacity:.8; animation:upload-pulse 1.2s ease-in-out infinite; }
 @keyframes upload-pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }
-.kind-hint { font-size:13px; color:var(--ink-muted); transition:color .2s; }
+.kind-hint { font-size:var(--fs-body-sm); color:var(--text-tertiary); transition:color .2s; }
 
 /* 学生端成绩卡片（实训题专用） */
-.student-score-card { margin-bottom:12px; flex-shrink:0; border:1px solid #e8e8e8; border-radius:8px; background:#fff; overflow:hidden; }
-.student-score-card.pending { border-color:#f0f0f0; }
-.ssc-head { display:flex; align-items:center; gap:10px; padding:8px 14px; background:#fafafa; border-bottom:1px solid #f0f0f0; }
-.ssc-status { font-weight:600; font-size:13px; }
-.ssc-status.success { color:#52c41a; }
-.ssc-status.info { color:#1677ff; }
-.ssc-status.default { color:#999; }
-.ssc-time { margin-left:auto; font-size:12px; color:#999; }
+.student-score-card { margin-bottom:12px; flex-shrink:0; border:1px solid var(--border-default); border-radius:var(--radius-md); background:var(--bg-surface); overflow:hidden; }
+.student-score-card.pending { border-color:var(--border-subtle); }
+.ssc-head { display:flex; align-items:center; gap:10px; padding:8px 14px; background:var(--bg-surface-2); border-bottom:1px solid var(--border-subtle); }
+.ssc-status { font-weight:600; font-size:var(--fs-body-sm); }
+.ssc-status.success { color:var(--status-success-fg); }
+.ssc-status.info { color:var(--brand-600); }
+.ssc-status.default { color:var(--text-tertiary); }
+.ssc-time { margin-left:auto; font-size:var(--fs-caption); color:var(--text-tertiary); }
 .ssc-body { display:flex; align-items:flex-start; padding:14px 16px; gap:20px; }
-.ssc-score { display:flex; align-items:baseline; gap:4px; padding-right:20px; border-right:1px solid #f0f0f0; min-width:110px; }
-.ssc-score-num { font-size:32px; font-weight:700; color:#1677ff; line-height:1; }
-.ssc-score-max { font-size:13px; color:#999; }
+.ssc-score { display:flex; align-items:baseline; gap:4px; padding-right:20px; border-right:1px solid var(--border-subtle); min-width:110px; }
+.ssc-score-num { font-size:var(--fs-display-1); font-weight:700; color:var(--brand-600); line-height:1; }
+.ssc-score-max { font-size:var(--fs-body-sm); color:var(--text-tertiary); }
 .ssc-feedback { flex:1; min-width:0; }
-.ssc-feedback-label { font-size:12px; color:#888; margin-bottom:4px; }
-.ssc-feedback-text { font-size:13px; line-height:1.7; color:#333; white-space:pre-wrap; }
-.ssc-feedback-empty { font-size:13px; color:#bbb; }
-.ssc-pending-hint { display:flex; align-items:center; gap:8px; font-size:13px; color:#999; padding:6px 0; }
+.ssc-feedback-label { font-size:var(--fs-caption); color:var(--text-tertiary); margin-bottom:4px; }
+.ssc-feedback-text { font-size:var(--fs-body-sm); line-height:1.7; color:var(--text-primary); white-space:pre-wrap; }
+.ssc-feedback-empty { font-size:var(--fs-body-sm); color:var(--text-disabled); }
+.ssc-pending-hint { display:flex; align-items:center; gap:8px; font-size:var(--fs-body-sm); color:var(--text-tertiary); padding:6px 0; }
 
-.ide-stage { flex:1; display:flex; flex-direction:column; overflow:hidden; min-height:0; }
+.ide-stage { height:calc(100vh - 300px); min-height:480px; display:flex; flex-direction:column; overflow:hidden; }
 .picker-slot { flex:1; display:flex; flex-direction:column; min-height:0; }
 /* 开放性实训题说明（仅教师视角）：居中灰字，不挤压上传入口 */
-.open-project-hint { flex-shrink:0; margin:0 auto 20px; padding:0 24px; max-width:760px; font-size:13px; line-height:1.8; color:var(--ink-muted); text-align:center; }
-.ide-body { flex:1; display:flex; overflow:hidden; min-height:0; border:1px solid #e0e0e0; border-radius:4px; }
+.open-project-hint { flex-shrink:0; margin:0 auto 20px; padding:0 24px; max-width:760px; font-size:var(--fs-body-sm); line-height:1.8; color:var(--text-tertiary); text-align:center; }
+.ide-body { flex:1; display:flex; overflow:hidden; min-height:0; border:1px solid var(--border-strong); border-radius:var(--radius-xs); }
 
-.sidebar { width:260px; flex-shrink:0; background:#f3f3f3; border-right:1px solid #e0e0e0; display:flex; flex-direction:column; overflow:hidden; }
-.sidebar-title { padding:10px 12px; font-size:11px; font-weight:600; text-transform:uppercase; color:#666; letter-spacing:.5px; flex-shrink:0; }
+.sidebar { width:260px; flex-shrink:0; background:var(--bg-sunken); border-right:1px solid var(--border-strong); display:flex; flex-direction:column; overflow:hidden; }
+.sidebar-title { padding:10px 12px; font-size:11px; font-weight:600; text-transform:uppercase; color:var(--text-secondary); letter-spacing:.5px; flex-shrink:0; }
 .file-tree { flex:1; overflow-y:auto; padding:4px 0; }
-.file-tree :deep(.ant-tree) { background:transparent; font-size:13px; }
+.file-tree :deep(.ant-tree) { background:transparent; font-size:var(--fs-body-sm); }
 .file-tree :deep(.ant-tree-treenode) { padding:1px 0; white-space:nowrap; }
 .file-tree :deep(.ant-tree-node-content-wrapper) { padding:0 6px 0 2px; overflow:hidden; text-overflow:ellipsis; }
-.file-tree :deep(.ant-tree-node-content-wrapper:hover) { background:#e4e6f1; }
-.file-tree :deep(.ant-tree-node-selected) { background:#d6d9e8!important; }
-.tree-icon { font-size:14px; width:16px; text-align:center; display:inline-block; flex-shrink:0; }
+.file-tree :deep(.ant-tree-node-content-wrapper:hover) { background:var(--bg-hover); }
+.file-tree :deep(.ant-tree-node-content-wrapper.ant-tree-node-selected) { background:var(--bg-active); }
+.tree-icon { font-size:var(--fs-body); width:16px; text-align:center; display:inline-block; flex-shrink:0; }
 .tree-dir { font-weight:500; }
 .tree-file { font-weight:400; }
 
 .editor-area { flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0; }
-.tab-bar { display:flex; background:#ececec; flex-shrink:0; min-height:35px; height:35px; align-items:flex-end; overflow-x:auto; overflow-y:hidden; }
-.tab { display:flex; align-items:center; padding:7px 12px; font-size:12px; cursor:pointer; border-right:1px solid #ddd; background:#ececec; white-space:nowrap; min-width:80px; max-width:160px; flex-shrink:0; }
-.tab.active { background:#fff; border-bottom:2px solid #fff; margin-bottom:-2px; }
-.tab:hover:not(.active) { background:#e0e0e0; }
-.tab-name { flex:1; overflow:hidden; text-overflow:ellipsis; font-size:12px; }
-.tab-close { margin-left:6px; font-size:14px; color:#999; line-height:1; }
-.tab-close:hover { color:#333; }
-.tab-bar-fill { flex:1; background:#ececec; border-bottom:2px solid #ececec; height:35px; }
+.tab-bar { display:flex; background:var(--bg-sunken); flex-shrink:0; min-height:35px; height:35px; align-items:flex-end; overflow-x:auto; overflow-y:hidden; }
+.tab { display:flex; align-items:center; padding:7px 12px; font-size:var(--fs-caption); cursor:pointer; border-right:1px solid var(--border-strong); background:var(--bg-sunken); white-space:nowrap; min-width:80px; max-width:160px; flex-shrink:0; }
+.tab.active { background:var(--bg-surface); border-bottom:2px solid var(--bg-surface); margin-bottom:-2px; }
+.tab:hover:not(.active) { background:var(--border-strong); }
+.tab-name { flex:1; overflow:hidden; text-overflow:ellipsis; font-size:var(--fs-caption); }
+.tab-close { margin-left:6px; font-size:var(--fs-body); color:var(--text-tertiary); line-height:1; }
+.tab-close:hover { color:var(--text-primary); }
+.tab-bar-fill { flex:1; background:var(--bg-sunken); border-bottom:2px solid var(--bg-sunken); height:35px; }
 .editor-body { flex:1; position:relative; display:flex; min-height:0; overflow:hidden; }
-  .editor-container { flex:1; overflow:hidden; background:#fff; }
-.editor-empty { position:absolute; top:0; right:0; bottom:0; left:0; background:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#bfbfbf; gap:12px; }
+  .editor-container { flex:1; overflow:hidden; background:var(--bg-surface); }
+.editor-empty { position:absolute; top:0; right:0; bottom:0; left:0; background:var(--bg-surface); display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--text-disabled); gap:12px; }
 .editor-empty p { margin:0; }
 
-.readonly-desc { padding: 12px; min-height: 200px; font-size: 14px; line-height: 1.8; }
-.readonly-rubric { padding: 12px; min-height: 100px; font-size: 14px; line-height: 2; white-space: pre-wrap; }
+.readonly-desc { padding: 12px; min-height: 200px; font-size:var(--fs-body); line-height: 1.8; }
+.readonly-rubric { padding: 12px; min-height: 100px; font-size:var(--fs-body); line-height: 2; white-space: pre-wrap; }
 
 /* AI 提示词预览 */
 .prompt-block { margin-bottom: 12px; }
-.prompt-role-label { font-size: 12px; font-weight: 600; color: #666; margin: 8px 0 4px; }
+.prompt-role-label { font-size:var(--fs-caption); font-weight: 600; color: var(--text-secondary); margin: 8px 0 4px; }
 .prompt-pre {
   margin: 0; padding: 10px 12px;
-  background: #f6f8fa; border: 1px solid #e8e8e8; border-radius: 6px;
-  font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-all;
+  background: var(--bg-sunken); border: 1px solid var(--border-default); border-radius:var(--radius-sm);
+  font-size:var(--fs-caption); line-height: 1.6; white-space: pre-wrap; word-break: break-all;
   max-height: 400px; overflow: auto;
 }
 
 .grade-result { padding: 8px 0; }
 .grade-total { font-size: 24px; font-weight: 700; text-align: center; margin-bottom: 16px; }
-.grade-total span { color: #1677ff; }
+.grade-total span { color: var(--brand-600); }
 .grade-breakdown { margin-bottom: 12px; }
-.grade-item { padding: 10px 12px; background: #fafafa; border-radius: 6px; margin-bottom: 8px; }
+.grade-item { padding: 10px 12px; background: var(--bg-surface-2); border-radius:var(--radius-sm); margin-bottom: 8px; }
 .grade-item-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-.grade-item-name { font-weight: 600; font-size: 14px; }
-.grade-item-score { color: #1677ff; font-weight: 700; font-size: 14px; }
-.grade-item-comment { font-size: 13px; color: #666; }
-.grade-highlights { font-size: 13px; color: #52c41a; margin-bottom: 8px; }
-.grade-issues { font-size: 13px; color: #ff4d4f; margin-bottom: 8px; }
-.grade-overall { font-size: 13px; color: #333; padding: 10px; background: #f6ffed; border-radius: 6px; margin-top: 8px; }
+.grade-item-name { font-weight: 600; font-size:var(--fs-body); }
+.grade-item-score { color: var(--brand-600); font-weight: 700; font-size:var(--fs-body); }
+.grade-item-comment { font-size:var(--fs-body-sm); color: var(--text-secondary); }
+.grade-highlights { font-size:var(--fs-body-sm); color: var(--status-success-fg); margin-bottom: 8px; }
+.grade-issues { font-size:var(--fs-body-sm); color: var(--status-danger-fg); margin-bottom: 8px; }
+.grade-overall { font-size:var(--fs-body-sm); color: var(--text-primary); padding: 10px; background: var(--status-success-bg); border-radius:var(--radius-sm); margin-top: 8px; }
 </style>
 
 <style>

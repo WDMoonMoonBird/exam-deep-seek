@@ -32,7 +32,7 @@
         <template v-else-if="column.key === 'action'">
           <div class="row-actions">
             <a-button type="link" @click="openEdit(record)">编辑</a-button>
-            <a-popconfirm title="确定删除？" ok-text="确定" cancel-text="取消" @confirm="del(record.id)">
+            <a-popconfirm title="确认删除该班级？" description="删除后该班级的学生/教师关联与作业布置记录一并移除，不可撤销。" ok-text="删除班级" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="del(record.id)">
               <a-button type="link" danger>删除</a-button>
             </a-popconfirm>
           </div>
@@ -40,7 +40,7 @@
       </template>
     </ListPage>
 
-    <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" ok-text="确定" cancel-text="取消" :width="1040" wrap-class-name="form-modal">
+    <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" ok-text="确定" cancel-text="取消" :width="640" wrap-class-name="form-modal">
       <a-form :model="form">
         <a-form-item label="班级名称"><a-input v-model:value="form.name" /></a-form-item>
         <a-form-item label="所属学校">

@@ -56,7 +56,7 @@
         <template v-else-if="column.key === 'action'">
           <div class="row-actions">
             <a-button type="link" @click="openEdit(record)" :disabled="isTeamClass">编辑</a-button>
-            <a-popconfirm title="确定删除该学生？" ok-text="确定" cancel-text="取消" @confirm="del(record.id)" :disabled="isTeamClass">
+            <a-popconfirm title="确认删除该学生？" description="删除后该学生的班级关联与全部提交记录将被移除，不可撤销。" ok-text="删除学生" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="del(record.id)" :disabled="isTeamClass">
               <a-button type="link" danger :disabled="isTeamClass">删除</a-button>
             </a-popconfirm>
           </div>
@@ -64,7 +64,7 @@
       </template>
     </ListPage>
 
-    <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" ok-text="确定" cancel-text="取消">
+    <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" ok-text="确定" cancel-text="取消" :width="480">
       <a-form :model="form">
         <a-form-item label="学号">
           <a-input v-model:value="form.username" :disabled="isEdit && !form._canEditUsername" />
@@ -76,7 +76,7 @@
           </a-select>
         </a-form-item>
         <a-form-item v-if="isEdit" label="重置密码">
-          <a-popconfirm title="确认将该学生密码重置为学号？" ok-text="确定" cancel-text="取消" @confirm="resetPassword">
+          <a-popconfirm title="确认将该学生密码重置为学号？" description="重置后旧密码立即失效。" ok-text="重置为学号" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="resetPassword">
             <a-button :disabled="form._incomplete" type="dashed" danger>重置为学号</a-button>
           </a-popconfirm>
         </a-form-item>
@@ -86,7 +86,7 @@
     <a-modal
       v-model:open="uploadModalOpen"
       title="批量导入学生"
-      :footer="null" :width="520" :destroyOnClose="true"
+      :footer="null" :width="640" :destroyOnClose="true"
       :maskClosable="!uploading" :closable="!uploading"
       @cancel="uploadFileList = []"
     >
@@ -118,7 +118,7 @@
       </a-spin>
     </a-modal>
 
-    <a-modal v-model:open="uploadResultOpen" title="导入结果" :footer="null" :width="520" :destroyOnClose="true">
+    <a-modal v-model:open="uploadResultOpen" title="导入结果" :footer="null" :width="640" :destroyOnClose="true">
       <!-- 全部成功、无警告 -->
       <div v-if="uploadResult.errors.length === 0 && uploadResult.warnings.length === 0" class="result-center">
         <CheckCircleOutlined class="icon-success" />
@@ -153,7 +153,7 @@
 
 <script setup>
 import { ref, reactive, watch, computed, onMounted } from 'vue';
-import { message, Modal } from 'ant-design-vue';
+import { message } from 'ant-design-vue';
 import { InboxOutlined, CheckCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons-vue';
 import * as XLSX from 'xlsx';
 import request from '../../api/request.js';
@@ -161,6 +161,10 @@ import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
 import StatusTag from '../../components/StatusTag.vue';
 import { formatDateTime } from '../../domain/format.js';
+import { useConfirm } from '../../composables/useConfirm.js';
+
+/** 命令式确认框（Wave 2 构件 useConfirm）：替代原 antd 命令式调用，行为等价 */
+const { confirm } = useConfirm();
 
 const page = reactive({ current: 1, pageSize: 20 });
 const loading = ref(false);
@@ -264,23 +268,21 @@ async function handleOk() {
     // 补全学号：二次确认，保存后不可再修改
     if (form._canEditUsername) {
       d.newUsername = form.username;
-      return new Promise((resolve) => {
-        Modal.confirm({
-          title: '确认修改学号',
-          content: `保存后学号将变为「${form.username}」，不可再次修改。确定吗？`,
-          okText: '确定保存',
-          cancelText: '取消',
-          onOk: async () => {
-            try {
-              await request.put(`/teacher/students/${editId.value}`, d);
-              message.success('修改成功');
-              visible.value = false; await Promise.all([fetch(), loadClasses()]);
-            } catch {}
-            resolve();
-          },
-          onCancel: () => resolve(),
-        });
+      confirm({
+        title: '确认修改学号',
+        content: `保存后学号将变为「${form.username}」，且不可再次修改。`,
+        okText: '保存新学号',
+        cancelText: '取消',
+        danger: true,   // 学号补齐后不可再次修改（不可逆）
+        onOk: async () => {
+          try {
+            await request.put(`/teacher/students/${editId.value}`, d);
+            message.success('修改成功');
+            visible.value = false; await Promise.all([fetch(), loadClasses()]);
+          } catch {}
+        },
       });
+      return;
     }
     await request.put(`/teacher/students/${editId.value}`, d);
     message.success('修改成功');

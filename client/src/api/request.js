@@ -21,6 +21,26 @@ request.interceptors.request.use((config) => {
 });
 
 /**
+ * 静默开关（Wave 2 t13 / R-1）：单个请求可传 `{ silent: true }` 关闭全局错误提示
+ *   request.get('/teacher/pending-summary', { silent: true })
+ * 语义：失败（HTTP 错误 / 网络错误 / 业务码非 0）**只 reject，不弹全局 message**，
+ *      由调用方 try/catch 自行处理；401 跳登录、Authorization 与 schoolId 注入等既有行为不变。
+ * 用途：侧栏徽标这类「辅助信息」请求 —— 失败不能打断用户。
+ */
+function isSilent(config) {
+  return config?.silent === true;
+}
+
+/** 业务码非 0 时构造与 axios 错误同形状的 Error：err.response.data 仍能取到响应体 */
+function businessError(res) {
+  const err = new Error(res?.data?.message || '请求失败');
+  err.code = res?.data?.code;
+  err.data = res?.data?.data;
+  err.response = res;
+  return err;
+}
+
+/**
  * 布置作业 Q9 软警告（HTTP 400 + code=1007 + data.requiresConfirmation）是**正常业务分支**：
  * 页面（Assignments.vue）会据此弹确认框，文案本身就含「以下题目未上传标准工程包…」；
  * 若这里再弹一次 message.error，同一件事会以「报错」形式出现，误导教师以为布置失败。
@@ -35,6 +55,8 @@ function isConfirmableWarning(err) {
 request.interceptors.response.use(
   (res) => {
     if (res.data.code !== 0) {
+      // 静默请求：不弹提示，但仍 reject（调用方 try/catch 统一处理）
+      if (isSilent(res.config)) return Promise.reject(businessError(res));
       message.error(res.data.message || '请求失败');
     }
     return res.data;
@@ -45,7 +67,7 @@ request.interceptors.response.use(
       localStorage.removeItem('user');
       window.location.href = '/login';
     }
-    if (!isConfirmableWarning(err)) {
+    if (!isSilent(err.config) && !isConfirmableWarning(err)) {
       message.error(err.response?.data?.message || '网络错误');
     }
     return Promise.reject(err);
