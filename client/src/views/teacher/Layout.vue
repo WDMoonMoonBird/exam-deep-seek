@@ -73,7 +73,7 @@
         </a-layout>
     </a-layout>
 
-    <a-modal v-model:open="showProfile" :width="420" :footer="null" :destroyOnClose="true" @cancel="resetPwdForm">
+    <a-modal v-model:open="showProfile" :width="480" :footer="null" :destroyOnClose="true" @cancel="resetPwdForm">
       <div class="profile-card">
         <a-avatar :size="56" class="profile-avatar">{{ user?.realName?.charAt(0) }}</a-avatar>
         <div class="profile-row"><span class="profile-label">姓名</span><span>{{ user?.realName }}</span></div>
@@ -93,6 +93,9 @@
       </div>
     </a-modal>
 
+    <!-- 工作流/内容型弹窗：captain 2026-10-09 定案作为第四档 1040 保留。
+             与页面下方非 scoped 的 .flow-modal-wrap 规则成对维护：改这里的 :width 必须同步改那条 max-width
+             （对齐 views/teacher/Assignments.vue 的 .assign-modal 写法） -->
     <a-modal v-model:open="showFlowModal" :width="1040" :footer="null" :destroyOnClose="true" @cancel="flowStep = 0" :bodyStyle="{ padding: 'var(--space-4) var(--space-6)' }" wrap-class-name="flow-modal-wrap">
       <template #title>
         <QuestionCircleOutlined class="flow-title-icon" />AI 评分流程
@@ -267,6 +270,8 @@ function handleMenu ({ key }) {
 .topbar {
     background: var(--topbar-bg);
     border-bottom: 1px solid var(--topbar-bd);
+    /* R-2：容器色令牌化（折叠按钮/分隔点等继承它；现代与 html.legacy 计算值一致，见 18-wave4-verify 证据） */
+    color: var(--text-primary);
     padding: 0 var(--space-6);
     display: flex;
     align-items: center;
@@ -294,6 +299,7 @@ function handleMenu ({ key }) {
 }
 
 .trigger {
+    color: var(--text-primary);
     font-size: var(--fs-title-2);
     line-height: var(--layout-topbar-h);
     padding: 0 var(--space-3);

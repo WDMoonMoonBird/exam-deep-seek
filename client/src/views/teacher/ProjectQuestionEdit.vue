@@ -38,20 +38,20 @@
     </template>
 
     <!-- 题目描述模态框 -->
-    <a-modal v-model:open="showDescModal" :title="isTeacher ? '题目描述' : '题目描述（只读）'" width="720px" wrap-class-name="desc-modal">
+    <a-modal v-model:open="showDescModal" :title="isTeacher ? '题目描述' : '题目描述（只读）'" :width="820" wrap-class-name="desc-modal">
       <RichEditor v-if="isTeacher" v-model="descDraft" placeholder="请输入题目描述，说明项目要实现的功能和目标" />
       <div v-else class="readonly-desc" v-html="safeDescriptionHtml"></div>
       <template #footer>
         <a-button v-if="!isTeacher" @click="showDescModal = false">关闭</a-button>
         <template v-else>
           <a-button @click="showDescModal = false">取消</a-button>
-          <a-button type="primary" @click="confirmDesc">确定</a-button>
+          <a-button type="primary" @click="confirmDesc">保存描述</a-button>
         </template>
       </template>
     </a-modal>
 
     <!-- 评分标准模态框 -->
-    <a-modal v-model:open="showRubricModal" :title="isTeacher ? '评分标准' : '评分标准（只读）'" width="640px">
+    <a-modal v-model:open="showRubricModal" :title="isTeacher ? '评分标准' : '评分标准（只读）'" :width="640">
       <a-textarea v-if="isTeacher" v-model:value="rubricDraft" :rows="12" placeholder="建议逐条写明必须完成的功能并注明分值，AI 会逐条核对。" />
       <div v-else class="readonly-rubric">{{ form.scoringRubric || '未填写，使用默认标准：功能完整性50% + 代码规范25% + 健壮性25%' }}</div>
       <div v-if="isTeacher" style="margin-top:8px;font-size:var(--fs-caption);color:var(--text-tertiary);">不填写则使用默认标准：功能完整性50% + 代码规范25% + 健壮性25%</div>
@@ -59,13 +59,13 @@
         <a-button v-if="!isTeacher" @click="showRubricModal = false">关闭</a-button>
         <template v-else>
           <a-button @click="showRubricModal = false">取消</a-button>
-          <a-button type="primary" @click="confirmRubric">确定</a-button>
+          <a-button type="primary" @click="confirmRubric">保存评分标准</a-button>
         </template>
       </template>
     </a-modal>
 
     <!-- AI 提示词预览（编辑页模板：有标准包时展示标准包真实内容；开放性题目无标准答案段，学生代码占位） -->
-    <a-modal v-model:open="promptModalOpen" title="AI 提示词（与实评一致，学生代码以占位符显示）" :footer="null" width="820px">
+    <a-modal v-model:open="promptModalOpen" title="AI 提示词（与实评一致，学生代码以占位符显示）" :footer="null" :width="820">
       <a-spin :spinning="promptLoading">
         <template v-if="promptPreview">
           <div class="prompt-block">
@@ -167,6 +167,7 @@ import { uploadPackage } from '../../api/projects.js';
 import { getLanguage } from '../../domain/fileLang.js';
 import ProjectZipUploader from '../../components/ProjectZipUploader.vue';
 import FormPage from '../../components/FormPage.vue';
+import { formatDateTimeSec } from '../../domain/format.js';
 
 const props = defineProps({ mode: { type: String, default: 'teacher' } });
 const isTeacher = computed(() => props.mode === 'teacher');
@@ -245,11 +246,9 @@ const studentStatusType = computed(() => {
   return 'default';
 });
 
-/** 成绩卡片：提交时间本地化显示 */
+/** 成绩卡片：提交时间（需秒级精度 → 复用 domain 的带秒变体） */
 function formatSubmitTime(t) {
-  if (!t) return '';
-  const d = new Date(t);
-  return d.toLocaleString('zh-CN', { hour12: false });
+  return formatDateTimeSec(t);
 }
 
 const form = reactive({

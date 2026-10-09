@@ -29,7 +29,7 @@
         @expand="onTreeExpand"
       >
         <template #icon="{ type, path }">
-          <FolderOutlined v-if="type === 'directory'" style="color:#dcb67a;font-size:14px;" />
+          <FolderOutlined v-if="type === 'directory'" style="color:var(--amber-400);font-size:var(--fs-body);" />
           <span v-else class="tree-icon fiv-icon" :class="getClassWithColor(path || '')"></span>
         </template>
         <template #title="{ name, type }">
@@ -151,19 +151,19 @@ function onTreeExpand(keys) {
 
 /* 圆形选择按钮（还原封装前 kind-picker UI） */
 .kind-picker { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; min-height:120px; }
-.kind-add-btn { width:56px; height:56px; border-radius:50%; border:2px dashed #d9d9d9; background:#fafafa; font-size:24px; color:#999; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .2s; }
-.kind-add-btn:hover { border-color:#1677ff; color:#1677ff; background:#e6f4ff; }
+.kind-add-btn { width:56px; height:56px; border-radius:50%; border:2px dashed var(--border-strong); background:var(--bg-surface-2); font-size:24px; color:var(--text-tertiary); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .2s; }
+.kind-add-btn:hover { border-color:var(--border-focus); color:var(--text-link); background:var(--bg-selected); }
 .kind-add-btn:disabled { cursor:not-allowed; opacity:.8; animation:upload-pulse 1.2s ease-in-out infinite; }
-.kind-hint { font-size:13px; color:var(--ink-muted); transition:color .2s; }
+.kind-hint { font-size:var(--fs-body-sm); color:var(--text-tertiary); transition:color .2s; }
 @keyframes upload-pulse { 0%,100% { opacity:.6; } 50% { opacity:1; } }
 .zu-tree { flex:1; overflow:auto; margin-top:10px; min-height:0; }
 .zu-tree-head { display:flex; align-items:baseline; gap:8px; margin-bottom:6px; }
-.zu-tree-title { font-size:11px; font-weight:600; text-transform:uppercase; color:#666; letter-spacing:.5px; }
+.zu-tree-title { font-size:11px; font-weight:600; text-transform:uppercase; color:var(--text-secondary); letter-spacing:.5px; }
 
-.zu-tree :deep(.ant-tree) { background:transparent; font-size:13px; }
+.zu-tree :deep(.ant-tree) { background:transparent; font-size:var(--fs-body-sm); }
 .zu-tree :deep(.ant-tree-treenode) { padding:1px 0; white-space:nowrap; }
 .zu-tree :deep(.ant-tree-node-content-wrapper) { padding:0 6px 0 2px; overflow:hidden; text-overflow:ellipsis; }
-.tree-icon { font-size:14px; width:16px; text-align:center; display:inline-block; flex-shrink:0; }
+.tree-icon { font-size:var(--fs-body); width:16px; text-align:center; display:inline-block; flex-shrink:0; }
 .tree-dir { font-weight:500; }
 .tree-file { font-weight:400; }
 </style>

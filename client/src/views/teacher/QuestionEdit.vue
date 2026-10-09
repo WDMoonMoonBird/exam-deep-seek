@@ -63,7 +63,7 @@
               <TransitionGroup name="sq-list">
                 <span v-for="(sq, i) in subQuestions" :key="sq._key" :class="['sq-tab',{active:activeIndex===i}]" @click="switchTo(i)">
                   {{sqDisplayLabel(sq,i)}}
-                  <a-popconfirm v-if="subQuestions.length>1" title="确定删除？" ok-text="确定" cancel-text="取消" @confirm="removeSub(i)">
+                  <a-popconfirm v-if="subQuestions.length>1" title="确认删除该小题？" description="该小题的题干与答案将一并移除，不可撤销。" ok-text="删除小题" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="removeSub(i)">
                     <span class="sq-del" @click.stop>×</span>
                   </a-popconfirm>
                 </span>
@@ -132,7 +132,7 @@
                           <a-tag :color="itemTypeColor(item.type)" size="small">{{itemTypeLabel(item.type)}}</a-tag>
                           <span style="font-size:var(--fs-caption);color:var(--text-tertiary);">第{{idx+1}}小问</span>
                           <a-input-number v-model:value="item.score" :min="0" :step="0.01" :precision="2" placeholder="均分" size="small" style="width:70px;margin-left:auto;" @change="onItemScoreChange(item)" />分
-                          <a-popconfirm title="确定删除？" ok-text="确定" cancel-text="取消" @confirm="removeItem(idx)"><a-button size="small" type="text" danger @click.stop>×</a-button></a-popconfirm>
+                          <a-popconfirm title="确认删除该小问？" description="该小问的题干与选项将一并移除，不可撤销。" ok-text="删除小问" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="removeItem(idx)"><a-button size="small" type="text" danger @click.stop>×</a-button></a-popconfirm>
                         </div>
                         <a-textarea v-model:value="item.stem" :rows="2" placeholder="题干" size="small" :style="{fontFamily:isCodeStem(item.stem)?'monospace':'inherit'}" />
                         <div v-if="item.type==='choice'||item.type==='multi_choice'" class="obj-options">
@@ -221,7 +221,7 @@
           </Transition>
 
           <!-- AI 提示词预览 -->
-          <a-modal v-model:open="promptModalOpen" title="AI 提示词（与实评一致，学生代码以占位符显示）" :footer="null" width="760">
+          <a-modal v-model:open="promptModalOpen" title="AI 提示词（与实评一致，学生代码以占位符显示）" :footer="null" :width="820">
             <a-spin :spinning="promptLoading">
               <template v-if="promptPreviewData">
                 <a-collapse v-model:activeKey="promptActiveKeys">
@@ -257,12 +257,12 @@
             <a-radio value="partial">按正确选项比例给分</a-radio>
           </a-radio-group>
         </a-form-item>
-        <a-button type="primary" block @click="applySettings">确定</a-button>
+        <a-button type="primary" block @click="applySettings">应用设置</a-button>
       </a-form>
     </a-modal>
 
     <!-- 上传试卷模态框 -->
-    <a-modal v-model:open="showUploadExam" title="上传试卷" :footer="null" :width="520" :maskClosable="!uploadAnalyzing" :closable="!uploadAnalyzing" @cancel="resetUpload">
+    <a-modal v-model:open="showUploadExam" title="上传试卷" :footer="null" :width="640" :maskClosable="!uploadAnalyzing" :closable="!uploadAnalyzing" @cancel="resetUpload">
       <a-alert type="info" show-icon style="margin-bottom:16px;">
         <template #message>AI 试卷提取说明</template>
         <template #description>
@@ -763,6 +763,7 @@ function promptAiGenerate(missing){
     content:()=>h('div',{innerHTML:_sanHtml(`<p style="margin-bottom:8px;color:var(--text-secondary);">以下主观题尚未编写参考答案：</p>${tableHtml}<p style="margin-top:8px;color:var(--status-warning-fg);font-size:var(--fs-body-sm);">可由 AI 根据题目内容和评分标准自动生成参考答案，生成后请核对修改。</p>`)}),
     okText:'AI 生成参考答案',
     cancelText:'暂不生成',
+    width:640,
     onOk:async()=>{await aiGenerateRefs(missing);},
   });
 }
@@ -813,6 +814,7 @@ async function handleSave(){
     content:()=>h('div',{innerHTML:_sanHtml(`<p style="margin-bottom:8px;color:var(--text-secondary);">请确认各小题分值是否正确：</p>${html}<p style="margin-top:8px;color:var(--text-secondary);font-size:var(--fs-body-sm);">所有小题已设定分值，确认无误可保存。</p>`)}),
     okText:'确认保存',
     cancelText:'返回修改',
+    width:640,
     onOk:doSave,
   });
 }

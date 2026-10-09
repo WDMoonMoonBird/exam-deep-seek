@@ -129,16 +129,20 @@ onUnmounted(() => { clearInterval(timer); });
   font-weight: var(--fw-bold);
 }
 
-/* 深色日志区：颜色全部走令牌（背景/文字用反色面令牌；Wave 2 如需专用 --log-* 令牌再细拆） */
+/* 深色日志区：用 --code-bg / --code-fg（定义见 tokens.css:183-187 浅色语义层、:403-405 深色块显式重声明），
+   语义 = 「无论主题都必须保持深色的内容面」；浅色与暗色下取值一致（实测底色 11/15/22、文字 72% 白）。
+   不沿用 --bg-inverse/--text-inverse-muted 的理由是语义不同——--bg-inverse 表示「当前面的反色」（浅色主题下服务侧栏/浮层），
+   而非修暗色缺陷：tokens.css:388 起的「深色主题的组件级修正（必须放在组件令牌之后）」块在 :391 显式重声明 --bg-inverse 为深色值（与浅色主题同值），
+   与前面的 [data-theme="dark"] 块同优先级、后写者胜，故暗色下它同样保持深色；本注释此前「暗色会变浅底」的结论不成立，据此更正。 */
 .log-viewer {
   max-height: 500px;
   overflow: auto;
-  background: var(--bg-inverse);
+  background: var(--code-bg);
   border-radius: var(--radius-lg);
   padding: var(--space-4);
 }
 .log-viewer pre {
-  color: var(--text-inverse-muted);
+  color: var(--code-fg);
   font-size: var(--fs-code);
   line-height: var(--lh-code);
   margin: 0;

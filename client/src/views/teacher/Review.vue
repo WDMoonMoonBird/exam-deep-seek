@@ -39,7 +39,7 @@
           <div class="info-cell">
             <div class="info-title">{{ record.title }}</div>
             <div class="info-class"><TeamOutlined class="info-icon" />{{ record.className }}</div>
-            <div class="info-time">作答: {{ fmtDate(record.startTime) }} ~ {{ fmtDate(record.endTime) }}</div>
+            <div class="info-time">作答: {{ formatDate(record.startTime) }} ~ {{ formatDate(record.endTime) }}</div>
           </div>
         </template>
 
@@ -90,6 +90,7 @@ import { exportReviewXlsx } from '../../infrastructure/export.js';
 import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
 import StatusTag from '../../components/StatusTag.vue';
+import { formatDate } from '../../domain/format.js';
 
 const userStore = useUserStore();
 const loading = ref(false);
@@ -112,7 +113,6 @@ const columns = [
 const pagedList = computed(() => list.value.slice((page.current - 1) * page.pageSize, page.current * page.pageSize));
 
 function filterOption(input, option) { return option.label.toLowerCase().includes(input.toLowerCase()); }
-function fmtDate(d) { return d ? new Date(d).toLocaleDateString('zh-CN') : ''; }
 
 async function loadClasses() {
   const r = await request.get('/teacher/classes');

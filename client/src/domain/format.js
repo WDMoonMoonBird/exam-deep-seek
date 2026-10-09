@@ -1,12 +1,42 @@
 // 时间/难度显示格式化工具（全项目统一使用）
+/**
+ * 日期时间（全站统一，R-4）：YYYY-MM-DD HH:mm —— 月/日/时/分零填充。
+ * 空值 → ''（同改前）；无法解析的输入沿用 toLocale* 的原有输出（Invalid Date），行为与改前一致。
+ */
 export function formatDateTime(d) {
   if (!d) return '';
   const date = new Date(d);
-  return `${date.toLocaleDateString('zh-CN')} ${date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
+  if (Number.isNaN(date.getTime())) {
+    // 无效日期：保持改前输出（toLocaleDateString / toLocaleTimeString 对 Invalid Date 的结果）
+    return `${date.toLocaleDateString('zh-CN')} ${date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
+  }
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+/**
+ * 日期（仅日期，全站统一）：YYYY-MM-DD —— 月/日零填充。
+ * 空值 → ''（同改前）；无法解析的输入沿用 toLocaleDateString 的原有输出（Invalid Date），行为与改前一致。
+ */
 export function formatDate(d) {
-  return d ? new Date(d).toLocaleDateString('zh-CN') : '';
+  if (!d) return '';
+  const date = new Date(d);
+  if (Number.isNaN(date.getTime())) return date.toLocaleDateString('zh-CN');
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/**
+ * 日期时间（带秒）：YYYY-MM-DD HH:mm:ss —— 供确实需要秒级精度的场景（实训提交时间）复用，
+ * 与 formatDateTime 同族（零填充 + 同一无效输入回退策略）。
+ */
+export function formatDateTimeSec(d) {
+  if (!d) return '';
+  const date = new Date(d);
+  // 无效输入：保持被替换掉的页面本地实现（toLocaleString）的原有输出
+  if (Number.isNaN(date.getTime())) return date.toLocaleString('zh-CN', { hour12: false });
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 export function formatTime(d) {

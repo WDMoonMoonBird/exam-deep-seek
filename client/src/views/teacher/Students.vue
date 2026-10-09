@@ -64,7 +64,7 @@
       </template>
     </ListPage>
 
-    <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" ok-text="确定" cancel-text="取消" :width="480">
+    <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" :ok-text="isEdit ? '保存修改' : '新增学生'" cancel-text="取消" :width="480">
       <a-form :model="form">
         <a-form-item label="学号">
           <a-input v-model:value="form.username" :disabled="isEdit && !form._canEditUsername" />

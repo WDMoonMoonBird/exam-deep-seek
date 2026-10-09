@@ -37,7 +37,7 @@
             <a-popconfirm :title="`确认重置「${record.realName}」的密码？`" description="重置后密码将变为该教师工号，旧密码立即失效。" ok-text="重置密码" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="resetPwd(record.id)">
               <a-button type="link">重置密码</a-button>
             </a-popconfirm>
-            <a-popconfirm v-if="record.id !== currentUserId" title="确定删除该教师？删除后其账号将无法登录，历史数据（题目/作业/成绩）保留" ok-text="删除" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="removeTeacher(record)">
+            <a-popconfirm v-if="record.id !== currentUserId" title="确定删除该教师？删除后其账号将无法登录，历史数据（题目/作业/成绩）保留" ok-text="删除教师" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="removeTeacher(record)">
               <a-button type="link" danger>删除</a-button>
             </a-popconfirm>
           </div>
@@ -45,7 +45,7 @@
       </template>
     </ListPage>
 
-    <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" ok-text="确定" cancel-text="取消" :width="640">
+    <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" :ok-text="isEdit ? '保存修改' : '新增教师'" cancel-text="取消" :width="640">
       <a-form :model="form">
         <a-form-item label="工号"><a-input v-model:value="form.username" :disabled="isEdit" /></a-form-item>
         <a-form-item label="姓名"><a-input v-model:value="form.realName" /></a-form-item>

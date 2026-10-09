@@ -12,7 +12,12 @@ import { Modal } from 'ant-design-vue';
  *   cancelText: '取消',
  *   danger: false,          // true → ok 按钮用危险色令牌 --red-600（危险操作必填 true）
  *   onOk: async () => { … }, // 支持 async；抛错则保持弹窗打开
+ *   width: 640,             // 可选：弹窗宽度（Modal 宽度三档 480 / 640 / 820，见 17-wave4-brief.md §2）
+ *   maskClosable: false,    // 可选：点遮罩是否关闭（缺省跟随 antd confirm，即不关闭）
+ *   closable: false,        // 可选：是否显示右上角关闭按钮（缺省跟随 antd confirm，即不显示）
  * });
+ *
+ * 三个可选参数缺省时**不写入配置对象**，因此不传时的行为与 antd Modal.confirm 逐字一致。
  *
  * 行为与 antd Modal.confirm 等价（由 antd 的 _util/ActionButton 保障）：
  *  - onOk 返回 Promise → ok 按钮自动 loading，resolve 后关闭；
@@ -38,13 +43,20 @@ function silenceDerivedRejection(promise) {
 
 export function useConfirm() {
   function confirm(options = {}) {
-    const { title, content, okText = '确定', cancelText = '取消', danger = false, onOk } = options;
+    const {
+      title, content, okText = '确定', cancelText = '取消', danger = false, onOk,
+      width, maskClosable, closable,
+    } = options;
 
     return Modal.confirm({
       title,
       content,
       okText,
       cancelText,
+      // 可选参数只在显式传入时才写进配置，缺省时完全交给 antd 默认（与 Wave 2 的等价性断言一致）
+      ...(width !== undefined ? { width } : null),
+      ...(maskClosable !== undefined ? { maskClosable } : null),
+      ...(closable !== undefined ? { closable } : null),
       okButtonProps: danger
         // 主题尚未接管 colorError（见 styles/antd-theme.js 的波次约定：语义色留待后续波次），
         // 因此危险色直接绑令牌，不写死色值。

@@ -48,7 +48,7 @@
       </template>
     </ListPage>
 
-    <a-modal title="创建团队" :open="createVisible" @ok="handleCreate" @cancel="createVisible = false" ok-text="确定" cancel-text="取消" :width="480" wrap-class-name="form-modal">
+    <a-modal title="创建团队" :open="createVisible" @ok="handleCreate" @cancel="createVisible = false" ok-text="创建团队" cancel-text="取消" :width="480" wrap-class-name="form-modal">
       <a-form><a-form-item label="团队名称"><a-input v-model:value="createName" /></a-form-item></a-form>
     </a-modal>
   </PageShell>

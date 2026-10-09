@@ -550,7 +550,7 @@ function publishAll() {
   confirm({
     title: '确认发布成绩？',
     content: '发布后学生将能看到分数和评语。发布后仍可修改分数，修改后重新发布即可。',
-    okText: '确定发布',
+    okText: '发布成绩',
     cancelText: '取消',
     danger: true,
     onOk: async () => {

@@ -94,12 +94,12 @@ function handleMenu({ key }) {
 .logo-text { color: var(--text-inverse); font-family: var(--font-display); font-weight: var(--fw-semibold); letter-spacing: var(--tracking-tight); display: flex; flex-direction: column; line-height: 1.2; }
 .logo-line1 { font-size: var(--fs-body); opacity: 0.85; }
 .logo-line2 { font-size: var(--fs-title-2); }
-.topbar { background: var(--topbar-bg); border-bottom: 1px solid var(--topbar-bd); padding: 0 var(--space-6); display: flex; align-items: center; justify-content: space-between; height: var(--layout-topbar-h); position: absolute; top: 0; left: 0; right: 0; z-index: var(--z-topbar); transform: translate3d(0, 0, 0); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); }
+.topbar { background: var(--topbar-bg); border-bottom: 1px solid var(--topbar-bd); color: var(--text-primary); padding: 0 var(--space-6); display: flex; align-items: center; justify-content: space-between; height: var(--layout-topbar-h); position: absolute; top: 0; left: 0; right: 0; z-index: var(--z-topbar); transform: translate3d(0, 0, 0); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); }
 @supports not (backdrop-filter: blur(1px)) {
   .topbar { -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 .topbar-left { display: flex; align-items: center; }
-.trigger { font-size: var(--fs-title-2); line-height: var(--layout-topbar-h); padding: 0 var(--space-3); cursor: pointer; transition: var(--transition-control); }
+.trigger { color: var(--text-primary); font-size: var(--fs-title-2); line-height: var(--layout-topbar-h); padding: 0 var(--space-3); cursor: pointer; transition: var(--transition-control); }
 .trigger:hover { color: var(--text-link); }
 .user-area { display: flex; align-items: center; gap: var(--space-2); cursor: pointer; padding: var(--space-1) var(--space-2); border-radius: var(--radius-md); }
 .user-avatar { background: var(--brand-600); flex-shrink: 0; }

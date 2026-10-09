@@ -86,3 +86,4 @@
 | R-17 | 工作台评分面板折叠后 `activeElement=BODY`（面板头不可聚焦、不抢焦点）——验收方判定为设计取舍 | t21 §9⑤ | Wave 4 a11y 收尾（captain 倾向接受现状：折叠本不该抢焦点） |
 | R-18 | ✅ **已修复（t22，待 t23 独立验收）**：V3 beforeunload `fetch` 被同名加载器遮蔽（改 `window.fetch` + 加载器更名 `loadAssignment`）、V4 `clearDirty` 失败仍清脏（改 `allSaved` 才清）、V5 Monaco 懒挂载首帧竞态、S3 题号方块键盘不可达（`role=button`+`tabindex`+`aria-label`） | t18/t20/t21 实测 + captain 复核 | **已完成修复** |
 | R-19 | **已知冗余但可靠**（captain 裁决不修）：① `onBeforeUnload` 无脏标记判断 → 有可存小题时即使无改动也重发幂等 keepalive PUT（若改用 dirtySet 做闸门，一旦脏跟踪有缺口会漏存，可靠性优先；将来优化应以「与载入快照比较」为准）② 首屏从 DB 载入答案触发一次冗余保存（watch 既有）③ Monaco 冷启动 `loader.init()` ≈27s → 后续断言窗口约定 ≥45s | t23 §6 | 登记（不修） |
+| R-20 | **Modal 宽档例外条款（captain 定）**：三档 480/640/820 为主；**工作流/内容型弹窗允许第四档 1040**，但必须与 `styles/overrides.css` 的成对 teleport 规则共同维护（参考 `.assign-modal`）。`a-drawer` 宽度不受此约束。 | t24 抽验时发现（Assignments 向导 1040） | 已定（条款） |

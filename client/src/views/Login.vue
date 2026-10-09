@@ -7,7 +7,7 @@
 
             <!-- 多学校选择 -->
             <template v-if="schoolOptions.length">
-              <p class="login-desc" style="font-size:15px;color:var(--ink-muted);margin-bottom:16px;">
+              <p class="login-desc" style="font-size:var(--fs-body-lg);color:var(--text-tertiary);margin-bottom:var(--space-4);">
                 学号「{{ username }}」存在于多个学校，请选择您的学校
               </p>
               <a-form layout="vertical" class="login-form">
@@ -131,7 +131,7 @@ async function handleSelectSchool() {
 .login-desc {
     font-size: 21px;
     font-weight: 400;
-    color: var(--ink-muted);
+    color: var(--text-tertiary);
     margin-bottom: 40px;
 }
 
@@ -140,7 +140,7 @@ async function handleSelectSchool() {
 }
 
 .login-error {
-    color: #ff3b30;
+    color: var(--status-danger-fg);
     font-size: 14px;
     margin-top: 16px;
 }

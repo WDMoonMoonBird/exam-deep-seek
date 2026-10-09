@@ -48,7 +48,7 @@
       </template>
     </ListPage>
 
-    <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" ok-text="确定" cancel-text="取消" :width="640" wrap-class-name="form-modal">
+    <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" :ok-text="isEdit ? '保存修改' : '新增班级'" cancel-text="取消" :width="640" wrap-class-name="form-modal">
       <a-form :model="form">
         <a-form-item label="班级名称"><a-input v-model:value="form.name" /></a-form-item>
         <a-form-item label="指定教学团队">
@@ -59,7 +59,7 @@
       </a-form>
     </a-modal>
 
-    <a-modal :title="switchTitle" :open="switchVisible" @ok="handleSwitch" @cancel="switchVisible = false" ok-text="确定切换" cancel-text="取消" :width="640">
+    <a-modal :title="switchTitle" :open="switchVisible" @ok="handleSwitch" @cancel="switchVisible = false" ok-text="切换学校" cancel-text="取消" :width="640">
       <div class="switch-body">
         <p>将班级 <strong>{{ switchingClass?.name }}</strong> 从</p>
         <p class="switch-pair">

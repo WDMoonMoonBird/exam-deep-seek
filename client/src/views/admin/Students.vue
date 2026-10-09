@@ -34,7 +34,7 @@
       </template>
     </ListPage>
 
-    <a-modal title="新增学生" :open="visible" @ok="handleOk" @cancel="visible = false" ok-text="确定" cancel-text="取消" :width="480">
+    <a-modal title="新增学生" :open="visible" @ok="handleOk" @cancel="visible = false" ok-text="新增学生" cancel-text="取消" :width="480">
       <a-form :model="form">
         <a-form-item label="学号"><a-input v-model:value="form.username" /></a-form-item>
         <a-form-item label="姓名"><a-input v-model:value="form.realName" /></a-form-item>

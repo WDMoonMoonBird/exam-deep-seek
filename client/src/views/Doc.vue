@@ -65,7 +65,7 @@
                         </div>
 
                         <img class="doc-img" :src="'/exam/doc-img/09-parse-modal.png'" alt="AI解析试卷模态框" />
-                        <p style="text-align:center;color:#888;font-size:13px;margin-top:-12px;">▲ AI 解析试卷弹窗：上传 Word
+                        <p style="text-align:center;color:var(--text-tertiary);font-size:13px;margin-top:-12px;">▲ AI 解析试卷弹窗：上传 Word
                             文档，DeepSeek 自动识别题目</p>
 
                         <h3>6.3 编辑题目</h3>
@@ -496,10 +496,10 @@ const sections9to10 = [
     {
         id: 'opensource', title: '13. 开源', content: `
     <p>本项目完全开源，代码托管在 <a href="https://gitee.com/WD_MoonMoonBird/exam-deep-seek" target="_blank">Gitee</a>，欢迎 Star、Fork 和 PR。</p>
-    <div style="text-align:center;padding:32px 20px;margin:24px 0;background:linear-gradient(135deg,#f9f0ff,#e6f4ff);border-radius:12px;">
-      <p style="font-size:18px;font-weight:600;color:#333;margin-bottom:8px;">"From each according to his ability, to each according to his needs."</p>
-      <p style="font-size:15px;color:#666;margin-bottom:16px;">「各尽所能，按需分配」</p>
-      <p style="font-size:13px;color:#999;">— Karl Marx, <em>Critique of the Gotha Programme</em> / 卡尔·马克思，《哥达纲领批判》（1875）</p>
+    <div style="text-align:center;padding:32px 20px;margin:24px 0;background:linear-gradient(135deg,var(--status-accent-bg),var(--status-info-bg));border-radius:var(--radius-lg);">
+      <p style="font-size:18px;font-weight:600;color:var(--text-primary);margin-bottom:8px;">"From each according to his ability, to each according to his needs."</p>
+      <p style="font-size:15px;color:var(--text-secondary);margin-bottom:16px;">「各尽所能，按需分配」</p>
+      <p style="font-size:13px;color:var(--text-tertiary);">— Karl Marx, <em>Critique of the Gotha Programme</em> / 卡尔·马克思，《哥达纲领批判》（1875）</p>
     </div>
     <p>开源精神与马克思笔下的理想社会不谋而合：开发者<b>各尽所能</b>贡献代码，使用者<b>各取所需</b>自由获取。代码如知识，共享方能放大其价值。</p>
   `},
@@ -527,15 +527,15 @@ const anchors = allSections.map(s => ({
 <style scoped>
 .doc-layout {
     min-height: 100vh;
-    background: #f5f5f5;
+    background: var(--bg-canvas);
 }
 
 .doc-header {
     position: sticky;
     top: 0;
     z-index: 100;
-    background: #fff;
-    border-bottom: 1px solid #e8e8e8;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-default);
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.10);
     height: 56px;
     display: flex;
@@ -582,10 +582,10 @@ const anchors = allSections.map(s => ({
     top: 88px;
     width: 200px;
     flex-shrink: 0;
-    background: #fff;
-    border-radius: 8px;
+    background: var(--bg-surface);
+    border-radius: var(--radius-md);
     padding: 16px;
-    border: 1px solid #e8e8e8;
+    border: 1px solid var(--border-default);
     max-height: calc(100vh - 120px);
     overflow-y: auto;
 }
@@ -597,11 +597,11 @@ const anchors = allSections.map(s => ({
 }
 
 .doc-section {
-    background: #fff;
-    border-radius: 12px;
+    background: var(--bg-surface);
+    border-radius: var(--radius-lg);
     padding: 32px 40px;
     margin-bottom: 24px;
-    border: 1px solid #e8e8e8;
+    border: 1px solid var(--border-default);
 }
 
 .section-title {
@@ -609,13 +609,13 @@ const anchors = allSections.map(s => ({
     font-weight: 700;
     margin: 0 0 20px 0;
     padding-bottom: 12px;
-    border-bottom: 2px solid #1677ff;
+    border-bottom: 2px solid var(--brand-600);
 }
 
 .section-body {
     font-size: 15px;
     line-height: 1.9;
-    color: #333;
+    color: var(--text-primary);
 }
 
 .section-body :deep(h3) {
@@ -643,7 +643,7 @@ const anchors = allSections.map(s => ({
 }
 
 .section-body :deep(b) {
-    color: #1a1a1a;
+    color: var(--text-primary);
 }
 
 /* 流程图 */
@@ -654,8 +654,8 @@ const anchors = allSections.map(s => ({
     margin: 20px 0;
     overflow-x: auto;
     padding: 16px;
-    background: #fafafa;
-    border-radius: 8px;
+    background: var(--bg-surface-2);
+    border-radius: var(--radius-md);
     flex-wrap: wrap;
 }
 
@@ -663,9 +663,9 @@ const anchors = allSections.map(s => ({
     display: flex;
     align-items: center;
     gap: 8px;
-    background: #fff;
-    border: 1px solid #e8e8e8;
-    border-radius: 8px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
     padding: 10px 14px;
     white-space: nowrap;
     flex-shrink: 0;
@@ -676,8 +676,8 @@ const anchors = allSections.map(s => ({
     width: 24px;
     height: 24px;
     border-radius: 50%;
-    background: #1677ff;
-    color: #fff;
+    background: var(--brand-600);
+    color: var(--text-on-brand);
     font-size: 13px;
     font-weight: 700;
     display: flex;
@@ -688,7 +688,7 @@ const anchors = allSections.map(s => ({
 
 .flow-arrow {
     font-size: 18px;
-    color: #bbb;
+    color: var(--text-disabled);
     flex-shrink: 0;
     align-self: center;
 }
@@ -696,12 +696,12 @@ const anchors = allSections.map(s => ({
 
 /* 截图占位（未截图时的兜底） */
 .img-placeholder {
-    background: #fafafa;
-    border: 2px dashed #d9d9d9;
-    border-radius: 8px;
+    background: var(--bg-surface-2);
+    border: 2px dashed var(--border-strong);
+    border-radius: var(--radius-md);
     padding: 40px 20px;
     text-align: center;
-    color: #999;
+    color: var(--text-tertiary);
     font-size: 15px;
     margin: 20px 0;
 }
@@ -776,7 +776,7 @@ const anchors = allSections.map(s => ({
     border-spacing: 0;
     margin: 16px 0;
     font-size: 14px;
-    border: 1px solid #e8e8e8;
+    border: 1px solid var(--border-default);
     border-radius: 10px;
     overflow: hidden;
 }
@@ -785,8 +785,8 @@ const anchors = allSections.map(s => ({
 .doc-table td {
     padding: 10px 14px;
     text-align: left;
-    border-bottom: 1px solid #f0f0f0;
-    border-right: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--border-subtle);
+    border-right: 1px solid var(--border-subtle);
 }
 
 .doc-table th:last-child,
@@ -799,28 +799,28 @@ const anchors = allSections.map(s => ({
 }
 
 .doc-table th {
-    background: #fafafa;
+    background: var(--bg-surface-2);
     font-weight: 600;
     font-size: 13px;
-    color: #666;
+    color: var(--text-secondary);
 }
 
 .doc-table td {
-    color: #333;
+    color: var(--text-primary);
 }
 
 .a-alert {
     padding: 12px 16px;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     margin: 16px 0;
     font-size: 14px;
     line-height: 1.7;
 }
 
 .a-alert-info {
-    background: #e6f4ff;
-    border: 1px solid #91caff;
-    color: #0958d9;
+    background: var(--status-info-bg);
+    border: 1px solid var(--status-info-bd);
+    color: var(--status-info-fg);
 }
 
 .doc-tag {
@@ -835,39 +835,39 @@ const anchors = allSections.map(s => ({
 }
 
 .doc-tag-blue {
-    color: #1677ff;
-    background: #e6f4ff;
-    border: 1px solid #91caff;
+    color: var(--status-info-fg);
+    background: var(--status-info-bg);
+    border: 1px solid var(--status-info-bd);
 }
 
 .doc-tag-green {
-    color: #52c41a;
-    background: #f6ffed;
-    border: 1px solid #b7eb8f;
+    color: var(--status-success-fg);
+    background: var(--status-success-bg);
+    border: 1px solid var(--status-success-bd);
 }
 
 .doc-tag-red {
-    color: #ff4d4f;
-    background: #fff2f0;
-    border: 1px solid #ffccc7;
+    color: var(--status-danger-fg);
+    background: var(--status-danger-bg);
+    border: 1px solid var(--status-danger-bd);
 }
 
 .doc-tag-orange {
-    color: #fa8c16;
-    background: #fff7e6;
-    border: 1px solid #ffd591;
+    color: var(--status-warning-fg);
+    background: var(--status-warning-bg);
+    border: 1px solid var(--status-warning-bd);
 }
 
 .doc-tag-purple {
-    color: #722ed1;
-    background: #f9f0ff;
-    border: 1px solid #d3adf7;
+    color: var(--status-accent-fg);
+    background: var(--status-accent-bg);
+    border: 1px solid var(--status-accent-bd);
 }
 
 .doc-tag-default {
-    color: #666;
-    background: #fafafa;
-    border: 1px solid #d9d9d9;
+    color: var(--text-secondary);
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-strong);
 }
 
 @keyframes doc-spin {
@@ -882,8 +882,8 @@ const anchors = allSections.map(s => ({
     height: 10px;
     margin-right: 4px;
     vertical-align: middle;
-    border: 2px solid #91caff;
-    border-top-color: #1677ff;
+    border: 2px solid var(--status-info-bd);
+    border-top-color: var(--status-info-fg);
     border-radius: 50%;
     animation: doc-spin 0.8s linear infinite;
 }
@@ -900,18 +900,18 @@ const anchors = allSections.map(s => ({
     min-width: 150px;
     position: relative;
     padding: 20px 16px 16px 40px;
-    background: #fff;
-    border: 1px solid #e8e8e8;
-    border-radius: 8px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
     margin-right: -1px;
 }
 
 .doc-step:first-child {
-    border-radius: 8px 0 0 8px;
+    border-radius: var(--radius-md) 0 0 var(--radius-md);
 }
 
 .doc-step:last-child {
-    border-radius: 0 8px 8px 0;
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
     margin-right: 0;
 }
 
@@ -923,8 +923,8 @@ const anchors = allSections.map(s => ({
     width: 22px;
     height: 22px;
     border-radius: 50%;
-    background: #1677ff;
-    color: #fff;
+    background: var(--brand-600);
+    color: var(--text-on-brand);
     font-size: 12px;
     font-weight: 700;
     text-align: center;
@@ -939,7 +939,7 @@ const anchors = allSections.map(s => ({
 
 .doc-step span {
     font-size: 12px;
-    color: #666;
+    color: var(--text-secondary);
     line-height: 1.5;
 }
 
@@ -948,7 +948,7 @@ const anchors = allSections.map(s => ({
     right: -8px;
     top: 50%;
     transform: translateY(-50%);
-    color: #d9d9d9;
+    color: var(--border-strong);
     font-size: 16px;
     z-index: 1;
 }
@@ -961,11 +961,11 @@ const anchors = allSections.map(s => ({
     min-height: 60px;
     padding: 20px 24px;
     margin-top: 4px;
-    border: 1px dashed #d9d9d9;
-    border-radius: 8px;
-    background: #fafafa;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface-2);
     font-size: 14px;
-    color: #555;
+    color: var(--text-secondary);
     line-height: 1.8;
 }
 
@@ -976,13 +976,13 @@ const anchors = allSections.map(s => ({
 }
 
 .doc-img {
-    width: 100% !important;
-    max-width: 100% !important;
-    height: auto !important;
-    border-radius: 8px;
-    border: 1px solid #e8e8e8;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    margin: 20px 0;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-default);
+    box-shadow: var(--shadow-sm);
+    margin: var(--space-5) 0;
     display: block;
     object-fit: contain;
     cursor: zoom-in;
@@ -1008,7 +1008,7 @@ const anchors = allSections.map(s => ({
     position: absolute;
     top: 16px;
     right: 24px;
-    color: #fff;
+    color: var(--text-inverse);
     font-size: 32px;
     cursor: pointer;
     z-index: 1;
@@ -1029,7 +1029,7 @@ const anchors = allSections.map(s => ({
     max-width: 95vw;
     max-height: 95vh;
     object-fit: contain;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     cursor: default;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
@@ -1052,15 +1052,15 @@ const anchors = allSections.map(s => ({
     .doc-step {
         margin-right: 0;
         margin-bottom: -1px;
-        border-radius: 0 !important;
+        border-radius: 0;
     }
 
     .doc-step:first-child {
-        border-radius: 8px 8px 0 0 !important;
+        border-radius: var(--radius-md) var(--radius-md) 0 0;
     }
 
     .doc-step:last-child {
-        border-radius: 0 0 8px 8px !important;
+        border-radius: 0 0 var(--radius-md) var(--radius-md);
     }
 }
 </style>
