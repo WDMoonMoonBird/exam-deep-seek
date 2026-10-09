@@ -15,10 +15,10 @@
       <div class="sidebar">
         <div class="sidebar-title">资源管理器</div>
 
-        <!-- 双数据源切换：学生提交 / 标准答案包 -->
+        <!-- 双数据源切换：学生提交 / 标准答案包（开放性题目无标准包时不渲染后者，默认停留学生提交） -->
         <a-tabs v-model:activeKey="activeTree" size="small" class="pr-tree-tabs">
           <a-tab-pane key="student" tab="学生提交" />
-          <a-tab-pane key="standard" tab="标准答案包" />
+          <a-tab-pane v-if="hasStandardFiles" key="standard" tab="标准答案包" />
         </a-tabs>
 
         <Transition name="pr-fade" mode="out-in">
@@ -225,6 +225,9 @@ const status = computed(() => submission.value.status || '');
 const locked = computed(() => status.value === 'published');
 const standardFiles = reactive({ tree: [], contents: {} });
 const studentFiles = reactive({ tree: [], contents: {} });
+/** 有无标准答案包（tree 与 contents 均空 = 开放性题目）：无包不渲染「标准答案包」tab，不改变有包时的三栏布局 */
+const hasStandardFiles = computed(() => (standardFiles.tree?.length || 0) > 0
+  || Object.keys(standardFiles.contents || {}).length > 0);
 
 // ===== IDE 状态（复用 ProjectQuestionEdit.vue） =====
 
@@ -530,6 +533,8 @@ function applyReviewData(d) {
   teacherFeedback.value = d.submission?.teacherFeedback || '';
   standardFiles.tree = d.standardFiles?.tree || [];
   standardFiles.contents = d.standardFiles?.contents || {};
+  // 无标准包（开放性题目）：不逗留在已隐藏的「标准答案包」数据源，回落到学生提交
+  if (!hasStandardFiles.value && activeTree.value === 'standard') activeTree.value = 'student';
   studentFiles.tree = d.studentFiles?.tree || [];
   studentFiles.contents = d.studentFiles?.contents || {};
   loaded.value = true;

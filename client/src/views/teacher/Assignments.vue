@@ -204,21 +204,59 @@ function nextStep() {
   step.value++;
 }
 
+/** 提交布置作业请求；confirmWithoutStandardPackage=true 表示教师已在确认框点「确认布置」（开放性题目） */
+async function createAssignment(confirmWithoutStandardPackage) {
+  const payload = {
+    title: timeForm.title, description: timeForm.description,
+    startTime: timeForm.timeRange[0].toISOString(), endTime: timeForm.timeRange[1].toISOString(),
+    allowResubmit: timeForm.isPractice ? true : timeForm.allowResubmit,
+    mode: timeForm.isPractice ? 'practice' : 'exam',
+    maxAttempts: timeForm.isPractice ? (timeForm.maxAttempts || null) : null,
+    questionIds: selectedQIds.value, classIds: selectedCIds.value,
+  };
+  if (confirmWithoutStandardPackage) payload.confirmWithoutStandardPackage = true;
+  await request.post('/teacher/assignments', payload);
+  message.success('布置成功');
+  visible.value = false;
+  fetch();
+}
+
+/**
+ * 布置作业（Q9 软警告）：
+ * 题目未上传标准工程包时后端返回 code=1007 + data.warnings（不创建作业），
+ * 这里用确认框列出这些题目并说明将按开放性题目评分；确认后带
+ * confirmWithoutStandardPackage=true 重新提交，取消则不创建。
+ * 有标准包的题目后端直接创建，不会走到确认框。
+ */
 async function submit() {
   if (!timeForm.title || !timeForm.timeRange.length) return message.warn('请填写完整');
+  if (submitting.value) return;
   submitting.value = true;
   try {
-    await request.post('/teacher/assignments', {
-      title: timeForm.title, description: timeForm.description,
-      startTime: timeForm.timeRange[0].toISOString(), endTime: timeForm.timeRange[1].toISOString(),
-      allowResubmit: timeForm.isPractice ? true : timeForm.allowResubmit,
-      mode: timeForm.isPractice ? 'practice' : 'exam',
-      maxAttempts: timeForm.isPractice ? (timeForm.maxAttempts || null) : null,
-      questionIds: selectedQIds.value, classIds: selectedCIds.value,
+    await createAssignment(false);
+  } catch (err) {
+    const resp = err?.response?.data;
+    // 非「需确认」类错误（参数错误/网络错误等）由 request 拦截器统一提示
+    if (resp?.code !== 1007 || !resp?.data?.requiresConfirmation) return;
+    const warnings = resp.data.warnings || [];
+    const names = warnings.map(w => w.title).join('、');
+    Modal.confirm({
+      title: '确认按开放性题目布置',
+      content: h('div', { style: 'line-height:1.7' }, [
+        h('div', `以下题目未上传标准工程包，AI 将仅依据评分标准做评价式评分（不与参考答案对比）：${names}。确认按开放性题目布置？`),
+        h('ul', { style: 'margin:8px 0 0;padding-left:18px;color:#8c8c8c;font-size:13px' },
+          warnings.filter(w => w.message).map(w => h('li', w.message))),
+      ]),
+      okText: '确认布置',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await createAssignment(true);
+        } catch {
+          // 二次提交失败：原因已由 request 拦截器提示；吞掉 rejection 关闭确认框，避免重复提交
+        }
+      },
     });
-    message.success('布置成功');
-    visible.value = false;
-    fetch();
   } finally { submitting.value = false; }
 }
 

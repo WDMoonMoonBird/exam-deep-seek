@@ -7,6 +7,7 @@ import logger from '../utils/logger.js';
 import { DEFAULT_MAX_SCORE } from '../constants.js';
 import { resolveSubQuestionScores } from '../utils/scoring.js';
 import { getVisibleClassIds, getTeamTeacherIds } from './teamController.js';
+import { hasStandardPackage } from '../utils/projectPaths.js';
 import { parseExamPaper, parseExamPaperStream, generateReferenceAnswer } from '../services/deepseek.js';
 
 /** 获取教师当前学校ID（从 query 参数） */
@@ -129,6 +130,8 @@ const gradeProject = async (req, res) => {
       return result;
     };
 
+    // R6：开放性题目（attachmentUrl 为空且标准包目录无文件）本就没有标准答案可比对，试评不适用
+    const isOpenProject = !hasStandardPackage(q.id, q.attachmentUrl);
     const standardDir = q.attachmentUrl ? path.join(__dirname, '../../uploads', q.attachmentUrl) : '';
     const standardFiles = readDirFiles(standardDir)
       .map(f => `// 文件名: ${f.path}\n${f.content}`).join('\n\n');
@@ -139,7 +142,10 @@ const gradeProject = async (req, res) => {
       .map(f => `// 文件名: ${f.path}\n${f.content}`).join('\n\n');
 
     if (!standardFiles) {
-      return res.status(400).json({ code: 1001, message: '未找到标准项目文件', data: null });
+      // 开放性题目：明确提示「无标准工程包」，避免「未找到标准项目文件」被误读为上传失败；
+      // 有包但读不到内容（历史数据/目录丢失）仍保留原提示。
+      const message = isOpenProject ? '开放性题目无标准工程包，无法试评' : '未找到标准项目文件';
+      return res.status(400).json({ code: 1001, message, data: null });
     }
 
     const { gradeProject: doGrade } = await import('../services/deepseek.js');
@@ -436,31 +442,44 @@ export const getAssignment = async (req, res) => {
 
 export const createAssignment = async (req, res) => {
   try {
-    const { title, description, startTime, endTime, allowResubmit, questionIds, classIds, mode, maxAttempts } = req.body;
+    const { title, description, startTime, endTime, allowResubmit, questionIds, classIds, mode, maxAttempts, confirmWithoutStandardPackage } = req.body;
     if (!title || !startTime || !endTime || !questionIds?.length || !classIds?.length) {
       return res.status(400).json({ code: 1001, message: '参数错误', data: null });
     }
 
-    // 强校验：作业包含实训题（type=project）时，该题必须已上传非空标准工程包，否则拒绝创建作业
+    // Q9（2026-08 甲方定案，本次经甲方确认放宽为软警告）：
+    // 作业含实训题（type=project）但该题没有标准工程包时，不再直接 400 拒绝，
+    // 而是返回 warnings 软警告请教师确认；只有显式确认
+    // （body.confirmWithoutStandardPackage === true，即前端确认框点「确认布置」）才继续创建，
+    // 这类题目按开放性题目评分（AI 仅依据评分标准做评价式评分，不与参考答案对比）。
+    // 有标准包的题目零影响：不产生警告、直接创建（与改动前完全一致）。
+    // 「有无标准包」判据与 AI 实评一致：hasStandardPackage()。
     // 查询过滤软删除题目；已删题目不可被选入新作业
     const questions = await prisma.question.findMany({ where: { id: { in: questionIds }, deletedAt: null } });
     if (questions.length !== questionIds.length) {
       return res.status(400).json({ code: 1001, message: '部分题目不存在或已删除，无法布置', data: null });
     }
+    const openProjectWarnings = [];
     for (const q of questions) {
       if (q.type !== 'project') continue;
-      const standardDir = path.join(__dirname, '../../uploads/project-questions', String(q.id), 'standard');
-      let hasStandardPackage = false;
-      if (fs.existsSync(standardDir)) {
-        try {
-          hasStandardPackage = fs.readdirSync(standardDir).length > 0;
-        } catch {
-          hasStandardPackage = false;
-        }
-      }
-      if (!hasStandardPackage) {
-        return res.status(400).json({ code: 1001, message: `题目「${q.title}」未上传标准工程包，无法布置`, data: null });
-      }
+      if (hasStandardPackage(q.id, q.attachmentUrl)) continue;
+      openProjectWarnings.push({
+        questionId: q.id,
+        title: q.title,
+        message: `题目「${q.title}」未上传标准工程包，将按开放性题目布置：AI 仅依据评分标准做评价式评分，不与参考答案对比`,
+      });
+    }
+    if (openProjectWarnings.length && confirmWithoutStandardPackage !== true) {
+      const titles = openProjectWarnings.map(w => w.title).join('、');
+      logger.info({ questionIds: openProjectWarnings.map(w => w.questionId) }, '布置作业待教师确认：存在未上传标准工程包的题目');
+      return res.status(400).json({
+        code: 1007,
+        message: `以下题目未上传标准工程包，AI 将仅依据评分标准做评价式评分（不与参考答案对比）：${titles}。确认按开放性题目布置？`,
+        data: { requiresConfirmation: true, warnings: openProjectWarnings },
+      });
+    }
+    if (openProjectWarnings.length) {
+      logger.warn({ questionIds: openProjectWarnings.map(w => w.questionId) }, '按开放性题目布置作业（教师已确认无标准工程包）');
     }
 
     const assignment = await prisma.assignment.create({
