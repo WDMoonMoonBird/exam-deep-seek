@@ -1,0 +1,41 @@
+# 全站 UI 重设计 · 设计稿（feat/ui-redesign）
+
+> 分支 `feat/ui-redesign` ｜ worktree：`Exam-DeepSeek-ui/`（隔离自 `feat/open-project` 工作区）
+> 方法论：skill `afrexai-ui-design-system`（Phase 1–10）｜ 阶段：**设计稿先行，未改动 `client/` 任何代码**
+
+## 怎么评审
+
+1. **先看视觉**：浏览器打开 `preview/index.html` —— 五个页签（设计总览 / 登录页 / 教师端 / 审核工作台 / 学生端），右上角可切 **浅色/深色** 与 **紧凑/舒适** 密度。
+   - 静态截图在 `preview/shots/`（含 `teacher-dark.png` 深色版）。
+2. **再看规则**：`02-design-tokens.css`（令牌本体）→ `02-design-tokens.md`（antd 映射与验收命令）。
+3. **最后看落地**：`05-page-specs.md`（26 页逐页规范 + 4 个落地批次）。
+
+## 文件清单
+
+| 文件 | 内容 | skill 阶段 |
+|---|---|---|
+| [README.md](./README.md) | 本文件：评审入口 | — |
+| [00-design-brief.md](./00-design-brief.md) | 设计简报 + 盘点实测证据（15 份重复外壳、49 处主色分裂、0 个 aria-*…） | Phase 1 |
+| [01-information-architecture.md](./01-information-architecture.md) | 四种布局壳、导航分组、26 页地图、关键流程、IA 改动清单 | Phase 2 |
+| [02-design-tokens.css](./02-design-tokens.css) | **设计令牌本体**（三层：primitive → semantic → component；浅/深色 + 两档密度） | Phase 3 / 10 |
+| [02-design-tokens.md](./02-design-tokens.md) | 令牌说明、antd ConfigProvider 映射表、Chrome 69 兜底、验收命令 | Phase 3 / 10 |
+| [03-components.md](./03-components.md) | 组件规范（基础 / 数据 / 容器导航 / 反馈 / 业务专用） | Phase 4 |
+| [04-interaction-a11y.md](./04-interaction-a11y.md) | 断点与响应式、动效、四态反馈、WCAG AA 清单、Chrome 69 兼容 | Phase 5 / 6 / 7 |
+| [05-page-specs.md](./05-page-specs.md) | 5 个页面模板 + 26 页逐页规范 + 组件提取清单 + 落地批次 | Phase 9 |
+| [preview/index.html](./preview/index.html) | 高保真静态预览（5 屏，可切主题与密度） | Phase 9 |
+| [preview/shots/](./preview/shots) | 预览截图（1440×900） | — |
+| [_inventory-pages.md](./_inventory-pages.md) | 盘点原始报告：31 个 .vue 逐页现状、横切模式、问题证据、复杂度排行 | 输入 |
+
+## 核心决策（5 条）
+
+1. **不换组件库**：保留 ant-design-vue 4，用「设计令牌 + ConfigProvider 主题 + 少量覆盖」统一视觉，改造可分批、可回滚。
+2. **令牌只有一份**：三层令牌写进 `tokens.css`，antd 主题从 CSS 读值，避免"JS 一套 + CSS 一套"（现状 `App.vue` 就存在两套真相）。
+3. **先模板后页面**：26 页收敛为 5 个模板；新增 `AppShell / PageShell / ListPage / StatusTag / WorkbenchLayout / ScorePanel` 等共享组件，消灭 15 份重复外壳。
+4. **密度分档**：教师端/管理端 `compact`，学生端/文档 `comfortable`，同一套令牌两个档位。
+5. **风险后置**：Monaco/TipTap 相关的 3 页（Submit / ReviewDetail / ProjectReviewNew，合计 2800 行）放到 Wave 3，先冻结交互契约再动。
+
+## 下一步（待你确认后执行）
+
+- 若视觉方向 OK → 进入 **Wave 0 · 基础**（引入令牌、统一主题、清死令牌与非 scoped 样式，视觉零变化）。
+- 若想调方向（配色/密度/侧栏/登录页结构）→ 直接说，改令牌与预览即可，成本很低。
+- 落地代码建议仍在 `feat/ui-redesign` 分支，按 Wave 分批提交、逐批验证。
