@@ -113,11 +113,11 @@ AI 评分流程          ← 帮助
 | 4 | 教师 | `/teacher/review` | 评分审核总览 | Console | L1 | 清空待审核队列 | compact |
 | 5 | 教师 | `/teacher/review/class/:classId` | 班级评分审核 | Console | L2 | 按班查看提交矩阵、批量审核 | compact |
 | 6 | 教师 | `/teacher/review/:id` | 提交审核（通用题） | Workbench | L3 | 逐题给分与写评语 | compact |
-| 7 | 教师 | `/teacher/review/project/:submissionId` | 实训题审核 | Workbench | L3 | 看工程包 + 采纳/修改 AI 评分 | compact |
+| 7 | 教师 | `/teacher/review/project/:submissionId` | 实训题审核 | Workbench | L3 | 看工程包 + 采纳/修改 AI 评分（无标准包时单源 + 评价式评分） | compact |
 | 8 | 教师 | `/teacher/questions` | 题库管理 | Console | L1 | 建题、组卷、维护题目 | compact |
 | 9 | 教师 | `/teacher/questions/new` | 新建题目 | Console | L2 | 富文本题干 + 子题 + 参考答案 | compact |
 | 10 | 教师 | `/teacher/questions/:id/edit` | 编辑题目 | Console | L2 | 同上（回填态） | compact |
-| 11 | 教师 | `/teacher/questions/new/project` | 新建实训题 | Console | L2 | 工程要求 + 标准包上传 | compact |
+| 11 | 教师 | `/teacher/questions/new/project` | 新建实训题 | Console | L2 | 工程要求 + 标准包上传（**可选，不上传即开放性题目**） | compact |
 | 12 | 教师 | `/teacher/questions/:id/edit-project` | 编辑实训题 | Console | L2 | 同上（回填态） | compact |
 | 13 | 教师 | `/teacher/classes` | 班级管理 | Console | L1 | 建班、看人数、分配教师 | compact |
 | 14 | 教师 | `/teacher/students` | 学生管理 | Console | L1 | 学生档案、重置密码、批量导入 | compact |
@@ -172,7 +172,7 @@ AI 评分流程          ← 帮助
 | 统一 | 通用题审核与实训题审核统一到 Workbench 壳（同一骨架、同一评分面板） | 教师只需学一次 |
 | 分栏 | `/teacher/review` 增设 Tabs：待审核 / 按班级 / 已发布 | 班级视图不再是「另一个页面」 |
 | 状态 | 学生端作业/成绩共享 4 状态语义（未开始 / 进行中 / 已提交 / 已评分） | 学生一眼知道下一步 |
-| 命名 | 统一术语：题目（通用题）/ 实训题 / 作业 / 提交 / 评分审核 | 去掉「题库管理 vs 题目管理」类混用 |
+| 命名 | 统一术语：题目（通用题）/ 实训题（含**开放性**：无标准工程包）/ 作业 / 提交 / 评分审核 | 去掉「题库管理 vs 题目管理」类混用 |
 | 帮助 | 用户菜单把「AI 评分流程 / 使用文档」下移到分隔线以下 | 功能与帮助分离 |
 
 **明确不做**：不改 path、不改角色权限、不新增一级菜单、不做多语言切换。

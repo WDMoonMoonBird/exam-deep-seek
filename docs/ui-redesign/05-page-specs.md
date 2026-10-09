@@ -61,7 +61,7 @@ PageShell
 ```
 工作台头部（56px，sticky）：← 返回 · 对象名 · 类型标签 · 提交人/时间 · 状态徽标 · [上一位][下一位][发布成绩]
 三栏（264px / 自适应 / 384px）
-├ 左：Tabs（学生提交 / 标准答案包）+ FileTree
+├ 左：Tabs（学生提交 / **有标准工程包时才渲染**「标准答案包」）+ FileTree
 ├ 中：文件标签页 + CodeViewer（只读 Monaco）
 └ 右：ScorePanel（AI 总分 / 分项 ✓△✗ / 教师终分 / 评语 / 动作）
 ```
@@ -117,11 +117,11 @@ PageShell
 | 9 | `teacher/Classes` | T1 | 跨校迁移、多选团队 | 新建班级 | compact | 迁移确认文案写清影响范围 |
 | 10 | `teacher/Students` | T1 | Excel 导入 + 结果报告、重置密码 | 导入学生 | compact | 12 处模板内联色；导入结果需 `aria-live`；27 处内联样式 |
 | 11 | `teacher/Questions` | T1 | 类型/难度 tag、编辑分流两路由 | 新增题目 | compact | 0 处令牌引用；创建入口二选一（通用题/实训题）改为下拉菜单 |
-| 12 | `teacher/Assignments` | T1 | 3 步向导 Modal、班级穿梭面板 | 布置作业 | compact | 向导步骤用 Steps + 键盘可达；`h()` 内联样式确认框改 ConfirmDialog |
+| 12 | `teacher/Assignments` | T1 | 3 步向导 Modal、班级穿梭面板 | 布置作业 | compact | 向导步骤用 Steps + 键盘可达；`h()` 内联样式确认框改 ConfirmDialog；选到**无标准包**的实训题走**软警告确认**（不阻断），确认文案必须列出题目名与「评价式评分」后果 |
 | 13 | `teacher/QuestionEdit` | T2 | RichEditor×2 + CodeEditor + AI 解析 + 客观题 items | 保存并发布 | compact | 11 个 form-item 全无 label；45 处内联样式；129 处写死 px |
-| 14 | `teacher/ProjectQuestionEdit` | T2 | Zip 上传 ×2、自建 Monaco、三 Modal、双角色 | 保存并发布 | compact | 52 处硬编码色；学生模式下隐藏教师专属区块 |
+| 14 | `teacher/ProjectQuestionEdit` | T2 | Zip 上传 ×2（**标准包可选：不上传 = 开放性题目**）、自建 Monaco、三 Modal、双角色 | 保存并发布 | compact | 52 处硬编码色；学生模式下隐藏教师专属区块；**「开放性」是一等状态**（有说明文案与提示词预览变体），不要设计成错误态/警告态 |
 | 15 | `teacher/ReviewDetail` | T3 | 只读 Monaco、题号方块导航、逐题重评 | 发布成绩 | compact | 76 处硬编码色 + 291 行样式 + 4 处 `!important`；题号方块键盘不可达 |
-| 16 | `teacher/ProjectReviewNew` | T3 | 双源文件树、多标签、可折叠评分面板 | 发布成绩 | compact | 0 处令牌引用；3s 轮询静默刷新；评分面板 header 是 `div` 点击 |
+| 16 | `teacher/ProjectReviewNew` | T3 | 双源文件树（**无标准包时只渲染「学生提交」单源**）、多标签、可折叠评分面板 | 发布成绩 | compact | 0 处令牌引用；3s 轮询静默刷新；评分面板 header 是 `div` 点击；无标准包时评分面板须标明「评价式评分 · 无标准包」 |
 | 17 | `teacher/Review` | T1 | 表格内三行信息块、socket 刷新、导出 Excel | 去审核 | compact | 行内三行信息需稳定的信息层级（标题/元信息/状态） |
 | 18 | `teacher/ReviewClass` | T1 | 行内改分、5 态筛选 + 排序持久化、socket | 批量发布 | compact | 行内改分需要校验与撤销；筛选状态写回 URL |
 | 19 | `teacher/Teams` | T1 | 创建 Modal、身份分支 | 新建团队 | compact | 0 处令牌引用 |
