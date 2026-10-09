@@ -8,12 +8,16 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import loader from '@monaco-editor/loader';
 import { applyMonacoCompat } from '../infrastructure/monaco/legacyLoaderCompat';
+import { useMonacoTheme } from '../composables/useMonacoTheme.js';
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
   language: { type: String, default: 'cpp' },
   readOnly: { type: Boolean, default: false },
   height: { type: Number, default: 400 },
+  /** 字号 / 字体族：Wave 3 追加的可选接口，默认值与既有硬编码取值一致（不传即与改前完全相同） */
+  fontSize: { type: Number, default: 14 },
+  fontFamily: { type: String, default: 'MonacoDSH, monospace' },
 });
 
 const emit = defineEmits(['update:modelValue']);
@@ -22,6 +26,9 @@ const editorRef = ref(null);
 let editor = null;
 let subscription = null;
 let monaco = null;
+
+/** 编辑器主题跟随应用主题：ensureTheme() 在 create 之前按当前令牌定义并返回主题名 */
+const { ensureTheme } = useMonacoTheme();
 
 onMounted(async () => {
   // 旧浏览器（:where() 不可用即 Chrome < 88，或可选链不可用即 Chrome < 80）：
@@ -33,10 +40,11 @@ onMounted(async () => {
     value: props.modelValue,
     language: props.language,
     readOnly: props.readOnly,
+    theme: ensureTheme(monaco),
     minimap: { enabled: false },
     automaticLayout: true,
-    fontSize: 14,
-    fontFamily: 'MonacoDSH, monospace',
+    fontSize: props.fontSize,
+    fontFamily: props.fontFamily,
     lineNumbers: 'on',
     scrollBeyondLastLine: false,
     tabSize: 4,
@@ -57,6 +65,10 @@ watch(() => props.language, (lang) => {
     const model = editor.getModel();
     if (model) monaco.editor.setModelLanguage(model, lang);
   }
+});
+
+watch(() => [props.fontSize, props.fontFamily], ([size, family]) => {
+  editor?.updateOptions({ fontSize: size, fontFamily: family });
 });
 
 watch(() => props.modelValue, (val) => {

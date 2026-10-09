@@ -5,52 +5,56 @@
   font-display: swap;
 }
 
-/* ===== Apple-Inspired Design System ===== */
+/* ============================================================================
+ * 全局基础样式（Wave 4 · t25 收口）
+ *
+ * 本次改动：
+ *   1. 删除旧 :root 令牌块 —— --blue / --blue-focus / --blue-on-dark / --canvas /
+ *      --canvas-parchment / --surface-pearl / --surface-dark / --surface-dark-2 /
+ *      --surface-black / --ink / --body-on-dark / --body-muted / --divider-soft /
+ *      --hairline / --font-text 全仓 0 引用；--radius-sm|md|lg|pill 与 --font-display
+ *      由 styles/tokens.css 提供（main.js 中晚于本文件引入，同名令牌本来就以 tokens.css
+ *      为准），删除不改变任何渲染。
+ *   2. 本文件自身的选择器改为设计令牌驱动（body / h1-h3 / .q-content / .ant-card）。
+ *   3. 保留的唯一旧令牌：--ink-muted —— components/ProjectZipUploader.vue:157 仍在使用
+ *      （属 t26 范围），按原值写成 rgb() 以免在 t26 之前产生视觉变化；t26 完成后可删。
+ *   4. 代码块等「恒定深色内容面」改用 captain 新增的 --code-bg / --code-fg
+ *      （浅色与深色主题下取值一致，不随主题翻转）。
+ * 说明：过渡时长、页面基准字号（17px）等非 hex/非强制优先级的值保持原样 —— 改动它们会
+ *      波及全站所有未显式设置的页面，不属于「令牌残留清理」的范围。
+ * ==========================================================================*/
+
 :root {
-  /* Brand */
-  --blue: #0066cc;
-  --blue-focus: #0071e3;
-  --blue-on-dark: #2997ff;
-
-  /* Surface */
-  --canvas: #ffffff;
-  --canvas-parchment: #f5f5f7;
-  --surface-pearl: #fafafc;
-  --surface-dark: #272729;
-  --surface-dark-2: #2a2a2c;
-  --surface-black: #000000;
-
-  /* Text */
-  --ink: #1d1d1f;
-  --body-on-dark: #ffffff;
-  --body-muted: #cccccc;
-  --ink-muted: #7a7a7a;
-
-  /* Hairlines */
-  --divider-soft: rgba(0, 0, 0, 0.04);
-  --hairline: #e0e0e0;
-
-  /* Radius */
-  --radius-sm: 8px;
-  --radius-md: 11px;
-  --radius-lg: 18px;
-  --radius-pill: 9999px;
-
-  /* Typography */
-  --font-display: 'SF Pro Display', system-ui, -apple-system, sans-serif;
-  --font-text: 'SF Pro Text', system-ui, -apple-system, sans-serif;
+  /* 唯一残留的旧令牌（见文件头 §3） */
+  --ink-muted: rgb(122, 122, 122);
 }
 
 /* Global reset */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* 主题切换过渡（Wave 5 · t41）——仅在 <html> 带 .theme-transition 时生效：
+   该类由 useTheme 在「用户主动切换」前挂上、过渡结束后移除；初始化应用主题时不挂，故首帧无动画。
+   为什么不用强制优先级：靠选择器作用域（类在不在）压过组件自身过渡，而不是靠优先级声明 ——
+   类一移除，组件自己的 hover/focus 过渡立即恢复原状（实测抽验按钮与链接）。
+   时长走 --duration-base（220ms，落在要求的 200–300ms 内），所以
+   @media (prefers-reduced-motion: reduce) 里 tokens.css 把 --duration-* 降成 1ms 时，本规则自动降级。 */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition-property: color, background-color, border-color, fill, stroke;
+  transition-duration: var(--duration-base);
+  transition-timing-function: var(--ease-out);
+}
+
 body {
-  font-family: var(--font-text);
+  /* 字体栈统一到 --font-sans（Wave 0 已确认 SF Pro Display/Text 本机不存在，渲染等价） */
+  font-family: var(--font-sans);
   font-size: 17px;
-  font-weight: 400;
+  font-weight: var(--fw-regular);
   line-height: 1.47;
-  color: var(--ink);
-  background: var(--canvas-parchment);
+  color: var(--text-primary);
+  background: var(--bg-canvas);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -59,12 +63,12 @@ body {
 .page { margin-left: auto; margin-right: auto; }
 
 /* Headlines */
-h1, h2, h3 { font-family: var(--font-display); font-weight: 600; color: var(--ink); letter-spacing: -0.28px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: var(--fw-semibold); color: var(--text-primary); letter-spacing: var(--tracking-tight); }
 h1 { font-size: 40px; line-height: 1.1; }
 h2 { font-size: 28px; line-height: 1.14; }
 h3 { font-size: 21px; line-height: 1.19; }
 
-/* Page transition */
+/* Page transition（时长/缓动保持原值，非 hex 范围） */
 .page-fade-enter-active, .page-fade-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
 .page-fade-enter-from { opacity: 0; transform: translateY(8px); }
 .page-fade-leave-to { opacity: 0; transform: translateY(-8px); }
@@ -75,37 +79,53 @@ h3 { font-size: 21px; line-height: 1.19; }
 .q-content h2 { font-size: 1.2em; margin: 0.5em 0; }
 .q-content h3 { font-size: 1.1em; margin: 0.4em 0; }
 .q-content p { margin: 0.4em 0; }
-.q-content code { background: #f5f5f5; padding: 1px 5px; border-radius: 3px; font-size: 0.9em; }
-.q-content pre { background: #282c34; color: #abb2bf; padding: 10px 14px; border-radius: 6px; overflow-x: auto; }
-.q-content blockquote { border-left: 3px solid #d9d9d9; padding-left: 14px; color: #666; margin: 0.4em 0; }
+.q-content code { background: var(--bg-sunken); padding: 1px 5px; border-radius: var(--radius-xs); font-size: 0.9em; }
+.q-content pre { background: var(--code-bg); color: var(--code-fg); padding: 10px 14px; border-radius: var(--radius-sm); overflow-x: auto; }
+.q-content blockquote { border-left: 3px solid var(--border-strong); padding-left: 14px; color: var(--text-secondary); margin: 0.4em 0; }
 .q-content ul, .q-content ol { padding-left: 22px; margin: 0.3em 0; }
-.q-content hr { border: none; border-top: 1px solid #eee; margin: 0.8em 0; }
-.q-content img { max-width: 100%; border-radius: 4px; margin: 0.5em 0; }
+.q-content hr { border: none; border-top: 1px solid var(--border-subtle); margin: 0.8em 0; }
+.q-content img { max-width: 100%; border-radius: var(--radius-xs); margin: 0.5em 0; }
 .q-content table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
-.q-content th { background: #f5f5f5; border: 1px solid var(--hairline); padding: 8px 12px; font-weight: 600; }
-.q-content td { border: 1px solid var(--hairline); padding: 6px 12px; }
+.q-content th { background: var(--bg-surface-2); border: 1px solid var(--border-default); padding: 8px 12px; font-weight: var(--fw-semibold); }
+.q-content td { border: 1px solid var(--border-default); padding: 6px 12px; }
 
 /* AntDV fine-tune */
-.ant-card { border: 1px solid var(--hairline); box-shadow: none; }
+.ant-card { border: 1px solid var(--card-bd); box-shadow: none; }
 
-/* === Apple dark sidebar (only colors) === */
-.ant-layout-sider-dark { background: var(--surface-black) !important; }
-.ant-menu-dark { background: var(--surface-black) !important; }
-.ant-menu-dark .ant-menu-item { color: var(--body-muted); }
-.ant-menu-dark .ant-menu-item:hover { color: var(--body-on-dark); }
-.ant-menu-dark .ant-menu-item-selected { color: var(--body-on-dark); }
-.ant-menu-dark .ant-menu-item-selected::after { display: none; }
+/* === 深色侧栏 / 菜单（令牌驱动，见 docs/ui-redesign/03-components.md §3.4）===
+   为什么选择器带 html 前缀：antd 的样式是运行时注入的，且它写的是
+   :where(.css-hash).ant-menu-dark（:where 不贡献优先级 → 同样是 0-1-0），
+   同优先级下后插入的 antd 会反超本文件；加一个元素选择器（0-1-1）即可稳定胜出，
+   从而不必再写强制优先级声明（本文件的强制优先级已归零）。
+   Chrome 69（StyleProvider hash-priority="high"，antd 选择器带 hash 类、优先级 +1）
+   的等效规则在 src/legacy-patch.css 里 —— 改这里必须同步改那边。 */
+/* 侧栏底色：antd 写的是 :where(.css-hash).ant-layout .ant-layout-sider（0-2-0），
+   所以这里用「两个类 + html」（0-2-1）稳定胜出；菜单本身是 0-1-0，用 html 前缀即可。 */
+html .ant-layout-sider.ant-layout-sider-dark { background: var(--sider-bg); }
+html .ant-menu-dark { background: var(--sider-bg); }
+html .ant-menu-dark .ant-menu-item { color: var(--sider-fg); }
+html .ant-menu-dark .ant-menu-item:hover:not(.ant-menu-item-selected):not(.ant-menu-submenu-selected) { color: var(--sider-fg-active); }
+html .ant-menu-dark .ant-menu-item-selected { color: var(--sider-fg-active); }
+html .ant-menu-dark .ant-menu-item-selected::after { display: none; }
 
-.form-modal .ant-modal { max-width: 1040px; }
+/* === 顶栏容器色（Wave 4 · R-2）===
+   三端 Layout 的 scoped .topbar 规则在 Chrome 69（hash-priority="high"）下会被 antd 的
+   .css-hash.ant-layout .ant-layout-header（0-3-0）反超，导致 legacy 下容器色回落 antd 默认值；
+   这里用 html + 三个类（0-3-1）兜住，现代与 legacy 实测取值一致（均为 --text-primary）。
+   为何不用 legacy-patch.css：t25 的边界不含该文件；本规则在两种模式下同值，不需要分支。 */
+html .ant-layout .ant-layout-header.app-topbar { color: var(--text-primary); }
+
+/* 表单类弹窗最大宽度：对齐 R-14 的 480/640/820 档位（工作流型弹窗见各页的成对 wrap-class 规则） */
+.form-modal .ant-modal { max-width: 820px; }
 
 /* === 移动端响应式 === */
 @media (max-width: 768px) {
   /* 表格横向滚动 */
   .ant-table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
-  /* 弹窗全屏 */
-  .ant-modal { max-width: calc(100vw - 24px) !important; margin: 12px auto; }
+  /* 弹窗全屏（同样加 html 前缀抵消 antd 的运行时注入；Chrome 69 见 src/legacy-patch.css） */
+  html .ant-modal { max-width: calc(100vw - 24px); margin: 12px auto; }
 
   /* 按钮缩小 */
-  .ant-btn-lg { padding: 4px 12px; font-size: 14px; }
+  .ant-btn-lg { padding: var(--space-1) var(--space-3); font-size: var(--fs-body); }
 }

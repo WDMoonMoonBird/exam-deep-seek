@@ -1,73 +1,97 @@
 <template>
-  <div class="page">
-    <h2 class="page-title">作业列表</h2>
-
-    <DataTable
-      :columns="columns"
-      :dataSource="filteredList"
-      rowKey="id"
-      :loading="loading"
-      v-model:current="listPage.current"
-      :pageSize="listPage.pageSize"
-      :clientPagination="true"
-      :showTotal="(t) => `共 ${t} 项`"
-      :customRow="(r) => ({ onClick: () => goDetail(r), style: { cursor: canEnter(r) ? 'pointer' : 'not-allowed' } })"
-    >
-      <template #toolbar-left>
+  <!-- 卡片式列表变体（docs/ui-redesign/05-page-specs.md §2 #21）：保留行点击进入与四态筛选，不改成表格 -->
+  <PageShell
+    title="我的作业"
+    description="查看作业要求与截止时间；点击作业卡片进入作答或查看反馈。"
+    :max-width="'var(--layout-content-max)'"
+  >
+    <div class="card">
+      <div class="toolbar">
         <a-input-search
           v-model:value="keyword"
           placeholder="搜索作业标题"
           allow-clear
-          style="width: 280px;"
+          class="w-280"
           @search="fetch"
           @change="onSearchChange"
         />
         <a-radio-group v-model:value="activeFilter" button-style="solid" size="small" @change="onFilterChange">
           <a-radio-button v-for="f in filters" :key="f.key" :value="f.key">{{ f.label }}</a-radio-button>
         </a-radio-group>
-      </template>
+        <span class="toolbar-right muted">共 {{ filteredList.length }} 项</span>
+      </div>
+    </div>
 
-      <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'title'">
-          <span :class="{ 'locked-text': record.locked }">{{ record.title }}</span>
-          <a-tag v-if="record.mode === 'practice'" color="green" size="small" style="margin-left:6px">练习</a-tag>
-          <LockOutlined v-if="record.locked" style="color:#ff4d4f;margin-left:4px" />
-        </template>
-        <template v-if="column.key === 'qCount'">
-          {{ record._count?.assignmentQuestions || 0 }}
-        </template>
-        <template v-if="column.key === 'status'">
-          <a-tag :color="statusColor(record)">{{ statusText(record) }}</a-tag>
-        </template>
-        <template v-if="column.key === 'startTime'">
-          <div class="time-cell">
-            <FieldTimeOutlined class="time-icon" />
-            <div class="time-text">
-              <div>{{ formatDate(record.startTime) }}</div>
-              <div class="time-sub">{{ formatTime(record.startTime) }}</div>
+    <a-spin :spinning="loading">
+      <div v-if="filteredList.length" class="assign-list">
+        <div
+          v-for="record in pagedList"
+          :key="record.id"
+          class="assign"
+          :class="{ 'is-enterable': canEnter(record) }"
+          :role="canEnter(record) ? 'button' : null"
+          :tabindex="canEnter(record) ? 0 : null"
+          :aria-disabled="canEnter(record) ? null : 'true'"
+          @click="goDetail(record)"
+          @keydown.enter="goDetail(record)"
+          @keydown.space.prevent="goDetail(record)"
+        >
+          <div class="assign-main">
+            <h3 class="assign-title">
+              <span class="ellipsis" :title="record.title">{{ record.title }}</span>
+              <StatusTag :tone="statusTone(record)" :text="statusText(record)" dot />
+              <StatusTag v-if="record.mode === 'practice'" tone="accent" text="练习" />
+              <LockOutlined v-if="record.locked" class="lock-icon" title="已锁定" />
+            </h3>
+            <div class="assign-meta">
+              <span>共 <span class="meta-v tnum">{{ record._count?.assignmentQuestions || 0 }}</span> 题</span>
+              <span>开始 <span class="meta-v tnum">{{ formatDateTime(record.startTime) }}</span></span>
+              <span>
+                截止 <span class="meta-v tnum">{{ formatDateTime(record.endTime) }}</span>
+                <span v-if="deadlineOf(record).text" class="countdown" :class="'tone-' + deadlineOf(record).tone">
+                  （{{ deadlineOf(record).text }}）
+                </span>
+              </span>
             </div>
           </div>
-        </template>
-        <template v-if="column.key === 'endTime'">
-          <div class="time-cell">
-            <FieldTimeOutlined class="time-icon" />
-            <div class="time-text">
-              <div>{{ formatDate(record.endTime) }}</div>
-              <div class="time-sub">{{ formatTime(record.endTime) }}</div>
-            </div>
-          </div>
-        </template>
-      </template>
-    </DataTable>
-  </div>
+        </div>
+      </div>
+
+      <!-- 空态三件套：无搜索结果 → 清空筛选；无数据 → 刷新 -->
+      <div v-else-if="!loading" class="empty">
+        <div class="empty-title">{{ hasFilter ? '没有符合条件的作业' : '还没有收到作业' }}</div>
+        <div class="empty-desc">
+          {{ hasFilter ? '换个关键词或清空筛选后再试。' : '老师布置作业后，这里会显示作业要求与截止时间。' }}
+        </div>
+        <a-button v-if="hasFilter" @click="resetFilters">清空筛选</a-button>
+        <a-button v-else @click="fetch">刷新</a-button>
+      </div>
+    </a-spin>
+
+    <!-- 前端切片分页（/student/assignments 对 keyword 命中结果全量返回）：与改前 DataTable 行为一致，仅在超过一页时出现 -->
+    <!-- TODO(P1-7): 接口支持服务端分页后切换（/student/assignments 目前全量返回，沿用前端切片） -->
+    <div v-if="filteredList.length > listPage.pageSize" class="card table-foot">
+      <span>第 {{ listPage.current }} 页 · 每页 {{ listPage.pageSize }} 条</span>
+      <a-pagination
+        :current="listPage.current"
+        :page-size="listPage.pageSize"
+        :total="filteredList.length"
+        :show-size-changer="false"
+        size="small"
+        @change="onPageChange"
+      />
+    </div>
+  </PageShell>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import request from '../../api/request.js';
-import { FieldTimeOutlined, LockOutlined } from '@ant-design/icons-vue';
-import DataTable from '../../components/DataTable.vue';
+import { LockOutlined } from '@ant-design/icons-vue';
+import PageShell from '../../components/PageShell.vue';
+import StatusTag from '../../components/StatusTag.vue';
+import { formatDateTime, deadlineInfo } from '../../domain/format.js';
 
 const router = useRouter();
 const list = ref([]);
@@ -85,13 +109,8 @@ const filters = [
   { key: 'published', label: '已出分' },
 ];
 
-const columns = [
-  { title: '标题', key: 'title', dataIndex: 'title', width: 300, ellipsis: true },
-  { title: '题目数', key: 'qCount', width: 80, align: 'center' },
-  { title: '状态', key: 'status', width: 110, align: 'center' },
-  { title: '开始时间', key: 'startTime', width: 130 },
-  { title: '截止时间', key: 'endTime', width: 130 },
-];
+/** 是否处于筛选/搜索态（决定空态文案走「无搜索结果」还是「无数据」） */
+const hasFilter = computed(() => !!keyword.value || activeFilter.value !== 'all');
 
 function isNotStarted(a) { return now.value < new Date(a.startTime).getTime(); }
 function isExpired(a) { return now.value > new Date(a.endTime).getTime(); }
@@ -125,13 +144,26 @@ function statusText(a) {
   return '未提交';
 }
 
+/** a-tag 配色 → StatusTag tone（一一对应，状态判断逻辑未改） */
+const STATUS_TONE = {
+  orange: 'warning',
+  success: 'success',
+  processing: 'brand',
+  red: 'danger',
+  default: 'neutral',
+};
+function statusTone(a) { return STATUS_TONE[statusColor(a)] || 'neutral'; }
+
+/** 截止语义（剩 N 天 / 剩 N 小时 / 已截止）：随下方 10s 定时器一起刷新 */
+function deadlineOf(a) { return deadlineInfo(a.endTime); }
+
 function canEnter(a) { return !a.locked && !isNotStarted(a) && !(isExpired(a) && !hasRealSubmit(a)); }
-function formatDate(d) { return d ? new Date(d).toLocaleDateString('zh-CN') : ''; }
-function formatTime(d) { return d ? new Date(d).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : ''; }
 
 let timer = null;
 function onSearchChange() { listPage.current = 1; clearTimeout(timer); timer = setTimeout(fetch, 300); }
 function onFilterChange() { listPage.current = 1; fetch(); }
+function onPageChange(page) { listPage.current = page; }
+function resetFilters() { keyword.value = ''; activeFilter.value = 'all'; onFilterChange(); }
 
 const filteredList = computed(() => {
   let result = list.value;
@@ -145,6 +177,12 @@ const filteredList = computed(() => {
     });
   }
   return result;
+});
+
+/** 前端切片：与改前 DataTable 的 clientPagination 行为一致（每页 20 条） */
+const pagedList = computed(() => {
+  const start = (listPage.current - 1) * listPage.pageSize;
+  return filteredList.value.slice(start, start + listPage.pageSize);
 });
 
 function goDetail(record) {
@@ -172,23 +210,140 @@ onUnmounted(() => { clearInterval(nowTimer); });
 </script>
 
 <style scoped>
-.page {
-  max-width: 1400px;
-  height: 100%;
+/* ===== 工具栏 ===== */
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-bd);
+  border-radius: var(--card-radius);
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 12px var(--card-pad);
+  flex-wrap: wrap;
+}
+.toolbar-right {
+  margin-left: auto;
+}
+.w-280 {
+  width: 280px;
+}
+.muted {
+  color: var(--text-tertiary);
+  font-size: var(--fs-caption);
+}
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== 卡片式列表（样式取自 docs/ui-redesign/preview/index.html 的 .assign-*，全部走令牌） ===== */
+.assign-list {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  margin: 0 auto;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
 }
-.page-title {
-  font-size: 28px;
-  margin-bottom: 16px;
-  flex-shrink: 0;
+.assign {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--card-pad);
+  background: var(--card-bg);
+  border: 1px solid var(--card-bd);
+  border-radius: var(--card-radius);
+  transition: var(--transition-surface);
 }
-.hw-link { color: var(--blue); }
-.locked-text { color: var(--ink-muted); }
-.time-cell { display: flex; align-items: center; gap: 6px; justify-content: center; }
-.time-icon { font-size: 16px; color: var(--ink-muted); flex-shrink: 0; }
-.time-text { line-height: 1.4; }
-.time-sub { font-size: 12px; color: var(--ink-muted); }
+.assign.is-enterable {
+  cursor: pointer;
+}
+.assign.is-enterable:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+.assign:not(.is-enterable) {
+  cursor: not-allowed;
+}
+.assign-main {
+  min-width: 0;
+  flex: 1;
+}
+.assign-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 6px;
+  font-size: var(--fs-body-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--text-strong);
+}
+.assign-title .ellipsis {
+  max-width: 460px;
+}
+.assign-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+}
+.assign-meta .meta-v {
+  font-weight: var(--fw-medium);
+  color: var(--text-secondary);
+}
+.assign-meta .tone-overdue {
+  color: var(--red-600);
+  font-weight: var(--fw-medium);
+}
+.assign-meta .tone-urgent {
+  color: var(--red-600);
+  font-weight: var(--fw-medium);
+}
+.assign-meta .tone-soon {
+  color: var(--amber-700);
+}
+.assign-meta .tone-normal {
+  color: var(--text-tertiary);
+}
+.lock-icon {
+  color: var(--red-600);
+  font-size: var(--fs-caption);
+}
+
+/* ===== 空态 ===== */
+.empty {
+  padding: var(--space-8) var(--space-4);
+  margin-top: var(--space-4);
+  text-align: center;
+  background: var(--card-bg);
+  border: 1px solid var(--card-bd);
+  border-radius: var(--card-radius);
+}
+.empty-title {
+  font-size: var(--fs-title-3);
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+}
+.empty-desc {
+  margin: 6px 0 16px;
+  font-size: var(--fs-body-sm);
+  color: var(--text-tertiary);
+}
+
+/* ===== 底部分页栏（仅在超过一页时出现） ===== */
+.table-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px var(--card-pad);
+  margin-top: var(--space-4);
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+}
 </style>

@@ -17,7 +17,7 @@
             </aside>
 
             <!-- 主内容 -->
-            <main class="doc-main" ref="mainRef" @click="onMainClick">
+            <main class="doc-main" ref="mainRef" @click="onMainClick" @keydown="onMainKeydown">
                 <!-- 1. 系统简介（交互式步骤条） -->
                 <section id="intro" class="doc-section">
                     <h2 class="section-title">1. 系统简介</h2>
@@ -50,7 +50,7 @@
                     <div class="section-body">
                         <h3>6.1 题目结构</h3>
                         <p>每道题目为「<b>大题 + N 道小题</b>」的结构。大题包含标题、难度、总分（= 各小题分值之和）；每道小题可独立设置语言、分值和参考答案。</p>
-                        <img class="doc-img" :src="'/exam/doc-img/08-questions.png'" alt="题库列表" />
+                        <img class="doc-img" tabindex="0" :src="'/exam/doc-img/08-questions.png'" alt="题库列表" />
 
                         <h3>6.2 新建题目流程</h3>
                         <p>点击「新增题目」进入编辑页，通过 <b>AI 解析试卷文档</b> 快速创建题目：</p>
@@ -64,13 +64,13 @@
                                 @click="qStep = 0">重新浏览</a-button>
                         </div>
 
-                        <img class="doc-img" :src="'/exam/doc-img/09-parse-modal.png'" alt="AI解析试卷模态框" />
-                        <p style="text-align:center;color:#888;font-size:13px;margin-top:-12px;">▲ AI 解析试卷弹窗：上传 Word
+                        <img class="doc-img" tabindex="0" :src="'/exam/doc-img/09-parse-modal.png'" alt="AI解析试卷模态框" />
+                        <p style="text-align:center;color:var(--text-tertiary);font-size:13px;margin-top:-12px;">▲ AI 解析试卷弹窗：上传 Word
                             文档，DeepSeek 自动识别题目</p>
 
                         <h3>6.3 编辑题目</h3>
                         <p>在题库列表中点击「编辑」可修改已有题目。编辑页展示完整题目结构：左侧导航列出所有小题（彩色方形色块），右侧为各小题的详细编辑区。</p>
-                        <img class="doc-img" :src="'/exam/doc-img/09-question-edit.png'" alt="题目编辑页" />
+                        <img class="doc-img" tabindex="0" :src="'/exam/doc-img/09-question-edit.png'" alt="题目编辑页" />
 
                         <h3>6.4 分值系统</h3>
                         <ul>
@@ -94,7 +94,7 @@
 
                         <h3>① 新增实训题</h3>
                         <p>进入<b>题库管理</b>，点击右上角「新增题目」→ 下拉选择<b>实训题</b> <a-tag color="orange" size="small">BETA</a-tag>：</p>
-                        <img class="doc-img" :src="'/exam/doc-img/10-project-new.png'" alt="新增实训题" />
+                        <img class="doc-img" tabindex="0" :src="'/exam/doc-img/10-project-new.png'" alt="新增实训题" />
                         <ul>
                             <li>填写<b>题目名称 / 难度 / 满分</b>；</li>
                             <li>「题目描述」「评分标准」通过模态框编辑，<b>确定才生效，取消即还原</b>；不填评分标准则使用默认标准（功能完整性 50% + 代码规范 25% + 健壮性 25%）；</li>
@@ -104,7 +104,7 @@
 
                         <h3>② 编辑实训题</h3>
                         <p>在题库列表中找到实训题（紫色「实训题」标签），点击「编辑」：</p>
-                        <img class="doc-img" :src="'/exam/doc-img/11-project-edit.png'" alt="编辑实训题" />
+                        <img class="doc-img" tabindex="0" :src="'/exam/doc-img/11-project-edit.png'" alt="编辑实训题" />
                         <ul>
                             <li>可修改<b>题目名称 / 难度 / 满分 / 题目描述 / 评分标准</b>；</li>
                             <li>左侧<b>资源管理器</b>可浏览、更新标准工程包文件（未上传时可在此补传；始终不上传即保持开放性题目）；</li>
@@ -116,7 +116,7 @@
                         <p>如果所选实训题<b>未上传标准工程包</b>，点击「布置」后会先弹出确认框：「以下题目未上传标准工程包，AI 将仅依据评分标准做评价式评分（不与参考答案对比）：〈题名〉。确认按开放性题目布置？」——点<b>确认布置</b>按开放性题目创建；点<b>取消</b>不创建作业。有标准工程包的题目不会弹此框。</p>
 
                         <h3>④ AI 评分与教师审核</h3>
-                        <img class="doc-img" :src="'/exam/doc-img/12-project-review.png'" alt="AI 评分审核页" />
+                        <img class="doc-img" tabindex="0" :src="'/exam/doc-img/12-project-review.png'" alt="AI 评分审核页" />
                         <p>学生提交后系统<b>自动触发 AI 评分</b>（异步，通常 1-2 分钟）。教师审核页提供：</p>
                         <ul>
                             <li><b>AI 评分面板</b>：分项明细（分项得分/满分/点评）、优点、问题、总体评语；</li>
@@ -196,9 +196,9 @@
         <!-- 图片灯箱 -->
         <Teleport to="body">
             <Transition name="lightbox-fade">
-                <div v-if="lightboxOpen" class="lightbox-mask" @click="lightboxOpen = false">
-                    <div class="lightbox-close" @click="lightboxOpen = false">✕</div>
-                    <img :src="lightboxSrc" class="lightbox-img" @click.stop />
+                <div v-if="lightboxOpen" class="lightbox-mask" role="dialog" aria-modal="true" aria-label="图片预览" @click="closeLightbox">
+                    <button type="button" ref="lightboxCloseRef" class="lightbox-close" aria-label="关闭图片预览" @click.stop="closeLightbox">✕</button>
+                    <img :src="lightboxSrc" class="lightbox-img" alt="放大预览" @click.stop />
                 </div>
             </Transition>
         </Teleport>
@@ -206,23 +206,54 @@
 </template>
 
 <script setup>
-import { ref, computed, h, onMounted, onUnmounted } from 'vue';
+import { ref, computed, h, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import { BarsOutlined } from '@ant-design/icons-vue';
 import { Tag } from 'ant-design-vue';
 
 const showMobileToc = ref(false);
 const mobileTocOpen = ref(false);
 
-// 图片灯箱
+// 图片灯箱（R-22：Esc 关闭 + 焦点入箱 + 关闭后焦点回到触发元素）
 const lightboxOpen = ref(false);
 const lightboxSrc = ref('');
+const lightboxCloseRef = ref(null);
+let lightboxTrigger = null;   // 触发元素，关闭后焦点返回
+
+function openLightbox(img) {
+    lightboxTrigger = img;
+    lightboxSrc.value = img.src;
+    lightboxOpen.value = true;
+}
+function closeLightbox() {
+    lightboxOpen.value = false;
+}
 function onMainClick (e) {
     const img = e.target.closest('.doc-img');
-    if (img) {
-        lightboxSrc.value = img.src;
-        lightboxOpen.value = true;
-    }
+    if (img) openLightbox(img);
 }
+/** 键盘：Enter / Space 打开当前聚焦的文档图（图片可 Tab 聚焦） */
+function onMainKeydown(e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const el = document.activeElement;
+    const img = el && el.closest ? el.closest('.doc-img') : null;
+    if (img) { e.preventDefault(); openLightbox(img); }
+}
+/** 灯箱内键盘：Esc 关闭；Tab 不逃出灯箱（灯箱内仅关闭按钮可聚焦） */
+function onLightboxKeydown(e) {
+    if (!lightboxOpen.value) return;
+    if (e.key === 'Escape') { e.preventDefault(); closeLightbox(); return; }
+    if (e.key === 'Tab') { e.preventDefault(); lightboxCloseRef.value?.focus(); }
+}
+watch(lightboxOpen, async (open) => {
+    if (open) {
+        await nextTick();
+        lightboxCloseRef.value?.focus();
+    } else if (lightboxTrigger) {
+        const trigger = lightboxTrigger;
+        lightboxTrigger = null;
+        trigger.focus?.();
+    }
+});
 
 // 系统简介步骤条
 const introStep = ref(0);
@@ -267,19 +298,19 @@ const sections7 = computed(() => [sections2to7[5]]);
 function checkMobile () {
     showMobileToc.value = window.innerWidth < 992;
 }
-onMounted(() => { checkMobile(); window.addEventListener('resize', checkMobile); });
-onUnmounted(() => window.removeEventListener('resize', checkMobile));
+onMounted(() => { checkMobile(); window.addEventListener('resize', checkMobile); window.addEventListener('keydown', onLightboxKeydown); });
+onUnmounted(() => { window.removeEventListener('resize', checkMobile); window.removeEventListener('keydown', onLightboxKeydown); });
 
 const sections2to7 = [
     {
         id: 'quickstart', title: '2. 快速入门', content: `
     <h3>2.1 登录系统</h3>
     <p>使用学校分配的<b>工号</b>和<b>密码</b>登录。打开系统地址后，在登录页输入工号和密码，点击「登录」按钮进入系统。</p>
-    <img class="doc-img" src="/exam/doc-img/01-login.png" alt="登录页面" />
+    <img class="doc-img" tabindex="0" src="/exam/doc-img/01-login.png" alt="登录页面" />
 
     <h3>2.2 界面概览</h3>
     <p>登录后进入教师工作台，左侧为<b>导航菜单</b>，顶部为<b>操作栏</b>。</p>
-    <img class="doc-img" src="/exam/doc-img/02-classes.png" alt="教师主界面" />
+    <img class="doc-img" tabindex="0" src="/exam/doc-img/02-classes.png" alt="教师主界面" />
 
     <table class="doc-table">
       <tr><th style="width:120px">菜单项</th><th>功能说明</th></tr>
@@ -293,14 +324,14 @@ const sections2to7 = [
 
     <h3>2.3 个人信息与密码</h3>
     <p>点击右上角头像 →「我的信息」，可查看个人信息和修改密码。展开「修改密码」面板，输入原密码和新密码后确认即可。</p>
-    <img class="doc-img" src="/exam/doc-img/14-profile.png" alt="个人信息弹窗" />
+    <img class="doc-img" tabindex="0" src="/exam/doc-img/14-profile.png" alt="个人信息弹窗" />
   `},
 
     {
         id: 'classes', title: '3. 班级管理', content: `
     <h3>3.1 创建班级</h3>
     <p>点击「新增班级」按钮，在弹出的模态框中填写<b>班级名称</b>，可选择性地将班级加入已有的<b>教学团队</b>（留空则不加入任何团队）。点击「确定」完成创建。</p>
-    <img class="doc-img" src="/exam/doc-img/03-class-add.png" alt="新增班级模态框" />
+    <img class="doc-img" tabindex="0" src="/exam/doc-img/03-class-add.png" alt="新增班级模态框" />
 
     <h3>3.2 指定教学团队</h3>
     <p>创建或编辑班级时，可通过「指定教学团队」下拉框选择一个或多个团队。班级加入团队后，团队内所有教师均可查看和管理该班级的学生、作业和审核。</p>
@@ -308,7 +339,7 @@ const sections2to7 = [
 
     <h3>3.3 团队共享班级标识</h3>
     <p>在班级列表中，来自团队共享的班级会显示<span class="doc-tag doc-tag-purple">团队共享 · 教师姓名</span>。这类班级的「编辑」和「删除」按钮会被禁用。</p>
-    <img class="doc-img" src="/exam/doc-img/02-classes.png" alt="团队共享班级标签" />
+    <img class="doc-img" tabindex="0" src="/exam/doc-img/02-classes.png" alt="团队共享班级标签" />
   `},
 
     {
@@ -333,7 +364,7 @@ const sections2to7 = [
       <tr><td>teststudent1</td><td>测试学生1</td></tr>
       <tr><td>teststudent2</td><td>测试学生2</td></tr>
     </table>
-    <img class="doc-img" src="/exam/doc-img/05-import-modal.png" alt="批量导入模态框" />
+    <img class="doc-img" tabindex="0" src="/exam/doc-img/05-import-modal.png" alt="批量导入模态框" />
 
     <h3>4.4 团队班级只读限制</h3>
     <p>当选择了团队共享的班级时：</p>
@@ -349,7 +380,7 @@ const sections2to7 = [
         id: 'teams', title: '5. 教学团队', content: `
     <h3>5.1 创建团队</h3>
     <p>进入「教学团队」页面，点击「创建团队」按钮，输入团队名称即可创建。创建者自动成为团队成员，角色标注为「创建者」。</p>
-    <img class="doc-img" src="/exam/doc-img/06-teams.png" alt="团队列表页" />
+    <img class="doc-img" tabindex="0" src="/exam/doc-img/06-teams.png" alt="团队列表页" />
 
     <h3>5.2 管理团队成员</h3>
     <p>点击团队的「管理」按钮进入详情页，默认显示「教师管理」标签：</p>
@@ -358,7 +389,7 @@ const sections2to7 = [
       <li><b>移除教师：</b>点击表格中的「移除」按钮，弹出确认框后移除</li>
       <li><b>创建者保护：</b>创建者不可被移除，其「移除」按钮为禁用状态</li>
     </ul>
-    <img class="doc-img" src="/exam/doc-img/07-team-detail.png" alt="团队详情-教师管理" />
+    <img class="doc-img" tabindex="0" src="/exam/doc-img/07-team-detail.png" alt="团队详情-教师管理" />
 
     <h3>5.3 管理团队班级</h3>
     <p>切换到「班级管理」标签：</p>
@@ -367,7 +398,7 @@ const sections2to7 = [
       <li><b>移除班级：</b>点击「移除」按钮</li>
       <li><b>归属标注：</b>自己的班级显示「自己」，他人的班级显示 <span class="doc-tag doc-tag-purple">他人</span> 标签</li>
     </ul>
-    <img class="doc-img" src="/exam/doc-img/07-team-classes.png" alt="团队详情-班级管理" />
+    <img class="doc-img" tabindex="0" src="/exam/doc-img/07-team-classes.png" alt="团队详情-班级管理" />
 
     <h3>5.4 退出 / 删除团队</h3>
     <ul>
@@ -389,7 +420,7 @@ const sections2to7 = [
         id: 'questions', title: '6. 题库管理', content: `
     <h3>6.1 题目结构</h3>
     <p>每道题目为「<b>大题 + N 道小题</b>」的结构。大题包含标题、难度、满分、题目材料；每道小题包含内容描述、分值、参考答案、评分标准、编程语言。</p>
-    <img class="doc-img" src="/exam/doc-img/08-questions.png" alt="题库列表页" />
+    <img class="doc-img" tabindex="0" src="/exam/doc-img/08-questions.png" alt="题库列表页" />
 
     <h3>6.2 创建题目</h3>
     <p>点击「新增题目」进入编辑页：</p>
@@ -399,7 +430,7 @@ const sections2to7 = [
       <li><b>小题管理：</b>默认一道小题，点击「+」添加更多。每道小题独立设置标题、分值、题目描述、参考答案、编程语言和评分标准</li>
       <li>点击「保存」按钮</li>
     </ol>
-    <img class="doc-img" src="/exam/doc-img/09-question-edit.png" alt="题目编辑页" />
+    <img class="doc-img" tabindex="0" src="/exam/doc-img/09-question-edit.png" alt="题目编辑页" />
 
     <h3>6.3 评分标准</h3>
     <p>每道小题可自定义评分标准。若留空，系统使用默认标准：<b>代码正确性 60% + 代码效率 20% + 代码可读性 20%</b>。</p>
@@ -415,9 +446,9 @@ const sections2to7 = [
     <div class="a-alert a-alert-info">💡 本系统每份作业只包含<b>一道题目</b>（可含多道小题）。如需布置多道题目，请分别创建多份作业。</div>
     <p><b>第一步 · 选题：</b>搜索并选择一道题目（单选）。</p>
     <p><b>第二步 · 选班：</b>左侧为可选班级列表，点击选中；右侧为已选班级。团队共享班级会显示 <span class="doc-tag doc-tag-purple">团队</span> 标签，选中后显示归属教师名。</p>
-    <img class="doc-img" src="/exam/doc-img/11-assign-classes.png" alt="布置作业-选班步骤" />
+    <img class="doc-img" tabindex="0" src="/exam/doc-img/11-assign-classes.png" alt="布置作业-选班步骤" />
     <p><b>第三步 · 设置时间：</b>填写作业标题、说明，选择起止时间（精确到分钟），设置是否允许补交。</p>
-    <img class="doc-img" src="/exam/doc-img/12-assign-time.png" alt="布置作业-时间设置" />
+    <img class="doc-img" tabindex="0" src="/exam/doc-img/12-assign-time.png" alt="布置作业-时间设置" />
 
     <h3>7.2 补交控制</h3>
     <p>「允许补交」开关：</p>
@@ -442,18 +473,18 @@ const sections9to10 = [
       <tr><td>审核状态</td><td><span class="doc-tag doc-tag-orange">待审核</span> <span class="doc-tag doc-tag-green">已审核</span></td></tr>
       <tr><td>已交/未交</td><td>该班学生提交情况统计</td></tr>
     </table>
-    <img class="doc-img" src="/exam/doc-img/13-review.png" alt="评分审核列表页" />
+    <img class="doc-img" tabindex="0" src="/exam/doc-img/13-review.png" alt="评分审核列表页" />
 
     <div class="a-alert a-alert-info">💡 <b>审核 vs 发布：</b>「审核」仅保存教师的最终分数和评语，学生此时<b>看不到成绩</b>。教师需要点击「发布」按钮，学生端才会显示分数和评语。发布后如需修改分数，修改后重新点击「发布」即可覆盖更新。</div>
 
     <h3>9.2 班级审核</h3>
     <p>在审核列表点击「审核」进入班级审核页，查看全班学生的评分状态和成绩：</p>
-    <img class="doc-img" src="/exam/doc-img/13-review-class.png" alt="全班审核表格" />
+    <img class="doc-img" tabindex="0" src="/exam/doc-img/13-review-class.png" alt="全班审核表格" />
 
     <h3>9.3 逐人审核</h3>
     <p>在班级审核页点击某个学生的「审核」按钮，进入逐题审核详情页。左侧为题目标题导航，右侧展示学生代码与AI评分面板：</p>
-    <img class="doc-img" src="/exam/doc-img/13-review-detail-1.png" alt="逐题审核-编程题详情" />
-    <img class="doc-img" src="/exam/doc-img/13-review-detail-2.png" alt="逐题审核-客观题详情" />
+    <img class="doc-img" tabindex="0" src="/exam/doc-img/13-review-detail-1.png" alt="逐题审核-编程题详情" />
+    <img class="doc-img" tabindex="0" src="/exam/doc-img/13-review-detail-2.png" alt="逐题审核-客观题详情" />
 
     <h3>9.4 一键操作</h3>
     <p>在班级审核页面（审核列表点击「审核」后的列表页），可使用：</p>
@@ -496,10 +527,10 @@ const sections9to10 = [
     {
         id: 'opensource', title: '13. 开源', content: `
     <p>本项目完全开源，代码托管在 <a href="https://gitee.com/WD_MoonMoonBird/exam-deep-seek" target="_blank">Gitee</a>，欢迎 Star、Fork 和 PR。</p>
-    <div style="text-align:center;padding:32px 20px;margin:24px 0;background:linear-gradient(135deg,#f9f0ff,#e6f4ff);border-radius:12px;">
-      <p style="font-size:18px;font-weight:600;color:#333;margin-bottom:8px;">"From each according to his ability, to each according to his needs."</p>
-      <p style="font-size:15px;color:#666;margin-bottom:16px;">「各尽所能，按需分配」</p>
-      <p style="font-size:13px;color:#999;">— Karl Marx, <em>Critique of the Gotha Programme</em> / 卡尔·马克思，《哥达纲领批判》（1875）</p>
+    <div style="text-align:center;padding:32px 20px;margin:24px 0;background:linear-gradient(135deg,var(--status-accent-bg),var(--status-info-bg));border-radius:var(--radius-lg);">
+      <p style="font-size:18px;font-weight:600;color:var(--text-primary);margin-bottom:8px;">"From each according to his ability, to each according to his needs."</p>
+      <p style="font-size:15px;color:var(--text-secondary);margin-bottom:16px;">「各尽所能，按需分配」</p>
+      <p style="font-size:13px;color:var(--text-tertiary);">— Karl Marx, <em>Critique of the Gotha Programme</em> / 卡尔·马克思，《哥达纲领批判》（1875）</p>
     </div>
     <p>开源精神与马克思笔下的理想社会不谋而合：开发者<b>各尽所能</b>贡献代码，使用者<b>各取所需</b>自由获取。代码如知识，共享方能放大其价值。</p>
   `},
@@ -527,15 +558,15 @@ const anchors = allSections.map(s => ({
 <style scoped>
 .doc-layout {
     min-height: 100vh;
-    background: #f5f5f5;
+    background: var(--bg-canvas);
 }
 
 .doc-header {
     position: sticky;
     top: 0;
     z-index: 100;
-    background: #fff;
-    border-bottom: 1px solid #e8e8e8;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-default);
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.10);
     height: 56px;
     display: flex;
@@ -582,10 +613,10 @@ const anchors = allSections.map(s => ({
     top: 88px;
     width: 200px;
     flex-shrink: 0;
-    background: #fff;
-    border-radius: 8px;
+    background: var(--bg-surface);
+    border-radius: var(--radius-md);
     padding: 16px;
-    border: 1px solid #e8e8e8;
+    border: 1px solid var(--border-default);
     max-height: calc(100vh - 120px);
     overflow-y: auto;
 }
@@ -597,11 +628,11 @@ const anchors = allSections.map(s => ({
 }
 
 .doc-section {
-    background: #fff;
-    border-radius: 12px;
+    background: var(--bg-surface);
+    border-radius: var(--radius-lg);
     padding: 32px 40px;
     margin-bottom: 24px;
-    border: 1px solid #e8e8e8;
+    border: 1px solid var(--border-default);
 }
 
 .section-title {
@@ -609,13 +640,13 @@ const anchors = allSections.map(s => ({
     font-weight: 700;
     margin: 0 0 20px 0;
     padding-bottom: 12px;
-    border-bottom: 2px solid #1677ff;
+    border-bottom: 2px solid var(--brand-600);
 }
 
 .section-body {
     font-size: 15px;
     line-height: 1.9;
-    color: #333;
+    color: var(--text-primary);
 }
 
 .section-body :deep(h3) {
@@ -643,7 +674,7 @@ const anchors = allSections.map(s => ({
 }
 
 .section-body :deep(b) {
-    color: #1a1a1a;
+    color: var(--text-primary);
 }
 
 /* 流程图 */
@@ -654,8 +685,8 @@ const anchors = allSections.map(s => ({
     margin: 20px 0;
     overflow-x: auto;
     padding: 16px;
-    background: #fafafa;
-    border-radius: 8px;
+    background: var(--bg-surface-2);
+    border-radius: var(--radius-md);
     flex-wrap: wrap;
 }
 
@@ -663,9 +694,9 @@ const anchors = allSections.map(s => ({
     display: flex;
     align-items: center;
     gap: 8px;
-    background: #fff;
-    border: 1px solid #e8e8e8;
-    border-radius: 8px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
     padding: 10px 14px;
     white-space: nowrap;
     flex-shrink: 0;
@@ -676,8 +707,8 @@ const anchors = allSections.map(s => ({
     width: 24px;
     height: 24px;
     border-radius: 50%;
-    background: #1677ff;
-    color: #fff;
+    background: var(--brand-600);
+    color: var(--text-on-brand);
     font-size: 13px;
     font-weight: 700;
     display: flex;
@@ -688,7 +719,7 @@ const anchors = allSections.map(s => ({
 
 .flow-arrow {
     font-size: 18px;
-    color: #bbb;
+    color: var(--text-disabled);
     flex-shrink: 0;
     align-self: center;
 }
@@ -696,12 +727,12 @@ const anchors = allSections.map(s => ({
 
 /* 截图占位（未截图时的兜底） */
 .img-placeholder {
-    background: #fafafa;
-    border: 2px dashed #d9d9d9;
-    border-radius: 8px;
+    background: var(--bg-surface-2);
+    border: 2px dashed var(--border-strong);
+    border-radius: var(--radius-md);
     padding: 40px 20px;
     text-align: center;
-    color: #999;
+    color: var(--text-tertiary);
     font-size: 15px;
     margin: 20px 0;
 }
@@ -776,7 +807,7 @@ const anchors = allSections.map(s => ({
     border-spacing: 0;
     margin: 16px 0;
     font-size: 14px;
-    border: 1px solid #e8e8e8;
+    border: 1px solid var(--border-default);
     border-radius: 10px;
     overflow: hidden;
 }
@@ -785,8 +816,8 @@ const anchors = allSections.map(s => ({
 .doc-table td {
     padding: 10px 14px;
     text-align: left;
-    border-bottom: 1px solid #f0f0f0;
-    border-right: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--border-subtle);
+    border-right: 1px solid var(--border-subtle);
 }
 
 .doc-table th:last-child,
@@ -799,28 +830,28 @@ const anchors = allSections.map(s => ({
 }
 
 .doc-table th {
-    background: #fafafa;
+    background: var(--bg-surface-2);
     font-weight: 600;
     font-size: 13px;
-    color: #666;
+    color: var(--text-secondary);
 }
 
 .doc-table td {
-    color: #333;
+    color: var(--text-primary);
 }
 
 .a-alert {
     padding: 12px 16px;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     margin: 16px 0;
     font-size: 14px;
     line-height: 1.7;
 }
 
 .a-alert-info {
-    background: #e6f4ff;
-    border: 1px solid #91caff;
-    color: #0958d9;
+    background: var(--status-info-bg);
+    border: 1px solid var(--status-info-bd);
+    color: var(--status-info-fg);
 }
 
 .doc-tag {
@@ -835,39 +866,39 @@ const anchors = allSections.map(s => ({
 }
 
 .doc-tag-blue {
-    color: #1677ff;
-    background: #e6f4ff;
-    border: 1px solid #91caff;
+    color: var(--status-info-fg);
+    background: var(--status-info-bg);
+    border: 1px solid var(--status-info-bd);
 }
 
 .doc-tag-green {
-    color: #52c41a;
-    background: #f6ffed;
-    border: 1px solid #b7eb8f;
+    color: var(--status-success-fg);
+    background: var(--status-success-bg);
+    border: 1px solid var(--status-success-bd);
 }
 
 .doc-tag-red {
-    color: #ff4d4f;
-    background: #fff2f0;
-    border: 1px solid #ffccc7;
+    color: var(--status-danger-fg);
+    background: var(--status-danger-bg);
+    border: 1px solid var(--status-danger-bd);
 }
 
 .doc-tag-orange {
-    color: #fa8c16;
-    background: #fff7e6;
-    border: 1px solid #ffd591;
+    color: var(--status-warning-fg);
+    background: var(--status-warning-bg);
+    border: 1px solid var(--status-warning-bd);
 }
 
 .doc-tag-purple {
-    color: #722ed1;
-    background: #f9f0ff;
-    border: 1px solid #d3adf7;
+    color: var(--status-accent-fg);
+    background: var(--status-accent-bg);
+    border: 1px solid var(--status-accent-bd);
 }
 
 .doc-tag-default {
-    color: #666;
-    background: #fafafa;
-    border: 1px solid #d9d9d9;
+    color: var(--text-secondary);
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-strong);
 }
 
 @keyframes doc-spin {
@@ -882,8 +913,8 @@ const anchors = allSections.map(s => ({
     height: 10px;
     margin-right: 4px;
     vertical-align: middle;
-    border: 2px solid #91caff;
-    border-top-color: #1677ff;
+    border: 2px solid var(--status-info-bd);
+    border-top-color: var(--status-info-fg);
     border-radius: 50%;
     animation: doc-spin 0.8s linear infinite;
 }
@@ -900,18 +931,18 @@ const anchors = allSections.map(s => ({
     min-width: 150px;
     position: relative;
     padding: 20px 16px 16px 40px;
-    background: #fff;
-    border: 1px solid #e8e8e8;
-    border-radius: 8px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
     margin-right: -1px;
 }
 
 .doc-step:first-child {
-    border-radius: 8px 0 0 8px;
+    border-radius: var(--radius-md) 0 0 var(--radius-md);
 }
 
 .doc-step:last-child {
-    border-radius: 0 8px 8px 0;
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
     margin-right: 0;
 }
 
@@ -923,8 +954,8 @@ const anchors = allSections.map(s => ({
     width: 22px;
     height: 22px;
     border-radius: 50%;
-    background: #1677ff;
-    color: #fff;
+    background: var(--brand-600);
+    color: var(--text-on-brand);
     font-size: 12px;
     font-weight: 700;
     text-align: center;
@@ -939,7 +970,7 @@ const anchors = allSections.map(s => ({
 
 .doc-step span {
     font-size: 12px;
-    color: #666;
+    color: var(--text-secondary);
     line-height: 1.5;
 }
 
@@ -948,7 +979,7 @@ const anchors = allSections.map(s => ({
     right: -8px;
     top: 50%;
     transform: translateY(-50%);
-    color: #d9d9d9;
+    color: var(--border-strong);
     font-size: 16px;
     z-index: 1;
 }
@@ -961,11 +992,11 @@ const anchors = allSections.map(s => ({
     min-height: 60px;
     padding: 20px 24px;
     margin-top: 4px;
-    border: 1px dashed #d9d9d9;
-    border-radius: 8px;
-    background: #fafafa;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface-2);
     font-size: 14px;
-    color: #555;
+    color: var(--text-secondary);
     line-height: 1.8;
 }
 
@@ -976,13 +1007,13 @@ const anchors = allSections.map(s => ({
 }
 
 .doc-img {
-    width: 100% !important;
-    max-width: 100% !important;
-    height: auto !important;
-    border-radius: 8px;
-    border: 1px solid #e8e8e8;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    margin: 20px 0;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-default);
+    box-shadow: var(--shadow-sm);
+    margin: var(--space-5) 0;
     display: block;
     object-fit: contain;
     cursor: zoom-in;
@@ -1008,7 +1039,7 @@ const anchors = allSections.map(s => ({
     position: absolute;
     top: 16px;
     right: 24px;
-    color: #fff;
+    color: var(--text-inverse);
     font-size: 32px;
     cursor: pointer;
     z-index: 1;
@@ -1029,7 +1060,7 @@ const anchors = allSections.map(s => ({
     max-width: 95vw;
     max-height: 95vh;
     object-fit: contain;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     cursor: default;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
@@ -1052,15 +1083,15 @@ const anchors = allSections.map(s => ({
     .doc-step {
         margin-right: 0;
         margin-bottom: -1px;
-        border-radius: 0 !important;
+        border-radius: 0;
     }
 
     .doc-step:first-child {
-        border-radius: 8px 8px 0 0 !important;
+        border-radius: var(--radius-md) var(--radius-md) 0 0;
     }
 
     .doc-step:last-child {
-        border-radius: 0 0 8px 8px !important;
+        border-radius: 0 0 var(--radius-md) var(--radius-md);
     }
 }
 </style>

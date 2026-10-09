@@ -1,30 +1,37 @@
 <template>
-  <div>
+  <div class="app-shell" data-density="compact">
     <a-layout class="layout">
-        <a-layout-sider v-model:collapsed="collapsed" :trigger="null" collapsible :width="160" :collapsedWidth="sidebarCollapsedWidth" breakpoint="lg">
+        <a-layout-sider v-model:collapsed="collapsed" :trigger="null" collapsible :width="SIDER_WIDTH" :collapsedWidth="sidebarCollapsedWidth" breakpoint="lg">
             <div class="logo">
                 <img src="../../assets/logo.svg" class="logo-img" alt="logo" />
                 <span v-show="!collapsed" class="logo-text"><span class="logo-line1">Deadpan</span><span class="logo-line2">判题</span></span>
             </div>
             <a-menu v-model:selectedKeys="selectedKeys" theme="dark" mode="inline" @click="onMenuClick">
-                <a-menu-item key="/teacher/classes"><template #icon>
-                        <AppstoreOutlined />
-                    </template><span>班级管理</span></a-menu-item>
-                <a-menu-item key="/teacher/students"><template #icon>
-                        <IdcardOutlined />
-                    </template><span>学生管理</span></a-menu-item>
-                <a-menu-item key="/teacher/teams"><template #icon>
-                        <TeamOutlined />
-                    </template><span>教学团队</span></a-menu-item>
-                <a-menu-item key="/teacher/questions"><template #icon>
-                        <DatabaseOutlined />
-                    </template><span>题库管理</span></a-menu-item>
-                <a-menu-item key="/teacher/assignments"><template #icon>
-                        <FileTextOutlined />
-                    </template><span>作业管理</span></a-menu-item>
-                <a-menu-item key="/teacher/review"><template #icon>
-                        <SafetyCertificateOutlined />
-                    </template><span>评分审核</span></a-menu-item>
+                <!-- 导航分组与顺序：docs/ui-redesign/01-information-architecture.md §2.2 -->
+                <a-menu-item-group key="teaching" title="教学">
+                    <a-menu-item key="/teacher/assignments"><template #icon>
+                            <FileTextOutlined />
+                        </template><span>作业管理</span></a-menu-item>
+                    <a-menu-item key="/teacher/review"><template #icon>
+                            <SafetyCertificateOutlined />
+                        </template><span>评分审核</span>
+                        <span v-if="pendingReview > 0" class="sider-badge tnum" :title="pendingTitle">{{ pendingBadge }}</span>
+                    </a-menu-item>
+                    <a-menu-item key="/teacher/questions"><template #icon>
+                            <DatabaseOutlined />
+                        </template><span>题库管理</span></a-menu-item>
+                </a-menu-item-group>
+                <a-menu-item-group key="organization" title="组织">
+                    <a-menu-item key="/teacher/classes"><template #icon>
+                            <AppstoreOutlined />
+                        </template><span>班级管理</span></a-menu-item>
+                    <a-menu-item key="/teacher/students"><template #icon>
+                            <IdcardOutlined />
+                        </template><span>学生管理</span></a-menu-item>
+                    <a-menu-item key="/teacher/teams"><template #icon>
+                            <TeamOutlined />
+                        </template><span>教学团队</span></a-menu-item>
+                </a-menu-item-group>
             </a-menu>
         </a-layout-sider>
         <a-layout>
@@ -33,6 +40,7 @@
                     <MenuUnfoldOutlined v-if="collapsed" class="trigger" @click="collapsed = false" />
                     <MenuFoldOutlined v-else class="trigger" @click="collapsed = true" />
                 </div>
+                <ThemeToggle />
                 <a-dropdown>
                     <div class="user-area">
                         <a-avatar size="small" class="user-avatar">{{ user?.realName?.charAt(0) }}</a-avatar>
@@ -51,6 +59,12 @@
                             </a-sub-menu>
                             <a-menu-item key="flow"><NodeIndexOutlined /> AI 评分流程</a-menu-item>
                             <a-menu-item key="doc"><BookOutlined /> 使用文档</a-menu-item>
+                            <a-sub-menu key="theme" title="主题">
+                                <template #icon><BulbOutlined /></template>
+                                <a-menu-item key="theme-light">浅色{{ themeMode === 'light' ? ' ✓' : '' }}</a-menu-item>
+                                <a-menu-item key="theme-dark">深色{{ themeMode === 'dark' ? ' ✓' : '' }}</a-menu-item>
+                                <a-menu-item key="theme-system">跟随系统{{ themeMode === 'system' ? ' ✓' : '' }}</a-menu-item>
+                            </a-sub-menu>
                             <a-menu-item key="logout"><PoweroffOutlined /> 退出登录</a-menu-item>
                         </a-menu>
                     </template>
@@ -66,9 +80,9 @@
         </a-layout>
     </a-layout>
 
-    <a-modal v-model:open="showProfile" :width="420" :footer="null" :destroyOnClose="true" @cancel="resetPwdForm">
+    <a-modal v-model:open="showProfile" :width="480" :footer="null" :destroyOnClose="true" @cancel="resetPwdForm">
       <div class="profile-card">
-        <a-avatar :size="56" style="background:var(--blue);font-size:24px;margin-bottom:16px;">{{ user?.realName?.charAt(0) }}</a-avatar>
+        <a-avatar :size="56" class="profile-avatar">{{ user?.realName?.charAt(0) }}</a-avatar>
         <div class="profile-row"><span class="profile-label">姓名</span><span>{{ user?.realName }}</span></div>
         <div class="profile-row"><span class="profile-label">工号</span><span>{{ user?.username }}</span></div>
         <div class="profile-row"><span class="profile-label">当前单位</span><span>{{ userStore.currentSchool?.name || '未绑定' }}</span></div>
@@ -86,11 +100,14 @@
       </div>
     </a-modal>
 
-    <a-modal v-model:open="showFlowModal" :width="1040" :footer="null" :destroyOnClose="true" @cancel="flowStep = 0" :bodyStyle="{ padding: '16px 24px' }" wrap-class-name="flow-modal-wrap">
+    <!-- 工作流/内容型弹窗：captain 2026-10-09 定案作为第四档 1040 保留。
+             与页面下方非 scoped 的 .flow-modal-wrap 规则成对维护：改这里的 :width 必须同步改那条 max-width
+             （对齐 views/teacher/Assignments.vue 的 .assign-modal 写法） -->
+    <a-modal v-model:open="showFlowModal" :width="1040" :footer="null" :destroyOnClose="true" @cancel="flowStep = 0" :bodyStyle="{ padding: 'var(--space-4) var(--space-6)' }" wrap-class-name="flow-modal-wrap">
       <template #title>
-        <QuestionCircleOutlined style="color:#1677ff;margin-right:8px;" />AI 评分流程
+        <QuestionCircleOutlined class="flow-title-icon" />AI 评分流程
       </template>
-      <a-steps :current="flowStep" size="small" :items="flowItems" style="margin:12px 0 16px;" />
+      <a-steps :current="flowStep" size="small" :items="flowItems" class="flow-steps" />
       <div class="flow-content" :class="{ 'step-center': flowStep !== 2 }">{{ flowSteps[flowStep].content }}</div>
       <div class="flow-actions">
         <a-button v-if="flowStep > 0" @click="flowStep--">上一步</a-button>
@@ -102,24 +119,54 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue';
+import { ref, reactive, computed, watch, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useUserStore } from '../../stores/user.js';
 import request from '../../api/request.js';
-import { Modal, message } from 'ant-design-vue';
-import { QuestionCircleOutlined, UserOutlined, NodeIndexOutlined, UserSwitchOutlined, PoweroffOutlined, AppstoreOutlined, IdcardOutlined, DatabaseOutlined, FileTextOutlined, SafetyCertificateOutlined, TeamOutlined, BookOutlined, ExperimentOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
+import { message } from 'ant-design-vue';
+import { useConfirm } from '../../composables/useConfirm.js';
+import { useTheme } from '../../composables/useTheme.js';
+import ThemeToggle from '../../components/ThemeToggle.vue';
+import { QuestionCircleOutlined, UserOutlined, NodeIndexOutlined, UserSwitchOutlined, PoweroffOutlined, AppstoreOutlined, IdcardOutlined, DatabaseOutlined, FileTextOutlined, SafetyCertificateOutlined, TeamOutlined, BookOutlined, ExperimentOutlined, BulbOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
 
 const router = useRouter(); const route = useRoute(); const userStore = useUserStore();
+const { confirm } = useConfirm();
+const { mode: themeMode, setMode } = useTheme();
 const user = userStore.user;
 const collapsed = ref(false);
-const sidebarCollapsedWidth = ref(window.innerWidth < 992 ? 0 : 80);
-window.addEventListener('resize', () => { sidebarCollapsedWidth.value = window.innerWidth < 992 ? 0 : 80; });
+
+/** 侧栏宽度取自令牌：232 / 折叠 64（docs/ui-redesign/03-components.md §3.4） */
+const SIDER_WIDTH = 'var(--layout-sider-w)';
+const SIDER_COLLAPSED_WIDTH = 'var(--layout-sider-w-collapsed)';
+/** <992px 时侧栏完全收起（保持原有响应式行为，宽度仍由令牌决定） */
+const sidebarCollapsedWidth = ref(window.innerWidth < 992 ? 0 : SIDER_COLLAPSED_WIDTH);
+window.addEventListener('resize', () => { sidebarCollapsedWidth.value = window.innerWidth < 992 ? 0 : SIDER_COLLAPSED_WIDTH; });
 const selectedKeys = ref([route.path]);
 const showFlowModal = ref(false);
 const showProfile = ref(false);
 const pwdActiveKey = ref([]);
 const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' });
 const changingPwd = ref(false);
+
+// ===== 侧栏「评分审核」待审核徽标 =====
+/**
+ * 数据源：GET /teacher/pending-summary（Batch1 P0-1，与「评分审核」页、作业管理 KPI 同源）。
+ * Wave 2 t13 / R-1：徽标是辅助信息，失败不得弹提示打断教师 —— 走统一请求入口 + silent 开关
+ * （api/request.js 的响应拦截器对 silent 请求只 reject、不弹全局 message）。
+ */
+const pendingReview = ref(0);
+const pendingBadge = computed(() => (pendingReview.value > 99 ? '99+' : String(pendingReview.value)));
+const pendingTitle = computed(() => `待审核 ${pendingReview.value} 条`);
+
+/** 进入 Layout 拉取一次 + 每次路由切换后刷新；失败保留上一次数值并静默 */
+async function refreshPendingReview() {
+  try {
+    const r = await request.get('/teacher/pending-summary', { silent: true });
+    pendingReview.value = Number(r.data?.pendingReview) || 0;
+  } catch (e) { /* 静默：不弹提示、不打断当前页面 */ }
+}
+
+onMounted(() => { refreshPendingReview(); });
 
 function resetPwdForm() {
   pwdActiveKey.value = [];
@@ -158,6 +205,8 @@ watch(() => route.path, (p) => {
   else if (p.startsWith('/teacher/projects')) selectedKeys.value = ['/teacher/projects'];
   else selectedKeys.value = [p];
   collapsed.value = p.includes('/teacher/questions/') || p.includes('/teacher/review/') || p.includes('/teacher/projects/');
+  // 路由切换后刷新待审核数
+  refreshPendingReview();
 });
 function onMenuClick ({ key }) {
   router.push(key);
@@ -171,12 +220,21 @@ async function switchSchool (school) {
 }
 
 function handleMenu ({ key }) {
+    if (key === 'theme-light') { setMode('light'); return; }
+    if (key === 'theme-dark') { setMode('dark'); return; }
+    if (key === 'theme-system') { setMode('system'); return; }
     if (key === 'flow') { showFlowModal.value = true; return; }
     if (key === 'doc') { window.open('/exam/doc', '_blank'); return; }
     if (key === 'profile') {
         showProfile.value = true;
     } else if (key === 'logout') {
-        Modal.confirm({ title: '确定退出登录？', content: '退出后需重新输入用户名和密码', okText: '确定', cancelText: '取消', onOk: () => { userStore.logout(); router.push('/login'); } });
+        confirm({
+            title: '确定退出登录？',
+            content: '退出后需重新输入用户名和密码',
+            okText: '退出登录',
+            cancelText: '取消',
+            onOk: () => { userStore.logout(); router.push('/login'); },
+        });
     }
 }
 </script>
@@ -199,9 +257,9 @@ function handleMenu ({ key }) {
 .logo {
     display: flex;
     align-items: center;
-    gap: 10px;
-    height: 64px;
-    padding: 0 24px;
+    gap: var(--space-2);
+    height: var(--layout-topbar-h);
+    padding: 0 var(--space-6);
     overflow: hidden;
     white-space: nowrap;
 }
@@ -213,28 +271,30 @@ function handleMenu ({ key }) {
 }
 
 .logo-text {
-    color: #fff;
+    color: var(--text-inverse);
     font-family: var(--font-display);
-    font-weight: 600;
-    letter-spacing: -0.28px;
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--tracking-tight);
     display: flex; flex-direction: column; line-height: 1.2;
 }
-.logo-line1 { font-size: 14px; opacity: 0.85; }
-.logo-line2 { font-size: 18px; }
+.logo-line1 { font-size: var(--fs-body); opacity: 0.85; }
+.logo-line2 { font-size: var(--fs-title-2); }
 
 .topbar {
-    background: rgba(255, 255, 255, 0.92);
-    padding: 0 24px;
+    background: var(--topbar-bg);
+    border-bottom: 1px solid var(--topbar-bd);
+    /* R-2：容器色令牌化（折叠按钮/分隔点等继承它；现代与 html.legacy 计算值一致，见 18-wave4-verify 证据） */
+    color: var(--text-primary);
+    padding: 0 var(--space-6);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    height: 52px;
-    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15);
+    height: var(--layout-topbar-h);
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
-    z-index: 10;
+    z-index: var(--z-topbar);
     transform: translate3d(0, 0, 0);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
     backdrop-filter: saturate(180%) blur(20px);
@@ -252,74 +312,96 @@ function handleMenu ({ key }) {
 }
 
 .trigger {
-    font-size: 18px;
-    line-height: 52px;
-    padding: 0 12px;
+    color: var(--text-primary);
+    font-size: var(--fs-title-2);
+    line-height: var(--layout-topbar-h);
+    padding: 0 var(--space-3);
     cursor: pointer;
-    transition: color 0.3s;
+    transition: var(--transition-control);
 }
 
 .trigger:hover {
-    color: var(--blue);
+    color: var(--text-link);
 }
 
 .user-area {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     cursor: pointer;
-    padding: 4px 8px;
-    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-md);
 }
 
 .user-avatar {
-    background: var(--blue);
+    background: var(--brand-600);
     flex-shrink: 0;
 }
 
 .user-name {
-    font-size: 14px;
-    color: var(--ink);
+    font-size: var(--fs-body);
+    color: var(--text-primary);
 }
 
 .user-school {
-    color: var(--ink-muted);
+    color: var(--text-tertiary);
 }
 
 .user-caret {
-    font-size: 10px;
-    color: var(--ink-muted);
+    font-size: var(--fs-caption);
+    color: var(--text-tertiary);
 }
 
 .content {
-    padding: 80px 48px 40px;
-    background: var(--canvas-parchment);
+    padding: calc(var(--layout-topbar-h) + var(--space-6)) var(--space-12) var(--space-10);
+    background: var(--bg-canvas);
     overflow-y: auto;
     height: 100%;
 }
 
+/* 侧栏徽标：待审核数（深色侧栏上的 danger 三元组，见 03-components.md §3.4） */
+.sider-badge {
+    flex: none;
+    margin-inline-start: auto;
+    min-width: var(--tag-h);
+    height: var(--tag-h);
+    padding: 0 var(--tag-pad-x);
+    border-radius: var(--radius-pill);
+    background: var(--status-danger-bg);
+    color: var(--status-danger-fg);
+    font-size: var(--tag-fs);
+    line-height: var(--tag-h);
+    font-weight: var(--fw-semibold);
+    text-align: center;
+}
+/* 折叠态：与文字一起隐藏（antd 会把 title-content 置为透明，这里对徽标兜底） */
+.layout :deep(.ant-layout-sider-collapsed .sider-badge) { display: none; }
+
+.flow-title-icon { color: var(--brand-600); margin-right: var(--space-2); }
+.flow-steps { margin: var(--space-3) 0 var(--space-4); }
+
 .flow-content {
-  padding: 24px 16px; min-height: 80px;
-  background: #fafafa; border: 1px dashed #e9e9e9;
-  border-radius: 6px; font-size: 13px; color: #555; line-height: 1.8;
+  padding: var(--space-6) var(--space-4); min-height: 80px;
+  background: var(--bg-surface-2); border: 1px dashed var(--border-default);
+  border-radius: var(--radius-sm); font-size: var(--fs-body-sm); color: var(--text-secondary); line-height: var(--lh-body);
   white-space: pre-wrap; font-family: inherit;
 }
 .flow-content.step-center {
   display: flex; align-items: center; justify-content: center;
   text-align: center;
 }
-.flow-actions { display: flex; gap: 8px; margin-top: 16px; }
+.flow-actions { display: flex; gap: var(--space-2); margin-top: var(--space-4); }
 
 .profile-card { text-align: center; }
-.profile-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; }
-.profile-label { color: var(--ink-muted); }
-.profile-card :deep(.ant-collapse-header) { text-align: left; color: var(--blue); font-size: 14px; }
+.profile-avatar { background: var(--brand-600); font-size: var(--fs-display-2); margin-bottom: var(--space-4); }
+.profile-row { display: flex; justify-content: space-between; padding: var(--space-2) 0; font-size: var(--fs-body); }
+.profile-label { color: var(--text-tertiary); }
+.profile-card :deep(.ant-collapse-header) { text-align: left; color: var(--text-link); font-size: var(--fs-body); }
 
 @media (max-width: 768px) {
-  .topbar { padding: 0 12px; }
-  .content { padding: 72px 12px 24px; }
+  .topbar { padding: 0 var(--space-3); }
+  .content { padding: calc(var(--layout-topbar-h) + var(--space-4)) var(--space-3) var(--space-6); }
   .user-name { display: none; }
-  .ant-table { font-size: 13px; }
 }
 </style>
 <style>

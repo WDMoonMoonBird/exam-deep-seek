@@ -7,7 +7,7 @@
       <button @click="editor.chain().focus().toggleUnderline().run()" :class="{ active: editor.isActive('underline') }" title="下划线"><u>U</u></button>
       <button @click="editor.chain().focus().toggleStrike().run()" :class="{ active: editor.isActive('strike') }" title="删除线"><s>S</s></button>
       <button @click="editor.chain().focus().toggleCode().run()" :class="{ active: editor.isActive('code') }" title="行内代码">&lt;/&gt;</button>
-      <button @click="editor.chain().focus().toggleHighlight().run()" :class="{ active: editor.isActive('highlight') }" title="高亮" style="background: #fff3cd">H</button>
+      <button @click="editor.chain().focus().toggleHighlight().run()" :class="{ active: editor.isActive('highlight') }" title="高亮" style="background: var(--status-warning-bg)">H</button>
       <span class="sep" />
       <!-- 文字颜色 -->
       <input type="color" class="color-pick" @input="setColor($event.target.value)" title="文字颜色" />
@@ -165,60 +165,61 @@ onUnmounted(() => {
 
 <style scoped>
 .rich-editor {
-  border: 1px solid #d9d9d9;
-  border-radius: 6px;
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
   overflow: hidden;
   transition: border-color 0.2s;
-  background: #fff;
+  background: var(--bg-surface);
 }
 .rich-editor.focused {
-  border-color: #1677ff;
-  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.1);
+  border-color: var(--border-focus);
+  box-shadow: var(--ring-focus);
 }
 .toolbar {
   display: flex;
   align-items: center;
   gap: 2px;
   padding: 6px 8px;
-  border-bottom: 1px solid #f0f0f0;
-  background: #fafafa;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface-2);
   flex-wrap: wrap;
 }
 .toolbar button {
   width: 30px;
   height: 28px;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: transparent;
   cursor: pointer;
-  font-size: 13px;
-  color: #555;
+  font-size: var(--fs-body-sm);
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s;
+  transition: all var(--duration-fast);
   flex-shrink: 0;
 }
 .toolbar button:hover {
-  background: #e6e8eb;
-  color: #222;
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 .toolbar button.active {
-  background: #e0edff;
-  color: #1677ff;
+  background: var(--bg-selected);
+  color: var(--text-link);
 }
 .toolbar .sep {
   width: 1px;
   height: 20px;
-  background: #d9d9d9;
+  background: var(--border-strong);
   margin: 0 4px;
   flex-shrink: 0;
 }
 .color-pick {
   width: 24px;
   height: 24px;
-  border: 1px solid #d9d9d9;
-  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
   padding: 0;
   cursor: pointer;
 }
@@ -227,50 +228,52 @@ onUnmounted(() => {
 
 /* 表格弹窗 */
 .table-dialog-overlay {
-  position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: rgba(0,0,0,0.3); z-index: 9999;
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: var(--bg-overlay); z-index: 9999;
   display: flex; align-items: center; justify-content: center;
 }
 .table-dialog {
-  background: #fff; border-radius: 12px; padding: 24px; width: 280px;
-  box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+  background: var(--bg-surface); border-radius: var(--radius-lg); padding: 24px; width: 280px;
+  box-shadow: var(--shadow-lg);
 }
-.table-dialog-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+.table-dialog-title { font-size: var(--fs-title-3); font-weight: 600; margin-bottom: 16px; }
 .table-dialog-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-.table-dialog-row label { width: 40px; font-size: 14px; color: #555; }
+.table-dialog-row label { width: 40px; font-size: var(--fs-body); color: var(--text-secondary); }
 .table-dialog-row input {
-  flex: 1; height: 32px; padding: 0 8px; border: 1px solid #d9d9d9;
-  border-radius: 6px; font-size: 14px; outline: none;
+  flex: 1; height: 32px; padding: 0 8px; border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm); font-size: var(--fs-body); outline: none;
 }
-.table-dialog-row input:focus { border-color: #1677ff; }
+.table-dialog-row input:focus { border-color: var(--border-focus); }
 .table-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .table-dialog-actions button {
-  height: 32px; padding: 0 16px; border-radius: 6px; border: 1px solid #d9d9d9;
-  background: #fff; cursor: pointer; font-size: 13px;
+  height: 32px; padding: 0 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong);
+  background: var(--bg-surface); cursor: pointer; font-size: var(--fs-body-sm);
 }
-.table-dialog-actions button.primary { background: #1677ff; color: #fff; border-color: #1677ff; }
+.table-dialog-actions button.primary { background: var(--btn-primary-bg); color: var(--btn-primary-fg); border-color: var(--btn-primary-bg); }
 
 :deep(.tiptap) {
-  padding: 12px 16px; min-height: 160px; outline: none; font-size: 14px; line-height: 1.7;
+  padding: 12px 16px; min-height: 160px; outline: none; font-size: var(--fs-body); line-height: 1.7;
+  /* 正文颜色显式绑令牌：否则继承 antd 的 rgba(0,0,0,.88)，暗色深底上对比度仅 1.19:1 */
+  color: var(--text-primary);
 }
 :deep(.tiptap p.is-editor-empty:first-child::before) {
-  content: attr(data-placeholder); color: #bfbfbf; pointer-events: none; float: left; height: 0;
+  content: attr(data-placeholder); color: var(--text-disabled); pointer-events: none; float: left; height: 0;
 }
 :deep(.tiptap h2) { font-size: 1.25em; margin: 0.5em 0; }
 :deep(.tiptap h3) { font-size: 1.1em; margin: 0.4em 0; }
-:deep(.tiptap code) { background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
-:deep(.tiptap pre) { background: #282c34; color: #abb2bf; padding: 12px 16px; border-radius: 6px; overflow-x: auto; }
-:deep(.tiptap blockquote) { border-left: 3px solid #d9d9d9; padding-left: 16px; color: #666; margin: 0.5em 0; }
+:deep(.tiptap code) { background: var(--bg-sunken); padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+:deep(.tiptap pre) { background: var(--code-bg); color: var(--code-fg); padding: 12px 16px; border-radius: var(--radius-sm); overflow-x: auto; }
+:deep(.tiptap blockquote) { border-left: 3px solid var(--border-strong); padding-left: 16px; color: var(--text-secondary); margin: 0.5em 0; }
 :deep(.tiptap ul, .tiptap ol) { padding-left: 24px; }
-:deep(.tiptap hr) { border: none; border-top: 1px solid #d9d9d9; margin: 1em 0; }
-:deep(.tiptap a) { color: #1677ff; text-decoration: underline; cursor: pointer; }
-:deep(.tiptap mark) { background: #fff3cd; padding: 1px 4px; border-radius: 2px; }
+:deep(.tiptap hr) { border: none; border-top: 1px solid var(--border-strong); margin: 1em 0; }
+:deep(.tiptap a) { color: var(--text-link); text-decoration: underline; cursor: pointer; }
+:deep(.tiptap mark) { background: var(--status-warning-bg); padding: 1px 4px; border-radius: 2px; }
 :deep(.tiptap ul[data-type="taskList"] li) { display: flex; align-items: flex-start; gap: 8px; }
 :deep(.tiptap ul[data-type="taskList"] li label) { margin-top: 2px; }
 
-:deep(.tiptap img) { max-width: 100%; border-radius: 4px; margin: 0.5em 0; }
+:deep(.tiptap img) { max-width: 100%; border-radius: var(--radius-xs); margin: 0.5em 0; }
 
 :deep(.tiptap table) { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
-:deep(.tiptap th) { background: #f5f5f5; border: 1px solid #d9d9d9; padding: 8px 12px; font-weight: 600; text-align: left; }
-:deep(.tiptap td) { border: 1px solid #d9d9d9; padding: 6px 12px; }
-:deep(.tiptap .selectedCell) { background: rgba(22, 119, 255, 0.08); }
+:deep(.tiptap th) { background: var(--bg-sunken); border: 1px solid var(--border-strong); padding: 8px 12px; font-weight: 600; text-align: left; }
+:deep(.tiptap td) { border: 1px solid var(--border-strong); padding: 6px 12px; }
+:deep(.tiptap .selectedCell) { background: var(--bg-selected); }
 </style>

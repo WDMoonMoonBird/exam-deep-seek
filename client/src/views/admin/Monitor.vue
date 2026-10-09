@@ -1,13 +1,14 @@
 <template>
-  <div class="page">
-    <div class="page-header">
-      <h2>服务器监控</h2>
-      <a-space>
-        <a-tag :color="autoRefresh ? 'green' : 'default'">自动刷新 {{ autoRefresh ? '开' : '关' }}</a-tag>
-        <a-switch v-model:checked="autoRefresh" size="small" />
-        <a-button size="small" @click="fetch" :loading="loading">手动刷新</a-button>
-      </a-space>
-    </div>
+  <PageShell
+    title="服务器监控"
+    description="服务器运行状态、PM2 进程与近期错误日志；开启自动刷新后每 30 秒拉取一次。"
+    :max-width="'var(--layout-content-max)'"
+  >
+    <template #actions>
+      <StatusTag :tone="autoRefresh ? 'success' : 'neutral'" :text="`自动刷新 ${autoRefresh ? '开' : '关'}`" />
+      <a-switch v-model:checked="autoRefresh" size="small" aria-label="自动刷新" />
+      <a-button size="small" @click="fetch" :loading="loading">手动刷新</a-button>
+    </template>
 
     <!-- 系统信息 -->
     <a-card title="🖥️ 系统信息" size="small" class="monitor-card">
@@ -33,7 +34,7 @@
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'status'">
-            <a-badge :status="record.status === 'online' ? 'success' : 'error'" :text="record.status" />
+            <StatusTag :tone="record.status === 'online' ? 'success' : 'danger'" :text="record.status" dot />
           </template>
           <template v-if="column.key === 'cpu'">{{ record.cpu }}%</template>
         </template>
@@ -48,13 +49,15 @@
         <a-empty v-else description="暂无日志" :image="false" />
       </div>
     </a-card>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
+import PageShell from '../../components/PageShell.vue';
+import StatusTag from '../../components/StatusTag.vue';
 
 const loading = ref(false);
 const autoRefresh = ref(true);
@@ -100,24 +103,51 @@ onUnmounted(() => { clearInterval(timer); });
 </script>
 
 <style scoped>
-.page { max-width: 1400px; }
-.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-shrink: 0; }
-.page-header h2 { font-size: 28px; margin: 0; }
+.monitor-card {
+  margin-bottom: var(--space-4);
+}
+.monitor-card:last-child :deep(.ant-card-body) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 
-.monitor-card { margin-bottom: 16px; }
-.monitor-card:last-child :deep(.ant-card-body) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.label {
+  display: block;
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-1);
+}
+.value {
+  font-size: var(--fs-body);
+  color: var(--text-primary);
+  font-weight: var(--fw-medium);
+}
+.mem-low {
+  color: var(--status-danger-fg);
+  font-weight: var(--fw-bold);
+}
 
-.label { display: block; font-size: 12px; color: #999; margin-bottom: 2px; }
-.value { font-size: 14px; color: #333; font-weight: 500; }
-.mem-low { color: #ff4d4f; font-weight: 700; }
-
+/* 深色日志区：用 --code-bg / --code-fg（定义见 tokens.css:183-187 浅色语义层、:403-405 深色块显式重声明），
+   语义 = 「无论主题都必须保持深色的内容面」；浅色与暗色下取值一致（实测底色 11/15/22、文字 72% 白）。
+   不沿用 --bg-inverse/--text-inverse-muted 的理由是语义不同——--bg-inverse 表示「当前面的反色」（浅色主题下服务侧栏/浮层），
+   而非修暗色缺陷：tokens.css:388 起的「深色主题的组件级修正（必须放在组件令牌之后）」块在 :391 显式重声明 --bg-inverse 为深色值（与浅色主题同值），
+   与前面的 [data-theme="dark"] 块同优先级、后写者胜，故暗色下它同样保持深色；本注释此前「暗色会变浅底」的结论不成立，据此更正。 */
 .log-viewer {
-  max-height: 500px; overflow: auto;
-  background: #1e1e1e; border-radius: 8px; padding: 16px;
+  max-height: 500px;
+  overflow: auto;
+  background: var(--code-bg);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
 }
 .log-viewer pre {
-  color: #d4d4d4; font-size: 13px; line-height: 1.7;
-  margin: 0; white-space: pre-wrap; word-break: break-all;
-  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  color: var(--code-fg);
+  font-size: var(--fs-code);
+  line-height: var(--lh-code);
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: var(--font-mono);
 }
 </style>

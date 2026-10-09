@@ -5,6 +5,20 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Deadpan 判题</title>
+    <!-- 首帧防闪（Wave 5 · t31）：在任何样式/脚本之前按 localStorage 与系统偏好先定 data-theme，
+         否则暗色用户会先看到一帧白底；同时设 color-scheme 让原生控件/滚动条跟随。
+         必须保持 ES5 写法（Chrome 69）并整体 try/catch（localStorage 可能不可用）。 -->
+    <script>
+      (function () {
+        try {
+          var m = localStorage.getItem('ui-theme') || 'system';
+          var dark = m === 'dark' || (m === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var t = dark ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-theme', t);
+          document.documentElement.style.colorScheme = t;
+        } catch (e) { /* 存储不可用：交给 Vue 侧 useTheme 决定 */ }
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

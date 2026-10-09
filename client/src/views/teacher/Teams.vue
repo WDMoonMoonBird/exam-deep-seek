@@ -1,49 +1,66 @@
 <template>
-  <div class="page">
-    <div class="page-header">
-      <h2>教学团队</h2>
+  <PageShell
+    title="教学团队"
+    description="把班级和同事编入团队，团队内的班级、题库可共享给成员。"
+  >
+    <template #actions>
       <a-button type="primary" @click="openCreate">创建团队</a-button>
-    </div>
+    </template>
 
-    <DataTable
+    <!-- TODO(P1-7): 接口支持服务端分页后切换（/teacher/teams 目前全量返回，沿用前端切片） -->
+    <ListPage
       :columns="columns"
-      :dataSource="list"
-      rowKey="id"
+      :data-source="pagedList"
       :loading="loading"
-      v-model:current="page.current"
-      :clientPagination="true"
-      :pageSize="20"
+      row-key="id"
+      :total="list.length"
+      :current="page.current"
+      :page-size="page.pageSize"
+      empty-title="还没有教学团队"
+      empty-desc="创建团队后，可把班级加入团队，与同事共享班级和题库。"
+      empty-action-text="创建团队"
+      @page-change="onPageChange"
+      @empty-action="openCreate"
     >
+      <template #toolbar-right>
+        <span class="muted">共 {{ list.length }} 个团队</span>
+      </template>
+
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'creator'">{{ record.creator?.realName }}</template>
-        <template v-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
-        <template v-if="column.key === 'counts'">{{ record._count?.teachers || 0 }} 教师 / {{ record._count?.classes || 0 }} 班级</template>
-        <template v-if="column.key === 'action'">
-          <a-space>
+        <template v-else-if="column.key === 'counts'">
+          {{ record._count?.teachers || 0 }} 教师 / {{ record._count?.classes || 0 }} 班级
+        </template>
+        <template v-else-if="column.key === 'createdAt'">
+          <span class="tnum">{{ formatDateTime(record.createdAt) }}</span>
+        </template>
+        <template v-else-if="column.key === 'action'">
+          <div class="row-actions">
             <a-button type="link" @click="$router.push(`/teacher/teams/${record.id}`)">管理</a-button>
-            <a-popconfirm v-if="record.createdBy === userStore.user?.id" title="确定删除该团队？" ok-text="确定" cancel-text="取消" @confirm="del(record.id)">
+            <a-popconfirm v-if="record.createdBy === userStore.user?.id" title="确认删除该团队？" description="删除后团队成员将失去该团队及其班级的访问权限，不可撤销。" ok-text="删除团队" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="del(record.id)">
               <a-button type="link" danger>删除</a-button>
             </a-popconfirm>
-            <a-popconfirm v-else title="确定退出该团队？" ok-text="确定" cancel-text="取消" @confirm="leave(record.id)">
+            <a-popconfirm v-else title="确认退出该团队？" description="退出后你将无法查看该团队的班级与成员。" ok-text="退出团队" cancel-text="取消" @confirm="leave(record.id)">
               <a-button type="link">退出</a-button>
             </a-popconfirm>
-          </a-space>
+          </div>
         </template>
       </template>
-    </DataTable>
+    </ListPage>
 
-    <a-modal title="创建团队" :open="createVisible" @ok="handleCreate" @cancel="createVisible = false" ok-text="确定" cancel-text="取消" :width="400" wrap-class-name="form-modal">
+    <a-modal title="创建团队" :open="createVisible" @ok="handleCreate" @cancel="createVisible = false" ok-text="创建团队" cancel-text="取消" :width="480" wrap-class-name="form-modal">
       <a-form><a-form-item label="团队名称"><a-input v-model:value="createName" /></a-form-item></a-form>
     </a-modal>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
+import PageShell from '../../components/PageShell.vue';
+import ListPage from '../../components/ListPage.vue';
 import { useUserStore } from '../../stores/user.js';
-import DataTable from '../../components/DataTable.vue';
 import { formatDateTime } from '../../domain/format.js';
 
 const userStore = useUserStore();
@@ -55,11 +72,14 @@ const createName = ref('');
 
 const columns = [
   { title: '团队名称', dataIndex: 'name', width: 200, ellipsis: true },
-  { title: '创建者', key: 'creator', width: 100 },
+  { title: '创建者', key: 'creator', width: 100, responsive: ['xl'] },
   { title: '成员', key: 'counts', width: 160 },
-  { title: '创建时间', key: 'createdAt', width: 170 },
-  { title: '操作', key: 'action', width: 160 },
+  { title: '创建时间', key: 'createdAt', width: 170, responsive: ['xl'] },
+  { title: '操作', key: 'action', width: 160, align: 'right' },
 ];
+
+/** 前端切片：接口全量返回（见上方 TODO(P1-7)） */
+const pagedList = computed(() => list.value.slice((page.current - 1) * page.pageSize, page.current * page.pageSize));
 
 async function fetch() {
   loading.value = true;
@@ -80,26 +100,25 @@ async function handleCreate() {
 async function del(id) { await request.delete(`/teacher/teams/${id}`); message.success('删除成功'); fetch(); }
 async function leave(id) { await request.post(`/teacher/teams/${id}/leave`); message.success('已退出团队'); fetch(); }
 
+/** 前端切片页码（ListPage 只抛出页码，不内置请求） */
+function onPageChange(p) {
+  page.current = p;
+}
+
 onMounted(fetch);
 </script>
 
 <style scoped>
-.page {
-  max-width: 1400px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+.muted {
+  color: var(--text-tertiary);
+  font-size: var(--fs-caption);
 }
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  flex-shrink: 0;
+.tnum {
+  font-variant-numeric: tabular-nums;
 }
-.page-header h2 {
-  font-size: 28px;
-  margin: 0;
+.row-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
 }
 </style>
