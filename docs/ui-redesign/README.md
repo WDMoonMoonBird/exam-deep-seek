@@ -129,3 +129,9 @@
 1. Modal 宽度原值「560」在本仓库 git 历史中不存在（t24 考证）→ 实际现为 640
 2. `--bg-inverse` 在暗色下**不翻转**（tokens.css:384 起组件级修正块后写生效）——t26 的诊断被否证，t28 实测确认
 3. `style.css` 真实路径为 `client/src/style.css`（契约写成 `styles/style.css`，**第 5 次路径笔误**）→ 规则加强：写路径前 `ls`；**grep 空输出必须先排除「路径不存在」**
+
+### Wave 5 追加（动画与过渡）
+| # | 项 | 来源 | 归属 |
+|---|---|---|---|
+| R-25 | 页面内**既有**写死过渡时长未令牌化（ReviewDetail 6 处：`.15s`/`.2s`/`.25s`/`.3s ease` 等，含 `.collapse-enter-active`、`.material-arrow`）。t42 新增的过渡已全部走 `--duration-*`；这些是改前既有。注意：reduced-motion 降级对它们仍生效（tokens.css 对 `*` 的强制规则），故非功能缺陷，属令牌纯度 | t42 抽验时 captain 发现并核证（本次 diff 0 命中） | Wave 6 / 收口池 |
+| R-26 | 折叠控件形态不一致：ReviewDetail 用原生 `<button>`（语义最佳），ProjectReviewNew 用 `role=button + tabindex=0` + 手写 Enter/Space。建议统一为原生 `<button>`（省掉手写键盘处理） | t42 报告对比发现 | Wave 6 / 收口池 |
