@@ -67,13 +67,16 @@
 
 | # | 项 | 来源 | 归属 |
 |---|---|---|---|
-| R-1 | `api/request.js` 提供 `silent` 选项，替换 Layout 中派生的 axios 实例（约 15 行重复鉴权逻辑）；同时解决试点页 KPI 请求失败仍弹提示的问题 | T2 契约边界限制 | Wave 2 |
-| R-2 | 顶栏容器与折叠按钮的文字色未走令牌（沿用 antd 默认 `rgba(0,0,0,.88)`）——实测写成 `--text-primary` 反而会与 legacy 产生偏差，故暂不强制 | T8 实测结论 | Wave 4 令牌纯度 |
+| R-1 | ✅ **已完成（t13）**：`api/request.js` 提供静默开关；三端 Layout 的派生 axios 实例已删（15 行重复鉴权消失）；试点页 KPI 失败弹提示一并解决 | T2 契约边界限制 | **Wave 2 已完成** |
+| R-2 | 顶栏容器与折叠按钮文字色未走令牌（沿用 antd 默认 `rgba(0,0,0,.88)`）——实测写成 `--text-primary` 反而与 legacy 产生偏差，故不强制 | T8 实测结论 | Wave 4 令牌纯度 |
 | R-3 | 逐页 legacy（Chrome 69）像素级扫描：学生页内容区曾出现 1 字节截图差异（12 项计算样式一致 → 判定瞬态） | T8 顺带发现 | Wave 4（页面冻结后） |
 | R-4 | 时间格式统一为 `YYYY-MM-DD HH:mm`（现为 `2026/8/24 19:01`）；`formatDateTime` 被 20+ 页使用，需一次性切换 | Wave 0 已知差异 | **Wave 4**（captain 决策：横切变更，避免与 Wave 2/3 每轮视觉验收叠加；且未迁移页仍是旧格式，先切会新旧混杂） |
-| R-8 | 令牌纯度残留：`teacher/Students.vue` 2 处 `font-size:48px`（装饰图标，**保留字面量**——无对应语义令牌，不为此扩令牌表）；12/14px 两处已并入 T11 | T6 §8① | 已决（部分收尾） |
-| R-9 | ListPage 两处能力缺口：① 单页时仍显示分页栏（改前 DataTable 会整栏隐藏）② 组件无每页条数切换（Schools 目前用页面内 a-select 兜底） | T6 §7.2 / §8 | Wave 2 |
-| R-10 | 页面级「错态」：列表请求失败仍靠全局 message 提示；建议 ListPage 增加 `error` 插槽 + 与 R-1 同批做（同属请求与反馈层） | T6 §8④ | Wave 2（与 R-1 同批） |
 | R-5 | P1-7（7 个列表接口服务端分页）到位后，切换 admin 4 页与 teacher classes/students/teams 的前端切片（代码中已标 `TODO(P1-7)`） | 后端未交付 | 依赖后端 |
-| R-6 | 深色日志区（admin/Monitor）复用 `--bg-inverse`/`--text-inverse-muted`；评估是否新增 `--log-bg`/`--log-fg` 语义令牌 | T4 令牌缺口反馈 | Wave 2 评估 |
-| R-7 | **删除 `components/DataTable.vue`（323 行死代码）**：13 个列表页全部迁移到 ListPage 后，全仓 0 引用（用 grep 在 client/src 的 .vue 里检索无结果）。删除前再跑一次引用检查 | captain 抽验时发现 | Wave 2 清理 |
+| R-6 | 深色日志区（admin/Monitor）复用 `--bg-inverse`/`--text-inverse-muted`；评估是否新增 `--log-bg`/`--log-fg` 语义令牌 | T4 令牌缺口反馈 | Wave 2 未处理 → 顺延 Wave 3/4 |
+| R-7 | ✅ **已完成（t13）**：`components/DataTable.vue` 已 `git rm`，引用 0 | captain 抽验发现 | **Wave 2 已完成** |
+| R-8 | 令牌纯度残留：`teacher/Students.vue` 2 处 `font-size:48px`（装饰图标，**保留字面量**——无对应语义令牌，不为此扩令牌表） | T6 §8① | 已决（保留） |
+| R-9 | ✅ **已完成（t13）**：ListPage 已支持每页条数切换（默认关闭）与单页隐藏分页栏；admin/Schools 页面内兜底 a-select 已回收 | T6 §7.2 / §8 | **Wave 2 已完成** |
+| R-10 | ✅ **已完成（t13）**：ListPage 已加 `error` 插槽/prop（`role=alert` + 重试），未传入时行为与 Wave 1 一致 | T6 §8④ | **Wave 2 已完成** |
+| R-11 | 剩余等值令牌字号：`RichEditor.vue` 6 处 + `ProjectZipUploader.vue` 6 处（未纳入任何 Wave 2 任务） | captain 全站扫描 | Wave 3/4 |
+| R-12 | `useConfirm` 缺可选参数 `width` / `maskClosable` / `closable`：QuestionEdit 两处确认框因此丢失 `width:560`（分值表仍正常渲染，默认 520 与原 560 差异极小） | t14 声明 | Wave 3 或收尾（届时页面回收该设置） |
+| R-13 | 字阶下沿缺口：`10px×2` 与 `11px×6` 无对应令牌（按规则保留字面量）；评估是否新增 `--fs-caption-sm` 之类 | t14 字号清单 | Wave 4 评估 |
