@@ -265,6 +265,10 @@
   --status-danger-fg:  #fda29b; --status-danger-bg:  rgba(217, 45, 32, 0.16); --status-danger-bd:  rgba(217, 45, 32, 0.36);
   --status-info-fg:    #8ec5ff; --status-info-bg:    rgba(0, 102, 204, 0.20); --status-info-bd:    rgba(0, 102, 204, 0.40);
   --status-neutral-fg: #a9b0bb; --status-neutral-bg: rgba(255, 255, 255, 0.08); --status-neutral-bd: rgba(255, 255, 255, 0.14);
+  /* accent（紫）此前漏配暗色值 → 暗色下仍是浅紫底 + 深紫字（视觉上一块亮色）。按本块其余 5 个三元组的同一模式补齐：
+     fg 用同族 -300 级亮色（与 #6ce9a6/#fec84b/#fda29b/#8ec5ff 同级），bg/bd 用 violet-500 的半透明叠加（与 --bg-selected 的 18% 手法一致）。
+     实测对比度 = #c4b5fd 叠在 rgba(122,90,248,.18) 之上约 7.95:1（≥4.5）。 */
+  --status-accent-fg: #c4b5fd; --status-accent-bg: rgba(122, 90, 248, 0.18); --status-accent-bd: rgba(122, 90, 248, 0.40);
 
   --score-excellent: #32d583; --score-good: #4d9bf5; --score-pass: #fdb022; --score-fail: #f97066;
   --score-track: rgba(255, 255, 255, 0.10);
@@ -403,6 +407,10 @@
   /* 代码/日志面：深色主题下显式重声明为同一深色值（本对令牌不随主题翻转） */
   --code-bg: var(--gray-950);
   --code-fg: rgba(255, 255, 255, 0.72);
+  /* 表格行态：--table-row-* 原先只有浅色 primitive（--gray-50/--brand-50），暗色下沿用会得到「浅底浅字」（实测 1.12:1）。
+     这里改指随主题切换的语义令牌（与 t32 在组件侧的临时兜底取值一致，故该兜底可删）。 */
+  --table-row-hover: var(--bg-hover);
+  --table-row-selected: var(--bg-selected);
 }
 
 /* ------------------------------------------------------------ 工具类（最小集） */

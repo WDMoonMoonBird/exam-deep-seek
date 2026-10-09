@@ -17,6 +17,7 @@
       :loading="loading"
       :pagination="false"
       :sticky="stickyConfig"
+      :scroll="TABLE_SCROLL"
       @change="onTableChange"
     >
       <template #bodyCell="cellProps">
@@ -119,6 +120,15 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['page-change', 'size-change', 'empty-action', 'change', 'retry', 'update:pageSize']);
+
+/**
+ * R-23（组件侧）：表格窄屏横向滚动**只在表体内发生**，不再把溢出传导到 .content。
+ * 必须走 antd 的 scroll.x —— 它会把表头放进 .ant-table-sticky-holder（body 的兄弟节点），
+ * 表体单独 overflow-x: auto，并用 StickyScrollBar 同步表头/表体的横向滚动；
+ * 自己加 CSS overflow 会（a）让粘性表头改成相对该盒子吸附而失效，（b）横滚时表头与表体错位。
+ * 只设 x、不设 y：竖向仍是页面滚动 + 粘性表头（Wave 1 方案 a 的竖向行为不变）。
+ */
+const TABLE_SCROLL = { x: 'max-content' };
 
 function onPageChange(page) {
   emit('page-change', page);
@@ -317,6 +327,10 @@ onBeforeUnmount(() => {
 }
 .tbl :deep(.ant-table-tbody > tr:hover > td) {
   background: var(--table-row-hover);
+}
+/* 选中态：行选择（13 个列表页暂未启用，令牌先行，暗色下同样成立） */
+.tbl :deep(.ant-table-tbody > tr.ant-table-row-selected > td) {
+  background: var(--table-row-selected);
 }
 .tbl :deep(.ant-table-tbody > tr:last-child > td) {
   border-bottom: 0;
