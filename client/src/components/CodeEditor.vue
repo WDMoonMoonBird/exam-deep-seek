@@ -14,6 +14,9 @@ const props = defineProps({
   language: { type: String, default: 'cpp' },
   readOnly: { type: Boolean, default: false },
   height: { type: Number, default: 400 },
+  /** 字号 / 字体族：Wave 3 追加的可选接口，默认值与既有硬编码取值一致（不传即与改前完全相同） */
+  fontSize: { type: Number, default: 14 },
+  fontFamily: { type: String, default: 'MonacoDSH, monospace' },
 });
 
 const emit = defineEmits(['update:modelValue']);
@@ -35,8 +38,8 @@ onMounted(async () => {
     readOnly: props.readOnly,
     minimap: { enabled: false },
     automaticLayout: true,
-    fontSize: 14,
-    fontFamily: 'MonacoDSH, monospace',
+    fontSize: props.fontSize,
+    fontFamily: props.fontFamily,
     lineNumbers: 'on',
     scrollBeyondLastLine: false,
     tabSize: 4,
@@ -57,6 +60,10 @@ watch(() => props.language, (lang) => {
     const model = editor.getModel();
     if (model) monaco.editor.setModelLanguage(model, lang);
   }
+});
+
+watch(() => [props.fontSize, props.fontFamily], ([size, family]) => {
+  editor?.updateOptions({ fontSize: size, fontFamily: family });
 });
 
 watch(() => props.modelValue, (val) => {

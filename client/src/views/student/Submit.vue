@@ -53,7 +53,7 @@
         </div>
         <div class="sp-nav-footer">
           <span v-if="dirtyCount" class="dirty-hint">{{ dirtyCount }} 题未保存</span>
-          <span v-else style="color:#52c41a;">草稿已同步</span>
+          <span v-else class="sync-ok">草稿已同步</span>
         </div>
       </nav>
 
@@ -106,7 +106,7 @@
               <a-select
                 :value="editorLangs[sq.id] || sq.language || 'cpp'"
                 @change="(v) => editorLangs[sq.id] = v"
-                size="small" style="width:110px"
+                size="small" class="lang-select"
                 :disabled="isSqReadonly(sq.id)"
               >
                 <a-select-option v-for="l in langs" :key="l" :value="l">{{ l }}</a-select-option>
@@ -167,7 +167,7 @@
                 <a-radio-group
                   v-model:value="itemAnswers[getItemKey(sq.id, item.key)].answer"
                   :disabled="isSqReadonly(sq.id)"
-                  style="display:flex;flex-direction:column;gap:6px;"
+                  class="oi-answer-col"
                 >
                   <a-radio v-for="opt in item.options" :key="opt.key" :value="opt.key">
                     {{ opt.key }}. {{ opt.text || '(待填写)' }}
@@ -180,7 +180,7 @@
                 <a-checkbox-group
                   v-model:value="multiAnswerBind[getItemKey(sq.id, item.key)]"
                   :disabled="isSqReadonly(sq.id)"
-                  style="display:flex;flex-direction:column;gap:6px;"
+                  class="oi-answer-col"
                   @change="onMultiBindChange(sq.id, item.key)"
                 >
                   <a-checkbox v-for="opt in item.options" :key="opt.key" :value="opt.key">
@@ -207,7 +207,7 @@
                   v-model:value="itemAnswers[getItemKey(sq.id, item.key)].answer"
                   :disabled="isSqReadonly(sq.id)"
                   placeholder="请输入答案"
-                  :style="{ fontFamily: 'monospace' }"
+                  :style="{ fontFamily: 'var(--font-mono)' }"
                 />
               </div>
 
@@ -226,7 +226,7 @@
         </div>
 
         <!-- 底部：练习模式全部出分 → 重新答题 -->
-        <div class="sp-submit-bar" v-if="practiceAllGraded" style="justify-content:center">
+        <div class="sp-submit-bar is-center" v-if="practiceAllGraded">
           <a-button type="primary" size="large" @click="retryPractice">重新答题</a-button>
         </div>
 
@@ -234,7 +234,7 @@
         <div class="sp-submit-bar" v-else-if="!allSubmitted && !isExpired">
           <div class="sp-submit-info">
             <template v-if="unsubmittedCount === 0">
-              <span style="color:#52c41a;">✓ 全部已提交</span>
+              <span class="sync-ok">✓ 全部已提交</span>
             </template>
             <template v-else>
               <span>共 {{ subQuestions.length }} 题，{{ unsubmittedCount }} 题未提交</span>
@@ -255,7 +255,7 @@
           </a-button>
         </div>
         <div class="sp-submit-bar" v-else-if="isExpired">
-          <span style="color:#999;font-size:14px;">考试已结束</span>
+          <span class="ended-hint">考试已结束</span>
         </div>
       </div>
     </div>
@@ -270,8 +270,10 @@ import { ArrowLeftOutlined } from '@ant-design/icons-vue';
 import DOMPurify from 'dompurify';
 import request from '../../api/request.js';
 import CodeEditor from '../../components/CodeEditor.vue';
+import { useConfirm } from '../../composables/useConfirm.js';
 
 const route = useRoute();
+const { confirm } = useConfirm();
 
 // ===================== 数据 =====================
 const data = ref(null);
@@ -346,11 +348,13 @@ function formatItemAnswer(item) {
 }
 
 async function retryPractice() {
-  Modal.confirm({
+  // 危险操作（清空全部作答）→ danger=true；ok 文案动词化（R-15）
+  confirm({
     title: '重新答题',
-    content: '将清空当前所有答案，之前的高分记录会被保留。确定重新开始吗？',
-    okText: '确定',
+    content: '将清空当前所有答案，之前的高分记录会被保留。',
+    okText: '重新答题',
     cancelText: '取消',
+    danger: true,
     onOk: async () => {
       try {
         await request.post(`/student/assignments/${route.params.id}/retry`);
@@ -799,12 +803,12 @@ async function submitAll() {
     content = `将提交全部 ${toSubmit.length} 道小题的答案，提交后不可修改。确定继续？`;
   }
 
-  Modal.confirm({
+  confirm({
     title,
     content,
-    okText: isUnfinished ? '仍要提交' : '确定提交',
+    okText: isUnfinished ? '仍要提交' : '提交全部',
     cancelText: '返回继续作答',
-    okButtonProps: isUnfinished ? { danger: true } : {},
+    danger: isUnfinished,
     onOk: async () => {
       submittingAll.value = true;
       const results = await Promise.allSettled(
@@ -1021,27 +1025,30 @@ onUnmounted(() => {
 <style scoped>
 .sp-page {
   display: flex; flex-direction: column;
-  height: calc(100vh - 52px);
-  margin: -28px -48px -40px;
+  /* 顶格到 topbar 下沿，并抵消 student/Layout.vue 内容区的内距（topbar+space-6 / space-12 / space-10） */
+  height: calc(100vh - var(--layout-topbar-h));
+  margin: calc(-1 * var(--space-6)) calc(-1 * var(--space-12)) calc(-1 * var(--space-10));
   padding: 0;
-  background: var(--canvas-parchment);
+  overflow: hidden;
+  background: var(--bg-canvas);
 }
 
-/* 顶栏 */
+/* 顶栏（T4 顶部信息条：返回 + 考试名 + 状态标签） */
 .sp-top {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 20px;
-  background: #fff;
-  border-bottom: 1px solid var(--hairline);
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-2) var(--space-5);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
-.sp-title { font-size: 18px; font-weight: 700; margin: 0; flex: 1; }
+.sp-title { font-size: var(--fs-title-2); font-weight: var(--fw-bold); margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sp-expired-tag {
-  font-size: 12px; color: #ff4d4f;
-  border: 1px solid #ff4d4f; border-radius: 4px; padding: 0 8px;
+  font-size: var(--fs-caption); color: var(--status-danger-fg);
+  border: 1px solid var(--status-danger-fg); border-radius: var(--radius-xs); padding: 0 var(--space-2);
 }
 
-/* 主体 */
+/* 主体：左侧题号导航 + 右侧作答区 */
 .sp-main {
   flex: 1; display: flex; min-height: 0; overflow: hidden;
 }
@@ -1049,52 +1056,54 @@ onUnmounted(() => {
 /* 左侧导航 */
 .sp-nav {
   width: 220px; flex-shrink: 0;
-  background: #fafafa; border-right: 1px solid var(--hairline);
+  background: var(--bg-surface-2); border-right: 1px solid var(--border-subtle);
   display: flex; flex-direction: column; overflow: hidden;
 }
 .sp-nav-title {
-  padding: 14px 14px 10px;
-  font-size: 13px; font-weight: 600; color: #999;
-  border-bottom: 1px solid #f0f0f0; flex-shrink: 0;
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  font-size: var(--fs-body-sm); font-weight: var(--fw-semibold); color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border-subtle); flex-shrink: 0;
 }
 .sp-nav-list {
-  flex: 1; overflow-y: auto; padding: 8px 12px 16px;
+  flex: 1; overflow-y: auto; padding: var(--space-2) var(--space-3) var(--space-4);
 }
 .sp-nav-footer {
-  padding: 8px 14px; font-size: 12px;
-  border-top: 1px solid #f0f0f0; flex-shrink: 0;
+  padding: var(--space-2) var(--space-3); font-size: var(--fs-caption);
+  border-top: 1px solid var(--border-subtle); flex-shrink: 0;
 }
-.dirty-hint { color: #faad14; }
+.dirty-hint { color: var(--status-warning-fg); }
+.sync-ok { color: var(--status-success-fg); }
+.ended-hint { color: var(--text-tertiary); font-size: var(--fs-body); }
 
 /* 小节标题（可点击折叠） */
 .n-section-head {
   display: flex; align-items: center; gap: 6px;
-  margin: 14px 0 8px; padding: 6px 4px;
+  margin: var(--space-3) 0 var(--space-2); padding: 6px 4px;
   cursor: pointer; user-select: none;
-  font-size: 13px; font-weight: 600; color: #666;
-  transition: color .15s;
-  border-radius: 6px;
+  font-size: var(--fs-body-sm); font-weight: var(--fw-semibold); color: var(--text-secondary);
+  transition: var(--transition-control);
+  border-radius: var(--radius-sm);
 }
 .n-section-head:first-child { margin-top: 0; }
-.n-section-head:hover { color: #1677ff; }
+.n-section-head:hover { color: var(--text-link); }
 .n-section-arrow {
-  font-size: 14px; width: 16px; flex-shrink: 0;
-  color: #999; margin-right: 2px;
-  transition: transform .25s ease;
+  font-size: var(--fs-body); width: 16px; flex-shrink: 0;
+  color: var(--text-tertiary); margin-right: 2px;
+  transition: transform var(--duration-base) var(--ease-out);
 }
 .n-section-arrow.collapsed { transform: rotate(-90deg); }
-.n-section-head:hover .n-section-arrow { color: #1677ff; }
+.n-section-head:hover .n-section-arrow { color: var(--text-link); }
 .n-section-label { flex: 1; }
 .n-section-count {
-  font-size: 10px; font-weight: 400; color: #bbb;
-  background: #f0f0f0; padding: 0 5px; border-radius: 8px;
+  font-size: 10px; font-weight: var(--fw-regular); color: var(--text-disabled);
+  background: var(--bg-sunken); padding: 0 5px; border-radius: var(--radius-pill);
 }
 
 /* 方块网格容器（折叠动画） */
 .n-grid-wrap {
   max-height: none;
   overflow: visible;
-  transition: max-height .3s ease, opacity .2s ease;
+  transition: max-height var(--duration-slow) var(--ease-out), opacity var(--duration-base) var(--ease-out);
   opacity: 1;
 }
 .n-grid-wrap.collapsed {
@@ -1109,177 +1118,212 @@ onUnmounted(() => {
   padding: 4px 2px;
 }
 
-/* 方块 */
+/* 方块（状态色走 --status-* 三元组） */
 .n-box {
   width: 30px; height: 30px;
   display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 5px; font-size: 12px; font-weight: 600;
-  cursor: pointer; transition: background .15s, border-color .15s, color .15s;
+  border-radius: var(--radius-sm); font-size: var(--fs-caption); font-weight: var(--fw-semibold);
+  cursor: pointer; transition: var(--transition-control);
   border: 2px solid transparent;
   user-select: none;
   flex-shrink: 0;
 }
 
-/* 已答（未出分）：暖黄 */
+/* 已答（未出分） */
 .n-box-done {
-  background: #fff7e6; border-color: #ffd591; color: #d46b08;
+  background: var(--status-info-bg); border-color: var(--status-info-bd); color: var(--status-info-fg);
 }
-/* 正确：绿色 */
+/* 正确 */
 .n-box-correct {
-  background: #f6ffed; border-color: #b7eb8f; color: #389e0d;
+  background: var(--status-success-bg); border-color: var(--status-success-bd); color: var(--status-success-fg);
 }
-/* 错误：红色 */
+/* 错误 */
 .n-box-wrong {
-  background: #fff2f0; border-color: #ffccc7; color: #cf1322;
+  background: var(--status-danger-bg); border-color: var(--status-danger-bd); color: var(--status-danger-fg);
 }
-/* 部分正确：橙色 */
+/* 部分正确 */
 .n-box-partial {
-  background: #fffbe6; border-color: #ffe58f; color: #d48806;
+  background: var(--status-warning-bg); border-color: var(--status-warning-bd); color: var(--status-warning-fg);
 }
-/* 未答：灰色 */
+/* 未答 */
 .n-box-empty {
-  background: #fff; border-color: #e8e8e8; color: #bbb;
+  background: var(--bg-surface); border-color: var(--border-default); color: var(--text-disabled);
 }
 
-/* 当前激活 */
+/* 当前激活（规则置于各状态色之后：同优先级即可覆盖，无需提升优先级） */
 .n-box-active {
-  border-color: #1677ff !important;
-  background: #e6f4ff !important;
-  color: #1677ff !important;
-  box-shadow: 0 0 0 3px rgba(22,119,255,.15);
+  border-color: var(--brand-600);
+  background: var(--bg-selected);
+  color: var(--brand-600);
+  box-shadow: var(--ring-focus);
 }
 
 /* 右侧答题区 */
 .sp-content {
-  flex: 1; overflow-y: auto; overflow-x: hidden;
-  padding: 0 24px 24px;
+  flex: 1; min-width: 0; min-height: 0;
+  overflow-y: auto; overflow-x: hidden;
+  padding: 0 var(--space-6) var(--space-6);
 }
 
 /* 材料 */
 .sp-material-bar {
-  display: flex; align-items: center; gap: 8px;
-  margin-top: 16px; padding: 10px 16px;
-  font-size: 13px; font-weight: 500; color: #666;
+  display: flex; align-items: center; gap: var(--space-2);
+  margin-top: var(--space-4); padding: var(--space-3) var(--space-4);
+  font-size: var(--fs-body-sm); font-weight: var(--fw-medium); color: var(--text-secondary);
   cursor: pointer; user-select: none;
-  background: #fff; border-radius: 8px; border: 1px solid #f0f0f0;
+  background: var(--bg-surface); border-radius: var(--radius-md); border: 1px solid var(--border-subtle);
 }
-.sp-material-bar:hover { background: #f5f5f5; }
-.material-arrow { margin-left: auto; font-size: 10px; transition: transform .2s; }
+.sp-material-bar:hover { background: var(--bg-hover); }
+.material-arrow { margin-left: auto; font-size: 10px; transition: transform var(--duration-base) var(--ease-out); }
 .material-arrow.open { transform: rotate(180deg); }
 .sp-material-body { overflow: hidden; }
-.sp-material-inner { padding: 12px 16px; background: #fafafa; border-radius: 0 0 8px 8px; }
-.collapse-enter-active, .collapse-leave-active { transition: all .25s ease; }
+.sp-material-inner { padding: var(--space-3) var(--space-4); background: var(--bg-surface-2); border-radius: 0 0 var(--radius-md) var(--radius-md); }
+.collapse-enter-active, .collapse-leave-active { transition: all var(--duration-base) var(--ease-out); }
 .collapse-enter-from, .collapse-leave-to { opacity: 0; max-height: 0; }
 .collapse-enter-to, .collapse-leave-from { opacity: 1; max-height: 800px; }
 
 /* 题目区段 */
 .sq-section {
-  margin-top: 24px; padding: 20px 24px;
-  background: #fff; border-radius: 12px;
-  border: 1px solid #f0f0f0;
-  box-shadow: 0 1px 4px rgba(0,0,0,.04);
-  scroll-margin-top: 16px;
+  margin-top: var(--space-6); padding: var(--space-5) var(--space-6);
+  background: var(--card-bg); border-radius: var(--card-radius);
+  border: 1px solid var(--card-bd);
+  box-shadow: var(--card-shadow);
+  scroll-margin-top: var(--space-4);
 }
 .sq-header {
-  display: flex; align-items: center; gap: 10px;
-  padding-bottom: 12px; margin-bottom: 16px;
-  border-bottom: 1px solid #f0f0f0;
+  display: flex; align-items: center; gap: var(--space-3);
+  padding-bottom: var(--space-3); margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
 }
-.sq-num { font-size: 16px; font-weight: 700; color: #333; }
-.sq-score { margin-left: auto; font-size: 14px; font-weight: 600; color: #1677ff; }
+.sq-num { font-size: var(--fs-title-3); font-weight: var(--fw-bold); color: var(--text-primary); }
+.sq-score { margin-left: auto; font-size: var(--fs-body); font-weight: var(--fw-semibold); color: var(--text-link); }
 .sq-status-spacer { flex: 1; }
 .sq-stem { margin-bottom: 16px; }
 
 /* 编辑器 */
 .sq-editor-toolbar {
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 10px; background: #fafafa;
-  border: 1px solid #e8e8e8; border-bottom: none;
-  border-radius: 6px 6px 0 0;
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: 6px var(--space-3); background: var(--bg-surface-2);
+  border: 1px solid var(--border-default); border-bottom: none;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
 }
+.lang-select { width: 110px; }
 .sq-editor-wrap {
-  border: 1px solid #e8e8e8; border-radius: 0 0 6px 6px;
+  border: 1px solid var(--border-default); border-radius: 0 0 var(--radius-sm) var(--radius-sm);
   overflow: hidden;
 }
-.sq-editor-wrap :deep(.monaco-editor) { border: none !important; }
+.sq-editor-wrap :deep(.monaco-editor) { border: none; }
 .sq-editor-placeholder {
-  border: 1px solid #e8e8e8; border-radius: 0 0 6px 6px;
+  border: 1px solid var(--border-default); border-radius: 0 0 var(--radius-sm) var(--radius-sm);
 }
 .placeholder-inner {
   height: 280px; display: flex; align-items: center; justify-content: center;
-  background: #fafafa; color: #bbb; font-size: 14px;
+  background: var(--bg-surface-2); color: var(--text-disabled); font-size: var(--fs-body);
 }
 
 /* 客观题小问卡片 */
 .oi-card {
-  margin-bottom: 16px; padding: 14px 16px;
-  border: 2px solid #f0f0f0; border-radius: 8px;
-  scroll-margin-top: 16px;
-  transition: border-color .2s;
+  margin-bottom: var(--space-4); padding: var(--space-3) var(--space-4);
+  border: 2px solid var(--border-subtle); border-radius: var(--radius-md);
+  scroll-margin-top: var(--space-4);
+  transition: var(--transition-control);
 }
-.oi-card:hover { border-color: #d9d9d9; }
-.oi-card.oi-correct { border-color: #b7eb8f; background: #fcfff5; }
-.oi-card.oi-wrong { border-color: #ffccc7; background: #fffbfb; }
+.oi-card:hover { border-color: var(--border-strong); }
+.oi-card.oi-correct { border-color: var(--status-success-bd); background: var(--status-success-bg); }
+.oi-card.oi-wrong { border-color: var(--status-danger-bd); background: var(--status-danger-bg); }
 .oi-card:last-child { margin-bottom: 0; }
 .oi-head {
-  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+  display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2);
 }
-.oi-num { font-weight: 700; font-size: 14px; }
-.oi-score { font-size: 12px; color: #1677ff; font-weight: 600; }
-.oi-judge { margin-left: auto; font-size: 13px; font-weight: 600; }
-.oi-judge.correct { color: #52c41a; }
-.oi-judge.wrong { color: #ff4d4f; }
-.oi-stem { font-size: 14px; line-height: 1.7; margin-bottom: 10px; white-space: pre-wrap; }
-.oi-stem-code { font-family: monospace; font-size: 13px; background: #f5f5f5; padding: 8px 12px; border-radius: 6px; }
-.oi-answer { margin-top: 8px; }
+.oi-num { font-weight: var(--fw-bold); font-size: var(--fs-body); }
+.oi-score { font-size: var(--fs-caption); color: var(--text-link); font-weight: var(--fw-semibold); }
+.oi-judge { margin-left: auto; font-size: var(--fs-body-sm); font-weight: var(--fw-semibold); }
+.oi-judge.correct { color: var(--status-success-fg); }
+.oi-judge.wrong { color: var(--status-danger-fg); }
+.oi-stem { font-size: var(--fs-body); line-height: 1.7; margin-bottom: var(--space-2); white-space: pre-wrap; }
+.oi-stem-code { font-family: var(--font-mono); font-size: var(--fs-body-sm); background: var(--bg-sunken); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); }
+.oi-answer { margin-top: var(--space-2); }
+.oi-answer-col { display: flex; flex-direction: column; gap: 6px; }
 
 /* 评语 */
 .sq-feedback {
-  margin-top: 16px; padding: 12px 16px;
-  background: #f9f9f9; border-radius: 8px;
-  border-left: 3px solid #1677ff;
+  margin-top: var(--space-4); padding: var(--space-3) var(--space-4);
+  background: var(--bg-sunken); border-radius: var(--radius-md);
+  border-left: 3px solid var(--brand-600);
 }
-.fb-label { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
-.fb-body { font-size: 13px; color: #555; line-height: 1.7; }
+.fb-label { font-weight: var(--fw-semibold); font-size: var(--fs-body-sm); margin-bottom: 4px; }
+.fb-body { font-size: var(--fs-body-sm); color: var(--text-secondary); line-height: 1.7; }
 
-/* 参考答案 */
+/* 参考答案（仅出分后 + 接口返回 referenceAnswer 时渲染） */
 .sq-reference {
-  margin-top: 16px; padding: 12px 16px;
-  background: #f6ffed; border: 1px solid #b7eb8f; border-radius: 8px;
+  margin-top: var(--space-4); padding: var(--space-3) var(--space-4);
+  background: var(--status-success-bg); border: 1px solid var(--status-success-bd); border-radius: var(--radius-md);
   max-height: 360px; overflow: auto;
 }
 .reference-code {
-  margin: 8px 0 0; font-size: 13px; line-height: 1.7;
+  margin: var(--space-2) 0 0; font-size: var(--fs-body-sm); line-height: 1.7;
   white-space: pre-wrap; word-break: break-all;
-  font-family: 'SF Mono', Monaco, Consolas, monospace;
-  color: #333;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
 }
 .oi-reference {
-  margin-top: 8px; padding: 6px 10px;
-  background: #fff7e6; border: 1px solid #ffd591; border-radius: 6px;
-  font-size: 13px; color: #ad6800;
+  margin-top: var(--space-2); padding: 6px 10px;
+  background: var(--status-warning-bg); border: 1px solid var(--status-warning-bd); border-radius: var(--radius-sm);
+  font-size: var(--fs-body-sm); color: var(--status-warning-fg);
 }
 
 /* 底部提交栏 */
 .sp-submit-bar {
   display: flex; align-items: center; justify-content: space-between;
-  margin-top: 24px; margin-bottom: 40px;
-  padding: 16px 24px;
-  background: #fff; border-radius: 12px;
-  border: 1px solid #f0f0f0;
-  box-shadow: 0 2px 8px rgba(0,0,0,.06);
-  position: sticky; bottom: 0; z-index: 10;
+  margin-top: var(--space-6); margin-bottom: var(--space-10);
+  padding: var(--space-4) var(--space-6);
+  background: var(--bg-surface); border-radius: var(--card-radius);
+  border: 1px solid var(--card-bd);
+  box-shadow: var(--shadow-sm);
+  position: sticky; bottom: 0; z-index: var(--z-sticky);
 }
-.sp-submit-info { font-size: 14px; color: #888; }
+.sp-submit-bar.is-center { justify-content: center; }
+.sp-submit-info { font-size: var(--fs-body); color: var(--text-tertiary); }
 
 /* 通用 */
-.q-content { font-size: 15px; line-height: 1.8; }
+.q-content { font-size: var(--fs-body-lg); line-height: 1.8; }
 
 .spinner-dot {
   display: inline-block; width: 8px; height: 8px;
-  border: 2px solid #91caff; border-top-color: #1677ff;
+  border: 2px solid var(--brand-300); border-top-color: var(--brand-600);
   border-radius: 50%; animation: spin .8s linear infinite;
   vertical-align: middle; margin-right: 2px;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== <1200px：左侧题号导航折叠为顶部横向滚动条（T4 窄屏形态），条内自滚动、不产生横向溢出 ===== */
+@media (max-width: 1199px) {
+  .sp-main { flex-direction: column; }
+  .sp-nav {
+    width: 100%; flex-direction: row; align-items: center;
+    border-right: 0; border-bottom: 1px solid var(--border-subtle);
+    overflow: hidden;
+  }
+  .sp-nav-title { display: none; }
+  .sp-nav-list {
+    flex: 1; min-width: 0;
+    display: flex; align-items: center; gap: var(--space-3);
+    overflow-x: auto; overflow-y: hidden;
+    padding: var(--space-2) var(--space-3);
+  }
+  .n-section-head { margin: 0; flex: 0 0 auto; }
+  .n-grid-wrap { flex: 0 0 auto; }
+  .n-grid-wrap.collapsed { display: none; }
+  .n-grid { flex-wrap: nowrap; padding: 0; }
+  .sp-nav-footer { border-top: 0; border-left: 1px solid var(--border-subtle); }
+}
+
+/* ===== ≤768px：与 student/Layout.vue 的 ≤768 内距一致，保证负边距不产生横向溢出 ===== */
+@media (max-width: 768px) {
+  .sp-page {
+    margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-3)) calc(-1 * var(--space-6));
+  }
+  .sp-content { padding: 0 var(--space-3) var(--space-4); }
+  .sq-section { padding: var(--space-4); }
+}
 </style>
