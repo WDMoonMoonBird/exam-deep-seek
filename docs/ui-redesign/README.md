@@ -72,3 +72,4 @@
 | R-3 | 逐页 legacy（Chrome 69）像素级扫描：学生页内容区曾出现 1 字节截图差异（12 项计算样式一致 → 判定瞬态） | T8 顺带发现 | Wave 4（页面冻结后） |
 | R-4 | 时间格式统一为 `YYYY-MM-DD HH:mm`（现为 `2026/8/24 19:01`）；`formatDateTime` 被 20+ 页使用，需一次性切换 | Wave 0 已知差异 | Wave 1 收尾 / Wave 4 |
 | R-5 | P1-7（7 个列表接口服务端分页）到位后，切换 admin 4 页与 teacher classes/students/teams 的前端切片（代码中已标 `TODO(P1-7)`） | 后端未交付 | 依赖后端 |
+| R-6 | 深色日志区（admin/Monitor）复用 `--bg-inverse`/`--text-inverse-muted`；评估是否新增 `--log-bg`/`--log-fg` 语义令牌 | T4 令牌缺口反馈 | Wave 2 评估 |
