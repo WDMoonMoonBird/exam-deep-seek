@@ -46,13 +46,15 @@ confirm({
 
 ### `composables/useDraftAutosave.js`
 ```js
-const { status, lastSavedAt, saveNow } = useDraftAutosave({
+const { status, lastSavedAt, saveNow, schedule } = useDraftAutosave({
   save: async () => { … },   // 实际保存函数（页面提供，内部仍是原有请求）
   delay: 1500,               // 输入防抖
   interval: 30000,           // 定时兜底（0 = 关闭）
   enabled: () => dirty.value,
 });
 // status: 'idle' | 'saving' | 'saved' | 'error'
+// schedule(): 输入时调用，delay 内多次调用合并为一次保存（**防抖入口，契约 rev2 补入**）
+// saveNow():  跳过防抖立即保存，返回 Promise<boolean>；另有 visibilitychange 立即落盘与卸载清理
 ```
 - 页面负责把 `status` 渲染成动作条上的状态文本（`role="status" aria-live="polite"`）
 - **不改保存节拍语义**：各页现有 delay 值原样传入（QuestionEdit 2s / TeamEdit 300ms / 学生 Submit 留待 Wave 3）
