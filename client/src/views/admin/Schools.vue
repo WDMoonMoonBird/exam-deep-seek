@@ -50,11 +50,11 @@ const schoolPage = reactive({ current: 1, pageSize: 50 });
 const pageSizeOptions = [20, 50, 100, 200];
 
 const columns = [
-  { title: '院校代码', key: 'code', width: 140 },
+  { title: '院校代码', key: 'code', width: 140, responsive: ['xl'] },
   { title: '学校名称', dataIndex: 'name', width: 220, ellipsis: true },
   { title: '省份', key: 'province', width: 120 },
   { title: '城市', key: 'city', width: 120 },
-  { title: '层次', key: 'level', width: 80 },
+  { title: '层次', key: 'level', width: 80, responsive: ['xl'] },
 ];
 
 /** 层次 → 状态色调（取值语义与改前一致，只做视觉分层，不新增取值） */

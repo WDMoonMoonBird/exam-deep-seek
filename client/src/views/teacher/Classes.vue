@@ -108,9 +108,9 @@ const otherSchoolOptions = computed(() =>
 
 const columns = [
   { title: '班级名称', key: 'name', width: 200, ellipsis: true },
-  { title: '所属学校', key: 'school', width: 200, ellipsis: true },
+  { title: '所属学校', key: 'school', width: 200, ellipsis: true, responsive: ['xl'] },
   { title: '人数', key: 'count', width: 70 },
-  { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true },
+  { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true, responsive: ['xl'] },
   { title: '操作', key: 'action', width: 160, align: 'right' },
 ];
 

@@ -229,8 +229,8 @@ const statusOptions = [
 
 const columns = [
   { title: '作业名称', key: 'title', width: 280 },
-  { title: '班级', key: 'classes', width: 200 },
-  { title: '题数', key: 'qCount', width: 70, align: 'right' },
+  { title: '班级', key: 'classes', width: 200, responsive: ['xl'] },
+  { title: '题数', key: 'qCount', width: 70, align: 'right', responsive: ['xl'] },
   { title: '提交进度', key: 'progress', width: 180 },
   { title: '状态', key: 'status', width: 170 },
   { title: '截止时间', key: 'deadline', width: 170 },

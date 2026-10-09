@@ -25,6 +25,12 @@
           <template #overlay>
             <a-menu @click="handleMenu">
               <a-menu-item key="profile"><UserOutlined /> 我的信息</a-menu-item>
+              <a-sub-menu key="theme" title="主题">
+                <template #icon><BulbOutlined /></template>
+                <a-menu-item key="theme-light">浅色{{ themeMode === 'light' ? ' ✓' : '' }}</a-menu-item>
+                <a-menu-item key="theme-dark">深色{{ themeMode === 'dark' ? ' ✓' : '' }}</a-menu-item>
+                <a-menu-item key="theme-system">跟随系统{{ themeMode === 'system' ? ' ✓' : '' }}</a-menu-item>
+              </a-sub-menu>
               <a-menu-item key="logout"><PoweroffOutlined /> 退出登录</a-menu-item>
             </a-menu>
           </template>
@@ -70,11 +76,13 @@ import { useRouter, useRoute } from 'vue-router';
 import { useUserStore } from '../../stores/user.js';
 import { message } from 'ant-design-vue';
 import { useConfirm } from '../../composables/useConfirm.js';
+import { useTheme } from '../../composables/useTheme.js';
 import request from '../../api/request.js';
-import { ReadOutlined, TrophyOutlined, UserOutlined, PoweroffOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
+import { ReadOutlined, TrophyOutlined, UserOutlined, BulbOutlined, PoweroffOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
 
 const router = useRouter(); const route = useRoute(); const userStore = useUserStore();
 const { confirm } = useConfirm();
+const { mode: themeMode, setMode } = useTheme();
 const user = userStore.user;
 const collapsed = ref(false);
 
@@ -150,6 +158,9 @@ async function openProfile() {
 
 function handleMenu({ key }) {
   if (key === 'profile') { openProfile(); return; }
+  if (key === 'theme-light') { setMode('light'); return; }
+  if (key === 'theme-dark') { setMode('dark'); return; }
+  if (key === 'theme-system') { setMode('system'); return; }
   if (key === 'logout') {
     confirm({
       title: '确定退出登录？',

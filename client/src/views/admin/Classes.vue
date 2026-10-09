@@ -79,8 +79,8 @@ const form = reactive({ name: '', schoolId: undefined, teacherIds: [] });
 
 const columns = [
   { title: '班级名称', dataIndex: 'name', width: 180, ellipsis: true },
-  { title: '所属学校', key: 'school', width: 200, ellipsis: true },
-  { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true },
+  { title: '所属学校', key: 'school', width: 200, ellipsis: true, responsive: ['xl'] },
+  { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true, responsive: ['xl'] },
   { title: '操作', key: 'action', width: 160, align: 'right' },
 ];
 

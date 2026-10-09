@@ -105,7 +105,7 @@ const columns = [
   { title: '题目信息', key: 'info', width: 320 },
   { title: 'AI状态', key: 'aiStatus', width: 200 },
   { title: '审核状态', key: 'reviewStatus', width: 140 },
-  { title: '已交/未交', key: 'stats', width: 120 },
+  { title: '已交/未交', key: 'stats', width: 120, responsive: ['xl'] },
   { title: '操作', key: 'action', width: 140, align: 'right' },
 ];
 

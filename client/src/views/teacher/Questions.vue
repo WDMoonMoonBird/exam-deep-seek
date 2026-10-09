@@ -97,9 +97,9 @@ const hasFilter = computed(() => !!keyword.value);
 const columns = [
   { title: '标题', dataIndex: 'title', width: 250, ellipsis: true },
   { title: '类型', key: 'type', width: 90 },
-  { title: '难度', dataIndex: 'difficulty', width: 80 },
+  { title: '难度', dataIndex: 'difficulty', width: 80, responsive: ['xl'] },
   { title: '满分', dataIndex: 'maxScore', width: 80, align: 'right' },
-  { title: '创建时间', key: 'createdAt', width: 170 },
+  { title: '创建时间', key: 'createdAt', width: 170, responsive: ['xl'] },
   { title: '操作', key: 'action', width: 160, align: 'right' },
 ];
 

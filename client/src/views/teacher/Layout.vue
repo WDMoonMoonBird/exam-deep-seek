@@ -58,6 +58,12 @@
                             </a-sub-menu>
                             <a-menu-item key="flow"><NodeIndexOutlined /> AI 评分流程</a-menu-item>
                             <a-menu-item key="doc"><BookOutlined /> 使用文档</a-menu-item>
+                            <a-sub-menu key="theme" title="主题">
+                                <template #icon><BulbOutlined /></template>
+                                <a-menu-item key="theme-light">浅色{{ themeMode === 'light' ? ' ✓' : '' }}</a-menu-item>
+                                <a-menu-item key="theme-dark">深色{{ themeMode === 'dark' ? ' ✓' : '' }}</a-menu-item>
+                                <a-menu-item key="theme-system">跟随系统{{ themeMode === 'system' ? ' ✓' : '' }}</a-menu-item>
+                            </a-sub-menu>
                             <a-menu-item key="logout"><PoweroffOutlined /> 退出登录</a-menu-item>
                         </a-menu>
                     </template>
@@ -118,10 +124,12 @@ import { useUserStore } from '../../stores/user.js';
 import request from '../../api/request.js';
 import { message } from 'ant-design-vue';
 import { useConfirm } from '../../composables/useConfirm.js';
-import { QuestionCircleOutlined, UserOutlined, NodeIndexOutlined, UserSwitchOutlined, PoweroffOutlined, AppstoreOutlined, IdcardOutlined, DatabaseOutlined, FileTextOutlined, SafetyCertificateOutlined, TeamOutlined, BookOutlined, ExperimentOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
+import { useTheme } from '../../composables/useTheme.js';
+import { QuestionCircleOutlined, UserOutlined, NodeIndexOutlined, UserSwitchOutlined, PoweroffOutlined, AppstoreOutlined, IdcardOutlined, DatabaseOutlined, FileTextOutlined, SafetyCertificateOutlined, TeamOutlined, BookOutlined, ExperimentOutlined, BulbOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
 
 const router = useRouter(); const route = useRoute(); const userStore = useUserStore();
 const { confirm } = useConfirm();
+const { mode: themeMode, setMode } = useTheme();
 const user = userStore.user;
 const collapsed = ref(false);
 
@@ -210,6 +218,9 @@ async function switchSchool (school) {
 }
 
 function handleMenu ({ key }) {
+    if (key === 'theme-light') { setMode('light'); return; }
+    if (key === 'theme-dark') { setMode('dark'); return; }
+    if (key === 'theme-system') { setMode('system'); return; }
     if (key === 'flow') { showFlowModal.value = true; return; }
     if (key === 'doc') { window.open('/exam/doc', '_blank'); return; }
     if (key === 'profile') {

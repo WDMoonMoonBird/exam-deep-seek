@@ -80,8 +80,8 @@ const form = reactive({ username: '', realName: '', schoolIds: [] });
 const columns = [
   { title: '工号', dataIndex: 'username', width: 130, ellipsis: true },
   { title: '姓名', dataIndex: 'realName', width: 120, ellipsis: true },
-  { title: '隶属学校', key: 'schools', width: 200 },
-  { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true },
+  { title: '隶属学校', key: 'schools', width: 200, responsive: ['xl'] },
+  { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true, responsive: ['xl'] },
   { title: '操作', key: 'action', width: 100, align: 'right' },
 ];
 

@@ -163,7 +163,7 @@ async function saveScore(record) {
 const columns = computed(() => [
   { title: '姓名', key: 'studentName', width: 120 },
   { title: '学号', dataIndex: 'studentNo', key: 'studentNo', width: 140, sorter: (a, b) => (a.studentNo || '').localeCompare(b.studentNo || ''), defaultSortOrder: sortField.value === 'studentNo' ? sortOrder.value : undefined },
-  { title: 'AI评分', dataIndex: 'aiScore', key: 'aiScore', width: 90, sorter: (a, b) => (a.aiScore || 0) - (b.aiScore || 0), defaultSortOrder: sortField.value === 'aiScore' ? sortOrder.value : undefined },
+  { title: 'AI评分', dataIndex: 'aiScore', key: 'aiScore', width: 90, sorter: (a, b) => (a.aiScore || 0) - (b.aiScore || 0), defaultSortOrder: sortField.value === 'aiScore' ? sortOrder.value : undefined, responsive: ['xl'] },
   { title: '最终分', dataIndex: 'finalScore', key: 'finalScore', width: 90, sorter: (a, b) => (a.finalScore || 0) - (b.finalScore || 0), defaultSortOrder: sortField.value === 'finalScore' ? sortOrder.value : undefined },
   { title: '状态', key: 'status', width: 120, sorter: (a, b) => (statusOrder[a.status] || 0) - (statusOrder[b.status] || 0) },
   { title: '操作', key: 'action', width: 80, align: 'right' },

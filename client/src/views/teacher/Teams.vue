@@ -72,9 +72,9 @@ const createName = ref('');
 
 const columns = [
   { title: '团队名称', dataIndex: 'name', width: 200, ellipsis: true },
-  { title: '创建者', key: 'creator', width: 100 },
+  { title: '创建者', key: 'creator', width: 100, responsive: ['xl'] },
   { title: '成员', key: 'counts', width: 160 },
-  { title: '创建时间', key: 'createdAt', width: 170 },
+  { title: '创建时间', key: 'createdAt', width: 170, responsive: ['xl'] },
   { title: '操作', key: 'action', width: 160, align: 'right' },
 ];
 

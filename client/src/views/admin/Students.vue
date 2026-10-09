@@ -65,8 +65,8 @@ const form = reactive({ username: '', realName: '', classIds: [] });
 const columns = [
   { title: '学号', dataIndex: 'username', width: 130, ellipsis: true },
   { title: '姓名', dataIndex: 'realName', width: 120, ellipsis: true },
-  { title: '班级', key: 'classes', width: 180 },
-  { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true },
+  { title: '班级', key: 'classes', width: 180, responsive: ['xl'] },
+  { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true, responsive: ['xl'] },
 ];
 
 /** /admin/students 目前全量返回 → 保持前端切片分页（见模板 TODO(P1-7)） */

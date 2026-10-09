@@ -188,9 +188,9 @@ const selectedClassCount = computed(() => {
 const columns = [
   { title: '学号', key: 'username', width: 150, ellipsis: true },
   { title: '姓名', dataIndex: 'realName', width: 120, ellipsis: true },
-  { title: '学校', key: 'school', width: 180, ellipsis: true },
+  { title: '学校', key: 'school', width: 180, ellipsis: true, responsive: ['xl'] },
   { title: '班级', key: 'classes', width: 150 },
-  { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true },
+  { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true, responsive: ['xl'] },
   { title: '操作', key: 'action', width: 160, align: 'right' },
 ];
 

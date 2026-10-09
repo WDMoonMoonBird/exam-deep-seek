@@ -12,6 +12,8 @@
  *                   接管会改变全站图标与状态色，留待后续波次逐页对照截图评审。
  */
 
+import { theme as antdTheme } from 'ant-design-vue';
+
 /**
  * 令牌缺失时的兜底值：与改造前 App.vue 里的硬编码同值。
  * 用 rgb() 写法而不是 hex，避免在 JS 里出现硬编码色值（验收要求改动文件 0 命中 hex）。
@@ -34,8 +36,15 @@ function cssVar(name, fallback) {
   }
 }
 
-export function createAntdTheme() {
+/**
+ * @param {'light'|'dark'} resolved 解析后的主题（Wave 5 · t31）
+ *   注意：其余 token 仍从 CSS 变量读取，而「同一个变量在 light/dark 下取值不同」
+ *   （见 styles/tokens.css 的 [data-theme="dark"] 块）—— 所以主题切换后**必须重新调用本函数**，
+ *   App.vue 用 computed(resolved) 保证这一点。
+ */
+export function createAntdTheme(resolved = 'light') {
   return {
+    algorithm: resolved === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
     token: {
       borderRadius: parseInt(cssVar('--radius-md', '8px'), 10),   // 8（--radius-md）
       fontSize: 14,                                               // Wave 1：--fs-body，正文基准下调

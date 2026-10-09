@@ -165,6 +165,7 @@ onUnmounted(() => {
 
 <style scoped>
 .rich-editor {
+  color: var(--text-primary);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   overflow: hidden;
@@ -251,6 +252,8 @@ onUnmounted(() => {
 
 :deep(.tiptap) {
   padding: 12px 16px; min-height: 160px; outline: none; font-size: var(--fs-body); line-height: 1.7;
+  /* 正文颜色显式绑令牌：否则继承 antd 的 rgba(0,0,0,.88)，暗色深底上对比度仅 1.19:1 */
+  color: var(--text-primary);
 }
 :deep(.tiptap p.is-editor-empty:first-child::before) {
   content: attr(data-placeholder); color: var(--text-disabled); pointer-events: none; float: left; height: 0;
