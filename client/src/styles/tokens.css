@@ -164,6 +164,11 @@
   --table-row-h: 44px;  --table-cell-pad-y: 9px;  --table-cell-pad-x: 12px;
   --page-pad-y: 20px;   --page-pad-x: 24px;
   --panel-pad: 16px;    --stack-gap: 12px;
+  /* 组件层别名必须在同一子树重新声明：自定义属性在「声明它的元素」上完成 var() 替换后才继承，
+     因此 :root 上的 --input-h / --card-pad 会带着 comfortable 的数值继承进来，
+     不会跟随子树里的 --control-h / --panel-pad 变化（nav-dev 实测发现，captain 修正）。 */
+  --input-h: var(--control-h);
+  --card-pad: var(--panel-pad);
 }
 
 /* ------------------------------------------------------------ 2. 语义：浅色主题 */
