@@ -1,44 +1,149 @@
 <template>
   <div class="page">
-    <div class="page-header">
-      <h2>作业管理</h2>
-      <a-button type="primary" @click="openAdd">布置作业</a-button>
-    </div>
+    <header class="page-head">
+      <div>
+        <h2 class="page-title">作业管理</h2>
+        <p class="page-desc">布置作业、跟踪提交与评分进度；AI 评分完成后会自动推送到「评分审核」。</p>
+      </div>
+      <div class="page-actions">
+        <a-button @click="fetch">刷新</a-button>
+        <a-button type="primary" @click="openAdd">布置作业</a-button>
+      </div>
+    </header>
 
-    <DataTable
-      :columns="columns"
-      :dataSource="list"
-      rowKey="id"
-      :loading="loading"
-      v-model:current="pagination.current"
-      :pageSize="pagination.pageSize"
-      :total="pagination.total"
-      @page-change="onPageChange"
-    >
-      <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'title'">
-          <span>{{ record.title }}</span>
-          <a-tag v-if="record.mode === 'practice'" color="green" size="small" style="margin-left:6px">练习</a-tag>
-          <LockOutlined v-if="record.locked" style="color:#ff4d4f;margin-left:4px" />
+    <!-- KPI：只用后端真实返回的数据（docs/ui-redesign/06-api-gap.md §5 已剔除示意数字） -->
+    <section class="kpi-row">
+      <div class="kpi">
+        <div class="kpi-label">作业总数</div>
+        <div class="kpi-value tnum">{{ pagination.total }}<small>份</small></div>
+        <div class="kpi-sub">{{ hasFilter ? '当前筛选结果' : '全部作业' }}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">待审核提交</div>
+        <div class="kpi-value tnum tone-warn">{{ summary.pendingReview }}<small>份</small></div>
+        <div class="kpi-sub">与「评分审核」页数字同源</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">AI 评分中</div>
+        <div class="kpi-value tnum">{{ summary.aiPending }}<small>份</small></div>
+        <div class="kpi-sub">{{ summary.abnormal ? summary.abnormal + ' 份评分异常' : '无异常' }}</div>
+      </div>
+    </section>
+
+    <div class="card">
+      <div class="toolbar">
+        <a-input-search
+          v-model:value="filters.keyword"
+          placeholder="搜索作业名称"
+          allow-clear
+          class="w-260"
+          @search="applyFilters"
+        />
+        <a-select
+          v-model:value="filters.classId"
+          placeholder="全部班级"
+          allow-clear
+          class="w-200"
+          :options="classOptions"
+          @change="applyFilters"
+        />
+        <a-select
+          v-model:value="filters.status"
+          placeholder="全部状态"
+          allow-clear
+          class="w-160"
+          :options="statusOptions"
+          @change="applyFilters"
+        />
+        <a-button v-if="hasFilter" type="link" @click="resetFilters">重置</a-button>
+        <span class="grow"></span>
+        <span class="muted">共 {{ pagination.total }} 份</span>
+      </div>
+
+      <a-table
+        class="tbl"
+        :columns="columns"
+        :data-source="list"
+        row-key="id"
+        :loading="loading"
+        :pagination="false"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'title'">
+            <div class="cell-title">
+              <span class="ellipsis" :title="record.title">{{ record.title }}</span>
+              <span v-if="record.mode === 'practice'" class="tag tag-accent">练习</span>
+              <lock-outlined v-if="record.locked" class="lock-icon" title="已锁定" />
+            </div>
+            <div v-if="record.description" class="cell-sub ellipsis" :title="record.description">{{ record.description }}</div>
+          </template>
+
+          <template v-else-if="column.key === 'classes'">
+            <span v-for="ac in visibleClasses(record)" :key="ac.classId" class="tag tag-neutral">{{ ac.class?.name }}</span>
+            <span v-if="hiddenClassCount(record) > 0" class="tag tag-outline">+{{ hiddenClassCount(record) }}</span>
+            <span v-if="!record.assignmentClasses?.length" class="muted">—</span>
+          </template>
+
+          <template v-else-if="column.key === 'qCount'">
+            <span class="tnum">{{ record._count?.assignmentQuestions || 0 }}</span>
+          </template>
+
+          <template v-else-if="column.key === 'progress'">
+            <div class="progress-row">
+              <div class="progress"><i :style="{ width: progressOf(record).percent + '%' }"></i></div>
+              <span class="tnum muted">{{ progressOf(record).done }}/{{ progressOf(record).total }}</span>
+            </div>
+          </template>
+
+          <template v-else-if="column.key === 'status'">
+            <span :class="['tag', 'tag-' + rowStatus(record).tone]"><i class="tag-dot"></i>{{ rowStatus(record).text }}</span>
+            <router-link
+              v-if="record.pendingReviewCount > 0"
+              class="tag tag-warning tag-link"
+              :to="{ path: '/teacher/review' }"
+            >待审核 {{ record.pendingReviewCount }}</router-link>
+          </template>
+
+          <template v-else-if="column.key === 'deadline'">
+            <div class="tnum">{{ formatDateTime(record.endTime) }}</div>
+            <div class="cell-sub">
+              <span :class="'tone-' + deadlineInfo(record.endTime).tone">{{ deadlineInfo(record.endTime).text }}</span>
+            </div>
+          </template>
+
+          <template v-else-if="column.key === 'action'">
+            <div class="row-actions">
+              <a-button type="link" size="small" @click="toggleLock(record)">
+                {{ record.locked ? '解锁' : '锁定' }}
+              </a-button>
+            </div>
+          </template>
         </template>
-        <template v-if="column.key === 'qCount'">{{ record._count?.assignmentQuestions || 0 }}</template>
-        <template v-if="column.key === 'sCount'">{{ record.submissionCount ?? record._count?.submissions ?? 0 }}</template>
-        <template v-if="column.key === 'classes'">
-          <a-tag v-for="ac in record.assignmentClasses" :key="ac.classId" size="small">{{ ac.class?.name }}</a-tag>
+
+        <template #emptyText>
+          <div class="empty">
+            <div class="empty-title">{{ hasFilter ? '没有符合条件的作业' : '还没有布置过作业' }}</div>
+            <div class="empty-desc">
+              {{ hasFilter ? '换个关键词或清空筛选后再试。' : '从题库选择题目并指定班级，学生即可在作业列表中看到它。' }}
+            </div>
+            <a-button v-if="hasFilter" @click="resetFilters">清空筛选</a-button>
+            <a-button v-else type="primary" @click="openAdd">布置第一份作业</a-button>
+          </div>
         </template>
-        <template v-if="column.key === 'time'">{{ formatDateTime(record.startTime) }} ~ {{ formatDateTime(record.endTime) }}</template>
-        <template v-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
-        <template v-if="column.key === 'action'">
-          <a-button type="link" size="small"
-            :style="{ color: record.locked ? '#ff4d4f' : '' }"
-            :title="record.locked ? '解锁' : '锁定'"
-            @click.stop="toggleLock(record)">
-            <LockOutlined v-if="record.locked" style="color:#ff4d4f" />
-            <UnlockOutlined v-else />
-          </a-button>
-        </template>
-      </template>
-    </DataTable>
+      </a-table>
+
+      <div class="table-foot">
+        <span>第 {{ pagination.current }} 页 · 每页 {{ pagination.pageSize }} 条</span>
+        <a-pagination
+          v-model:current="pagination.current"
+          :page-size="pagination.pageSize"
+          :total="pagination.total"
+          :show-size-changer="false"
+          size="small"
+          @change="onPageChange"
+        />
+      </div>
+    </div>
 
     <a-modal title="布置作业" :open="visible" @cancel="visible = false" :width="1040" :footer="null" :destroyOnClose="true" wrap-class-name="assign-modal">
       <a-steps :current="step" class="steps">
@@ -88,7 +193,7 @@
           <a-form-item label="练习模式"><a-switch :checked="timeForm.isPractice" @change="onPracticeToggle" /></a-form-item>
           <a-form-item v-if="timeForm.isPractice" label="允许提交次数">
             <a-input-number v-model:value="timeForm.maxAttempts" :min="1" placeholder="不限" style="width:120px" />
-            <span style="margin-left:8px;color:var(--ink-muted);font-size:13px">留空为不限次数</span>
+            <span style="margin-left:8px;color:var(--text-tertiary);font-size:13px">留空为不限次数</span>
           </a-form-item>
           <a-form-item v-if="!timeForm.isPractice" label="允许补交"><a-switch v-model:checked="timeForm.allowResubmit" /></a-form-item>
         </a-form>
@@ -106,21 +211,108 @@
 <script setup>
 import { ref, reactive, computed, onMounted, h } from 'vue';
 import { message, Modal } from 'ant-design-vue';
-import { CheckOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons-vue';
+import { CheckOutlined, LockOutlined } from '@ant-design/icons-vue';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
 import dateLocale from 'ant-design-vue/es/date-picker/locale/zh_CN';
 import request from '../../api/request.js';
-import { useUserStore } from '../../stores/user.js';
-import DataTable from '../../components/DataTable.vue';
-import { formatDateTime, difficultyText } from '../../domain/format.js';
+import { formatDateTime, difficultyText, deadlineInfo, timeStatus } from '../../domain/format.js';
 
 dayjs.locale('zh-cn');
 
-const userStore = useUserStore();
+// ===================== 列表（Wave 1 试点：服务端筛选 + 真实进度 + 状态语义） =====================
 const loading = ref(false);
 const list = ref([]);
 const pagination = reactive({ current: 1, pageSize: 20, total: 0 });
+const filters = reactive({ keyword: '', classId: undefined, status: undefined });
+/** 待审核汇总：与「评分审核」页同源（Batch1 GET /teacher/pending-summary） */
+const summary = reactive({ pendingReview: 0, aiPending: 0, abnormal: 0 });
+const hasFilter = computed(() => !!(filters.keyword || filters.classId || filters.status));
+
+/** 状态筛选取值必须与后端 buildAssignmentStatusWhere 的语义一致（时间维度与锁定维度互相独立） */
+const statusOptions = [
+  { value: 'ongoing', label: '进行中' },
+  { value: 'upcoming', label: '未开始' },
+  { value: 'ended', label: '已结束' },
+  { value: 'locked', label: '已锁定' },
+];
+
+const columns = [
+  { title: '作业名称', key: 'title', width: 280 },
+  { title: '班级', key: 'classes', width: 200 },
+  { title: '题数', key: 'qCount', width: 70, align: 'right' },
+  { title: '提交进度', key: 'progress', width: 180 },
+  { title: '状态', key: 'status', width: 170 },
+  { title: '截止时间', key: 'deadline', width: 170 },
+  { title: '操作', key: 'action', width: 90, align: 'right' },
+];
+
+/** 行状态：锁定优先，其次按时间；「待审核 N」单独一枚标签（数据源= pendingReviewCount） */
+function rowStatus(record) {
+  if (record.locked) return { text: '已锁定', tone: 'neutral' };
+  const s = timeStatus(record.startTime, record.endTime);
+  if (s === 'upcoming') return { text: '未开始', tone: 'neutral' };
+  if (s === 'ended') return { text: '已结束', tone: 'neutral' };
+  return { text: '进行中', tone: 'success' };
+}
+
+/**
+ * 提交进度：分子 submissionCount 与分母 expectedCount 同 population（作业全部关联班级）——
+ * 口径由后端保证，前端不要与 pendingReviewCount 混用（后者仅统计教师可见班级）。
+ */
+function progressOf(record) {
+  const done = record.submissionCount || 0;
+  const total = record.expectedCount || 0;
+  return { done, total, percent: total ? Math.min(100, Math.round((done / total) * 100)) : 0 };
+}
+
+function visibleClasses(record) {
+  return (record.assignmentClasses || []).slice(0, 2);
+}
+function hiddenClassCount(record) {
+  return Math.max(0, (record.assignmentClasses || []).length - 2);
+}
+
+async function fetchSummary() {
+  try {
+    const r = await request.get('/teacher/pending-summary');
+    Object.assign(summary, r.data || {});
+  } catch (e) {
+    // KPI 是辅助信息，失败不阻塞列表（错误提示由 request 拦截器统一处理）
+  }
+}
+
+async function fetch() {
+  loading.value = true;
+  try {
+    const params = { page: pagination.current, pageSize: pagination.pageSize };
+    if (filters.keyword) params.keyword = filters.keyword;
+    if (filters.classId) params.classId = filters.classId;
+    if (filters.status) params.status = filters.status;
+    const [r] = await Promise.all([request.get('/teacher/assignments', { params }), fetchSummary()]);
+    list.value = r.data.list || [];
+    pagination.total = r.data.total || 0;
+  } finally {
+    loading.value = false;
+  }
+}
+
+function applyFilters() {
+  pagination.current = 1;
+  fetch();
+}
+function resetFilters() {
+  filters.keyword = '';
+  filters.classId = undefined;
+  filters.status = undefined;
+  applyFilters();
+}
+function onPageChange(page) {
+  pagination.current = page;
+  fetch();
+}
+
+// ===================== 布置作业向导（逻辑未改动） =====================
 const visible = ref(false);
 const step = ref(0);
 const submitting = ref(false);
@@ -145,6 +337,11 @@ const classTeamMap = computed(() => {
   avalClasses.value.forEach(c => { if (c.isTeamClass) m[c.id] = c.ownerTeacherName; });
   return m;
 });
+/** 班级筛选下拉：复用向导已加载的班级列表，避免重复请求 */
+const classOptions = computed(() => avalClasses.value.map(c => ({
+  value: c.id,
+  label: c.isTeamClass ? c.name + '（团队）' : c.name,
+})));
 
 function toggleClass(id) {
   const idx = selectedCIds.value.indexOf(id);
@@ -157,28 +354,6 @@ const qCols = [
   { title: '标题', dataIndex: 'title', width: 250, ellipsis: true },
   { title: '难度', dataIndex: 'difficulty', width: 80 },
 ];
-const columns = [
-  { title: '标题', key: 'title', width: 240, ellipsis: true },
-  { title: '班级', key: 'classes', width: 140 },
-  { title: '题目数', key: 'qCount', width: 70 },
-  { title: '提交数', key: 'sCount', width: 70 },
-  { title: '时间', key: 'time', width: 200, ellipsis: true },
-  { title: '创建时间', key: 'createdAt', width: 150 },
-  { title: '锁定', key: 'action', width: 60 },
-];
-
-async function fetch() {
-  loading.value = true;
-  const r = await request.get('/teacher/assignments', { params: { page: pagination.current, pageSize: pagination.pageSize } });
-  list.value = r.data.list;
-  pagination.total = r.data.total;
-  loading.value = false;
-}
-
-function onPageChange(page) {
-  pagination.current = page;
-  fetch();
-}
 
 async function openAdd() {
   step.value = 0;
@@ -243,7 +418,7 @@ async function submit() {
     Modal.confirm({
       title: '确认按开放性题目布置',
       content: h('div', { style: 'line-height:1.7' }, [
-        h('div', `以下题目未上传标准工程包，AI 将仅依据评分标准做评价式评分（不与参考答案对比）：${names}。确认按开放性题目布置？`),
+        h('div', '以下题目未上传标准工程包，AI 将仅依据评分标准做评价式评分（不与参考答案对比）：' + names + '。确认按开放性题目布置？'),
         h('ul', { style: 'margin:8px 0 0;padding-left:18px;color:#8c8c8c;font-size:13px' },
           warnings.filter(w => w.message).map(w => h('li', w.message))),
       ]),
@@ -262,7 +437,7 @@ async function submit() {
 
 async function toggleLock(record) {
   try {
-    await request.put(`/teacher/assignments/${record.id}/lock`);
+    await request.put('/teacher/assignments/' + record.id + '/lock');
     record.locked = !record.locked;
     message.success(record.locked ? '已锁定' : '已解锁');
   } catch { message.error('操作失败'); }
@@ -281,7 +456,7 @@ function onPracticeToggle(checked) {
   const content = h('div', { style: 'padding:4px 0' }, [
     h('p', { style: 'margin:0 0 16px;color:#555;font-size:14px' }, '开启后，该作业将变为练习模式：'),
     ...items.map((item, i) =>
-      h('div', { style: `display:flex;align-items:flex-start;gap:12px;margin-bottom:${i < items.length - 1 ? '12px' : '0'}` }, [
+      h('div', { style: 'display:flex;align-items:flex-start;gap:12px;margin-bottom:' + (i < items.length - 1 ? '12px' : '0') }, [
         h('span', { style: 'display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#52c41a;color:#fff;font-size:12px;font-weight:700;flex-shrink:0' }, i + 1),
         h('div', { style: 'line-height:1.5' }, [
           h('div', { style: 'font-weight:600;font-size:13px;color:#333' }, item.title),
@@ -304,28 +479,93 @@ function onPracticeToggle(checked) {
   });
 }
 
-onMounted(fetch);
+/** 首屏同时拉列表与班级下拉（班级复用向导接口，无新增请求） */
+onMounted(async () => {
+  await Promise.all([fetch(), loadClasses()]);
+});
 </script>
 
 <style scoped>
-.page {
-  max-width: 1400px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+/* ===== 页面骨架（Wave 1 将提取为 PageShell/ListPage，见 docs/ui-redesign/05-page-specs.md） ===== */
+.page { max-width: var(--layout-content-max); }
+.page-head { display: flex; align-items: flex-start; gap: var(--space-4); margin-bottom: var(--space-5); }
+.page-title { margin: 0 0 4px; font-size: var(--fs-title-1); line-height: var(--lh-title-1); font-weight: 600; color: var(--text-strong); letter-spacing: var(--tracking-tight); }
+.page-desc { margin: 0; font-size: var(--fs-body); color: var(--text-secondary); }
+.page-actions { margin-left: auto; display: flex; gap: var(--space-2); }
+
+.kpi-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); margin-bottom: var(--space-4); }
+.kpi { padding: 16px 18px; background: var(--card-bg); border: 1px solid var(--card-bd); border-radius: var(--card-radius); }
+.kpi-label { font-size: var(--fs-body-sm); color: var(--text-secondary); }
+.kpi-value { margin-top: 6px; font-size: 26px; line-height: 1.2; font-weight: 600; letter-spacing: -0.02em; color: var(--text-strong); }
+.kpi-value.tone-warn { color: var(--amber-700); }
+.kpi-value small { margin-left: 4px; font-size: var(--fs-body-sm); font-weight: 400; color: var(--text-tertiary); }
+.kpi-sub { margin-top: 4px; font-size: var(--fs-caption); color: var(--text-tertiary); }
+
+.card { background: var(--card-bg); border: 1px solid var(--card-bd); border-radius: var(--card-radius); }
+.toolbar { display: flex; align-items: center; gap: var(--space-2); padding: 12px var(--card-pad); border-bottom: 1px solid var(--border-subtle); flex-wrap: wrap; }
+.toolbar .grow { flex: 1; }
+.w-260 { width: 260px; }
+.w-200 { width: 200px; }
+.w-160 { width: 160px; }
+.muted { color: var(--text-tertiary); font-size: var(--fs-caption); }
+.tnum { font-variant-numeric: tabular-nums; }
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ===== 表格（目标：去竖线、表头左对齐、行高走令牌） ===== */
+.tbl :deep(.ant-table) { background: transparent; }
+.tbl :deep(.ant-table-thead > tr > th) {
+  background: var(--table-header-bg);
+  color: var(--table-header-fg);
+  font-size: var(--fs-body-sm);
+  font-weight: 600;
+  text-align: left;
+  border-bottom: 1px solid var(--border-default);
+  padding: var(--table-cell-pad-y) var(--table-cell-pad-x);
 }
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  flex-shrink: 0;
+.tbl :deep(.ant-table-thead > tr > th::before) { display: none; }
+.tbl :deep(.ant-table-tbody > tr > td) {
+  padding: var(--table-cell-pad-y) var(--table-cell-pad-x);
+  border-bottom: 1px solid var(--table-bd);
+  vertical-align: middle;
 }
-.page-header h2 {
-  font-size: 28px;
-  margin: 0;
+.tbl :deep(.ant-table-tbody > tr:hover > td) { background: var(--table-row-hover); }
+.tbl :deep(.ant-table-tbody > tr:last-child > td) { border-bottom: 0; }
+
+.cell-title { display: flex; align-items: center; gap: 6px; font-weight: 500; color: var(--text-strong); }
+.cell-title .ellipsis { max-width: 200px; }
+.cell-sub { margin-top: 3px; font-size: var(--fs-caption); color: var(--text-tertiary); }
+.lock-icon { color: var(--red-600); font-size: 12px; }
+
+.tag { display: inline-flex; align-items: center; gap: 5px; height: var(--tag-h); padding: 0 var(--tag-pad-x); margin-right: 4px; border-radius: var(--tag-radius); font-size: var(--tag-fs); font-weight: 500; line-height: 1; white-space: nowrap; }
+.tag-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.tag-neutral { background: var(--status-neutral-bg); color: var(--status-neutral-fg); }
+.tag-success { background: var(--status-success-bg); color: var(--status-success-fg); }
+.tag-warning { background: var(--status-warning-bg); color: var(--status-warning-fg); }
+.tag-accent { background: var(--status-accent-bg); color: var(--status-accent-fg); }
+.tag-outline { background: transparent; border: 1px solid var(--border-strong); color: var(--text-secondary); }
+.tag-link { text-decoration: none; }
+.tag-link:hover { filter: brightness(0.96); }
+
+.progress-row { display: flex; align-items: center; gap: 8px; }
+.progress { height: 6px; width: 96px; border-radius: var(--radius-pill); background: var(--score-track); overflow: hidden; }
+.progress i { display: block; height: 100%; border-radius: var(--radius-pill); background: var(--brand-500); }
+.tone-overdue { color: var(--red-600); font-weight: 500; }
+.tone-urgent { color: var(--red-600); font-weight: 500; }
+.tone-soon { color: var(--amber-700); }
+.tone-normal { color: var(--text-tertiary); }
+
+.row-actions { display: flex; gap: 4px; justify-content: flex-end; }
+.table-foot { display: flex; align-items: center; justify-content: space-between; padding: 12px var(--card-pad); border-top: 1px solid var(--border-subtle); font-size: var(--fs-caption); color: var(--text-tertiary); }
+
+.empty { padding: 32px 16px; text-align: center; }
+.empty-title { font-size: var(--fs-title-3); font-weight: 600; color: var(--text-primary); }
+.empty-desc { margin: 6px 0 16px; font-size: var(--fs-body-sm); color: var(--text-tertiary); }
+
+@media (max-width: 1100px) {
+  .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* ===== 向导弹窗内部（scoped 可覆盖，因为内容渲染在组件自身 DOM 内） ===== */
 .steps { margin-bottom: 32px; }
 .mb20 { margin-bottom: 20px; }
 .step-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 32px; }
@@ -333,11 +573,8 @@ onMounted(fetch);
 .pick-panel { flex: 1; min-width: 0; }
 .pick-panel-title { font-weight: 600; margin-bottom: 8px; font-size: 14px; }
 .pick-list { margin-top: 8px; max-height: 260px; overflow-y: auto; }
-.pick-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; cursor: pointer; border-radius: 4px; font-size: 13px; }
-.pick-item:hover { background: #f0f5ff; }
-.pick-item.on { background: #e6f4ff; color: var(--blue); }
+.pick-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; cursor: pointer; border-radius: var(--radius-xs); font-size: 13px; }
+.pick-item:hover { background: var(--brand-50); }
+.pick-item.on { background: var(--brand-50); color: var(--brand-700); }
 .pick-check { font-size: 12px; }
-</style>
-<style>
-.assign-modal .ant-modal { max-width: 1040px; }
 </style>

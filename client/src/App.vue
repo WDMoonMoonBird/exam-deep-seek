@@ -16,6 +16,7 @@ import zhCN from 'ant-design-vue/locale/zh_CN';
 import { StyleProvider, legacyLogicalPropertiesTransformer } from 'ant-design-vue';
 import { isLegacyBrowser } from './domain/browserCompat';
 import './legacy-patch.css';
+import { createAntdTheme } from './styles/antd-theme';
 
 // 现代浏览器（支持 :where）用默认 low 模式：antd 样式低优先级，自定义样式天然覆盖，
 // 行为与未加 StyleProvider 时完全一致（还原头部导航栏等自定义样式）。
@@ -25,19 +26,8 @@ import './legacy-patch.css';
 // 为前缀，仅对旧浏览器匹配生效）。
 const legacyMode = isLegacyBrowser();
 
-const theme = {
-  token: {
-    borderRadius: 8,
-    colorPrimary: '#0066cc',
-    fontFamily: "SF Pro Text, system-ui, -apple-system, sans-serif",
-    fontSize: 15,
-  },
-  components: {
-    Button: { borderRadius: 8, primaryShadow: 'none' },
-    Card: { borderRadiusLG: 18 },
-    Modal: { borderRadiusLG: 18 },
-    Table: { borderRadiusLG: 18 },
-    Tag: { borderRadiusSM: 9999 },
-  },
-};
+// 主题值统一来自设计令牌（styles/tokens.css → styles/antd-theme.js）。
+// Wave 0 的取值与改造前逐项一致（含 fontSize 15 / 圆角 18 / 标签胶囊），因此视觉零变化；
+// 切换到新尺度是 Wave 1 的显式动作，见 antd-theme.js 中的 WAVE1 标注。
+const theme = createAntdTheme();
 </script>

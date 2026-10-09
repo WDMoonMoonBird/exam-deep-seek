@@ -1,7 +1,8 @@
 # 全站 UI 重设计 · 设计稿（feat/ui-redesign）
 
 > 分支 `feat/ui-redesign` ｜ worktree：`Exam-DeepSeek-ui/`（隔离自 `feat/open-project` 工作区）
-> 方法论：skill `afrexai-ui-design-system`（Phase 1–10）｜ 阶段：**设计稿先行，未改动 `client/` 任何代码**
+> 方法论：skill `afrexai-ui-design-system`（Phase 1–10）
+> 阶段：设计稿完成 → **已进入落地**：Wave 0 基础设施 + 教师端「作业管理」试点页已实现并通过真实运行验证（见 [08-wave0-pilot-log.md](./08-wave0-pilot-log.md)）
 
 ## 怎么评审
 
@@ -24,6 +25,7 @@
 | [05-page-specs.md](./05-page-specs.md) | 5 个页面模板 + 26 页逐页规范 + 组件提取清单 + 落地批次 | Phase 9 |
 | [preview/index.html](./preview/index.html) | 高保真静态预览（5 屏，可切主题与密度） | Phase 9 |
 | [preview/shots/](./preview/shots) | 预览截图（1440×900） | — |
+| [08-wave0-pilot-log.md](./08-wave0-pilot-log.md) | **Wave 0 + 试点页实施记录**：改了什么/为什么/验证证据/**后端待办（含新发现 N-1~N-3）** | 实施 |
 | [07-api-batch1-verify.md](./07-api-batch1-verify.md) | **Batch 1 后端交付独立验收**：P0 逐条核验、复跑测试、行为变更影响面、待处理 3 项 | 验收 |
 | [06-api-gap.md](./06-api-gap.md) | **设计稿 ↔ 后端接口对账**：P0/P1/P2 接口清单（可直接交后端团队）+ 前端自算清单 + 示意数据待确认项 | 交付/对接 |
 | [_inventory-pages.md](./_inventory-pages.md) | 前端盘点原始报告：31 个 .vue 逐页现状、横切模式、问题证据、复杂度排行 | 输入 |
@@ -45,10 +47,16 @@
 - **P1/P2**：KPI 聚合、队列上一条/下一条、客观题分项结构化、7 个列表服务端分页、实训题评分推送等。
 - **不依赖任何新接口**：Wave 0–2（令牌基础、13 个列表页、表单与确认）可以先做。
 
-## 下一步（待你确认后执行）
+## 落地进度
 
-- **前置**：本分支基于 `cd8cabc`，**已落后 master 6 个提交**（Batch1 接口 + chrome69 适配 + 开放性实训题）。写落地代码前先 rebase/merge 到最新 master，否则会基于旧契约实现。
+| 批次 | 内容 | 状态 |
+|---|---|---|
+| 前置 | rebase 到 master（`152ec99`） | ✅ 已完成 |
+| **Wave 0** | 令牌 + antd 主题桥 + 全局覆盖层（视觉零变化） | ✅ 已完成 |
+| **试点页** | 教师端「作业管理」（KPI / 服务端筛选 / 真实进度 / 状态语义） | ✅ 已完成，真实运行验证通过 |
+| Wave 1 | AppShell + PageShell + ListPage，迁移其余 12 个列表页；侧栏分组与待审核徽标；切全局尺度（14px / 圆角 12） | ⏳ 待开始 |
+| Wave 2 | 表单页模板 + ConfirmDialog + 自动保存统一 | ⏳ |
+| Wave 3 | 工作台/作答页（Monaco 三页，先冻交互契约） | ⏳ |
+| Wave 4 | Doc/Login、深色模式、移动端断点收尾 | ⏳ |
 
-- 若视觉方向 OK → 进入 **Wave 0 · 基础**（引入令牌、统一主题、清死令牌与非 scoped 样式，视觉零变化）。
-- 若想调方向（配色/密度/侧栏/登录页结构）→ 直接说，改令牌与预览即可，成本很低。
-- 落地代码建议仍在 `feat/ui-redesign` 分支，按 Wave 分批提交、逐批验证。
+**验收方式**：`cd Exam-DeepSeek-ui/client && npm run dev` → 打开 http://localhost:5174/exam/ 用教师账号进入「作业管理」；5173 是同机的旧 UI，可直接对比。

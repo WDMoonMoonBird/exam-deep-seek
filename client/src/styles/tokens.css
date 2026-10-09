@@ -1,0 +1,418 @@
+/* ============================================================================
+ * Exam-DeepSeek · 设计令牌（运行时副本）
+ *
+ * 引入方式：main.js 中在 ./style.css 之后 import，保证同名令牌以本文件为准。
+ * 设计说明：docs/ui-redesign/02-design-tokens.md（含 antd 映射表与验收命令）
+ * 唯一性约定：**本文件是前端令牌的唯一来源**；改动后请同步更新设计文档中的说明。
+ *
+ * Wave 0 已知的、刻意接受的同名覆盖（仅此 5 个，影响面已逐一核对）：
+ *   --radius-sm  8px  → 6px   影响 3 处（3 个 Layout 的 .user-area，2px 差异）
+ *   --radius-md  11px → 8px   未使用
+ *   --radius-lg  18px → 12px  未使用
+ *   --radius-pill 9999px → 999px  未使用
+ *   --font-display 'SF Pro Display',system-ui,… → 同族系统栈（渲染等价：都不存在 SF Pro Display 字体文件）
+ * 其余 94 处旧颜色令牌（--blue/--ink/--canvas/--hairline）**未做别名映射**，保持原值不动，
+ * 待 Wave 1 逐页替换后删除。
+ * ==========================================================================*/
+
+/* ============================================================================
+ * Exam-DeepSeek · Design Tokens v1.0
+ * 分支 feat/ui-redesign · 方法论 afrexai-ui-design-system Phase 3 / Phase 10
+ *
+ * 三层结构：
+ *   1) Primitive  原始值（色阶 / 字号 / 间距 / 圆角 / 阴影 / 时长 / 层级）
+ *   2) Semantic   语义（surface / text / border / status / score / density）
+ *   3) Component  组件（button / input / table / card / tag / sider / topbar …）
+ *
+ * 规则：业务代码只允许使用第 2、3 层；第 1 层仅在令牌文件内部引用。
+ * 兼容：Chrome 69 兜底 —— 不使用 color-mix() / oklch() / :is() / 容器查询 /
+ *       aspect-ratio / flex gap（用 margin 或 grid gap 代替）。
+ * ==========================================================================*/
+
+:root {
+  /* ---------------------------------------------------------------- 1. 原始值 */
+  /* 中性色（冷灰，用于所有界面骨架） */
+  --gray-0:   #ffffff;
+  --gray-25:  #fbfcfd;
+  --gray-50:  #f6f7f9;
+  --gray-100: #eef0f4;
+  --gray-200: #e2e5ea;
+  --gray-300: #cfd4dc;
+  --gray-400: #a5acb8;
+  --gray-450: #8b929e;   /* 3.13:1 —— 用于输入框边界（WCAG 1.4.11 需 ≥3:1） */
+  --gray-500: #6b7280;   /* 4.83:1 —— 修正原 #78808d 只有 3.98:1，不满足 AA 正文 */
+  --gray-600: #545c69;
+  --gray-700: #3a414d;
+  --gray-800: #232935;
+  --gray-900: #141922;
+  --gray-950: #0b0f16;
+
+  /* 品牌蓝（基准 #0066cc，源自现有 --blue） */
+  --brand-50:  #eff6ff;
+  --brand-100: #dbeafe;
+  --brand-200: #bfdbfe;
+  --brand-300: #8ec5ff;
+  --brand-400: #4d9bf5;
+  --brand-500: #1f7ae0;
+  --brand-600: #0066cc;
+  --brand-700: #0055ab;
+  --brand-800: #064a8c;
+  --brand-900: #08386b;
+
+  /* 成功 */
+  --green-50:  #ecfdf3;  --green-100: #d1fadf;  --green-200: #a6f4c5;
+  --green-400: #32d583;  --green-500: #12b76a;  --green-600: #039855;
+  --green-700: #027a48;  --green-900: #054f31;
+
+  /* 警告 */
+  --amber-50:  #fffaeb;  --amber-100: #fef0c7;  --amber-200: #fedf89;
+  --amber-400: #fdb022;  --amber-500: #f79009;  --amber-600: #dc6803;
+  --amber-700: #b54708;
+
+  /* 危险 */
+  --red-50:    #fef3f2;  --red-100: #fee4e2;    --red-200: #fecdca;
+  --red-400:   #f97066;  --red-500: #f04438;    --red-600: #d92d20;
+  --red-700:   #b42318;
+
+  /* 紫（实训题 / 项目类标识） */
+  --violet-50: #f4f3ff;  --violet-100: #ebe9fe; --violet-500: #7a5af8;
+  --violet-600: #6938ef;
+
+  /* 字号（中文友好：正文 14px / 行高 1.6） */
+  --fs-display-1: 32px;  --lh-display-1: 1.2;
+  --fs-display-2: 26px;  --lh-display-2: 1.25;
+  --fs-title-1:   22px;  --lh-title-1:   1.35;
+  --fs-title-2:   18px;  --lh-title-2:   1.4;
+  --fs-title-3:   16px;  --lh-title-3:   1.5;
+  --fs-body-lg:   15px;  --lh-body-lg:   1.6;
+  --fs-body:      14px;  --lh-body:      1.6;
+  --fs-body-sm:   13px;  --lh-body-sm:   1.55;
+  --fs-caption:   12px;  --lh-caption:   1.5;
+  --fs-code:      13px;  --lh-code:      1.6;
+
+  --fw-regular: 400; --fw-medium: 500; --fw-semibold: 600; --fw-bold: 700;
+  --tracking-tight: -0.01em;   /* 大标题 */
+  --tracking-normal: 0;
+  --tracking-wide: 0.02em;     /* 全大写小标签 */
+
+  /* 间距（4px 基数） */
+  --space-0: 0;     --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+  --space-4: 16px;  --space-5: 20px; --space-6: 24px; --space-8: 32px;
+  --space-10: 40px; --space-12: 48px; --space-16: 64px;
+
+  /* 圆角 */
+  --radius-xs: 4px; --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+  --radius-xl: 16px; --radius-2xl: 20px; --radius-pill: 999px;
+
+  /* 阴影（克制：只用于抬升层级，不用于装饰） */
+  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.08), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 4px 12px -2px rgba(16, 24, 40, 0.10), 0 2px 6px -2px rgba(16, 24, 40, 0.06);
+  --shadow-lg: 0 12px 32px -8px rgba(16, 24, 40, 0.16), 0 4px 12px -4px rgba(16, 24, 40, 0.08);
+  --shadow-xl: 0 24px 48px -12px rgba(16, 24, 40, 0.24);
+  --ring-focus: 0 0 0 3px rgba(31, 122, 224, 0.28);
+  --ring-danger: 0 0 0 3px rgba(240, 68, 56, 0.22);
+
+  /* 动效 */
+  --duration-instant: 90ms;
+  --duration-fast: 150ms;
+  --duration-base: 220ms;
+  --duration-slow: 320ms;
+  --duration-page: 380ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --transition-control: color var(--duration-fast) var(--ease-out),
+                        background-color var(--duration-fast) var(--ease-out),
+                        border-color var(--duration-fast) var(--ease-out),
+                        box-shadow var(--duration-fast) var(--ease-out);
+  --transition-surface: transform var(--duration-base) var(--ease-out),
+                        opacity var(--duration-base) var(--ease-out),
+                        box-shadow var(--duration-base) var(--ease-out);
+
+  /* 层级 */
+  --z-base: 0;       --z-sticky: 100;   --z-sider: 200;    --z-topbar: 300;
+  --z-dropdown: 1000; --z-modal-mask: 1100; --z-modal: 1200; --z-drawer: 1250;
+  --z-message: 1300; --z-tooltip: 1400; --z-lightbox: 1500;
+
+  /* 字体：macOS 用系统 UI 字体，Windows/机房机回落 Segoe UI + 雅黑 */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+               "Hiragino Sans GB", "Microsoft YaHei", "Source Han Sans SC",
+               "Noto Sans CJK SC", "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--font-sans);
+  --font-mono: "SFMono-Regular", "SF Mono", MonacoDSH, Menlo, Consolas,
+               "Liberation Mono", "Courier New", monospace;
+
+  /* 布局骨架 */
+  --layout-sider-w: 232px;
+  --layout-sider-w-collapsed: 64px;
+  --layout-topbar-h: 56px;
+  --layout-content-max: 1560px;
+  --layout-gutter: var(--space-6);
+  --layout-subnav-h: 44px;
+
+  /* ------------------------------------------------------------ 2. 语义：密度 */
+  /* comfortable = 学生端 / 公开文档；compact = 教师端 / 管理端 */
+  --control-h-sm: 28px; --control-h: 36px; --control-h-lg: 44px;
+  --table-row-h: 52px;  --table-cell-pad-y: 12px; --table-cell-pad-x: 16px;
+  --page-pad-y: 28px;   --page-pad-x: 32px;
+  --panel-pad: 20px;    --stack-gap: 16px;
+}
+[data-density="compact"] {
+  --control-h-sm: 26px; --control-h: 32px; --control-h-lg: 38px;
+  --table-row-h: 44px;  --table-cell-pad-y: 9px;  --table-cell-pad-x: 12px;
+  --page-pad-y: 20px;   --page-pad-x: 24px;
+  --panel-pad: 16px;    --stack-gap: 12px;
+}
+
+/* ------------------------------------------------------------ 2. 语义：浅色主题 */
+:root {
+  /* 背景 */
+  --bg-canvas: var(--gray-50);        /* 页面底色 */
+  --bg-surface: var(--gray-0);        /* 卡片 / 面板 / 表格 */
+  --bg-surface-2: var(--gray-25);     /* 次级面板、表头 */
+  --bg-sunken: var(--gray-100);       /* 内嵌区（代码块底、只读区） */
+  --bg-inverse: var(--gray-950);      /* 深色侧栏 */
+  --bg-inverse-2: var(--gray-900);    /* 深色侧栏 hover / 分组 */
+  --bg-hover: var(--gray-100);
+  --bg-active: var(--gray-200);
+  --bg-selected: var(--brand-50);
+  --bg-disabled: var(--gray-100);
+  --bg-overlay: rgba(11, 15, 22, 0.48);
+  --bg-mask-strong: rgba(11, 15, 22, 0.72);   /* 图片灯箱 */
+
+  /* 文本 */
+  --text-strong: var(--gray-950);
+  --text-primary: var(--gray-900);
+  --text-secondary: var(--gray-600);
+  --text-tertiary: var(--gray-500);
+  --text-disabled: var(--gray-400);
+  --text-inverse: var(--gray-0);
+  --text-inverse-muted: rgba(255, 255, 255, 0.72);
+  --text-inverse-subtle: rgba(255, 255, 255, 0.48);
+  --text-link: var(--brand-600);
+  --text-on-brand: var(--gray-0);
+
+  /* 边框 */
+  --border-subtle: var(--gray-100);
+  --border-default: var(--gray-200);
+  --border-strong: var(--gray-300);
+  --border-inverse: rgba(255, 255, 255, 0.10);
+  --border-focus: var(--brand-500);
+  --border-danger: var(--red-500);
+
+  /* 状态语义 */
+  --status-success-fg: var(--green-700);  --status-success-bg: var(--green-50);  --status-success-bd: var(--green-200);
+  --status-warning-fg: var(--amber-700);  --status-warning-bg: var(--amber-50);  --status-warning-bd: var(--amber-200);
+  --status-danger-fg:  var(--red-700);    --status-danger-bg:  var(--red-50);    --status-danger-bd:  var(--red-200);
+  --status-info-fg:    var(--brand-700);  --status-info-bg:    var(--brand-50);  --status-info-bd:    var(--brand-200);
+  --status-neutral-fg: var(--gray-600);   --status-neutral-bg: var(--gray-100);  --status-neutral-bd: var(--gray-200);
+  --status-accent-fg:  var(--violet-600); --status-accent-bg:  var(--violet-50); --status-accent-bd:  var(--violet-100);
+
+  /* 评分语义（分数、等级、进度） */
+  --score-excellent: var(--green-600);
+  --score-good:      var(--brand-600);
+  --score-pass:      var(--amber-600);
+  --score-fail:      var(--red-600);
+  --score-track:     var(--gray-100);
+
+  /* 图表 / 可视化顺序色 */
+  --chart-1: var(--brand-500); --chart-2: var(--green-500); --chart-3: var(--amber-500);
+  --chart-4: var(--violet-500); --chart-5: var(--gray-500);
+}
+
+/* ------------------------------------------------------------ 2. 语义：深色主题 */
+[data-theme="dark"] {
+  --bg-canvas: var(--gray-950);
+  --bg-surface: var(--gray-900);
+  --bg-surface-2: var(--gray-800);
+  --bg-sunken: #0f131a;
+  --bg-inverse: var(--gray-0);
+  --bg-inverse-2: var(--gray-100);
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --bg-active: rgba(255, 255, 255, 0.10);
+  --bg-selected: rgba(31, 122, 224, 0.18);
+  --bg-disabled: rgba(255, 255, 255, 0.06);
+  --bg-overlay: rgba(0, 0, 0, 0.64);
+
+  --text-strong: var(--gray-0);
+  --text-primary: #e8eaee;
+  --text-secondary: #a9b0bb;
+  --text-tertiary: #8b929e;
+  --text-disabled: #5b626e;
+  --text-inverse: var(--gray-950);
+  --text-link: var(--brand-300);
+
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.12);
+  --border-strong: rgba(255, 255, 255, 0.20);
+  --border-inverse: rgba(0, 0, 0, 0.12);
+  --border-focus: var(--brand-400);
+
+  --status-success-fg: #6ce9a6; --status-success-bg: rgba(3, 152, 85, 0.16); --status-success-bd: rgba(3, 152, 85, 0.36);
+  --status-warning-fg: #fec84b; --status-warning-bg: rgba(220, 104, 3, 0.16); --status-warning-bd: rgba(220, 104, 3, 0.36);
+  --status-danger-fg:  #fda29b; --status-danger-bg:  rgba(217, 45, 32, 0.16); --status-danger-bd:  rgba(217, 45, 32, 0.36);
+  --status-info-fg:    #8ec5ff; --status-info-bg:    rgba(0, 102, 204, 0.20); --status-info-bd:    rgba(0, 102, 204, 0.40);
+  --status-neutral-fg: #a9b0bb; --status-neutral-bg: rgba(255, 255, 255, 0.08); --status-neutral-bd: rgba(255, 255, 255, 0.14);
+
+  --score-excellent: #32d583; --score-good: #4d9bf5; --score-pass: #fdb022; --score-fail: #f97066;
+  --score-track: rgba(255, 255, 255, 0.10);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 12px 32px -8px rgba(0, 0, 0, 0.6);
+}
+
+/* ------------------------------------------------------------ 3. 组件级令牌 */
+:root {
+  /* 按钮 */
+  --btn-radius: var(--radius-md);
+  --btn-pad-x: var(--space-4);
+  --btn-font-weight: var(--fw-medium);
+  --btn-primary-bg: var(--brand-600);
+  --btn-primary-bg-hover: var(--brand-700);
+  --btn-primary-bg-active: var(--brand-800);
+  --btn-primary-fg: var(--text-on-brand);
+  --btn-default-bg: var(--bg-surface);
+  --btn-default-bg-hover: var(--gray-50);
+  --btn-default-bd: var(--border-strong);
+  --btn-default-fg: var(--text-primary);
+  --btn-text-fg: var(--text-link);
+  --btn-text-fg-hover: var(--brand-700);
+  --btn-danger-bg: var(--red-600);
+  --btn-danger-bg-hover: var(--red-700);
+  --btn-disabled-bg: var(--bg-disabled);
+  --btn-disabled-fg: var(--text-disabled);
+  --btn-disabled-bd: var(--border-default);
+
+  /* 输入 / 选择 / 日期 */
+  --input-h: var(--control-h);
+  --input-radius: var(--radius-md);
+  --input-bd: var(--gray-450);        /* 3.13:1，满足 WCAG 1.4.11 的非文本对比度 */
+  --input-bd-hover: var(--brand-400);
+  --input-bd-focus: var(--brand-500);
+  --input-bg: var(--bg-surface);
+  --input-bg-disabled: var(--bg-disabled);
+  --input-ph: var(--text-tertiary);
+  --input-pad-x: var(--space-3);
+  --input-ring: var(--ring-focus);
+
+  /* 表格 */
+  --table-bg: var(--bg-surface);
+  --table-header-bg: var(--bg-surface-2);
+  --table-header-fg: var(--text-secondary);
+  --table-header-fw: var(--fw-semibold);
+  --table-header-h: 44px;   /* 行高直接用密度层的 --table-row-h */
+  --table-row-hover: var(--gray-50);
+  --table-row-selected: var(--brand-50);
+  --table-bd: var(--border-subtle);
+  /* 单元格内距直接用密度层的 --table-cell-pad-y / --table-cell-pad-x */
+  --table-sticky-shadow: 0 6px 12px -8px rgba(16, 24, 40, 0.18);
+
+  /* 卡片 / 面板 */
+  --card-bg: var(--bg-surface);
+  --card-bd: var(--border-default);
+  --card-radius: var(--radius-lg);
+  --card-pad: var(--panel-pad);
+  --card-shadow: none;                 /* 平面优先，靠边框分层 */
+  --card-shadow-raised: var(--shadow-sm);
+
+  /* 标签 / 徽标 */
+  --tag-radius: var(--radius-sm);
+  --tag-h: 22px;
+  --tag-pad-x: var(--space-2);
+  --tag-fs: var(--fs-caption);
+  --tag-neutral-fg: var(--status-neutral-fg); --tag-neutral-bg: var(--status-neutral-bg);
+  --tag-brand-fg: var(--status-info-fg);       --tag-brand-bg: var(--status-info-bg);
+  --tag-success-fg: var(--status-success-fg);  --tag-success-bg: var(--status-success-bg);
+  --tag-warning-fg: var(--status-warning-fg);  --tag-warning-bg: var(--status-warning-bg);
+  --tag-danger-fg: var(--status-danger-fg);    --tag-danger-bg: var(--status-danger-bg);
+  --tag-accent-fg: var(--status-accent-fg);    --tag-accent-bg: var(--status-accent-bg);
+
+  /* 侧栏 */
+  --sider-bg: var(--bg-inverse);
+  --sider-fg: var(--text-inverse-muted);
+  --sider-fg-active: var(--text-inverse);
+  --sider-item-h: 40px;
+  --sider-item-radius: var(--radius-md);
+  --sider-item-gap: 2px;
+  --sider-item-pad-x: var(--space-3);
+  --sider-item-hover-bg: rgba(255, 255, 255, 0.08);
+  --sider-item-active-bg: var(--brand-600);
+  --sider-group-fg: var(--text-inverse-subtle);
+  --sider-icon-size: 16px;
+
+  /* 顶栏 */
+  --topbar-bg: var(--bg-surface);
+  --topbar-bd: var(--border-default);
+  --topbar-h: var(--layout-topbar-h);
+  --topbar-shadow-scrolled: var(--shadow-sm);
+
+  /* 页头 */
+  --page-header-gap: var(--space-4);
+  --page-title-fs: var(--fs-title-1);
+  --page-title-fw: var(--fw-semibold);
+  --page-desc-fs: var(--fs-body);
+  --page-desc-fg: var(--text-secondary);
+
+  /* 空态 / 加载 / 错误 */
+  --empty-icon-size: 56px;
+  --empty-fg: var(--text-tertiary);
+  --empty-title-fs: var(--fs-title-3);
+  --skeleton-bg: var(--gray-100);
+  --skeleton-sheen: rgba(255, 255, 255, 0.65);
+
+  /* 评分面板 */
+  --score-value-fs: 40px;
+  --score-value-fw: var(--fw-semibold);
+
+  /* 动作条（底部固定） */
+  --actionbar-h: 64px;
+  --actionbar-bg: var(--bg-surface);
+  --actionbar-bd: var(--border-default);
+  --actionbar-shadow: 0 -6px 16px -8px rgba(16, 24, 40, 0.16);
+}
+
+/* -------------------------------------------- 深色主题的组件级修正（必须放在组件令牌之后） */
+[data-theme="dark"] {
+  /* 侧栏在深色主题下仍保持深色，与顶栏/内容形成层次 */
+  --bg-inverse: #0b0f16;
+  --bg-inverse-2: #141922;
+  --text-inverse: #ffffff;
+  --text-inverse-muted: rgba(255, 255, 255, 0.72);
+  --text-inverse-subtle: rgba(255, 255, 255, 0.48);
+  --sider-bg: #0b0f16;
+  --sider-fg: rgba(255, 255, 255, 0.72);
+  --sider-fg-active: #ffffff;
+  --sider-item-hover-bg: rgba(255, 255, 255, 0.08);
+  --sider-item-active-bg: var(--brand-600);
+  --sider-group-fg: rgba(255, 255, 255, 0.48);
+  --skeleton-sheen: rgba(255, 255, 255, 0.08);
+}
+
+/* ------------------------------------------------------------ 工具类（最小集） */
+.tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.text-mono { font-family: var(--font-mono); }
+
+/* 焦点可见性（Chrome 69 无 :focus-visible，用类回落；现代浏览器走 :focus-visible） */
+:focus-visible { outline: none; box-shadow: var(--ring-focus); border-radius: var(--radius-sm); }
+/* 现代浏览器：仅在键盘聚焦时支出焦点环；鼠标点击不显示 */
+:focus:not(:focus-visible) { outline: none; }
+/* Chrome 69 等不认识 :focus-visible 的浏览器：@supports 判定为 false → 这里必须给出焦点环 */
+@supports not selector(:focus-visible) {
+  :focus { outline: none; box-shadow: var(--ring-focus); border-radius: var(--radius-sm); }
+}
+/* 能力检测兜底（04-interaction-a11y.md §6 的 isLegacyBrowser() 会给 html 加 .legacy） */
+html.legacy :focus { outline: none; box-shadow: var(--ring-focus); border-radius: var(--radius-sm); }
+
+/* ------------------------------------------------------------ 动效降级 */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-instant: 1ms; --duration-fast: 1ms; --duration-base: 1ms;
+    --duration-slow: 1ms; --duration-page: 1ms;
+  }
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}
