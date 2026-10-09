@@ -99,6 +99,15 @@ export function createAntdTheme(resolved = 'light') {
        * 若某版本忽略未知组件 token，则本行退化为无效、不会造成错误。
        */
       Anchor: { colorText: cssVar('--text-secondary'), colorPrimary: cssVar('--text-link') },
+      /**
+       * 分页当前页号（t35 暗色指纹扫描的第二类缺陷）：antd 分页的「当前项」字色 / 边框
+       * 直接取全局 colorPrimary（pagination/style/index.js:213/216/239），而 darkAlgorithm 会把
+       * 我们给的品牌蓝改写为偏暗的 rgb(3, 90, 176)，落在暗色实底上只有 2.71:1（不可读）。
+       * 与 Anchor 同款手法：只在 Pagination 组件内把 colorPrimary 覆盖成链接令牌，
+       * **不动全局 colorPrimary** —— 否则暗色主按钮（白字 on 派生主色）的对比度会被拖垮。
+       * 浅色下 --text-link = --brand-600，与全局 colorPrimary 同值，故浅色外观不变（实测前后一致）。
+       */
+      Pagination: { colorPrimary: cssVar('--text-link') },
     },
   };
 }
