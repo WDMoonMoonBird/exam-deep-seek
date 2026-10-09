@@ -24,7 +24,9 @@
 | [05-page-specs.md](./05-page-specs.md) | 5 个页面模板 + 26 页逐页规范 + 组件提取清单 + 落地批次 | Phase 9 |
 | [preview/index.html](./preview/index.html) | 高保真静态预览（5 屏，可切主题与密度） | Phase 9 |
 | [preview/shots/](./preview/shots) | 预览截图（1440×900） | — |
-| [_inventory-pages.md](./_inventory-pages.md) | 盘点原始报告：31 个 .vue 逐页现状、横切模式、问题证据、复杂度排行 | 输入 |
+| [06-api-gap.md](./06-api-gap.md) | **设计稿 ↔ 后端接口对账**：P0/P1/P2 接口清单（可直接交后端团队）+ 前端自算清单 + 示意数据待确认项 | 交付/对接 |
+| [_inventory-pages.md](./_inventory-pages.md) | 前端盘点原始报告：31 个 .vue 逐页现状、横切模式、问题证据、复杂度排行 | 输入 |
+| [_api-inventory.md](./_api-inventory.md) | 后端接口盘点原始报告：94 个接口逐条（方法/路径/权限/字段/证据行号） | 输入 |
 
 ## 核心决策（5 条）
 
@@ -33,6 +35,14 @@
 3. **先模板后页面**：26 页收敛为 5 个模板；新增 `AppShell / PageShell / ListPage / StatusTag / WorkbenchLayout / ScorePanel` 等共享组件，消灭 15 份重复外壳。
 4. **密度分档**：教师端/管理端 `compact`，学生端/文档 `comfortable`，同一套令牌两个档位。
 5. **风险后置**：Monaco/TipTap 相关的 3 页（Submit / ReviewDetail / ProjectReviewNew，合计 2800 行）放到 Wave 3，先冻结交互契约再动。
+
+## 接口依赖（重要）
+
+新 UI 的数据需求已逐页对账，见 [06-api-gap.md](./06-api-gap.md)：
+
+- **P0（阻塞新 UI 三个核心变化）**：① 教师待审核总数接口（侧栏徽标 + KPI）② 作业列表补「应交人数」（提交进度分母）③ 学生作业列表补 `submittedAt`/`answeredCount`/`finalScore`（状态贯通）。
+- **P1/P2**：KPI 聚合、队列上一条/下一条、客观题分项结构化、7 个列表服务端分页、实训题评分推送等。
+- **不依赖任何新接口**：Wave 0–2（令牌基础、13 个列表页、表单与确认）可以先做。
 
 ## 下一步（待你确认后执行）
 
