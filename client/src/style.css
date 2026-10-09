@@ -32,6 +32,21 @@
 /* Global reset */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* 主题切换过渡（Wave 5 · t41）——仅在 <html> 带 .theme-transition 时生效：
+   该类由 useTheme 在「用户主动切换」前挂上、过渡结束后移除；初始化应用主题时不挂，故首帧无动画。
+   为什么不用强制优先级：靠选择器作用域（类在不在）压过组件自身过渡，而不是靠优先级声明 ——
+   类一移除，组件自己的 hover/focus 过渡立即恢复原状（实测抽验按钮与链接）。
+   时长走 --duration-base（220ms，落在要求的 200–300ms 内），所以
+   @media (prefers-reduced-motion: reduce) 里 tokens.css 把 --duration-* 降成 1ms 时，本规则自动降级。 */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition-property: color, background-color, border-color, fill, stroke;
+  transition-duration: var(--duration-base);
+  transition-timing-function: var(--ease-out);
+}
+
 body {
   /* 字体栈统一到 --font-sans（Wave 0 已确认 SF Pro Display/Text 本机不存在，渲染等价） */
   font-family: var(--font-sans);
