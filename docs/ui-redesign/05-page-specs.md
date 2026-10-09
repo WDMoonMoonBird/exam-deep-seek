@@ -12,11 +12,11 @@
 ```
 页面外壳 PageShell（统一 .page / .page-header，替换 15 份重复 CSS）
 ├ PageHeader：标题 + 一句话描述 + [主操作]（唯一）
-├ [可选] KPI 行：StatCard × 2–4（数据量足够时才出现）
+├ [可选] KPI 行：StatCard × 2–4（**Batch1 后可用**：作业数、待审核数；均分/环比 P1-4 未交付，先不占位）
 └ Card
   ├ Toolbar：搜索 + 筛选（≤3 个）+ spacer + 列设置/导出（次要，ghost）
   ├ Table：状态列 = StatusTag；时间列 = 格式化（相对 + title 绝对）；空态 = EmptyState；加载 = 8 行骨架
-  └ TableFooter：共 N 条 · 分页（**统一服务端分页**，废弃客户端切片双轨）
+  └ TableFooter：共 N 条 · 分页（**目标：统一服务端分页**；P1-7 未交付前沿用前端切片，接口就绪后再切）
 ```
 
 | 统一项 | 规范 |
@@ -28,6 +28,8 @@
 | 行操作 | ≤3 个，右对齐；危险操作用 `--red-600` 文本按钮；**不使用红底实心按钮** |
 | 空态 | EmptyState 三文案模板（无数据 / 无搜索结果 / 无权限），主操作按钮指向该页唯一的创建入口 |
 | 加载 | 骨架屏优先（≥8 行），不用转圈；翻页时保留旧数据 + 顶部 2px 进度条 |
+| 题数 vs 小题数 | 后端给的是 `_count.assignmentQuestions`（**题**）与 `answeredCount`（**小题**，Submission 粒度 = 学生×题×小题）。**两者分母不同**，不得拼成「4/6 题」；学生端文案写「已答 4 小题」 |
+| 待审核 vs 提交进度 | `pendingReviewCount`（仅可见班级）与 `expectedCount`（全部关联班级）**范围不同**，不可放进同一分式；徽标/审核 Tab 用前者，进度用后者 |
 
 **适用**：admin Schools/Classes/Teachers/Students/Monitor、teacher Classes/Students/Questions/Assignments/Review/ReviewClass/Teams、student Assignments/Scores。
 

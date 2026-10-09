@@ -24,6 +24,7 @@
 | [05-page-specs.md](./05-page-specs.md) | 5 个页面模板 + 26 页逐页规范 + 组件提取清单 + 落地批次 | Phase 9 |
 | [preview/index.html](./preview/index.html) | 高保真静态预览（5 屏，可切主题与密度） | Phase 9 |
 | [preview/shots/](./preview/shots) | 预览截图（1440×900） | — |
+| [07-api-batch1-verify.md](./07-api-batch1-verify.md) | **Batch 1 后端交付独立验收**：P0 逐条核验、复跑测试、行为变更影响面、待处理 3 项 | 验收 |
 | [06-api-gap.md](./06-api-gap.md) | **设计稿 ↔ 后端接口对账**：P0/P1/P2 接口清单（可直接交后端团队）+ 前端自算清单 + 示意数据待确认项 | 交付/对接 |
 | [_inventory-pages.md](./_inventory-pages.md) | 前端盘点原始报告：31 个 .vue 逐页现状、横切模式、问题证据、复杂度排行 | 输入 |
 | [_api-inventory.md](./_api-inventory.md) | 后端接口盘点原始报告：94 个接口逐条（方法/路径/权限/字段/证据行号） | 输入 |
