@@ -7,8 +7,13 @@
                 <span v-show="!collapsed" class="logo-text"><span class="logo-line1">Deadpan</span><span class="logo-line2">判题</span></span>
             </div>
             <a-menu v-model:selectedKeys="selectedKeys" theme="dark" mode="inline" @click="onMenuClick">
-                <!-- 导航分组与顺序：docs/ui-redesign/01-information-architecture.md §2.2 -->
-                <a-menu-item-group key="teaching" title="教学">
+                <!-- 导航分组与顺序：docs/ui-redesign/01-information-architecture.md §2.2
+                     分组标题不用 a-menu-item-group：它渲染出的 li/ul 无 role，会打断 menuitem 的 ARIA 父子链，
+                     产生 axe 的 aria-required-children / aria-required-parent / list / listitem 四类违规
+                     （证据：tests/ui-redesign-verify/artifacts/T5-a11y.json，targets=.ant-menu 与 li[data-menu-id]）。
+                     antd 的 Menu 会原样渲染 slot 子节点（es/menu/src/Menu.js 的 flattenChildren），
+                     故改用 role=presentation 的标题 div（沿用 antd 的标题类名以保持视觉不变）。 -->
+                <div key="g-teaching" role="presentation" class="ant-menu-item-group-title">教学</div>
                     <a-menu-item key="/teacher/assignments"><template #icon>
                             <FileTextOutlined />
                         </template><span>作业管理</span></a-menu-item>
@@ -20,8 +25,7 @@
                     <a-menu-item key="/teacher/questions"><template #icon>
                             <DatabaseOutlined />
                         </template><span>题库管理</span></a-menu-item>
-                </a-menu-item-group>
-                <a-menu-item-group key="organization" title="组织">
+                <div key="g-organization" role="presentation" class="ant-menu-item-group-title">组织</div>
                     <a-menu-item key="/teacher/classes"><template #icon>
                             <AppstoreOutlined />
                         </template><span>班级管理</span></a-menu-item>
@@ -31,7 +35,6 @@
                     <a-menu-item key="/teacher/teams"><template #icon>
                             <TeamOutlined />
                         </template><span>教学团队</span></a-menu-item>
-                </a-menu-item-group>
             </a-menu>
         </a-layout-sider>
         <a-layout>

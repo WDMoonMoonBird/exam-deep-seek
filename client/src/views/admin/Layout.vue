@@ -6,17 +6,16 @@
         <span v-show="!collapsed" class="logo-text"><span class="logo-line1">Deadpan</span><span class="logo-line2">判题</span></span>
       </div>
       <a-menu v-model:selectedKeys="selectedKeys" theme="dark" mode="inline" @click="onMenuClick">
-        <!-- 导航分组与顺序：docs/ui-redesign/01-information-architecture.md §2.2 -->
-        <a-menu-item-group key="organization" title="组织">
+        <!-- 导航分组与顺序：docs/ui-redesign/01-information-architecture.md §2.2
+             分组标题不用 a-menu-item-group（其 li/ul 无 role，会打断 menuitem 的 ARIA 父子链）；详见 teacher/Layout.vue 同处注释。 -->
+        <div key="g-organization" role="presentation" class="ant-menu-item-group-title">组织</div>
           <a-menu-item key="/admin/schools"><template #icon><BankOutlined /></template><span>学校管理</span></a-menu-item>
           <a-menu-item key="/admin/classes"><template #icon><AppstoreOutlined /></template><span>班级管理</span></a-menu-item>
           <a-menu-item key="/admin/teachers"><template #icon><TeamOutlined /></template><span>教师管理</span></a-menu-item>
           <a-menu-item key="/admin/students"><template #icon><IdcardOutlined /></template><span>学生管理</span></a-menu-item>
-        </a-menu-item-group>
-        <a-menu-item-group key="system" title="系统">
+        <div key="g-system" role="presentation" class="ant-menu-item-group-title">系统</div>
           <a-menu-item key="/admin/monitor"><template #icon><DashboardOutlined /></template><span>系统监控</span></a-menu-item>
           <a-menu-item key="/admin/ai-config"><template #icon><RobotOutlined /></template><span>AI 配置</span></a-menu-item>
-        </a-menu-item-group>
       </a-menu>
     </a-layout-sider>
     <a-layout>
