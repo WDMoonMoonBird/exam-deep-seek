@@ -10,21 +10,29 @@ import { submissionDir, standardDir, ROOT } from '../utils/projectPaths.js';
 import { readProjectTree } from '../utils/projectFiles.js';
 import { buildSystemPrompt, buildGradingUserMessage } from '../infrastructure/ai/prompt-builder.js';
 
-/** 根据学校/班级/题目构建筛选条件 */
-async function buildFilter({ schoolId, classId, questionId, assignmentId, status }) {
+/**
+ * 根据教师可见范围 + 学校/班级/题目构建筛选条件。
+ *
+ * 越权防线（本函数是 /teacher/submissions 的唯一入口）：
+ * 起点不再是 {}——即使不传 schoolId/classId，也必须收敛到「该教师可见班级」的学生，
+ * 绝不返回全库提交。classId / questionId / assignmentId / status 仅在可见范围内做附加筛选；
+ * 传入不可见（或不存在）的 classId 时收敛为空集，而不是放行。
+ */
+async function buildFilter({ teacherId, schoolId, classId, questionId, assignmentId, status }) {
   const where = {};
   if (status) where.status = status.includes(',') ? { in: status.split(',') } : status;
   if (questionId) where.questionId = +questionId;
   if (assignmentId) where.assignmentId = +assignmentId;
 
-  if (classId) {
-    const ids = (await prisma.studentClass.findMany({ where: { classId: +classId }, select: { studentId: true } })).map(s => s.studentId);
-    where.studentId = { in: ids };
-  } else if (schoolId) {
-    const classIds = (await prisma.class.findMany({ where: { schoolId: +schoolId }, select: { id: true } })).map(c => c.id);
-    const ids = (await prisma.studentClass.findMany({ where: { classId: { in: classIds } }, select: { studentId: true } })).map(s => s.studentId);
-    where.studentId = { in: ids };
-  }
+  const visibleClassIds = await getVisibleClassIds(teacherId, schoolId ? +schoolId : null);
+  const scopeClassIds = classId ? visibleClassIds.filter((id) => id === +classId) : visibleClassIds;
+  const studentIds = scopeClassIds.length
+    ? (await prisma.studentClass.findMany({
+        where: { classId: { in: scopeClassIds } },
+        select: { studentId: true },
+      })).map((s) => s.studentId)
+    : [];
+  where.studentId = { in: [...new Set(studentIds)] };
   return where;
 }
 
@@ -43,10 +51,126 @@ async function enrichWithSchool(list) {
   return list.map(s => ({ ...s, schoolName: map[s.student?.id] || '' }));
 }
 
+/**
+ * 学生是否落在教师可见班级范围内（t4 越权防线的最小判定单元）。
+ *
+ * 可见集合来自 getVisibleClassIds(teacherId, schoolId)：schoolId 传入时收窄到该校，
+ * 为空时保持既有语义（全部可见班级）。学生不在任何可见班级 → false。
+ *
+ * @param {number} teacherId 教师 ID
+ * @param {number} studentId 学生 ID
+ * @param {number|null} [schoolId] 可选学校 ID
+ * @returns {Promise<boolean>}
+ */
+export async function isStudentVisibleToTeacher(teacherId, studentId, schoolId = null) {
+  const visibleClassIds = await getVisibleClassIds(teacherId, schoolId ? +schoolId : null);
+  if (!visibleClassIds.length) return false;
+  const linked = await prisma.studentClass.findFirst({
+    where: { studentId, classId: { in: visibleClassIds } },
+    select: { classId: true },
+  });
+  return !!linked;
+}
+
+/**
+ * 「按提交 id 直取」入口的统一归属校验（t4 · 越权收敛）。
+ *
+ * 详情 / 提示词 / 改分 / 审核 / 重评 / 发布 等所有以 submission id 定位的教师端入口
+ * 必须先过这里，杜绝「换一个 id 就能读到/改到别的学校、别的班级」的横向越权。
+ *
+ * 语义约定（错误码与信息量）：
+ *   - id 非法（非正整数）      → 400 / 1001，响应体不含任何提交内容
+ *   - 提交不存在               → 404 / 1004
+ *   - 存在但不在可见范围        → 403 / 1003（不区分「不存在」与「不可见」以外的信息，响应体同样不含内容）
+ *
+ * @param {number} teacherId 教师 ID
+ * @param {number} submissionId 提交 ID
+ * @param {number|null} [schoolId] 可选学校 ID（批量端点从 body 取；传入时收窄到该校）
+ * @returns {Promise<{ok:true, submission:{id:number,studentId:number,assignmentId:number,questionId:number}}|{ok:false,status:number,body:object}>}
+ */
+async function loadVisibleSubmission(teacherId, submissionId, schoolId = null) {
+  if (!Number.isInteger(submissionId) || submissionId < 1) {
+    return { ok: false, status: 400, body: { code: 1001, message: '参数错误', data: null } };
+  }
+  const submission = await prisma.submission.findUnique({
+    where: { id: submissionId },
+    select: { id: true, studentId: true, assignmentId: true, questionId: true },
+  });
+  if (!submission) {
+    return { ok: false, status: 404, body: { code: 1004, message: '提交不存在', data: null } };
+  }
+  const visible = await isStudentVisibleToTeacher(teacherId, submission.studentId, schoolId);
+  if (!visible) {
+    return { ok: false, status: 403, body: { code: 1003, message: '无权访问该提交', data: null } };
+  }
+  return { ok: true, submission };
+}
+
+/** 发送归属校验失败响应（响应体只含 code/message/data:null，绝不含题目、答案、评分等内容） */
+function sendScopeError(res, guard) {
+  return res.status(guard.status).json(guard.body);
+}
+
+/**
+ * 批量归属校验（供 submissionIds 批量端点使用）：两次查询完成全量判定，不随批量大小线性放大。
+ *
+ * @param {number} teacherId 教师 ID
+ * @param {number[]} ids 待校验提交 id（已去重）
+ * @param {number|null} [schoolId] 可选学校 ID
+ * @returns {Promise<number[]>} 不在可见范围内的 id（含不存在与非法 id），供整批拒绝时回执
+ */
+async function filterRejectedSubmissionIds(teacherId, ids, schoolId = null) {
+  const rejected = ids.filter((id) => !Number.isInteger(id) || id <= 0);
+  const validIds = ids.filter((id) => Number.isInteger(id) && id > 0);
+  if (!validIds.length) return rejected;
+
+  const rows = await prisma.submission.findMany({ where: { id: { in: validIds } }, select: { id: true, studentId: true } });
+  const studentBySubmission = new Map(rows.map((r) => [r.id, r.studentId]));
+  const studentIds = [...new Set(rows.map((r) => r.studentId))];
+  const visibleClassIds = await getVisibleClassIds(teacherId, schoolId ? +schoolId : null);
+  const linked = (studentIds.length && visibleClassIds.length)
+    ? await prisma.studentClass.findMany({
+        where: { studentId: { in: studentIds }, classId: { in: visibleClassIds } },
+        select: { studentId: true },
+      })
+    : [];
+  const visibleStudentIds = new Set(linked.map((l) => l.studentId));
+
+  for (const id of validIds) {
+    if (!studentBySubmission.has(id) || !visibleStudentIds.has(studentBySubmission.get(id))) rejected.push(id);
+  }
+  return rejected;
+}
+
+/**
+ * 解析教师端「班级维度」入口的可见范围（t6 · 越权收敛统一落点）。
+ *
+ * 语义（三个 classId 型入口 export-review / review-class / review-questions 共用）：
+ *   - schoolId 合法正整数 → 可见集合收窄到该校；缺失/非法 → 取全部可见班级（保持既有语义，不越权）
+ *   - classId 显式传入 → 必须命中可见集合；未命中/非法 → { ok:false }，由调用方 403 fail-closed
+ *   - classId 未传 → 返回全部可见班级，调用方据此把结果收敛到可见范围
+ *     （绝不允许「不传 classId 就全局返回」）
+ *
+ * @param {number} teacherId 教师 ID
+ * @param {{schoolId?: string|number|null, classId?: string|number|null}} [params]
+ * @returns {Promise<{ok:true, classIds:number[]}|{ok:false}>}
+ */
+async function resolveVisibleClassScope(teacherId, { schoolId, classId } = {}) {
+  const sid = (schoolId === undefined || schoolId === null || schoolId === '') ? null : +schoolId;
+  const visibleClassIds = await getVisibleClassIds(teacherId, Number.isInteger(sid) && sid > 0 ? sid : null);
+
+  if (classId !== undefined && classId !== null && classId !== '') {
+    const cid = +classId;
+    if (!Number.isInteger(cid) || !visibleClassIds.includes(cid)) return { ok: false };
+    return { ok: true, classIds: [cid] };
+  }
+  return { ok: true, classIds: visibleClassIds };
+}
+
 export const getSubmissions = async (req, res) => {
   try {
     const { schoolId, classId, questionId, status, page = 1, pageSize = 20 } = req.query;
-    const where = await buildFilter({ schoolId, classId, questionId, status });
+    const where = await buildFilter({ teacherId: req.user.id, schoolId, classId, questionId, status });
 
     const [list, total] = await Promise.all([
       prisma.submission.findMany({
@@ -73,14 +197,18 @@ export const getSubmissions = async (req, res) => {
 
 export const getReviewQuestions = async (req, res) => {
   try {
-    const { classId } = req.query;
-    let where = {};
-    if (classId) {
-      const studentIds = (await prisma.studentClass.findMany({ where: { classId: +classId }, select: { studentId: true } })).map(s => s.studentId);
-      where = { studentId: { in: studentIds }, status: { not: 'draft' } };
-    }
+    // t6：旧实现不传 classId 时 where={} → 全局返回（实测含跨校教师 B 的题目）。
+    // 现统一收敛到「教师可见班级」；显式传入不可见 classId → 403（fail-closed，见交付说明）。
+    const scope = await resolveVisibleClassScope(req.user.id, { schoolId: req.query.schoolId, classId: req.query.classId });
+    if (!scope.ok) return res.status(403).json({ code: 1003, message: '无权访问该班级', data: null });
+
+    const studentIds = scope.classIds.length
+      ? (await prisma.studentClass.findMany({ where: { classId: { in: scope.classIds } }, select: { studentId: true } })).map(s => s.studentId)
+      : [];
+    if (!studentIds.length) return res.json({ code: 0, message: 'ok', data: [] });
+
     const subs = await prisma.submission.findMany({
-      where,
+      where: { studentId: { in: [...new Set(studentIds)] }, status: { not: 'draft' } },
       select: { question: { select: { id: true, title: true } } },
       distinct: ['questionId'],
       orderBy: { questionId: 'asc' },
@@ -94,6 +222,10 @@ export const getReviewQuestions = async (req, res) => {
 
 export const getSubmissionDetail = async (req, res) => {
   try {
+    // t4：归属校验前置——教师只能看自己可见班级学生的提交，拒绝响应不含任何题目/答案内容
+    const guard = await loadVisibleSubmission(req.user.id, +req.params.id);
+    if (!guard.ok) return sendScopeError(res, guard);
+
     const s = await prisma.submission.findUnique({
       where: { id: +req.params.id },
       include: {
@@ -133,6 +265,10 @@ export const getSubmissionDetail = async (req, res) => {
 
 export const regradeSubmission = async (req, res) => {
   try {
+    // t4：越权校验前置（重评会改分，必须先确认提交在可见范围内）
+    const guard = await loadVisibleSubmission(req.user.id, +req.params.id);
+    if (!guard.ok) return sendScopeError(res, guard);
+
     const { aiScore, aiFeedback } = await req.app.locals.reviewUseCases.regrade({ submissionId: +req.params.id });
     res.json({ code: 0, message: '重新评分完成', data: { aiScore, aiFeedback } });
   } catch (err) {
@@ -148,6 +284,11 @@ export const updateScore = async (req, res) => {
   try {
     const id = +req.params.id;
     const { finalScore } = req.body;
+
+    // t4：越权校验前置——跨教师改分一律 403，且不产生任何写入
+    const guard = await loadVisibleSubmission(req.user.id, id);
+    if (!guard.ok) return sendScopeError(res, guard);
+
     const updated = await req.app.locals.reviewUseCases.manualAdjust({ submissionId: id, finalScore });
     res.json({ code: 0, message: '分数已更新', data: updated });
   } catch (err) {
@@ -161,6 +302,10 @@ export const updateScore = async (req, res) => {
 
 export const reviewSubmission = async (req, res) => {
   try {
+    // t4：越权校验前置——跨教师审核一律 403，且不产生任何写入
+    const guard = await loadVisibleSubmission(req.user.id, +req.params.id);
+    if (!guard.ok) return sendScopeError(res, guard);
+
     const { finalScore, teacherFeedback } = req.body;
     await req.app.locals.reviewUseCases.review({ submissionId: +req.params.id, finalScore, teacherFeedback });
     res.json({ code: 0, message: '审核成功', data: null });
@@ -173,12 +318,19 @@ export const reviewSubmission = async (req, res) => {
 export const batchReview = async (req, res) => {
   try {
     const { schoolId, classId, assignmentId } = req.body;
-    if (!schoolId) return res.status(400).json({ code: 1001, message: '请选择学校', data: null });
+    // t4：schoolId/classId 均需有效且班级在可见范围内 —— 否则整批拒绝，不产生任何写入
+    const sid = +schoolId;
+    if (!schoolId || !Number.isInteger(sid) || sid <= 0) return res.status(400).json({ code: 1001, message: '请选择学校', data: null });
+    const visibleClassIds = await getVisibleClassIds(req.user.id, sid);
+    const cid = +classId;
+    if (!Number.isInteger(cid) || !visibleClassIds.includes(cid)) {
+      return res.status(403).json({ code: 1003, message: '无权操作该班级', data: null });
+    }
 
     const assignment = await prisma.assignment.findUnique({ where: { id: +assignmentId }, select: { mode: true } });
     if (assignment?.mode === 'practice') return res.status(400).json({ code: 1001, message: '练习模式无需审核', data: null });
 
-    const classStudents = await prisma.studentClass.findMany({ where: { classId: +classId }, select: { studentId: true } });
+    const classStudents = await prisma.studentClass.findMany({ where: { classId: cid }, select: { studentId: true } });
     const studentIds = classStudents.map(cs => cs.studentId);
 
     const subs = await prisma.submission.findMany({
@@ -201,15 +353,16 @@ export const batchReview = async (req, res) => {
     }
     let count = 0;
     if (toReview.length) {
-      for (const s of toReview) {
+      // t4：归属校验已在前置全量完成 → 批量写入放同一事务，杜绝「写一半」留下部分生效
+      await prisma.$transaction(toReview.map((s) => {
         const isProject = s.question?.type === 'project';
-        await prisma.submission.update({
+        return prisma.submission.update({
           where: { id: s.id },
           // R3：实训题不把 AI 评语当作教师评语透传给学生
           data: { status: 'reviewed', reviewedAt: new Date(), finalScore: s.aiScore, teacherFeedback: isProject ? (s.teacherFeedback || '') : (s.aiFeedback || '') },
         });
-        count++;
-      }
+      }));
+      count = toReview.length;
     }
     res.json({ code: 0, message: `已审核 ${reviewedStudentIds.size} 名学生`, data: { count: reviewedStudentIds.size } });
   } catch (err) {
@@ -221,12 +374,19 @@ export const batchReview = async (req, res) => {
 export const batchPublish = async (req, res) => {
   try {
     const { schoolId, classId, assignmentId } = req.body;
-    if (!schoolId) return res.status(400).json({ code: 1001, message: '请选择学校', data: null });
+    // t4：schoolId/classId 均需有效且班级在可见范围内 —— 否则整批拒绝，不产生任何写入
+    const sid = +schoolId;
+    if (!schoolId || !Number.isInteger(sid) || sid <= 0) return res.status(400).json({ code: 1001, message: '请选择学校', data: null });
+    const visibleClassIds = await getVisibleClassIds(req.user.id, sid);
+    const cid = +classId;
+    if (!Number.isInteger(cid) || !visibleClassIds.includes(cid)) {
+      return res.status(403).json({ code: 1003, message: '无权操作该班级', data: null });
+    }
 
     const assignment = await prisma.assignment.findUnique({ where: { id: +assignmentId }, select: { mode: true } });
     if (assignment?.mode === 'practice') return res.status(400).json({ code: 1001, message: '练习模式无需发布', data: null });
 
-    const classStudents = await prisma.studentClass.findMany({ where: { classId: +classId }, select: { studentId: true } });
+    const classStudents = await prisma.studentClass.findMany({ where: { classId: cid }, select: { studentId: true } });
     const studentIds = classStudents.map(cs => cs.studentId);
 
     const subs = await prisma.submission.findMany({
@@ -263,8 +423,17 @@ export const publishScores = async (req, res) => {
   try {
     const { submissionIds } = req.body;
     if (!submissionIds?.length) return res.status(400).json({ code: 1001, message: '请选择提交', data: null });
+    const ids = [...new Set(submissionIds.map(Number))];
+
+    // t4：整批先全量校验，再执行——任何一条不可见/非法 → 整批拒绝（已可见的也不生效，原子性）
+    const rejectedIds = await filterRejectedSubmissionIds(req.user.id, ids);
+    if (rejectedIds.length) {
+      return res.status(403).json({ code: 1003, message: '部分提交不在可见范围内，已整批拒绝', data: { rejectedIds } });
+    }
+
+    // 全部可见 → 单条 updateMany 原子执行（status 过滤保持既有语义：只发布 reviewed）
     await prisma.submission.updateMany({
-      where: { id: { in: submissionIds.map(Number) }, status: 'reviewed' },
+      where: { id: { in: ids }, status: 'reviewed' },
       data: { status: 'published' },
     });
     res.json({ code: 0, message: '发布成功', data: null });
@@ -276,18 +445,21 @@ export const publishScores = async (req, res) => {
 
 export const getReviewSummary = async (req, res) => {
   try {
+    // R5：非法 schoolId（如 abc / 0 / 小数）与 pending-summary 一致 fail-closed → 空数组（不越权、不 500）
     const schoolId = req.query.schoolId ? +req.query.schoolId : null;
-    if (!schoolId) return res.json({ code: 0, data: [] });
+    if (!Number.isInteger(schoolId) || schoolId <= 0) return res.json({ code: 0, data: [] });
 
     const { classId } = req.query;
     const visibleIds = await getVisibleClassIds(req.user.id, schoolId);
-    const classWhere = { schoolId, id: { in: visibleIds } };
-    if (classId) classWhere.id = +classId;
+    // R16：classId 必须与可见集合求交（旧实现 classWhere.id = +classId 直接覆盖了 id:{in:visibleIds}，
+    // 传同校但不可见的 classId 仍能读到该班汇总行）→ 不可见/非法 classId 收敛为空集
+    const scopeClassIds = classId ? visibleIds.filter((id) => id === +classId) : visibleIds;
+    const classWhere = { schoolId, id: { in: scopeClassIds } };
 
     const classes = await prisma.class.findMany({
       where: classWhere,
       include: {
-        assignmentClasses: { include: { assignment: { select: { id: true, title: true, startTime: true, endTime: true, mode: true, locked: true, deletedAt: true } } } },
+        assignmentClasses: { include: { assignment: { select: { id: true, title: true, startTime: true, endTime: true, mode: true, locked: true, deletedAt: true, _count: { select: { assignmentQuestions: true } } } } } },
         studentClasses: true,
       },
       orderBy: { name: 'asc' },
@@ -329,6 +501,7 @@ export const getReviewSummary = async (req, res) => {
           totalStudents, submittedCount: submittedStudents,
           aiPending, reviewPending: isPractice ? 0 : reviewPending, abnormal,
           aiCompleted: isPractice ? reviewPending : 0,
+          _count: { assignmentQuestions: a._count?.assignmentQuestions ?? 0 },
           allAiDone, allReviewed,
         });
       }
@@ -344,7 +517,10 @@ export const getReviewSummary = async (req, res) => {
 
 export const getReviewByClass = async (req, res) => {
   try {
-    const classId = +req.params.classId;
+    // t6：花名册越权收敛——classId 必须命中教师可见集合，否则 403 且响应体不含任何姓名/学号/分数
+    const scope = await resolveVisibleClassScope(req.user.id, { schoolId: req.query.schoolId, classId: req.params.classId });
+    if (!scope.ok) return res.status(403).json({ code: 1003, message: '无权访问该班级', data: null });
+    const classId = scope.classIds[0];
     const { assignmentId, keyword, page = 1, pageSize = 20, filter, sortField, sortOrder } = req.query;
 
     const studentRecords = await prisma.studentClass.findMany({
@@ -434,19 +610,27 @@ export const exportReviewData = async (req, res) => {
     const { classId, assignmentId } = req.query;
     if (!classId || !assignmentId) return res.status(400).json({ code: 1001, message: '参数错误', data: null });
 
+    // t6：答案导出越权收敛——classId 必须命中教师可见集合（跨校/同校不可见班级一律 403），
+    // 失败响应体不含任何姓名、学号、答案、分数
+    const scope = await resolveVisibleClassScope(req.user.id, { schoolId: req.query.schoolId, classId });
+    if (!scope.ok) return res.status(403).json({ code: 1003, message: '无权访问该班级', data: null });
+    const cid = scope.classIds[0];
+    const aid = +assignmentId;
+    if (!Number.isInteger(aid) || aid <= 0) return res.status(400).json({ code: 1001, message: '参数错误', data: null });
+
     const students = await prisma.studentClass.findMany({
-      where: { classId: +classId },
+      where: { classId: cid },
       include: { student: true, class: { include: { school: { select: { name: true } } } } },
       orderBy: { student: { username: 'asc' } },
     });
 
     const submissions = await prisma.submission.findMany({
-      where: { assignmentId: +assignmentId, studentId: { in: students.map(s => s.studentId) } },
+      where: { assignmentId: aid, studentId: { in: students.map(s => s.studentId) } },
       include: { subQuestion: true },
     });
 
     const subQuestions = await prisma.subQuestion.findMany({
-      where: { question: { assignmentQuestions: { some: { assignmentId: +assignmentId } } } },
+      where: { question: { assignmentQuestions: { some: { assignmentId: aid } } } },
       orderBy: { sortOrder: 'asc' },
     });
 
@@ -616,6 +800,10 @@ export const getProjectReview = async (req, res) => {
     if (sub.question.type !== 'project') return res.status(400).json({ code: 1001, message: '非实训题提交', data: null });
     // R6：仅作业所属教师可查看实训提交（作业/班级/学校归属校验）
     if (sub.assignment.teacherId !== req.user.id) return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+    // t4：再收敛到该教师的可见班级范围（与其它按 id 直取的入口一致）
+    if (!(await isStudentVisibleToTeacher(req.user.id, sub.studentId))) {
+      return res.status(403).json({ code: 1003, message: '无权访问该提交', data: null });
+    }
 
     const env = parseProjectAnswer(sub.answer);
     const version = env.currentVersion;
@@ -674,6 +862,10 @@ export const reviewProjectSubmission = async (req, res) => {
     if (sub.question.type !== 'project') return res.status(400).json({ code: 1001, message: '非实训题提交', data: null });
     // R6：仅作业所属教师可审核实训提交
     if (sub.assignment.teacherId !== req.user.id) return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+    // t4：越权校验前置——不可见班级的提交一律 403，且不产生任何写入
+    if (!(await isStudentVisibleToTeacher(req.user.id, sub.studentId))) {
+      return res.status(403).json({ code: 1003, message: '无权访问该提交', data: null });
+    }
 
     const data = { status: 'reviewed', reviewedAt: new Date() };
     if (finalScore !== undefined) {
@@ -708,6 +900,9 @@ export const getQuestionPromptPreview = async (req, res) => {
       include: { subQuestions: { orderBy: { sortOrder: 'asc' } } },
     });
     if (!q) return res.status(404).json({ code: 1004, message: '题目不存在', data: null });
+    // t6：提示词模板含参考答案/评分标准，仅题目归属教师可预览（题库/编辑页本身即 owner-only）。
+    // 拒绝响应体不含任何题目、答案、评分标准内容
+    if (q.teacherId !== req.user.id) return res.status(403).json({ code: 1003, message: '无权访问该题目', data: null });
 
     const subs = (q.subQuestions || []).map(sq => ({
       id: sq.id,
@@ -734,6 +929,10 @@ export const getQuestionPromptPreview = async (req, res) => {
  */
 export const getSubmissionPrompt = async (req, res) => {
   try {
+    // t4：提示词含学生答案与参考答案，同属「按 id 直取」的详情类入口 → 先过归属校验
+    const guard = await loadVisibleSubmission(req.user.id, +req.params.id);
+    if (!guard.ok) return sendScopeError(res, guard);
+
     const sub = await prisma.submission.findUnique({
       where: { id: +req.params.id },
       include: {

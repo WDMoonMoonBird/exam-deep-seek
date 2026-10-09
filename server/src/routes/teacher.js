@@ -41,6 +41,8 @@ router.post('/assignments', teacher.createAssignment);
 router.put('/assignments/:id/lock', teacher.lockAssignment);
 
 // 评分审核
+// 教师端待审核汇总（侧栏徽标 / KPI）：范围=可见班级（getVisibleClassIds），口径与 review-summary 一致
+router.get('/pending-summary', teacher.getPendingSummary);
 router.get('/review-summary', review.getReviewSummary);
 router.get('/review-class/:classId', review.getReviewByClass);
 router.get('/review-questions', review.getReviewQuestions);

@@ -132,14 +132,34 @@ export const leaveTeam = async (req, res) => {
 };
 
 // ===== 获取教师可见班级（直连+团队） =====
+/**
+ * 获取教师可见班级 ID（直连班级 + 团队共享班级）。
+ *
+ * schoolId 生效：传入时只返回「班级所属学校 === 该校」的班级（两条来源都过滤），
+ * 防止教师用某校 schoolId 带出另一所学校的班级数据；schoolId 为空时保持改造前行为
+ * （返回全部可见班级 ID），避免影响未传 schoolId 的既有调用方。
+ *
+ * @param {number} teacherId 教师 ID
+ * @param {number|string|null} [schoolId] 学校 ID；为空/非法时不做学校过滤
+ * @returns {Promise<number[]>} 去重后的可见班级 ID
+ */
 export async function getVisibleClassIds(teacherId, schoolId) {
-  const direct = await prisma.teacherClass.findMany({ where: { teacherId }, select: { classId: true } });
+  const sid = schoolId ? +schoolId : null;
+  const classScope = sid ? { class: { schoolId: sid } } : {};
+
+  const direct = await prisma.teacherClass.findMany({
+    where: { teacherId, ...classScope },
+    select: { classId: true },
+  });
   const directIds = direct.map(d => d.classId);
 
   const teamIds = (await prisma.teamTeacher.findMany({ where: { teacherId }, select: { teamId: true } })).map(t => t.teamId);
   let teamClassIds = [];
   if (teamIds.length > 0) {
-    const tcs = await prisma.teamClass.findMany({ where: { teamId: { in: teamIds } }, select: { classId: true } });
+    const tcs = await prisma.teamClass.findMany({
+      where: { teamId: { in: teamIds }, ...classScope },
+      select: { classId: true },
+    });
     teamClassIds = [...new Set(tcs.map(tc => tc.classId))];
   }
   return [...new Set([...directIds, ...teamClassIds])];

@@ -14,6 +14,8 @@ import { enqueueProjectGrade, readDirFiles } from '../services/projectGrading.js
 import { PROJECT_ROLE, OPEN_PROJECT_ROLE, buildProjectGradePrompt, buildOpenProjectGradePrompt } from '../services/deepseek.js';
 import { buildFileTree, filterProjectFiles } from '../services/projectContextBuilder.js';
 import { buildTree, isIgnored } from '../utils/fileTree.js';
+// t6：复用 reviewController 的统一归属校验助手（教师可见班级范围），避免同一防线两处实现漂移
+import { isStudentVisibleToTeacher } from './reviewController.js';
 import { MAX_TEXT_BYTES } from '../utils/projectArchive.js';
 import fs from 'fs';
 import path from 'path';
@@ -103,6 +105,10 @@ export const getProjectReview = async (req, res) => {
     if (sub.question?.type !== 'project') {
       return res.status(400).json({ code: 1001, message: '该提交不是实训题', data: null });
     }
+    // t6：按 id 直取入口的归属校验——学生必须在该教师可见班级内，否则 403 且不含学生文件/标准包/AI 评语
+    if (!(await isStudentVisibleToTeacher(req.user.id, sub.studentId))) {
+      return res.status(403).json({ code: 1003, message: '无权访问该提交', data: null });
+    }
 
     const env = parseProjectAnswer(sub.answer);
     const version = env.currentVersion;
@@ -171,6 +177,10 @@ export const regradeProjectSubmission = async (req, res) => {
     if (sub.question?.type !== 'project') {
       return res.status(400).json({ code: 1001, message: '非实训题提交', data: null });
     }
+    // t6：写操作前置归属校验——不可见提交一律 403，且不产生任何写入
+    if (!(await isStudentVisibleToTeacher(req.user.id, sub.studentId))) {
+      return res.status(403).json({ code: 1003, message: '无权访问该提交', data: null });
+    }
 
     // 重评幂等——教师重评已触发（grading.state=pending 且 prevStatus 有值）时拒绝重复触发
     const curEnv = parseProjectAnswer(sub.answer);
@@ -223,11 +233,15 @@ export const getProjectQuestionPromptPreview = async (req, res) => {
   try {
     const q = await prisma.question.findUnique({
       where: { id: +req.params.id },
-      select: { id: true, title: true, material: true, scoringRubric: true, type: true, attachmentUrl: true },
+      select: { id: true, teacherId: true, title: true, material: true, scoringRubric: true, type: true, attachmentUrl: true },
     });
     if (!q) return res.status(404).json({ code: 1004, message: '题目不存在', data: null });
     if (q.type !== 'project') {
       return res.status(400).json({ code: 1001, message: '该题目不是实训题', data: null });
+    }
+    // t6：提示词模板含标准包源码/评分标准，仅题目归属教师可预览；拒绝响应体不含任何内容
+    if (q.teacherId !== req.user.id) {
+      return res.status(403).json({ code: 1003, message: '无权访问该题目', data: null });
     }
 
     const isOpen = !hasStandardPackage(q.id, q.attachmentUrl);
@@ -272,6 +286,10 @@ export const getProjectSubmissionPrompt = async (req, res) => {
     if (!sub) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
     if (sub.question?.type !== 'project') {
       return res.status(400).json({ code: 1001, message: '该提交不是实训题', data: null });
+    }
+    // t6：提示词含学生工程文件与标准包源码 → 先过归属校验
+    if (!(await isStudentVisibleToTeacher(req.user.id, sub.studentId))) {
+      return res.status(403).json({ code: 1003, message: '无权访问该提交', data: null });
     }
 
     const env = parseProjectAnswer(sub.answer);

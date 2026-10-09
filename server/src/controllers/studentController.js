@@ -50,7 +50,7 @@ async function withSubmitLock(key, task) {
 
 export const getAssignments = async (req, res) => {
   try {
-    const { page = 1, pageSize = 20 } = req.query;
+    const { page = 1, pageSize = 20, keyword } = req.query;
     const studentId = req.user.id;
 
     // 查学生所属班级
@@ -88,17 +88,20 @@ export const getAssignments = async (req, res) => {
       id: { in: assignmentIds },
       OR: orConditions,
     };
+    // keyword 按 title 模糊过滤（前端早已在传，旧实现服务端未读）
+    const kw = typeof keyword === 'string' ? keyword.trim() : '';
+    if (kw) where.title = { contains: kw };
 
-    const [list, total] = await Promise.all([
+    const [rawList, total] = await Promise.all([
       prisma.assignment.findMany({
         where,
         select: {
           id: true, title: true, description: true, startTime: true, endTime: true, allowResubmit: true, createdAt: true, deletedAt: true, mode: true, locked: true,
           _count: { select: { assignmentQuestions: true } },
-          assignmentQuestions: { select: { question: { select: { id: true, type: true } } } },
+          assignmentQuestions: { select: { question: { select: { id: true, type: true, maxScore: true } } } },
           submissions: {
             where: { studentId },
-            select: { status: true, id: true },
+            select: { id: true, status: true, submittedAt: true, finalScore: true, aiScore: true, attemptCount: true },
           },
         },
         orderBy: { createdAt: 'desc' },
@@ -107,6 +110,43 @@ export const getAssignments = async (req, res) => {
       }),
       prisma.assignment.count({ where }),
     ]);
+
+    const list = rawList.map((a) => {
+      const isPractice = a.mode === 'practice';
+      const subs = a.submissions || [];
+      const realSubs = subs.filter((s) => s.status !== 'draft'); // draft 不算已交/已答
+
+      // 最近一次非 draft 提交时间
+      let lastSubmittedAt = null;
+      for (const s of realSubs) {
+        if (!s.submittedAt) continue;
+        if (!lastSubmittedAt || new Date(s.submittedAt).getTime() > new Date(lastSubmittedAt).getTime()) {
+          lastSubmittedAt = s.submittedAt;
+        }
+      }
+
+      // 得分可见性（与 /student/assignments/:id、/student/scores 同口径）：
+      // exam 模式仅 published 可见；practice 模式 ai_graded/reviewed 亦可见（现有规则不变）。
+      const scoreVisible = realSubs.filter((s) =>
+        s.status === 'published' || (isPractice && (s.status === 'ai_graded' || s.status === 'reviewed')));
+      // R14：取值口径与 /student/scores 的 totalScore 完全一致 = finalScore ?? aiScore
+      // （published 但教师未定案分时为 aiScore，不再返回 null；aiScore 仅作数值来源，字段名依然不下发）
+      const scoreValues = scoreVisible
+        .map((s) => (s.finalScore ?? s.aiScore ?? null))
+        .filter((v) => v != null);
+
+      const { submissions, ...rest } = a;
+      return {
+        ...rest,
+        // 显式白名单：提交行只保留 id/status，aiScore/aiFeedback 等内部列一律不下发
+        submissions: submissions.map((s) => ({ id: s.id, status: s.status })),
+        submittedAt: lastSubmittedAt ? new Date(lastSubmittedAt).toISOString() : null,
+        answeredCount: realSubs.length,
+        finalScore: scoreValues.length ? scoreValues.reduce((sum, v) => sum + v, 0) : null,
+        maxScore: (a.assignmentQuestions || []).reduce((sum, aq) => sum + (aq.question?.maxScore || 0), 0),
+        attemptCount: subs.reduce((sum, s) => sum + (s.attemptCount || 0), 0),
+      };
+    });
 
     res.json({ code: 0, message: 'ok', data: { list, total, page: +page, pageSize: +pageSize } });
   } catch (err) {
@@ -124,6 +164,48 @@ function mapSubmissionError(res, err) {
     return res.status(400).json({ code: 1001, message: err.message, data: null });
   }
   return null;
+}
+
+/**
+ * 学生端提交行白名单（安全关键，铁律同 utils/projectView.js）。
+ *
+ * 必须「显式字段拷贝」：黑名单写法（{...submission} 再置空）在新增敏感列时会静默泄漏，
+ * 且 aiScore / aiFeedback 的**字段名**本身也不得出现（字段名即暴露「AI 已打分 / 已有 AI 评语」）。
+ *
+ * 可见性规则（与 /student/scores 同口径）：
+ *   - published：finalScore / teacherFeedback 可见；
+ *   - practice 模式且 ai_graded / reviewed：分数/评语可见（现有规则不变）；
+ *   - 其余状态：finalScore / teacherFeedback / bestScore 一律置空。
+ *
+ * @param {object} s submission 行
+ * @param {boolean} isPractice 作业是否为练习模式
+ * @returns {object} 学生可见字段的白名单视图
+ */
+function toStudentSubmissionView(s, isPractice) {
+  const published = s.status === 'published';
+  const practiceScored = isPractice && (s.status === 'ai_graded' || s.status === 'reviewed');
+  const showScore = published || practiceScored;
+  // 可见即取 finalScore ?? aiScore —— 与 /student/scores、/student/assignments 列表完全同口径（t6 收敛）：
+  // published 但教师未定案分时回退 aiScore（数值），aiScore/aiFeedback 字段名依然一律不下发
+  const finalScore = showScore ? (s.finalScore ?? s.aiScore ?? null) : null;
+  const teacherFeedback = published
+    ? (s.teacherFeedback ?? null)
+    : (practiceScored ? (s.teacherFeedback || s.aiFeedback || null) : null);
+  return {
+    id: s.id,
+    assignmentId: s.assignmentId,
+    studentId: s.studentId,
+    questionId: s.questionId,
+    subQuestionId: s.subQuestionId,
+    answer: s.answer,
+    status: s.status,
+    submittedAt: s.submittedAt,
+    attemptCount: s.attemptCount,
+    // bestScore 是 AI 分派生值：exam 模式未发布时不下发，practice 模式按「分数可见」的既有规则保留
+    bestScore: (published || isPractice) ? (s.bestScore ?? null) : null,
+    finalScore,
+    teacherFeedback,
+  };
 }
 
 export const getAssignmentDetail = async (req, res) => {
@@ -150,13 +232,10 @@ export const getAssignmentDetail = async (req, res) => {
       where: { assignmentId: +req.params.id, studentId: req.user.id },
     });
 
-    // 未发布的提交不返回评分/评语，但练习模式例外
+    // 未发布的提交不返回评分/评语，但练习模式例外。
+    // 旧实现 published 分支直接 return s（整行下发，含 aiScore/aiFeedback）——已改为白名单裁剪。
     const isPractice = assignment.mode === 'practice';
-    const safeSubmissions = submissions.map((s) => {
-      if (s.status === 'published') return s;
-      if (isPractice && (s.status === 'ai_graded' || s.status === 'reviewed')) return s;
-      return { ...s, aiScore: null, aiFeedback: null, finalScore: null, teacherFeedback: null };
-    });
+    const safeSubmissions = submissions.map((s) => toStudentSubmissionView(s, isPractice));
 
     // 学生有权看答案的条件 → 考试已发布 或 练习已评分
     const canSeeAnswers = safeSubmissions.some(s =>
