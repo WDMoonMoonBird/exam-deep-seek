@@ -188,3 +188,12 @@ await page.route((u) => new URL(u.toString()).pathname.startsWith('/api/'), asyn
 |---|---|---|
 | V1 | P7 轮询节拍 | t19 实测「13.5s 仅 1 次轮询」，未复现 5000ms 节拍；`POLL_INTERVAL=5000 / POLL_MAX=72` 未改动（grep 已证）。请 t21 复现并解释（是否与评分态切换/停止条件有关），结论写入报告 |
 | V2 | P10「评分中」标签 | t19 未复现；请 t21 构造评分中状态复现并登记基线 |
+
+### 7.4 t20 新增：两个**已确认的既有缺陷**（**不是回归**，t21 须登记但不得计为 Wave 3 引入）
+
+| # | 缺陷 | 证据 | 影响 |
+|---|---|---|---|
+| V3 | **beforeunload keepalive 落盘实际不生效**：`onBeforeUnload` 内第 729 行的 `fetch(...)` 被同模块第 836 行 `async function fetch()`（数据加载器，函数声明提升）遮蔽 → 发出去的是 GET /api/student/assignments/:id，而非 keepalive PUT /draft。captain 已独立复核（grep 实证 729/836 两处）。 | t20 实测 beforeunload → 3 次 GET、0 次 PUT；页面内手写全局 fetch PUT 可正常发出。也解释了 §1 S11 基线里「beforeunload 探针窗口内 4 次 GET」 | 学生关页/切后台时**草稿不落盘** |
+| V4 | **30s 定时兜底失效**（t18 已实测，captain 复核 Submit.vue:689）：`saveAllDrafts` 在 `.catch(()=>{})` 吞错后仍无条件 `clearDirty()` → 保存失败时脏标记被清、永不重试 | draft 全 500 保持脏 34s，无任何重试请求 | 弱网下**草稿静默丢失** |
+
+**判据口径**：V3/V4 是**改前既有缺陷**（Wave 3 未触碰草稿语义，符合红线），t21 须在报告里登记为「发现的既有缺陷」而非回归；两者的修复由 captain 另行派单（修复任务完成后，其验收要求见该任务契约）。
