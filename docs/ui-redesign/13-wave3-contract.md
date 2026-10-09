@@ -161,3 +161,30 @@ await page.route((u) => new URL(u.toString()).pathname.startsWith('/api/'), asyn
 
 - 截图：`docs/ui-redesign/preview/shots/wave3-baseline/`（submit-a1-active、submit-a8-scrolled、submit-writable-initial、submit-writable-monaco、submit-countdown-{gt24h,lt24h,last10min,expired}、reviewdetail-10293、reviewdetail-9102、projectreviewnew-10297、projectreviewnew-file-open、projectreviewnew-no-standard、projectreviewnew-collapsed-with-file、projectreviewnew-final）
 - 测量 JSON（会话内临时文件，数值已写入本文件）：`/tmp/t18-submit.json`、`/tmp/t18-round3.json`、`/tmp/t18-round4.json`、`/tmp/t18-round6.json`、`/tmp/t18-round7.json`
+
+---
+
+## 7. captain 契约修订（2026-10-09，t19 反馈后）
+
+> 背景：t19 实施「Workbench 三栏」（05-page-specs T3 的必做项）时发现，**三栏目标与本契约 §3 P8 的几何基线在物理上不可同时满足** —— 评分面板从「页面底部」迁到「右栏 384px」后，折叠改变的是**宽度**而非**高度**。这是契约内部的目标冲突，不是实现缺陷。
+
+### 7.1 P8 裁决：几何基线作废，语义断言保留
+
+| 项 | 原基线（t18） | 修订后（captain 裁决） |
+|---|---|---|
+| 折叠时 Monaco 几何 | 高度 479→729，宽度不变 | **宽度 564→904，高度不变**（564+340=904，340=384−44 内距）；**几何方向随壳而变，不再作为回归判据** |
+| 焦点 | 未记录 | **保留**：折叠后焦点仍在 Monaco 内部（未离开编辑器） |
+| 语义 | 面板可折叠/展开、内容不丢 | **保留**（仍为回归判据） |
+
+**判据口径**：P8 只保留「可折叠 + Monaco 不失焦 + 内容不丢」三条；几何数值按新壳记录即可，**不得再拿旧高度基线判回归**。
+
+### 7.2 R5 裁决：textarea 序号位移，语义不变
+
+评分盒迁移后，扁平 textarea 序号由 index1 变为 index2；**语义与数量不变**（第 1 小题的 AI 评语仍写入第 1 个教师评语框）。判据以「语义指向」为准，不以序号为准。
+
+### 7.3 待验收方（t21）额外核对的两项
+
+| # | 项 | 要求 |
+|---|---|---|
+| V1 | P7 轮询节拍 | t19 实测「13.5s 仅 1 次轮询」，未复现 5000ms 节拍；`POLL_INTERVAL=5000 / POLL_MAX=72` 未改动（grep 已证）。请 t21 复现并解释（是否与评分态切换/停止条件有关），结论写入报告 |
+| V2 | P10「评分中」标签 | t19 未复现；请 t21 构造评分中状态复现并登记基线 |
