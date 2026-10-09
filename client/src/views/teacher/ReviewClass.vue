@@ -1,31 +1,26 @@
 <template>
-  <div class="page">
-    <!-- 顶栏 -->
-    <div class="top-row">
-      <a-button type="link" @click="$router.push('/teacher/review')" class="back-btn">← 返回</a-button>
-      <div>
-        <h2 class="top-title">{{ assignmentTitle || '加载中...' }}</h2>
-        <div class="top-sub" v-if="className">
-          <a-tag>{{ className }}</a-tag>
-          <a-tag v-if="isPracticeMode" color="green" style="margin-left:4px">练习模式</a-tag>
-        </div>
-      </div>
-    </div>
+  <PageShell :title="assignmentTitle || '加载中...'" :description="pageDesc">
+    <template #actions>
+      <a-button type="link" @click="$router.push('/teacher/review')">← 返回评分审核</a-button>
+    </template>
 
-    <DataTable
-      ref="dtRef"
+    <ListPage
       :columns="columns"
-      :dataSource="list"
-      rowKey="id"
+      :data-source="list"
       :loading="loading"
-      v-model:current="pagination.current"
-      :pageSize="pagination.pageSize"
+      row-key="id"
       :total="pagination.total"
-      @change="onTableChange"
+      :current="pagination.current"
+      :page-size="pagination.pageSize"
+      empty-title="没有符合条件的学生"
+      empty-desc="换个筛选条件或清空搜索词后再试。"
+      empty-action-text="清空筛选"
       @page-change="onPageChange"
+      @empty-action="resetFilters"
+      @change="onTableChange"
     >
-      <template #toolbar-left>
-        <a-input-search v-model:value="keyword" placeholder="搜索学生姓名" allow-clear style="width: 240px;"
+      <template #toolbar>
+        <a-input-search v-model:value="keyword" placeholder="搜索学生姓名" allow-clear class="w-240"
           @search="fetch" @change="onSearchChange" />
         <a-radio-group v-model:value="filter" button-style="solid" size="small" @change="fetch">
           <a-radio-button value="all">全部</a-radio-button>
@@ -48,11 +43,11 @@
         <template v-if="column.key === 'studentName'">
           {{ record.studentName }}
         </template>
-        <template v-if="column.key === 'studentNo'">
+        <template v-else-if="column.key === 'studentNo'">
           {{ formatStudentNo(record.studentNo, record.schoolName) }}
         </template>
-        <template v-if="column.key === 'aiScore'">{{ record.aiScore ?? '—' }}</template>
-        <template v-if="column.key === 'finalScore'">
+        <template v-else-if="column.key === 'aiScore'">{{ record.aiScore ?? '—' }}</template>
+        <template v-else-if="column.key === 'finalScore'">
           <template v-if="!record.submitted"><span class="dim-text">—</span></template>
           <template v-else-if="editingId === record.id">
             <input
@@ -70,21 +65,24 @@
             </span>
           </template>
         </template>
-        <template v-if="column.key === 'status'">
-          <a-tag v-if="record.status === 'not_submitted'" color="default">未交</a-tag>
-          <a-tag v-else :color="statusColor(record.status)">
-            <span v-if="record.status === 'submitted'" class="spinner-dot"></span>
-            {{ statusText(record.status) }}
-          </a-tag>
+        <template v-else-if="column.key === 'status'">
+          <StatusTag v-if="record.status === 'not_submitted'" tone="neutral" text="未交" />
+          <StatusTag
+            v-else
+            :tone="statusTone(record.status)"
+            :text="statusText(record.status)"
+            :dot="record.status === 'submitted'"
+          />
         </template>
-        <template v-if="column.key === 'action'">
-          <a-button v-if="record.submitted" type="link"
-            @click="openReview(record)">审核</a-button>
-          <span v-else class="dim-text">—</span>
+        <template v-else-if="column.key === 'action'">
+          <div class="row-actions">
+            <a-button v-if="record.submitted" type="link" @click="openReview(record)">审核</a-button>
+            <span v-else class="dim-text">—</span>
+          </div>
         </template>
       </template>
-    </DataTable>
-  </div>
+    </ListPage>
+  </PageShell>
 </template>
 
 <script setup>
@@ -96,7 +94,9 @@ import request from '../../api/request.js';
 import { useUserStore } from '../../stores/user.js';
 import { savedSortField, savedSortOrder, savedPage } from '../../stores/reviewStore.js';
 import { exportReviewXlsx } from '../../infrastructure/export.js';
-import DataTable from '../../components/DataTable.vue';
+import PageShell from '../../components/PageShell.vue';
+import ListPage from '../../components/ListPage.vue';
+import StatusTag from '../../components/StatusTag.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -128,6 +128,7 @@ function openReview(record) {
   }
 }
 
+/** 表头排序：写回 reviewStore 并带参重新取数（与改前的 onTableChange 逐字一致） */
 function onTableChange(_p, _f, sorter) {
   sortField.value = sorter.order ? sorter.field : '';
   sortOrder.value = sorter.order || '';
@@ -156,21 +157,22 @@ async function saveScore(record) {
 }
 
 const columns = computed(() => [
-  { title: '姓名', key: 'studentName', width: 120, align: 'center' },
-  { title: '学号', dataIndex: 'studentNo', key: 'studentNo', width: 140, align: 'center', sorter: (a, b) => (a.studentNo || '').localeCompare(b.studentNo || ''), defaultSortOrder: sortField.value === 'studentNo' ? sortOrder.value : undefined },
-  { title: 'AI评分', dataIndex: 'aiScore', key: 'aiScore', width: 90, align: 'center', sorter: (a, b) => (a.aiScore || 0) - (b.aiScore || 0), defaultSortOrder: sortField.value === 'aiScore' ? sortOrder.value : undefined },
-  { title: '最终分', dataIndex: 'finalScore', key: 'finalScore', width: 90, align: 'center', sorter: (a, b) => (a.finalScore || 0) - (b.finalScore || 0), defaultSortOrder: sortField.value === 'finalScore' ? sortOrder.value : undefined },
-  { title: '状态', key: 'status', width: 120, align: 'center', sorter: (a, b) => (statusOrder[a.status] || 0) - (statusOrder[b.status] || 0) },
-  { title: '操作', key: 'action', width: 80, align: 'center' },
+  { title: '姓名', key: 'studentName', width: 120 },
+  { title: '学号', dataIndex: 'studentNo', key: 'studentNo', width: 140, sorter: (a, b) => (a.studentNo || '').localeCompare(b.studentNo || ''), defaultSortOrder: sortField.value === 'studentNo' ? sortOrder.value : undefined },
+  { title: 'AI评分', dataIndex: 'aiScore', key: 'aiScore', width: 90, sorter: (a, b) => (a.aiScore || 0) - (b.aiScore || 0), defaultSortOrder: sortField.value === 'aiScore' ? sortOrder.value : undefined },
+  { title: '最终分', dataIndex: 'finalScore', key: 'finalScore', width: 90, sorter: (a, b) => (a.finalScore || 0) - (b.finalScore || 0), defaultSortOrder: sortField.value === 'finalScore' ? sortOrder.value : undefined },
+  { title: '状态', key: 'status', width: 120, sorter: (a, b) => (statusOrder[a.status] || 0) - (statusOrder[b.status] || 0) },
+  { title: '操作', key: 'action', width: 80, align: 'right' },
 ]);
 
 const statusOrder = { not_submitted: 0, submitted: 1, abnormal: 2, ai_graded: 3, reviewed: 4, published: 5 };
-function statusColor(s) {
-  if (s === 'published') return 'green';
-  if (s === 'reviewed') return 'blue';
-  if (s === 'abnormal') return 'red';
-  if (s === 'ai_graded') return 'green';
-  return 'default';
+/** 状态色调（取值语义与改前的 a-tag 配色一致：green→success / blue→brand / red→danger / default→neutral） */
+function statusTone(s) {
+  if (s === 'published') return 'success';
+  if (s === 'reviewed') return 'brand';
+  if (s === 'abnormal') return 'danger';
+  if (s === 'ai_graded') return 'success';
+  return 'neutral';
 }
 function statusText(s) {
   if (s === 'published') return '已发布';
@@ -184,6 +186,14 @@ function statusText(s) {
 const isPracticeMode = computed(() => {
   const first = list.value.find(r => r.mode);
   return first?.mode === 'practice';
+});
+
+/** 页头副标题：班级名 + 练习模式（原先标题下方的两枚标签） */
+const pageDesc = computed(() => {
+  const parts = [];
+  if (className.value) parts.push(className.value);
+  if (isPracticeMode.value) parts.push('练习模式');
+  return parts.join(' · ');
 });
 
 const reviewSummary = computed(() => {
@@ -206,6 +216,13 @@ function formatStudentNo(studentNo, schoolName) {
 let timer = null;
 function onSearchChange() { clearTimeout(timer); timer = setTimeout(fetch, 300); }
 
+function resetFilters() {
+  keyword.value = '';
+  filter.value = 'all';
+  pagination.current = 1;
+  fetch();
+}
+
 async function fetch() {
   loading.value = true;
   const params = { assignmentId, page: pagination.current, pageSize: pagination.pageSize, filter: filter.value };
@@ -226,7 +243,7 @@ async function fetch() {
 
 function onPageChange(page, size) {
   pagination.current = page;
-  pagination.pageSize = size;
+  pagination.pageSize = size || pagination.pageSize;
   fetch();
 }
 
@@ -281,60 +298,32 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.page {
-  max-width: 1400px;
-  height: 100%;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.top-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 0;
-  flex-shrink: 0;
-}
-
-.back-btn {
-  flex-shrink: 0;
-  font-size: 14px;
-}
-
-.top-title {
-  font-size: 24px;
-  margin: 0;
-}
-
-.top-sub {
-  margin-top: 4px;
-}
-
-.score-val { cursor: pointer; border-bottom: 1px dashed transparent; }
-.score-val:hover { border-bottom-color: var(--blue); }
-.score-input {
-  width: 60px; height: 28px; text-align: center;
-  border: 1px solid #1677ff; border-radius: 4px; outline: none;
-  font-size: 14px;
+.w-240 {
+  width: 240px;
 }
 .dim-text {
-  color: var(--ink-muted);
+  color: var(--text-tertiary);
+}
+.row-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
-.spinner-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border: 2px solid #d9d9d9;
-  border-top-color: #1677ff;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin-right: 4px;
-  vertical-align: middle;
+/* 行内改分：点击分数进入编辑（交互未改动） */
+.score-val {
+  cursor: pointer;
+  border-bottom: 1px dashed transparent;
 }
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.score-val:hover {
+  border-bottom-color: var(--brand-600);
+}
+.score-input {
+  width: 60px;
+  height: var(--control-h-sm);
+  text-align: center;
+  border: 1px solid var(--border-focus);
+  border-radius: var(--radius-xs);
+  outline: none;
+  font-size: var(--fs-body);
 }
 </style>

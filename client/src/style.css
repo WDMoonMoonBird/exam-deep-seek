@@ -88,13 +88,21 @@ h3 { font-size: 21px; line-height: 1.19; }
 /* AntDV fine-tune */
 .ant-card { border: 1px solid var(--hairline); box-shadow: none; }
 
-/* === Apple dark sidebar (only colors) === */
-.ant-layout-sider-dark { background: var(--surface-black) !important; }
-.ant-menu-dark { background: var(--surface-black) !important; }
-.ant-menu-dark .ant-menu-item { color: var(--body-muted); }
-.ant-menu-dark .ant-menu-item:hover { color: var(--body-on-dark); }
-.ant-menu-dark .ant-menu-item-selected { color: var(--body-on-dark); }
-.ant-menu-dark .ant-menu-item-selected::after { display: none; }
+/* === 深色侧栏 / 菜单（令牌驱动，见 docs/ui-redesign/03-components.md §3.4）===
+   为什么选择器带 html 前缀：antd 的样式是运行时注入的，且它写的是
+   :where(.css-hash).ant-menu-dark（:where 不贡献优先级 → 同样是 0-1-0），
+   同优先级下后插入的 antd 会反超本文件；加一个元素选择器（0-1-1）即可稳定胜出，
+   从而不必再写强制优先级声明（本文件的强制优先级已归零）。
+   Chrome 69（StyleProvider hash-priority="high"，antd 选择器带 hash 类、优先级 +1）
+   的等效规则在 src/legacy-patch.css 里 —— 改这里必须同步改那边。 */
+/* 侧栏底色：antd 写的是 :where(.css-hash).ant-layout .ant-layout-sider（0-2-0），
+   所以这里用「两个类 + html」（0-2-1）稳定胜出；菜单本身是 0-1-0，用 html 前缀即可。 */
+html .ant-layout-sider.ant-layout-sider-dark { background: var(--sider-bg); }
+html .ant-menu-dark { background: var(--sider-bg); }
+html .ant-menu-dark .ant-menu-item { color: var(--sider-fg); }
+html .ant-menu-dark .ant-menu-item:hover:not(.ant-menu-item-selected):not(.ant-menu-submenu-selected) { color: var(--sider-fg-active); }
+html .ant-menu-dark .ant-menu-item-selected { color: var(--sider-fg-active); }
+html .ant-menu-dark .ant-menu-item-selected::after { display: none; }
 
 .form-modal .ant-modal { max-width: 1040px; }
 
@@ -103,8 +111,8 @@ h3 { font-size: 21px; line-height: 1.19; }
   /* 表格横向滚动 */
   .ant-table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
-  /* 弹窗全屏 */
-  .ant-modal { max-width: calc(100vw - 24px) !important; margin: 12px auto; }
+  /* 弹窗全屏（同样加 html 前缀抵消 antd 的运行时注入；Chrome 69 见 src/legacy-patch.css） */
+  html .ant-modal { max-width: calc(100vw - 24px); margin: 12px auto; }
 
   /* 按钮缩小 */
   .ant-btn-lg { padding: 4px 12px; font-size: 14px; }

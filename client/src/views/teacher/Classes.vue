@@ -1,38 +1,52 @@
 <template>
-  <div class="page">
-    <div class="page-header">
-      <h2>班级管理</h2>
+  <PageShell
+    title="班级管理"
+    description="维护你名下的班级；班级可加入教学团队分享给同事，也能在多个学校之间迁移。"
+  >
+    <template #actions>
       <a-button type="primary" @click="openAdd">新增班级</a-button>
-    </div>
+    </template>
 
-    <DataTable
+    <!-- TODO(P1-7): 接口支持服务端分页后切换（/teacher/classes 目前全量返回，沿用前端切片） -->
+    <ListPage
       :columns="columns"
-      :dataSource="list"
-      rowKey="id"
+      :data-source="pagedList"
       :loading="loading"
-      v-model:current="page.current"
-      :clientPagination="true"
-      :pageSize="20"
+      row-key="id"
+      :total="list.length"
+      :current="page.current"
+      :page-size="page.pageSize"
+      empty-title="还没有班级"
+      empty-desc="创建班级后，就能导入学生名单、给学生布置作业。"
+      empty-action-text="新增班级"
+      @page-change="onPageChange"
+      @empty-action="openAdd"
     >
+      <template #toolbar-right>
+        <span class="muted">共 {{ list.length }} 个班级</span>
+      </template>
+
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'name'">
           {{ record.name }}
-          <a-tag v-if="record.isTeamClass" color="purple" size="small" style="margin-left:4px">团队共享 · {{ record.ownerTeacherName }}</a-tag>
+          <StatusTag v-if="record.isTeamClass" tone="accent" :text="'团队共享 · ' + record.ownerTeacherName" />
         </template>
-        <template v-if="column.key === 'school'">{{ record.school?.name }}</template>
-        <template v-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
-        <template v-if="column.key === 'count'">{{ record._count?.studentClasses ?? 0 }}</template>
-        <template v-if="column.key === 'action'">
-          <a-space>
+        <template v-else-if="column.key === 'school'">{{ record.school?.name }}</template>
+        <template v-else-if="column.key === 'count'">{{ record._count?.studentClasses ?? 0 }}</template>
+        <template v-else-if="column.key === 'createdAt'">
+          <span class="tnum">{{ formatDateTime(record.createdAt) }}</span>
+        </template>
+        <template v-else-if="column.key === 'action'">
+          <div class="row-actions">
             <a-button type="link" @click="openEdit(record)" :disabled="record.isTeamClass">编辑</a-button>
             <a-button v-if="mySchools.length > 1" type="link" @click="openSwitchSchool(record)" :disabled="record.isTeamClass">切换学校</a-button>
             <a-popconfirm title="确定删除？" ok-text="确定" cancel-text="取消" @confirm="del(record.id)" :disabled="record.isTeamClass">
               <a-button type="link" danger :disabled="record.isTeamClass">删除</a-button>
             </a-popconfirm>
-          </a-space>
+          </div>
         </template>
       </template>
-    </DataTable>
+    </ListPage>
 
     <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" ok-text="确定" cancel-text="取消" :width="1040" wrap-class-name="form-modal">
       <a-form :model="form">
@@ -46,21 +60,27 @@
     </a-modal>
 
     <a-modal :title="switchTitle" :open="switchVisible" @ok="handleSwitch" @cancel="switchVisible = false" ok-text="确定切换" cancel-text="取消" :width="520">
-      <div style="line-height:1.8;font-size:14px">
+      <div class="switch-body">
         <p>将班级 <strong>{{ switchingClass?.name }}</strong> 从</p>
-        <p style="text-align:center;font-size:16px"><a-tag color="orange">{{ switchingClass?.school?.name }}</a-tag>  →  <a-tag color="green">{{ targetSchool?.name || '请选择' }}</a-tag></p>
-        <p style="color:#888;margin-top:12px">切换后，该班级的作业和提交记录将迁移至新学校。如该班级已加入教学团队，将自动退出所有团队。</p>
-        <a-select v-model:value="targetSchoolId" placeholder="选择目标学校" style="width:100%" :options="otherSchoolOptions" />
+        <p class="switch-pair">
+          <StatusTag tone="warning" :text="switchingClass?.school?.name || ''" />
+          <span class="switch-arrow">→</span>
+          <StatusTag tone="success" :text="targetSchool?.name || '请选择'" />
+        </p>
+        <p class="switch-warn">切换后，该班级的作业和提交记录将迁移至新学校。如该班级已加入教学团队，将自动退出所有团队。</p>
+        <a-select v-model:value="targetSchoolId" placeholder="选择目标学校" class="w-full" :options="otherSchoolOptions" />
       </div>
     </a-modal>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
 import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
-import DataTable from '../../components/DataTable.vue';
+import PageShell from '../../components/PageShell.vue';
+import ListPage from '../../components/ListPage.vue';
+import StatusTag from '../../components/StatusTag.vue';
 import { useUserStore } from '../../stores/user.js';
 import { formatDateTime } from '../../domain/format.js';
 const loading = ref(false);
@@ -79,7 +99,7 @@ const switchVisible = ref(false);
 const switchingClass = ref(null);
 const targetSchoolId = ref(undefined);
 const targetSchool = computed(() => mySchools.value.find(s => s.id === targetSchoolId.value));
-const switchTitle = computed(() => `切换学校 · ${switchingClass.value?.name || ''}`);
+const switchTitle = computed(() => '切换学校 · ' + (switchingClass.value?.name || ''));
 const otherSchoolOptions = computed(() =>
   mySchools.value
     .filter(s => s.id !== switchingClass.value?.schoolId)
@@ -91,8 +111,11 @@ const columns = [
   { title: '所属学校', key: 'school', width: 200, ellipsis: true },
   { title: '人数', key: 'count', width: 70 },
   { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true },
-  { title: '操作', key: 'action', width: 160 },
+  { title: '操作', key: 'action', width: 160, align: 'right' },
 ];
+
+/** 前端切片：接口全量返回（见上方 TODO(P1-7)） */
+const pagedList = computed(() => list.value.slice((page.current - 1) * page.pageSize, page.current * page.pageSize));
 
 async function fetch() {
   loading.value = true;
@@ -144,26 +167,44 @@ async function handleSwitch() {
   } catch { message.error('切换失败'); }
 }
 
+/** 前端切片页码（ListPage 只抛出页码，不内置请求） */
+function onPageChange(p) {
+  page.current = p;
+}
+
 onMounted(fetch);
 </script>
 
 <style scoped>
-.page {
-  max-width: 1400px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+.muted {
+  color: var(--text-tertiary);
+  font-size: var(--fs-caption);
 }
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  flex-shrink: 0;
+.tnum {
+  font-variant-numeric: tabular-nums;
 }
-.page-header h2 {
-  font-size: 28px;
-  margin: 0;
+.row-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+.switch-body {
+  line-height: 1.8;
+  font-size: var(--fs-body);
+}
+.switch-pair {
+  text-align: center;
+  font-size: var(--fs-title-3);
+}
+.switch-arrow {
+  margin: 0 var(--space-2);
+  color: var(--text-tertiary);
+}
+.switch-warn {
+  margin-top: var(--space-3);
+  color: var(--text-tertiary);
+}
+.w-full {
+  width: 100%;
 }
 </style>

@@ -1,62 +1,68 @@
 <template>
-  <div class="page">
-    <div class="page-header">
-      <h2>学生管理</h2>
-      <a-space>
-        <a-button type="primary" :disabled="!filterClass || isTeamClass" @click="openAdd">单个新增</a-button>
-        <a-button :disabled="!filterClass || isTeamClass" @click="openUploadModal">批量导入</a-button>
-      </a-space>
-    </div>
-
-    <div class="page-toolbar">
-      <a-select v-model:value="filterClass" placeholder="选择班级（必选）" allowClear @change="onClassChange" style="width: 260px;">
-        <a-select-option v-for="c in teacherClasses" :key="c.id" :value="c.id">
-          {{ c.name }}
-          <a-tag v-if="c.isTeamClass" color="purple" size="small" style="margin-left:4px">团队</a-tag>
-        </a-select-option>
-      </a-select>
-      <span v-if="selectedClassCount !== null" style="font-size:13px;color:var(--ink-muted);">
-        本班人数：<b style="color:var(--ink-base);">{{ selectedClassCount }}</b>
-      </span>
-      <a-input v-model:value="keyword" placeholder="搜索学生姓名" allowClear style="width: 220px;" :disabled="!filterClass" />
-      <a-tag v-if="isTeamClass" color="purple">团队共享班级 · 只读</a-tag>
-    </div>
-
-    <template v-if="filterClass">
-      <DataTable
-        :columns="columns"
-        :dataSource="list"
-        rowKey="id"
-        :loading="loading"
-        v-model:current="page.current"
-        :clientPagination="true"
-        :pageSize="20"
-        :scrollOffset="50"
-      >
-
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'username'">
-            <span>{{ record._displaySid }}</span>
-            <a-tag v-if="record._incomplete" color="orange" size="small" style="margin-left:4px">⚠ 待补全</a-tag>
-          </template>
-          <template v-if="column.key === 'school'">{{ record.studentClasses?.[0]?.class?.school?.name || '—' }}</template>
-          <template v-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
-          <template v-if="column.key === 'classes'">
-            <a-tag v-for="c in record.studentClasses" :key="c.classId">{{ c.class?.name }}</a-tag>
-          </template>
-          <template v-if="column.key === 'action'">
-            <a-space>
-              <a-button type="link" @click="openEdit(record)" :disabled="isTeamClass">编辑</a-button>
-              <a-popconfirm title="确定删除该学生？" ok-text="确定" cancel-text="取消" @confirm="del(record.id)" :disabled="isTeamClass">
-                <a-button type="link" danger :disabled="isTeamClass">删除</a-button>
-              </a-popconfirm>
-            </a-space>
-          </template>
-        </template>
-      </DataTable>
+  <PageShell
+    title="学生管理"
+    description="按班级维护学生名单；支持单个新增与 Excel 批量导入（缺学号或姓名的行会标为待补全）。"
+  >
+    <template #actions>
+      <a-button type="primary" :disabled="!filterClass || isTeamClass" @click="openAdd">单个新增</a-button>
+      <a-button :disabled="!filterClass || isTeamClass" @click="openUploadModal">批量导入</a-button>
     </template>
 
-    <a-empty v-else description="请先选择班级" style="flex:1;display:flex;align-items:center;justify-content:center;" />
+    <!-- TODO(P1-7): 接口支持服务端分页后切换（/teacher/students 目前全量返回，沿用前端切片） -->
+    <ListPage
+      :columns="columns"
+      :data-source="pagedList"
+      :loading="loading"
+      row-key="id"
+      :total="list.length"
+      :current="page.current"
+      :page-size="page.pageSize"
+      :empty-title="emptyTitle"
+      :empty-desc="emptyDesc"
+      :empty-action-text="emptyActionText"
+      @page-change="onPageChange"
+      @empty-action="onEmptyAction"
+    >
+      <template #toolbar>
+        <a-select v-model:value="filterClass" placeholder="选择班级（必选）" allowClear @change="onClassChange" class="w-260">
+          <a-select-option v-for="c in teacherClasses" :key="c.id" :value="c.id">
+            {{ c.name }}
+            <StatusTag v-if="c.isTeamClass" tone="accent" text="团队" />
+          </a-select-option>
+        </a-select>
+        <span v-if="selectedClassCount !== null" class="count-hint">
+          本班人数：<b class="count-strong">{{ selectedClassCount }}</b>
+        </span>
+        <a-input v-model:value="keyword" placeholder="搜索学生姓名" allowClear class="w-220" :disabled="!filterClass" />
+        <StatusTag v-if="isTeamClass" tone="accent" text="团队共享班级 · 只读" />
+      </template>
+
+      <template #toolbar-right>
+        <span class="muted">共 {{ list.length }} 名学生</span>
+      </template>
+
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'username'">
+          <span class="tnum">{{ record._displaySid }}</span>
+          <StatusTag v-if="record._incomplete" tone="warning" text="⚠ 待补全" />
+        </template>
+        <template v-else-if="column.key === 'school'">{{ record.studentClasses?.[0]?.class?.school?.name || '—' }}</template>
+        <template v-else-if="column.key === 'classes'">
+          <StatusTag v-for="c in record.studentClasses" :key="c.classId" tone="neutral" :text="c.class?.name" />
+        </template>
+        <template v-else-if="column.key === 'createdAt'">
+          <span class="tnum">{{ formatDateTime(record.createdAt) }}</span>
+        </template>
+        <template v-else-if="column.key === 'action'">
+          <div class="row-actions">
+            <a-button type="link" @click="openEdit(record)" :disabled="isTeamClass">编辑</a-button>
+            <a-popconfirm title="确定删除该学生？" ok-text="确定" cancel-text="取消" @confirm="del(record.id)" :disabled="isTeamClass">
+              <a-button type="link" danger :disabled="isTeamClass">删除</a-button>
+            </a-popconfirm>
+          </div>
+        </template>
+      </template>
+    </ListPage>
 
     <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" ok-text="确定" cancel-text="取消">
       <a-form :model="form">
@@ -85,18 +91,18 @@
       @cancel="uploadFileList = []"
     >
       <a-spin :spinning="uploading" tip="正在导入中，请稍候…">
-        <a-alert type="info" show-icon style="margin-bottom:16px;">
+        <a-alert type="info" show-icon class="mb-4">
           <template #message><div>上传格式要求</div></template>
           <template #description>
-            <ul style="margin:4px 0;padding-left:20px;font-size:13px;">
+            <ul class="fmt-list">
               <li>仅支持 <b>Excel 文件</b>（.xlsx / .xls）</li>
               <li>表头须包含 <b>学号</b> 和 <b>姓名</b> 两列</li>
               <li>学号和姓名尽量填写完整；<b>缺学号</b>或<b>缺姓名</b>的行也会导入，但标记为待补全（暂不可登录）</li>
             </ul>
           </template>
         </a-alert>
-        <div style="margin-bottom:16px;display:flex;align-items:center;gap:12px;">
-          <span style="font-size:13px;color:var(--ink-muted);">可先下载模板，按格式填写后上传：</span>
+        <div class="tpl-row">
+          <span class="tpl-hint">可先下载模板，按格式填写后上传：</span>
           <a-button size="small" @click="downloadTemplate">下载模板</a-button>
         </div>
         <a-upload-dragger
@@ -105,7 +111,7 @@
           accept=".xlsx,.xls"
           :maxCount="1"
         >
-          <p class="ant-upload-drag-icon"><inbox-outlined style="color:var(--blue);font-size:48px;" /></p>
+          <p class="ant-upload-drag-icon"><inbox-outlined class="upload-icon" /></p>
           <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
           <p class="ant-upload-hint">仅支持 Excel 格式（.xlsx / .xls）</p>
         </a-upload-dragger>
@@ -114,37 +120,35 @@
 
     <a-modal v-model:open="uploadResultOpen" title="导入结果" :footer="null" :width="520" :destroyOnClose="true">
       <!-- 全部成功、无警告 -->
-      <div v-if="uploadResult.errors.length === 0 && uploadResult.warnings.length === 0" style="text-align:center;padding:24px;">
-        <CheckCircleOutlined style="color:#52c41a;font-size:48px;" />
-        <p style="font-size:16px;margin-top:12px;">全部导入成功</p>
-        <p style="color:var(--ink-muted);">共 {{ uploadResult.success }} 名学生</p>
+      <div v-if="uploadResult.errors.length === 0 && uploadResult.warnings.length === 0" class="result-center">
+        <CheckCircleOutlined class="icon-success" />
+        <p class="result-title mt-3">全部导入成功</p>
+        <p class="muted">共 {{ uploadResult.success }} 名学生</p>
       </div>
       <!-- 有警告或错误 -->
       <div v-else>
-        <div style="text-align:center;margin-bottom:16px;">
-          <p style="font-size:16px;">
-            成功 <span style="color:#52c41a;font-weight:600;">{{ uploadResult.success }}</span> 名
-            <template v-if="uploadResult.incomplete">（含 <span style="color:#fa8c16;font-weight:600;">{{ uploadResult.incomplete }}</span> 名待补全）</template>
-            <template v-if="uploadResult.errors.length">，失败 <span style="color:#ff4d4f;font-weight:600;">{{ uploadResult.errors.length }}</span> 条</template>
+        <div class="result-head">
+          <p class="result-title">
+            成功 <span class="tone-success">{{ uploadResult.success }}</span> 名
+            <template v-if="uploadResult.incomplete">（含 <span class="tone-warning">{{ uploadResult.incomplete }}</span> 名待补全）</template>
+            <template v-if="uploadResult.errors.length">，失败 <span class="tone-danger">{{ uploadResult.errors.length }}</span> 条</template>
           </p>
         </div>
         <!-- 警告：缺字段但仍导入 -->
-        <div v-if="uploadResult.warnings.length" style="max-height:200px;overflow-y:auto;margin-bottom:12px;">
-          <div v-for="(w, i) in uploadResult.warnings" :key="'w'+i"
-            style="padding:6px 10px;margin-bottom:4px;background:#fff7e6;border:1px solid #ffd591;border-radius:4px;font-size:13px;color:#333;">
-            <ExclamationCircleOutlined style="color:#fa8c16;margin-right:6px;" />{{ w }}
+        <div v-if="uploadResult.warnings.length" class="result-list warn-list">
+          <div v-for="(w, i) in uploadResult.warnings" :key="'w'+i" class="warn-item">
+            <ExclamationCircleOutlined class="icon-warning" />{{ w }}
           </div>
         </div>
         <!-- 错误 -->
-        <div v-if="uploadResult.errors.length" style="max-height:200px;overflow-y:auto;">
-          <div v-for="(e, i) in uploadResult.errors" :key="'e'+i"
-            style="padding:6px 10px;margin-bottom:4px;background:#fff2f0;border:1px solid #ffccc7;border-radius:4px;font-size:13px;color:#333;">
-            <ExclamationCircleOutlined style="color:#ff4d4f;margin-right:6px;" />{{ e }}
+        <div v-if="uploadResult.errors.length" class="result-list">
+          <div v-for="(e, i) in uploadResult.errors" :key="'e'+i" class="err-item">
+            <ExclamationCircleOutlined class="icon-danger" />{{ e }}
           </div>
         </div>
       </div>
     </a-modal>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
@@ -153,7 +157,9 @@ import { message, Modal } from 'ant-design-vue';
 import { InboxOutlined, CheckCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons-vue';
 import * as XLSX from 'xlsx';
 import request from '../../api/request.js';
-import DataTable from '../../components/DataTable.vue';
+import PageShell from '../../components/PageShell.vue';
+import ListPage from '../../components/ListPage.vue';
+import StatusTag from '../../components/StatusTag.vue';
 import { formatDateTime } from '../../domain/format.js';
 
 const page = reactive({ current: 1, pageSize: 20 });
@@ -181,8 +187,28 @@ const columns = [
   { title: '学校', key: 'school', width: 180, ellipsis: true },
   { title: '班级', key: 'classes', width: 150 },
   { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true },
-  { title: '操作', key: 'action', width: 160 },
+  { title: '操作', key: 'action', width: 160, align: 'right' },
 ];
+
+/** 前端切片：接口全量返回（见上方 TODO(P1-7)） */
+const pagedList = computed(() => list.value.slice((page.current - 1) * page.pageSize, page.current * page.pageSize));
+
+/** 空态三态文案：未选班级 / 无搜索结果 / 班级无学生 */
+const emptyTitle = computed(() => {
+  if (!filterClass.value) return '请先选择班级';
+  if (keyword.value) return '没有匹配的学生';
+  return '这个班还没有学生';
+});
+const emptyDesc = computed(() => {
+  if (!filterClass.value) return '选择班级后即可查看该班学生名单。';
+  if (keyword.value) return '换个关键词，或清空搜索查看全部学生。';
+  return '可以单个新增，也可以用 Excel 模板批量导入。';
+});
+const emptyActionText = computed(() => {
+  if (!filterClass.value) return '';
+  if (keyword.value) return '清空搜索';
+  return '单个新增';
+});
 
 const uploadModalOpen = ref(false);
 const uploadFileList = ref([]);
@@ -385,33 +411,130 @@ async function handleUploadFile(file) {
   return false;
 }
 
+/** 前端切片页码（ListPage 只抛出页码，不内置请求） */
+function onPageChange(p) {
+  page.current = p;
+}
+
+/** 空态按钮：未选班级 → 无按钮；有搜索词 → 清空搜索；否则 → 新增学生 */
+function onEmptyAction() {
+  if (!filterClass.value) return;
+  if (keyword.value) { keyword.value = ''; return; }
+  openAdd();
+}
+
 onMounted(() => { loadClasses(); fetch(); });
 </script>
 
 <style scoped>
-.page {
-  max-width: 1400px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+.muted {
+  color: var(--text-tertiary);
+  font-size: var(--fs-caption);
 }
-.page-header {
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+.row-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+.w-260 {
+  width: 260px;
+}
+.w-220 {
+  width: 220px;
+}
+.count-hint {
+  font-size: var(--fs-body-sm);
+  color: var(--text-tertiary);
+}
+.count-strong {
+  color: var(--text-primary);
+}
+.mb-4 {
+  margin-bottom: var(--space-4);
+}
+.fmt-list {
+  margin: var(--space-1) 0;
+  padding-left: 20px;
+  font-size: var(--fs-body-sm);
+}
+.tpl-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  flex-shrink: 0;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
 }
-.page-header h2 {
-  font-size: 28px;
-  margin: 0;
+.tpl-hint {
+  font-size: var(--fs-body-sm);
+  color: var(--text-tertiary);
 }
-.page-toolbar {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 16px;
-  flex-shrink: 0;
+.upload-icon {
+  color: var(--brand-600);
+  font-size: 48px;
+}
+.result-center {
+  padding: var(--space-6);
+  text-align: center;
+}
+.result-head {
+  margin-bottom: var(--space-4);
+  text-align: center;
+}
+.result-title {
+  font-size: var(--fs-title-3);
+}
+.mt-3 {
+  margin-top: var(--space-3);
+}
+.result-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+.warn-list {
+  margin-bottom: var(--space-3);
+}
+.warn-item {
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  background: var(--status-warning-bg);
+  border: 1px solid var(--status-warning-bd);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-body-sm);
+  color: var(--text-primary);
+}
+.err-item {
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  background: var(--status-danger-bg);
+  border: 1px solid var(--status-danger-bd);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-body-sm);
+  color: var(--text-primary);
+}
+.icon-success {
+  color: var(--status-success-fg);
+  font-size: 48px;
+}
+.icon-warning {
+  margin-right: 6px;
+  color: var(--status-warning-fg);
+}
+.icon-danger {
+  margin-right: 6px;
+  color: var(--status-danger-fg);
+}
+.tone-success {
+  color: var(--status-success-fg);
+  font-weight: 600;
+}
+.tone-warning {
+  color: var(--status-warning-fg);
+  font-weight: 600;
+}
+.tone-danger {
+  color: var(--status-danger-fg);
+  font-weight: 600;
 }
 </style>

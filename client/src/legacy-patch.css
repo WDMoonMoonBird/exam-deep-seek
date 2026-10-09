@@ -11,23 +11,79 @@
  * 本文件只负责用 !important 兜底被 antd 反覆盖的关键自定义样式。
  *
  * 选择器约定：.app-topbar 为三端 Layout 共享的契约类名（跨文件稳定），
- * 颜色可用 CSS 变量覆盖（--topbar-bg/--topbar-ink/--topbar-muted/--topbar-shadow），
- * 默认值与三端 scoped 样式一致。
+ * 取值一律引用 tokens.css 中【已存在】的令牌（--topbar-bg / --topbar-bd /
+ * --text-primary / --text-tertiary / --layout-topbar-h / --space-*），
+ * 与三端 Layout 的 scoped 样式逐项对齐；不要引用未定义令牌（否则会走 fallback，
+ * 反而与现代表现不一致）。
  */
 
+/* high 模式下 antd 的 .ant-layout-header（0-2-0、后插入）会盖掉 scoped 的
+   .topbar[data-v-*]：高度 64px、左右内距 50px、文字走 antd 默认深色；
+   这里用已存在的令牌补等效值，与三端 Layout 的 .topbar scoped 样式逐项一致
+   （现代模式无阴影，故 box-shadow 显式置 none）。 */
 html.legacy .app-topbar {
-  background: var(--topbar-bg, rgba(255, 255, 255, 0.92)) !important;
-  color: var(--topbar-ink, var(--ink)) !important;
-  box-shadow: var(--topbar-shadow, 0 1px 6px rgba(0, 0, 0, 0.15)) !important;
+  background: var(--topbar-bg) !important;
+  border-bottom: 1px solid var(--topbar-bd) !important;
+  box-shadow: none !important;
+  height: var(--layout-topbar-h) !important;
+  padding: 0 var(--space-6) !important;
 }
-html.legacy .app-topbar .user-name,
+/* 文字色只固定三端 scoped 样式里显式写过的那几个（现代模式同款令牌值）；
+   容器与 .trigger 的 color 刻意不覆写 —— antd 的 .ant-layout-header 给的是
+   rgba(0, 0, 0, 0.88)，与现代模式实测值一字不差，覆写反而会偏离。 */
+html.legacy .app-topbar .user-name {
+  color: var(--text-primary) !important;
+}
 html.legacy .app-topbar .user-info,
-html.legacy .app-topbar .user-school {
-  color: var(--topbar-muted, var(--ink)) !important;
-}
+html.legacy .app-topbar .user-school,
 html.legacy .app-topbar .user-caret {
-  color: var(--topbar-muted, var(--ink-muted)) !important;
+  color: var(--text-tertiary) !important;
 }
-html.legacy .app-topbar .trigger {
-  color: var(--topbar-ink, var(--ink)) !important;
+/* 与 Layout 的移动端断点一致 */
+@media (max-width: 768px) {
+  html.legacy .app-topbar {
+    padding: 0 var(--space-3) !important;
+  }
+}
+
+/* ---- 深色侧栏 / 菜单（对应 style.css 的「深色侧栏 / 菜单」块，T7）----
+   high 模式下 antd 的 .ant-menu-dark.css-hash 是 0-2-0，style.css 的
+   html .ant-menu-dark（0-1-1）会输，故此处补 html.legacy 前缀（0-2-1）兜底。
+   取值必须与 style.css 一致：--sider-bg / --sider-fg / --sider-fg-active。 */
+html.legacy .ant-layout-sider.ant-layout-sider-dark {
+  background: var(--sider-bg) !important;
+}
+html.legacy .ant-menu-dark {
+  background: var(--sider-bg) !important;
+}
+html.legacy .ant-menu-dark .ant-menu-item {
+  color: var(--sider-fg) !important;
+}
+html.legacy .ant-menu-dark .ant-menu-item:hover:not(.ant-menu-item-selected):not(.ant-menu-submenu-selected) {
+  color: var(--sider-fg-active) !important;
+}
+html.legacy .ant-menu-dark .ant-menu-item-selected {
+  color: var(--sider-fg-active) !important;
+}
+html.legacy .ant-menu-dark .ant-menu-item-selected::after {
+  display: none !important;
+}
+/* ---- 侧栏菜单药丸 / 悬停底（对应 styles/overrides.css 的侧栏块，T2 引入）----
+   high 模式下 antd 的 .ant-menu-item.css-hash 等选择器优先级 +1，会把药丸圆角盖成
+   10px、把悬停底盖成 rgba(0,0,0,0.06)（在近黑侧栏上几乎不可见），故补等效兜底。 */
+html.legacy .ant-layout-sider .ant-menu-item,
+html.legacy .ant-layout-sider .ant-menu-submenu-title {
+  border-radius: var(--sider-item-radius) !important;
+}
+html.legacy .ant-layout-sider .ant-menu-dark .ant-menu-item:not(.ant-menu-item-selected):hover {
+  background: var(--sider-item-hover-bg) !important;
+}
+
+/* antd 在 <768px 把弹窗 max-width 收到 calc(100vw - 32px)，style.css 的
+   html .ant-modal 在 high 模式下赢不了，这里补等效兜底 */
+@media (max-width: 768px) {
+  html.legacy .ant-modal {
+    max-width: calc(100vw - 24px) !important;
+    margin: 12px auto !important;
+  }
 }

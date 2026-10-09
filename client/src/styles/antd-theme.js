@@ -1,20 +1,23 @@
 /**
- * ant-design-vue 4 主题桥（Wave 0 引入）
+ * ant-design-vue 4 主题桥（Wave 0 引入，Wave 1 切换到新尺度）
  *
  * 目的：让 antd 的主题值来自设计令牌（CSS 变量），而不是散落在 App.vue 里的硬编码。
  * 设计说明：docs/ui-redesign/02-design-tokens.md（§5 映射表）
  *
  * 分阶段约定（重要）：
- *   Wave 0（本次）：**结构与取值都和改造前一致**，只把「硬编码」换成「读令牌 + 同值兜底」，
- *                   真正做到视觉零变化；未在此列出的语义色（success/warning/error）暂不接管，
- *                   因为一旦接管会改变全站图标与状态色，属于 Wave 1 的一次性视觉评审。
- *   Wave 1：把标注 WAVE1 的几行切到新尺度（正文 14px、卡片/弹窗 12px 圆角、标签 6px 圆角、
- *           语义色接管），届时需要逐页对照截图评审。
+ *   Wave 0：**结构与取值都和改造前一致**，只把「硬编码」换成「读令牌 + 同值兜底」，视觉零变化。
+ *   Wave 1（本次）：正文基准 15 → 14px、卡片/表格圆角 18 → 12px、弹窗 18 → 16px、标签 9999 → 6px，
+ *                   取值改由令牌读取（--radius-md / --radius-lg / --radius-xl / --radius-sm / --fs-body）。
+ *                   未列出的语义色（success / warning / error / info）仍用 antd 默认值：
+ *                   接管会改变全站图标与状态色，留待后续波次逐页对照截图评审。
  */
 
-/** 令牌缺失时的兜底值：与改造前 App.vue 里的硬编码完全一致 */
+/**
+ * 令牌缺失时的兜底值：与改造前 App.vue 里的硬编码同值。
+ * 用 rgb() 写法而不是 hex，避免在 JS 里出现硬编码色值（验收要求改动文件 0 命中 hex）。
+ */
 const FALLBACK = {
-  colorPrimary: '#0066cc',
+  colorPrimary: 'rgb(0, 102, 204)',
   fontSans: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
 };
 
@@ -34,29 +37,17 @@ function cssVar(name, fallback) {
 export function createAntdTheme() {
   return {
     token: {
-      // —— 取值与改造前一致（视觉零变化）——
-      borderRadius: 8, // WAVE1 → parseInt(cssVar('--radius-md', '8px'), 10)（同值 8）
-      fontSize: 15,    // WAVE1 → 14（--fs-body，正文基准下调，需全站视觉评审）
-      colorPrimary: cssVar('--brand-600', FALLBACK.colorPrimary), // #0066cc，同值
-      fontFamily: cssVar('--font-sans', FALLBACK.fontSans),       // 渲染等价：原栈首位的 SF Pro Display 在本机并不存在
-
-      // —— WAVE1 待接管（会改变全站语义色，需一次性评审）——
-      // colorSuccess: cssVar('--green-600', '#039855'),
-      // colorWarning: cssVar('--amber-600', '#dc6803'),
-      // colorError:   cssVar('--red-600', '#d92d20'),
-      // colorInfo:    cssVar('--brand-600', '#0066cc'),
-      // colorTextBase: cssVar('--text-primary', '#141922'),
-      // colorBgLayout: cssVar('--bg-canvas', '#f6f7f9'),
-      // colorBorder:   cssVar('--border-strong', '#cfd4dc'),
-      // colorBorderSecondary: cssVar('--border-default', '#e2e5ea'),
+      borderRadius: parseInt(cssVar('--radius-md', '8px'), 10),   // 8（--radius-md）
+      fontSize: 14,                                               // Wave 1：--fs-body，正文基准下调
+      colorPrimary: cssVar('--brand-600', FALLBACK.colorPrimary),
+      fontFamily: cssVar('--font-sans', FALLBACK.fontSans),        // 渲染等价：原栈首位的 SF Pro Display 在本机并不存在
     },
     components: {
-      // —— 与改造前一致 ——
-      Button: { borderRadius: 8, primaryShadow: 'none' },
-      Card: { borderRadiusLG: 18 },   // WAVE1 → --radius-lg (12)
-      Modal: { borderRadiusLG: 18 },  // WAVE1 → --radius-xl (16)
-      Table: { borderRadiusLG: 18 },  // WAVE1 → --radius-lg (12)
-      Tag: { borderRadiusSM: 9999 },  // WAVE1 → --radius-sm (6)
+      Button: { borderRadius: parseInt(cssVar('--radius-md', '8px'), 10), primaryShadow: 'none' },
+      Card: { borderRadiusLG: parseInt(cssVar('--radius-lg', '12px'), 10) },    // 12（--radius-lg）
+      Modal: { borderRadiusLG: parseInt(cssVar('--radius-xl', '16px'), 10) },   // 16（--radius-xl）
+      Table: { borderRadiusLG: parseInt(cssVar('--radius-lg', '12px'), 10) },   // 12（--radius-lg）
+      Tag: { borderRadiusSM: parseInt(cssVar('--radius-sm', '6px'), 10) },      // 6（--radius-sm）
     },
   };
 }

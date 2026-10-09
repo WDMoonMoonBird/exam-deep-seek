@@ -1,26 +1,38 @@
 <template>
-  <div class="page">
-    <div class="page-header">
-      <h2>教师管理</h2>
+  <PageShell
+    title="教师管理"
+    description="维护教师账号、隶属学校；重置密码与删除请谨慎操作。"
+    :max-width="'var(--layout-content-max)'"
+  >
+    <template #actions>
       <a-button type="primary" @click="openAdd">新增教师</a-button>
-    </div>
+    </template>
 
-    <DataTable
+    <!-- TODO(P1-7): 接口支持服务端分页后切换（/admin/teachers 目前全量返回，暂由前端切片） -->
+    <ListPage
       :columns="columns"
-      :dataSource="list"
-      rowKey="id"
+      :data-source="pagedList"
       :loading="loading"
-      v-model:current="page.current"
-      :clientPagination="true"
-      :pageSize="20"
+      row-key="id"
+      :total="list.length"
+      :current="page.current"
+      :page-size="page.pageSize"
+      empty-title="还没有教师"
+      empty-desc="新增教师后，教师即可登录并管理自己名下的班级。"
+      empty-action-text="新增教师"
+      @page-change="onPageChange"
+      @empty-action="openAdd"
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'schools'">
-          <a-tag v-for="ts in record.teacherSchools" :key="ts.schoolId">{{ ts.school?.name }}</a-tag>
+          <template v-for="ts in record.teacherSchools" :key="ts.schoolId">
+            <StatusTag v-if="ts.school" tone="neutral" :text="ts.school.name" />
+          </template>
+          <span v-if="!record.teacherSchools?.length" class="muted">—</span>
         </template>
-        <template v-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
-        <template v-if="column.key === 'action'">
-          <a-space>
+        <template v-else-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
+        <template v-else-if="column.key === 'action'">
+          <div class="row-actions">
             <a-button type="link" @click="openEdit(record)">编辑</a-button>
             <a-popconfirm title="确定重置该教师密码？" ok-text="确定" cancel-text="取消" @confirm="resetPwd(record.id)">
               <a-button type="link">重置密码</a-button>
@@ -28,10 +40,10 @@
             <a-popconfirm v-if="record.id !== currentUserId" title="确定删除该教师？删除后其账号将无法登录，历史数据（题目/作业/成绩）保留" ok-text="删除" ok-button-props="{ danger: true }" cancel-text="取消" @confirm="removeTeacher(record)">
               <a-button type="link" danger>删除</a-button>
             </a-popconfirm>
-          </a-space>
+          </div>
         </template>
       </template>
-    </DataTable>
+    </ListPage>
 
     <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" ok-text="确定" cancel-text="取消" width="560">
       <a-form :model="form">
@@ -45,14 +57,16 @@
         </a-form-item>
       </a-form>
     </a-modal>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
 import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
-import DataTable from '../../components/DataTable.vue';
+import PageShell from '../../components/PageShell.vue';
+import ListPage from '../../components/ListPage.vue';
+import StatusTag from '../../components/StatusTag.vue';
 import { formatDateTime } from '../../domain/format.js';
 const loading = ref(false);
 const list = ref([]);
@@ -68,7 +82,7 @@ const columns = [
   { title: '姓名', dataIndex: 'realName', width: 120, ellipsis: true },
   { title: '隶属学校', key: 'schools', width: 200 },
   { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true },
-  { title: '操作', key: 'action', width: 100 },
+  { title: '操作', key: 'action', width: 100, align: 'right' },
 ];
 
 const availableSchoolOptions = computed(() =>
@@ -76,6 +90,16 @@ const availableSchoolOptions = computed(() =>
 );
 
 function getSchoolName(id) { return schools.value.find(s => s.id === id)?.name || ''; }
+
+/** /admin/teachers 目前全量返回 → 保持前端切片分页（见模板 TODO(P1-7)） */
+const pagedList = computed(() => {
+  const start = (page.current - 1) * page.pageSize;
+  return list.value.slice(start, start + page.pageSize);
+});
+
+function onPageChange(p) {
+  page.current = p;
+}
 
 async function fetch() {
   loading.value = true;
@@ -140,23 +164,19 @@ onMounted(fetch);
 </script>
 
 <style scoped>
-.page {
-  max-width: 1400px;
-  height: 100%;
+.muted {
+  color: var(--text-tertiary);
+  font-size: var(--fs-caption);
+}
+.row-actions {
   display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  gap: var(--space-1);
+  justify-content: flex-end;
 }
-.page-header {
+.school-tags {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
 }
-.page-header h2 {
-  font-size: 28px;
-  margin: 0;
-}
-.school-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 </style>

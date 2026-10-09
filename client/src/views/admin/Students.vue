@@ -1,26 +1,38 @@
 <template>
-  <div class="page">
-    <div class="page-header">
-      <h2>学生管理</h2>
+  <PageShell
+    title="学生管理"
+    description="维护学生账号，并把学生分配到班级。"
+    :max-width="'var(--layout-content-max)'"
+  >
+    <template #actions>
       <a-button type="primary" @click="openAdd">新增学生</a-button>
-    </div>
+    </template>
 
-    <DataTable
+    <!-- TODO(P1-7): 接口支持服务端分页后切换（/admin/students 目前全量返回，暂由前端切片） -->
+    <ListPage
       :columns="columns"
-      :dataSource="list"
-      rowKey="id"
+      :data-source="pagedList"
       :loading="loading"
-      v-model:current="page.current"
-      :clientPagination="true"
-      :pageSize="20"
+      row-key="id"
+      :total="list.length"
+      :current="page.current"
+      :page-size="page.pageSize"
+      empty-title="还没有学生"
+      empty-desc="新增学生后，即可把学生加入班级并参加作业。"
+      empty-action-text="新增学生"
+      @page-change="onPageChange"
+      @empty-action="openAdd"
     >
       <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
         <template v-if="column.key === 'classes'">
-          <a-tag v-for="c in record.studentClasses" :key="c.classId">{{ c.class?.name }}</a-tag>
+          <template v-for="c in record.studentClasses" :key="c.classId">
+            <StatusTag v-if="c.class" tone="neutral" :text="c.class.name" />
+          </template>
+          <span v-if="!record.studentClasses?.length" class="muted">—</span>
         </template>
+        <template v-else-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
       </template>
-    </DataTable>
+    </ListPage>
 
     <a-modal title="新增学生" :open="visible" @ok="handleOk" @cancel="visible = false" ok-text="确定" cancel-text="取消">
       <a-form :model="form">
@@ -33,13 +45,15 @@
         </a-form-item>
       </a-form>
     </a-modal>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import request from '../../api/request.js';
-import DataTable from '../../components/DataTable.vue';
+import PageShell from '../../components/PageShell.vue';
+import ListPage from '../../components/ListPage.vue';
+import StatusTag from '../../components/StatusTag.vue';
 import { formatDateTime } from '../../domain/format.js';
 const loading = ref(false);
 const list = ref([]);
@@ -54,6 +68,16 @@ const columns = [
   { title: '班级', key: 'classes', width: 180 },
   { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true },
 ];
+
+/** /admin/students 目前全量返回 → 保持前端切片分页（见模板 TODO(P1-7)） */
+const pagedList = computed(() => {
+  const start = (page.current - 1) * page.pageSize;
+  return list.value.slice(start, start + page.pageSize);
+});
+
+function onPageChange(p) {
+  page.current = p;
+}
 
 async function fetch() {
   loading.value = true;
@@ -78,22 +102,8 @@ onMounted(fetch);
 </script>
 
 <style scoped>
-.page {
-  max-width: 1400px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  flex-shrink: 0;
-}
-.page-header h2 {
-  font-size: 28px;
-  margin: 0;
+.muted {
+  color: var(--text-tertiary);
+  font-size: var(--fs-caption);
 }
 </style>

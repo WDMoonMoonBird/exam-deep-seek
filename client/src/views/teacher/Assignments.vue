@@ -1,37 +1,50 @@
 <template>
-  <div class="page">
-    <header class="page-head">
-      <div>
-        <h2 class="page-title">作业管理</h2>
-        <p class="page-desc">布置作业、跟踪提交与评分进度；AI 评分完成后会自动推送到「评分审核」。</p>
-      </div>
-      <div class="page-actions">
-        <a-button @click="fetch">刷新</a-button>
-        <a-button type="primary" @click="openAdd">布置作业</a-button>
-      </div>
-    </header>
+  <PageShell
+    title="作业管理"
+    description="布置作业、跟踪提交与评分进度；AI 评分完成后会自动推送到「评分审核」。"
+  >
+    <template #actions>
+      <a-button @click="fetch">刷新</a-button>
+      <a-button type="primary" @click="openAdd">布置作业</a-button>
+    </template>
 
     <!-- KPI：只用后端真实返回的数据（docs/ui-redesign/06-api-gap.md §5 已剔除示意数字） -->
-    <section class="kpi-row">
-      <div class="kpi">
-        <div class="kpi-label">作业总数</div>
-        <div class="kpi-value tnum">{{ pagination.total }}<small>份</small></div>
-        <div class="kpi-sub">{{ hasFilter ? '当前筛选结果' : '全部作业' }}</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">待审核提交</div>
-        <div class="kpi-value tnum tone-warn">{{ summary.pendingReview }}<small>份</small></div>
-        <div class="kpi-sub">与「评分审核」页数字同源</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">AI 评分中</div>
-        <div class="kpi-value tnum">{{ summary.aiPending }}<small>份</small></div>
-        <div class="kpi-sub">{{ summary.abnormal ? summary.abnormal + ' 份评分异常' : '无异常' }}</div>
-      </div>
-    </section>
+    <template #kpi>
+      <section class="kpi-row">
+        <div class="kpi">
+          <div class="kpi-label">作业总数</div>
+          <div class="kpi-value tnum">{{ pagination.total }}<small>份</small></div>
+          <div class="kpi-sub">{{ hasFilter ? '当前筛选结果' : '全部作业' }}</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">待审核提交</div>
+          <div class="kpi-value tnum tone-warn">{{ summary.pendingReview }}<small>份</small></div>
+          <div class="kpi-sub">与「评分审核」页数字同源</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">AI 评分中</div>
+          <div class="kpi-value tnum">{{ summary.aiPending }}<small>份</small></div>
+          <div class="kpi-sub">{{ summary.abnormal ? summary.abnormal + ' 份评分异常' : '无异常' }}</div>
+        </div>
+      </section>
+    </template>
 
-    <div class="card">
-      <div class="toolbar">
+    <!-- 服务端分页 + 服务端筛选：/teacher/assignments 支持 page / pageSize / keyword / classId / status -->
+    <ListPage
+      :columns="columns"
+      :data-source="list"
+      :loading="loading"
+      row-key="id"
+      :total="pagination.total"
+      :current="pagination.current"
+      :page-size="pagination.pageSize"
+      :empty-title="hasFilter ? '没有符合条件的作业' : '还没有布置过作业'"
+      :empty-desc="hasFilter ? '换个关键词或清空筛选后再试。' : '从题库选择题目并指定班级，学生即可在作业列表中看到它。'"
+      :empty-action-text="hasFilter ? '清空筛选' : '布置第一份作业'"
+      @page-change="onPageChange"
+      @empty-action="onEmptyAction"
+    >
+      <template #toolbar>
         <a-input-search
           v-model:value="filters.keyword"
           placeholder="搜索作业名称"
@@ -56,94 +69,64 @@
           @change="applyFilters"
         />
         <a-button v-if="hasFilter" type="link" @click="resetFilters">重置</a-button>
-        <span class="grow"></span>
+      </template>
+
+      <template #toolbar-right>
         <span class="muted">共 {{ pagination.total }} 份</span>
-      </div>
+      </template>
 
-      <a-table
-        class="tbl"
-        :columns="columns"
-        :data-source="list"
-        row-key="id"
-        :loading="loading"
-        :pagination="false"
-      >
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'title'">
-            <div class="cell-title">
-              <span class="ellipsis" :title="record.title">{{ record.title }}</span>
-              <span v-if="record.mode === 'practice'" class="tag tag-accent">练习</span>
-              <lock-outlined v-if="record.locked" class="lock-icon" title="已锁定" />
-            </div>
-            <div v-if="record.description" class="cell-sub ellipsis" :title="record.description">{{ record.description }}</div>
-          </template>
-
-          <template v-else-if="column.key === 'classes'">
-            <span v-for="ac in visibleClasses(record)" :key="ac.classId" class="tag tag-neutral">{{ ac.class?.name }}</span>
-            <span v-if="hiddenClassCount(record) > 0" class="tag tag-outline">+{{ hiddenClassCount(record) }}</span>
-            <span v-if="!record.assignmentClasses?.length" class="muted">—</span>
-          </template>
-
-          <template v-else-if="column.key === 'qCount'">
-            <span class="tnum">{{ record._count?.assignmentQuestions || 0 }}</span>
-          </template>
-
-          <template v-else-if="column.key === 'progress'">
-            <div class="progress-row">
-              <div class="progress"><i :style="{ width: progressOf(record).percent + '%' }"></i></div>
-              <span class="tnum muted">{{ progressOf(record).done }}/{{ progressOf(record).total }}</span>
-            </div>
-          </template>
-
-          <template v-else-if="column.key === 'status'">
-            <span :class="['tag', 'tag-' + rowStatus(record).tone]"><i class="tag-dot"></i>{{ rowStatus(record).text }}</span>
-            <router-link
-              v-if="record.pendingReviewCount > 0"
-              class="tag tag-warning tag-link"
-              :to="{ path: '/teacher/review' }"
-            >待审核 {{ record.pendingReviewCount }}</router-link>
-          </template>
-
-          <template v-else-if="column.key === 'deadline'">
-            <div class="tnum">{{ formatDateTime(record.endTime) }}</div>
-            <div class="cell-sub">
-              <span :class="'tone-' + deadlineInfo(record.endTime).tone">{{ deadlineInfo(record.endTime).text }}</span>
-            </div>
-          </template>
-
-          <template v-else-if="column.key === 'action'">
-            <div class="row-actions">
-              <a-button type="link" size="small" @click="toggleLock(record)">
-                {{ record.locked ? '解锁' : '锁定' }}
-              </a-button>
-            </div>
-          </template>
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'title'">
+          <div class="cell-title">
+            <span class="ellipsis" :title="record.title">{{ record.title }}</span>
+            <StatusTag v-if="record.mode === 'practice'" tone="accent" text="练习" />
+            <lock-outlined v-if="record.locked" class="lock-icon" title="已锁定" />
+          </div>
+          <div v-if="record.description" class="cell-sub ellipsis" :title="record.description">{{ record.description }}</div>
         </template>
 
-        <template #emptyText>
-          <div class="empty">
-            <div class="empty-title">{{ hasFilter ? '没有符合条件的作业' : '还没有布置过作业' }}</div>
-            <div class="empty-desc">
-              {{ hasFilter ? '换个关键词或清空筛选后再试。' : '从题库选择题目并指定班级，学生即可在作业列表中看到它。' }}
-            </div>
-            <a-button v-if="hasFilter" @click="resetFilters">清空筛选</a-button>
-            <a-button v-else type="primary" @click="openAdd">布置第一份作业</a-button>
+        <template v-else-if="column.key === 'classes'">
+          <StatusTag v-for="ac in visibleClasses(record)" :key="ac.classId" tone="neutral" :text="ac.class?.name" />
+          <span v-if="hiddenClassCount(record) > 0" class="chip-more">+{{ hiddenClassCount(record) }}</span>
+          <span v-if="!record.assignmentClasses?.length" class="muted">—</span>
+        </template>
+
+        <template v-else-if="column.key === 'qCount'">
+          <span class="tnum">{{ record._count?.assignmentQuestions || 0 }}</span>
+        </template>
+
+        <template v-else-if="column.key === 'progress'">
+          <div class="progress-row">
+            <div class="progress"><i :style="{ width: progressOf(record).percent + '%' }"></i></div>
+            <span class="tnum muted">{{ progressOf(record).done }}/{{ progressOf(record).total }}</span>
           </div>
         </template>
-      </a-table>
 
-      <div class="table-foot">
-        <span>第 {{ pagination.current }} 页 · 每页 {{ pagination.pageSize }} 条</span>
-        <a-pagination
-          v-model:current="pagination.current"
-          :page-size="pagination.pageSize"
-          :total="pagination.total"
-          :show-size-changer="false"
-          size="small"
-          @change="onPageChange"
-        />
-      </div>
-    </div>
+        <template v-else-if="column.key === 'status'">
+          <StatusTag :tone="rowStatus(record).tone" :text="rowStatus(record).text" dot />
+          <router-link
+            v-if="record.pendingReviewCount > 0"
+            class="tag-link"
+            :to="{ path: '/teacher/review' }"
+          ><StatusTag tone="warning" :text="'待审核 ' + record.pendingReviewCount" /></router-link>
+        </template>
+
+        <template v-else-if="column.key === 'deadline'">
+          <div class="tnum">{{ formatDateTime(record.endTime) }}</div>
+          <div class="cell-sub">
+            <span :class="'tone-' + deadlineInfo(record.endTime).tone">{{ deadlineInfo(record.endTime).text }}</span>
+          </div>
+        </template>
+
+        <template v-else-if="column.key === 'action'">
+          <div class="row-actions">
+            <a-button type="link" size="small" @click="toggleLock(record)">
+              {{ record.locked ? '解锁' : '锁定' }}
+            </a-button>
+          </div>
+        </template>
+      </template>
+    </ListPage>
 
     <a-modal title="布置作业" :open="visible" @cancel="visible = false" :width="1040" :footer="null" :destroyOnClose="true" wrap-class-name="assign-modal">
       <a-steps :current="step" class="steps">
@@ -167,7 +150,7 @@
             <div v-for="c in filteredClasses" :key="c.id"
               :class="['pick-item', { on: selectedCIds.includes(c.id) }]"
               @click="toggleClass(c.id)">
-              <span>{{ c.name }}<a-tag v-if="c.isTeamClass" color="purple" size="small" style="margin-left:4px;font-size:10px;">团队</a-tag></span>
+              <span>{{ c.name }}<StatusTag v-if="c.isTeamClass" tone="accent" text="团队" /></span>
               <CheckOutlined v-if="selectedCIds.includes(c.id)" class="pick-check" />
             </div>
             <a-empty v-if="!filteredClasses.length" :image="false" description="无匹配班级" />
@@ -178,7 +161,7 @@
           <div class="pick-list">
             <a-tag v-for="cid in selectedCIds" :key="cid" closable @close="toggleClass(cid)" :color="classTeamMap[cid] ? 'purple' : 'blue'">
               {{ classNameMap[cid] }}
-              <span v-if="classTeamMap[cid]" style="font-size:10px;"> · {{ classTeamMap[cid] }}</span>
+              <span v-if="classTeamMap[cid]" class="pick-team"> · {{ classTeamMap[cid] }}</span>
             </a-tag>
             <a-empty v-if="!selectedCIds.length" :image="false" description="请从左侧选择" />
           </div>
@@ -192,8 +175,8 @@
           <a-form-item label="起止时间"><a-range-picker v-model:value="timeForm.timeRange" show-time :locale="dateLocale" /></a-form-item>
           <a-form-item label="练习模式"><a-switch :checked="timeForm.isPractice" @change="onPracticeToggle" /></a-form-item>
           <a-form-item v-if="timeForm.isPractice" label="允许提交次数">
-            <a-input-number v-model:value="timeForm.maxAttempts" :min="1" placeholder="不限" style="width:120px" />
-            <span style="margin-left:8px;color:var(--text-tertiary);font-size:13px">留空为不限次数</span>
+            <a-input-number v-model:value="timeForm.maxAttempts" :min="1" placeholder="不限" class="w-120" />
+            <span class="hint-inline">留空为不限次数</span>
           </a-form-item>
           <a-form-item v-if="!timeForm.isPractice" label="允许补交"><a-switch v-model:checked="timeForm.allowResubmit" /></a-form-item>
         </a-form>
@@ -205,7 +188,7 @@
         <a-button v-if="step === 2" type="primary" :loading="submitting" @click="submit">提交</a-button>
       </div>
     </a-modal>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
@@ -216,6 +199,9 @@ import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
 import dateLocale from 'ant-design-vue/es/date-picker/locale/zh_CN';
 import request from '../../api/request.js';
+import PageShell from '../../components/PageShell.vue';
+import ListPage from '../../components/ListPage.vue';
+import StatusTag from '../../components/StatusTag.vue';
 import { formatDateTime, difficultyText, deadlineInfo, timeStatus } from '../../domain/format.js';
 
 dayjs.locale('zh-cn');
@@ -310,6 +296,12 @@ function resetFilters() {
 function onPageChange(page) {
   pagination.current = page;
   fetch();
+}
+
+/** 空态按钮：有筛选 → 清空筛选；无数据 → 布置第一份作业 */
+function onEmptyAction() {
+  if (hasFilter.value) resetFilters();
+  else openAdd();
 }
 
 // ===================== 布置作业向导（逻辑未改动） =====================
@@ -419,7 +411,7 @@ async function submit() {
       title: '确认按开放性题目布置',
       content: h('div', { style: 'line-height:1.7' }, [
         h('div', '以下题目未上传标准工程包，AI 将仅依据评分标准做评价式评分（不与参考答案对比）：' + names + '。确认按开放性题目布置？'),
-        h('ul', { style: 'margin:8px 0 0;padding-left:18px;color:#8c8c8c;font-size:13px' },
+        h('ul', { style: 'margin:8px 0 0;padding-left:18px;color:var(--text-tertiary);font-size:var(--fs-body-sm)' },
           warnings.filter(w => w.message).map(w => h('li', w.message))),
       ]),
       okText: '确认布置',
@@ -454,17 +446,17 @@ function onPracticeToggle(checked) {
   ];
 
   const content = h('div', { style: 'padding:4px 0' }, [
-    h('p', { style: 'margin:0 0 16px;color:#555;font-size:14px' }, '开启后，该作业将变为练习模式：'),
+    h('p', { style: 'margin:0 0 16px;color:var(--text-secondary);font-size:var(--fs-body)' }, '开启后，该作业将变为练习模式：'),
     ...items.map((item, i) =>
       h('div', { style: 'display:flex;align-items:flex-start;gap:12px;margin-bottom:' + (i < items.length - 1 ? '12px' : '0') }, [
-        h('span', { style: 'display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#52c41a;color:#fff;font-size:12px;font-weight:700;flex-shrink:0' }, i + 1),
+        h('span', { style: 'display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--status-success-fg);color:var(--text-inverse);font-size:var(--fs-caption);font-weight:700;flex-shrink:0' }, i + 1),
         h('div', { style: 'line-height:1.5' }, [
-          h('div', { style: 'font-weight:600;font-size:13px;color:#333' }, item.title),
-          h('div', { style: 'font-size:12px;color:#888' }, item.desc),
+          h('div', { style: 'font-weight:600;font-size:var(--fs-body-sm);color:var(--text-primary)' }, item.title),
+          h('div', { style: 'font-size:var(--fs-caption);color:var(--text-tertiary)' }, item.desc),
         ]),
       ])
     ),
-    h('div', { style: 'margin-top:16px;padding:10px 12px;background:#fff7e6;border-radius:6px;border:1px solid #ffd591;font-size:13px;color:#ad6800' },
+    h('div', { style: 'margin-top:16px;padding:10px 12px;background:var(--status-warning-bg);border-radius:var(--radius-sm);border:1px solid var(--status-warning-bd);font-size:var(--fs-body-sm);color:var(--status-warning-fg)' },
       '开启后将无法切换回考试模式。确定开启练习模式吗？'
     ),
   ]);
@@ -486,13 +478,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* ===== 页面骨架（Wave 1 将提取为 PageShell/ListPage，见 docs/ui-redesign/05-page-specs.md） ===== */
-.page { max-width: var(--layout-content-max); }
-.page-head { display: flex; align-items: flex-start; gap: var(--space-4); margin-bottom: var(--space-5); }
-.page-title { margin: 0 0 4px; font-size: var(--fs-title-1); line-height: var(--lh-title-1); font-weight: 600; color: var(--text-strong); letter-spacing: var(--tracking-tight); }
-.page-desc { margin: 0; font-size: var(--fs-body); color: var(--text-secondary); }
-.page-actions { margin-left: auto; display: flex; gap: var(--space-2); }
-
+/* ===== KPI 行（外壳 PageShell 只负责位置，卡片样式在本页） ===== */
 .kpi-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); margin-bottom: var(--space-4); }
 .kpi { padding: 16px 18px; background: var(--card-bg); border: 1px solid var(--card-bd); border-radius: var(--card-radius); }
 .kpi-label { font-size: var(--fs-body-sm); color: var(--text-secondary); }
@@ -501,48 +487,22 @@ onMounted(async () => {
 .kpi-value small { margin-left: 4px; font-size: var(--fs-body-sm); font-weight: 400; color: var(--text-tertiary); }
 .kpi-sub { margin-top: 4px; font-size: var(--fs-caption); color: var(--text-tertiary); }
 
-.card { background: var(--card-bg); border: 1px solid var(--card-bd); border-radius: var(--card-radius); }
-.toolbar { display: flex; align-items: center; gap: var(--space-2); padding: 12px var(--card-pad); border-bottom: 1px solid var(--border-subtle); flex-wrap: wrap; }
-.toolbar .grow { flex: 1; }
 .w-260 { width: 260px; }
 .w-200 { width: 200px; }
 .w-160 { width: 160px; }
+.w-120 { width: 120px; }
+.hint-inline { margin-left: var(--space-2); color: var(--text-tertiary); font-size: var(--fs-body-sm); }
 .muted { color: var(--text-tertiary); font-size: var(--fs-caption); }
 .tnum { font-variant-numeric: tabular-nums; }
 .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* ===== 表格（目标：去竖线、表头左对齐、行高走令牌） ===== */
-.tbl :deep(.ant-table) { background: transparent; }
-.tbl :deep(.ant-table-thead > tr > th) {
-  background: var(--table-header-bg);
-  color: var(--table-header-fg);
-  font-size: var(--fs-body-sm);
-  font-weight: 600;
-  text-align: left;
-  border-bottom: 1px solid var(--border-default);
-  padding: var(--table-cell-pad-y) var(--table-cell-pad-x);
-}
-.tbl :deep(.ant-table-thead > tr > th::before) { display: none; }
-.tbl :deep(.ant-table-tbody > tr > td) {
-  padding: var(--table-cell-pad-y) var(--table-cell-pad-x);
-  border-bottom: 1px solid var(--table-bd);
-  vertical-align: middle;
-}
-.tbl :deep(.ant-table-tbody > tr:hover > td) { background: var(--table-row-hover); }
-.tbl :deep(.ant-table-tbody > tr:last-child > td) { border-bottom: 0; }
 
 .cell-title { display: flex; align-items: center; gap: 6px; font-weight: 500; color: var(--text-strong); }
 .cell-title .ellipsis { max-width: 200px; }
 .cell-sub { margin-top: 3px; font-size: var(--fs-caption); color: var(--text-tertiary); }
 .lock-icon { color: var(--red-600); font-size: 12px; }
 
-.tag { display: inline-flex; align-items: center; gap: 5px; height: var(--tag-h); padding: 0 var(--tag-pad-x); margin-right: 4px; border-radius: var(--tag-radius); font-size: var(--tag-fs); font-weight: 500; line-height: 1; white-space: nowrap; }
-.tag-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.tag-neutral { background: var(--status-neutral-bg); color: var(--status-neutral-fg); }
-.tag-success { background: var(--status-success-bg); color: var(--status-success-fg); }
-.tag-warning { background: var(--status-warning-bg); color: var(--status-warning-fg); }
-.tag-accent { background: var(--status-accent-bg); color: var(--status-accent-fg); }
-.tag-outline { background: transparent; border: 1px solid var(--border-strong); color: var(--text-secondary); }
+/* 超出 2 个班级后的「+N」计数片（不是状态，走描边样式） */
+.chip-more { display: inline-flex; align-items: center; height: var(--tag-h); padding: 0 var(--tag-pad-x); margin-right: 4px; border-radius: var(--tag-radius); border: 1px solid var(--border-strong); color: var(--text-secondary); font-size: var(--tag-fs); white-space: nowrap; }
 .tag-link { text-decoration: none; }
 .tag-link:hover { filter: brightness(0.96); }
 
@@ -555,11 +515,6 @@ onMounted(async () => {
 .tone-normal { color: var(--text-tertiary); }
 
 .row-actions { display: flex; gap: 4px; justify-content: flex-end; }
-.table-foot { display: flex; align-items: center; justify-content: space-between; padding: 12px var(--card-pad); border-top: 1px solid var(--border-subtle); font-size: var(--fs-caption); color: var(--text-tertiary); }
-
-.empty { padding: 32px 16px; text-align: center; }
-.empty-title { font-size: var(--fs-title-3); font-weight: 600; color: var(--text-primary); }
-.empty-desc { margin: 6px 0 16px; font-size: var(--fs-body-sm); color: var(--text-tertiary); }
 
 @media (max-width: 1100px) {
   .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -577,4 +532,5 @@ onMounted(async () => {
 .pick-item:hover { background: var(--brand-50); }
 .pick-item.on { background: var(--brand-50); color: var(--brand-700); }
 .pick-check { font-size: 12px; }
+.pick-team { font-size: var(--fs-caption); }
 </style>

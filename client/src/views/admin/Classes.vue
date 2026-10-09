@@ -1,32 +1,44 @@
 <template>
-  <div class="page">
-    <div class="page-header">
-      <h2>班级管理</h2>
+  <PageShell
+    title="班级管理"
+    description="维护各学校的班级，并为班级指定任课教师。"
+    :max-width="'var(--layout-content-max)'"
+  >
+    <template #actions>
       <a-button type="primary" @click="openAdd">新增班级</a-button>
-    </div>
+    </template>
 
-    <DataTable
+    <!-- TODO(P1-7): 接口支持服务端分页后切换（/admin/classes 目前全量返回，暂由前端切片） -->
+    <ListPage
       :columns="columns"
-      :dataSource="list"
-      rowKey="id"
+      :data-source="pagedList"
       :loading="loading"
-      v-model:current="page.current"
-      :clientPagination="true"
-      :pageSize="20"
+      row-key="id"
+      :total="list.length"
+      :current="page.current"
+      :page-size="page.pageSize"
+      empty-title="还没有班级"
+      empty-desc="创建班级后，就可以把教师和学生分配进去。"
+      empty-action-text="新增班级"
+      @page-change="onPageChange"
+      @empty-action="openAdd"
     >
       <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'school'">{{ record.school?.name }}</template>
-        <template v-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
-        <template v-if="column.key === 'action'">
-          <a-space>
+        <template v-if="column.key === 'school'">
+          <StatusTag v-if="record.school" tone="neutral" :text="record.school.name" />
+          <span v-else class="muted">—</span>
+        </template>
+        <template v-else-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
+        <template v-else-if="column.key === 'action'">
+          <div class="row-actions">
             <a-button type="link" @click="openEdit(record)">编辑</a-button>
             <a-popconfirm title="确定删除？" ok-text="确定" cancel-text="取消" @confirm="del(record.id)">
               <a-button type="link" danger>删除</a-button>
             </a-popconfirm>
-          </a-space>
+          </div>
         </template>
       </template>
-    </DataTable>
+    </ListPage>
 
     <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" ok-text="确定" cancel-text="取消" :width="1040" wrap-class-name="form-modal">
       <a-form :model="form">
@@ -43,13 +55,15 @@
         </a-form-item>
       </a-form>
     </a-modal>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import request from '../../api/request.js';
-import DataTable from '../../components/DataTable.vue';
+import PageShell from '../../components/PageShell.vue';
+import ListPage from '../../components/ListPage.vue';
+import StatusTag from '../../components/StatusTag.vue';
 import { formatDateTime } from '../../domain/format.js';
 
 const loading = ref(false);
@@ -67,8 +81,18 @@ const columns = [
   { title: '班级名称', dataIndex: 'name', width: 180, ellipsis: true },
   { title: '所属学校', key: 'school', width: 200, ellipsis: true },
   { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true },
-  { title: '操作', key: 'action', width: 160 },
+  { title: '操作', key: 'action', width: 160, align: 'right' },
 ];
+
+/** /admin/classes 目前全量返回 → 保持前端切片分页（见模板 TODO(P1-7)） */
+const pagedList = computed(() => {
+  const start = (page.current - 1) * page.pageSize;
+  return list.value.slice(start, start + page.pageSize);
+});
+
+function onPageChange(p) {
+  page.current = p;
+}
 
 async function fetch() {
   loading.value = true;
@@ -108,22 +132,13 @@ onMounted(fetch);
 </script>
 
 <style scoped>
-.page {
-  max-width: 1400px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+.muted {
+  color: var(--text-tertiary);
+  font-size: var(--fs-caption);
 }
-.page-header {
+.row-actions {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  flex-shrink: 0;
-}
-.page-header h2 {
-  font-size: 28px;
-  margin: 0;
+  gap: var(--space-1);
+  justify-content: flex-end;
 }
 </style>
