@@ -73,3 +73,4 @@
 | R-4 | 时间格式统一为 `YYYY-MM-DD HH:mm`（现为 `2026/8/24 19:01`）；`formatDateTime` 被 20+ 页使用，需一次性切换 | Wave 0 已知差异 | Wave 1 收尾 / Wave 4 |
 | R-5 | P1-7（7 个列表接口服务端分页）到位后，切换 admin 4 页与 teacher classes/students/teams 的前端切片（代码中已标 `TODO(P1-7)`） | 后端未交付 | 依赖后端 |
 | R-6 | 深色日志区（admin/Monitor）复用 `--bg-inverse`/`--text-inverse-muted`；评估是否新增 `--log-bg`/`--log-fg` 语义令牌 | T4 令牌缺口反馈 | Wave 2 评估 |
+| R-7 | **删除 `components/DataTable.vue`（323 行死代码）**：13 个列表页全部迁移到 ListPage 后，全仓 0 引用（用 grep 在 client/src 的 .vue 里检索无结果）。删除前再跑一次引用检查 | captain 抽验时发现 | Wave 2 清理 |
