@@ -82,3 +82,6 @@
 | R-13 | 字阶下沿缺口：`10px×2` 与 `11px×6` 无对应令牌（按规则保留字面量）；评估是否新增 `--fs-caption-sm` 之类 | t14 字号清单 | Wave 4 评估 |
 | R-14 | Modal 宽度未收敛到设计三档（小 480 / 中 640 / 大 820）且存在字符串写法（\"720px\"/\"820px\"，设计稿明令禁止混写）：QuestionEdit 760/520、ProjectQuestionEdit 720px、ReviewDetail 820px、ProjectReviewNew 820px、teacher/Layout 420/1040（1040 为 AI 评分流程内容型弹窗，评估是否保留为例外） | captain 抽验 t14/t15 时发现 | Wave 3 一并收口（Wave 3 会动后两者） |
 | R-15 | 对话框文案未全程动词化：6 处声明式 \`a-modal\` 的 \`ok-text="确定"\`（admin/Students:37、admin/Teachers:48、admin/Classes:43、teacher/Students:67、teacher/Classes:51、teacher/Teams:51）+ teacher/Classes:62「确定切换」+ QuestionEdit:66/135 两处 popconfirm \`title="确定删除？" ok-text="确定"\` | T16 §13①② | Wave 3 一并收口 |
+| R-16 | **倒计时**：设计稿 05-page-specs T4 有、代码中不存在（仅到点强制提交 + 一句文案）→ 属**新增功能**，非本批范围 | t18 契约实测 / captain 复核 | 待用户裁决（captain 建议：记入本池，Wave 4 后再议） |
+| R-17 | 工作台评分面板折叠后 `activeElement=BODY`（面板头不可聚焦、不抢焦点）——验收方判定为设计取舍 | t21 §9⑤ | Wave 4 a11y 收尾（captain 倾向接受现状：折叠本不该抢焦点） |
+| R-18 | ✅ **已修复（t22，待 t23 独立验收）**：V3 beforeunload `fetch` 被同名加载器遮蔽（改 `window.fetch` + 加载器更名 `loadAssignment`）、V4 `clearDirty` 失败仍清脏（改 `allSaved` 才清）、V5 Monaco 懒挂载首帧竞态、S3 题号方块键盘不可达（`role=button`+`tabindex`+`aria-label`） | t18/t20/t21 实测 + captain 复核 | **已完成修复** |
