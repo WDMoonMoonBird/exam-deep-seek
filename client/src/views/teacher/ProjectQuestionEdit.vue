@@ -47,7 +47,7 @@
 
     <!-- 评分标准模态框 -->
     <a-modal v-model:open="showRubricModal" :title="isTeacher ? '评分标准' : '评分标准（只读）'" width="640px">
-      <a-textarea v-if="isTeacher" v-model:value="rubricDraft" :rows="12" placeholder="请逐行填写评分项..." />
+      <a-textarea v-if="isTeacher" v-model:value="rubricDraft" :rows="12" placeholder="建议逐条写明必须完成的功能并注明分值，AI 会逐条核对。" />
       <div v-else class="readonly-rubric">{{ form.scoringRubric || '未填写，使用默认标准：功能完整性50% + 代码规范25% + 健壮性25%' }}</div>
       <div v-if="isTeacher" style="margin-top:8px;font-size:12px;color:#999;">不填写则使用默认标准：功能完整性50% + 代码规范25% + 健壮性25%</div>
       <template #footer>
@@ -59,14 +59,14 @@
       </template>
     </a-modal>
 
-    <!-- AI 提示词预览（编辑页模板：标准包真实内容，学生代码占位） -->
+    <!-- AI 提示词预览（编辑页模板：有标准包时展示标准包真实内容；开放性题目无标准答案段，学生代码占位） -->
     <a-modal v-model:open="promptModalOpen" title="AI 提示词（与实评一致，学生代码以占位符显示）" :footer="null" width="820px">
       <a-spin :spinning="promptLoading">
         <template v-if="promptPreview">
           <div class="prompt-block">
             <div class="prompt-role-label">System（角色设定）</div>
             <pre class="prompt-pre">{{ promptPreview.system }}</pre>
-            <div class="prompt-role-label">User（评分任务，含标准工程源码）</div>
+            <div class="prompt-role-label">User（评分任务，{{ promptUserPartLabel }}）</div>
             <pre class="prompt-pre">{{ promptPreview.user }}</pre>
           </div>
         </template>
@@ -103,12 +103,18 @@
     <Transition name="kind-pick-switch" mode="out-in">
       <!-- 阶段一：整页居中上传入口（圆形按钮 + 提示） -->
       <div v-if="!hasUploaded" key="picker" class="ide-stage">
-        <ProjectZipUploader
-          :hint="isTeacher ? '点击上传标准工程包' : '点击上传项目文件'"
-          v-model:package="form.packageFile"
-          @ready="onZipReady"
-          @error="(m) => message.error(m)"
-        />
+        <div class="picker-slot">
+          <ProjectZipUploader
+            :hint="isTeacher ? '点击上传标准工程包' : '点击上传项目文件'"
+            v-model:package="form.packageFile"
+            @ready="onZipReady"
+            @error="(m) => message.error(m)"
+          />
+        </div>
+        <!-- 开放性实训题说明（仅教师视角；学生端不显示） -->
+        <p v-if="isTeacher" class="open-project-hint">
+          本项可选：不上传标准工程包即为开放性题目 —— AI 将只依据上方评分标准对学生工程做评价式评分，不与参考答案对比。建议在评分标准中逐条写明必须完成的功能及分值。
+        </p>
       </div>
 
       <!-- 阶段二：VSCode 风格 IDE（左文件树 + 右 Monaco） -->
@@ -174,6 +180,8 @@ const showRubricModal = ref(false);
 const promptModalOpen = ref(false);
 const promptLoading = ref(false);
 const promptPreview = ref(null);
+/** 开放性题目（无标准工程包）的 user prompt 不含标准答案源码段，标题随之区分（R6） */
+const promptUserPartLabel = computed(() => (promptPreview.value?.mode === 'open' ? '开放性题目，无标准答案源码' : '含标准工程源码'));
 
 async function showPromptPreview() {
   const id = route.params.id;
@@ -342,8 +350,8 @@ async function handleSave() {
       await request.put(`/teacher/questions/${route.params.id}`, payload);
       message.success('保存成功');
     } else {
-      if (!form.tempId) return message.warn('请先上传标准工程包');
-      payload.tempId = form.tempId;
+      // 标准工程包可选：未上传即开放性题目（attachmentUrl 为 null），payload 不携带 tempId
+      if (form.tempId) payload.tempId = form.tempId;
       await request.post('/teacher/questions', payload);
       message.success('创建成功');
     }
@@ -394,7 +402,7 @@ async function teacherUpload(blob, name) {
     message.success(`上传成功（已过滤依赖），保留 ${uploadKeptCount.value} 个代码文件 ${(uploadKeptBytes.value / 1024).toFixed(0)}KB`);
   } catch (err) {
     form.tempId = '';
-    message.error('上传失败：' + (err.response?.data?.message || err.message) + '（保存前请重新上传）');
+    message.error('上传失败：' + (err.response?.data?.message || err.message) + '（可重试上传；也可不上传，直接保存为开放性题目）');
   }
 }
 
@@ -553,6 +561,9 @@ onBeforeUnmount(() => {
 .ssc-pending-hint { display:flex; align-items:center; gap:8px; font-size:13px; color:#999; padding:6px 0; }
 
 .ide-stage { flex:1; display:flex; flex-direction:column; overflow:hidden; min-height:0; }
+.picker-slot { flex:1; display:flex; flex-direction:column; min-height:0; }
+/* 开放性实训题说明（仅教师视角）：居中灰字，不挤压上传入口 */
+.open-project-hint { flex-shrink:0; margin:0 auto 20px; padding:0 24px; max-width:760px; font-size:13px; line-height:1.8; color:var(--ink-muted); text-align:center; }
 .ide-body { flex:1; display:flex; overflow:hidden; min-height:0; border:1px solid #e0e0e0; border-radius:4px; }
 
 .sidebar { width:260px; flex-shrink:0; background:#f3f3f3; border-right:1px solid #e0e0e0; display:flex; flex-direction:column; overflow:hidden; }

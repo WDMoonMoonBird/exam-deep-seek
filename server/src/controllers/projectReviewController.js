@@ -8,10 +8,10 @@
 
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
-import { standardDir, submissionDir } from '../utils/projectPaths.js';
+import { standardDir, submissionDir, hasStandardPackage } from '../utils/projectPaths.js';
 import { toTeacherView, parseProjectAnswer, serializeProjectAnswer } from '../utils/projectView.js';
 import { enqueueProjectGrade, readDirFiles } from '../services/projectGrading.js';
-import { PROJECT_ROLE, buildProjectGradePrompt } from '../services/deepseek.js';
+import { PROJECT_ROLE, OPEN_PROJECT_ROLE, buildProjectGradePrompt, buildOpenProjectGradePrompt } from '../services/deepseek.js';
 import { buildFileTree, filterProjectFiles } from '../services/projectContextBuilder.js';
 import { buildTree, isIgnored } from '../utils/fileTree.js';
 import { MAX_TEXT_BYTES } from '../utils/projectArchive.js';
@@ -213,29 +213,45 @@ export const regradeProjectSubmission = async (req, res) => {
 
 /**
  * GET /api/teacher/questions/:id/project-prompt-preview — 实训题提示词模板预览（编辑页用）。
- * 展示 system（PROJECT_ROLE）+ user 模板（标准包真实内容，学生代码占位）。
+ * 展示 system（角色）+ user 模板（标准包真实内容，学生代码占位）。
+ * R6：预览必须等于实评——按题目有无标准工程包选择角色与 prompt 构建函数：
+ *   standard → PROJECT_ROLE + buildProjectGradePrompt（含标准答案源码段）
+ *   open     → OPEN_PROJECT_ROLE + buildOpenProjectGradePrompt（开放性题目，无标准答案段）
+ * 判据与 services/projectGrading.js 一致：attachmentUrl 为空且标准包目录无文件即视为 open。
  */
 export const getProjectQuestionPromptPreview = async (req, res) => {
   try {
     const q = await prisma.question.findUnique({
       where: { id: +req.params.id },
-      select: { id: true, title: true, material: true, scoringRubric: true, type: true },
+      select: { id: true, title: true, material: true, scoringRubric: true, type: true, attachmentUrl: true },
     });
     if (!q) return res.status(404).json({ code: 1004, message: '题目不存在', data: null });
     if (q.type !== 'project') {
       return res.status(400).json({ code: 1001, message: '该题目不是实训题', data: null });
     }
 
+    const isOpen = !hasStandardPackage(q.id, q.attachmentUrl);
+    const studentFiles = '【学生提交的工程文件将在此拼接（自动过滤依赖目录）】';
     // DSGN-005：预览与实评一致，标准包走 L0 过滤
-    const standardFiles = readFilteredDir(standardDir(q.id));
-    const user = buildProjectGradePrompt({
-      title: q.title,
-      description: q.material || '',
-      scoringRubric: q.scoringRubric || '',
-      standardFiles,
-      studentFiles: '【学生提交的工程文件将在此拼接（自动过滤依赖目录）】',
+    const user = isOpen
+      ? buildOpenProjectGradePrompt({
+        title: q.title,
+        description: q.material || '',
+        scoringRubric: q.scoringRubric || '',
+        studentFiles,
+      })
+      : buildProjectGradePrompt({
+        title: q.title,
+        description: q.material || '',
+        scoringRubric: q.scoringRubric || '',
+        standardFiles: readFilteredDir(standardDir(q.id)),
+        studentFiles,
+      });
+    res.json({
+      code: 0,
+      message: 'ok',
+      data: { type: 'project', mode: isOpen ? 'open' : 'standard', system: isOpen ? OPEN_PROJECT_ROLE : PROJECT_ROLE, user },
     });
-    res.json({ code: 0, message: 'ok', data: { type: 'project', system: PROJECT_ROLE, user } });
   } catch (err) {
     logger.error({ err }, '获取实训题提示词模板失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
@@ -244,13 +260,14 @@ export const getProjectQuestionPromptPreview = async (req, res) => {
 
 /**
  * GET /api/teacher/review/:submissionId/project/prompt — 该次评分的实际实训题提示词（审核页用）。
+ * R6：同样按有无标准工程包选择角色与 prompt 构建函数（预览必须等于实评）。
  */
 export const getProjectSubmissionPrompt = async (req, res) => {
   try {
     const id = +req.params.id;
     const sub = await prisma.submission.findUnique({
       where: { id },
-      include: { question: { select: { id: true, title: true, material: true, scoringRubric: true, type: true } } },
+      include: { question: { select: { id: true, title: true, material: true, scoringRubric: true, type: true, attachmentUrl: true } } },
     });
     if (!sub) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
     if (sub.question?.type !== 'project') {
@@ -259,19 +276,30 @@ export const getProjectSubmissionPrompt = async (req, res) => {
 
     const env = parseProjectAnswer(sub.answer);
     const version = env.currentVersion;
+    const isOpen = !hasStandardPackage(sub.questionId, sub.question.attachmentUrl);
     // DSGN-005：预览与实评一致，标准包/学生版本均走 L0 过滤
-    const standardFiles = readFilteredDir(standardDir(sub.questionId));
     const studentFiles = version > 0
       ? readFilteredDir(submissionDir(sub.questionId, sub.studentId, version))
       : '【学生尚未提交有效版本】';
-    const user = buildProjectGradePrompt({
-      title: sub.question.title,
-      description: sub.question.material || '',
-      scoringRubric: sub.question.scoringRubric || '',
-      standardFiles,
-      studentFiles,
+    const user = isOpen
+      ? buildOpenProjectGradePrompt({
+        title: sub.question.title,
+        description: sub.question.material || '',
+        scoringRubric: sub.question.scoringRubric || '',
+        studentFiles,
+      })
+      : buildProjectGradePrompt({
+        title: sub.question.title,
+        description: sub.question.material || '',
+        scoringRubric: sub.question.scoringRubric || '',
+        standardFiles: readFilteredDir(standardDir(sub.questionId)),
+        studentFiles,
+      });
+    res.json({
+      code: 0,
+      message: 'ok',
+      data: { type: 'project', mode: isOpen ? 'open' : 'standard', system: isOpen ? OPEN_PROJECT_ROLE : PROJECT_ROLE, user },
     });
-    res.json({ code: 0, message: 'ok', data: { type: 'project', system: PROJECT_ROLE, user } });
   } catch (err) {
     logger.error({ err }, '获取实训题提交提示词失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });

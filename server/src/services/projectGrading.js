@@ -29,7 +29,7 @@ import {
   BUDGET_TOKENS,
 } from './projectContextBuilder.js';
 import { ABNORMAL_FEEDBACK } from '../constants.js';
-import { standardDir, submissionDir } from '../utils/projectPaths.js';
+import { standardDir, submissionDir, hasStandardPackage } from '../utils/projectPaths.js';
 import { parseProjectAnswer, serializeProjectAnswer } from '../utils/projectView.js';
 import { MAX_TEXT_BYTES } from '../utils/projectArchive.js';
 import { isIgnored } from '../utils/fileTree.js';
@@ -335,7 +335,7 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
   try {
     const sub = await prisma.submission.findUnique({
       where: { id: submissionId },
-      include: { question: { select: { id: true, title: true, material: true, scoringRubric: true, maxScore: true, type: true } } },
+      include: { question: { select: { id: true, title: true, material: true, scoringRubric: true, maxScore: true, type: true, attachmentUrl: true } } },
     });
     if (!sub) {
       logger.warn({ submissionId }, '实训题评分：提交记录不存在，跳过');
@@ -356,6 +356,13 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
     const stdDir = standardDir(questionId);
     const stuDir = submissionDir(questionId, studentId, version);
 
+    // 开放性实训题（Wave 1，判据统一为单一实现）：有无标准工程包是唯一信号（不新增数据库字段）。
+    // attachmentUrl 为 null 即教师建题时未上传标准包；兼容历史数据：标准包目录仍有文件时
+    // 按标准题处理，不误判为开放性题目。判据收敛到 utils/projectPaths.js 的
+    // hasStandardPackage()（与 Q9 布置作业软警告、提示词预览共用同一实现，避免将来漂移成
+    // 「布置放行但评分模式不一致」）。
+    const gradeMode = hasStandardPackage(questionId, sub.question?.attachmentUrl) ? 'standard' : 'open';
+
     // 2026-08-17 上下文管理方案 v1.1：L0 过滤 + L1 两阶段（配置开关，失败自动降级）
     const contextMode = await getProjectContextMode();
     const ctx = await buildGradingContext({
@@ -374,6 +381,7 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
     if (ctx.info.mode !== 'off') {
       logger.info({ submissionId, mode: ctx.info.mode, pickedCount: ctx.info.pickedCount || 0 }, '实训题评分：上下文构建完成');
     }
+    logger.info({ submissionId, gradeMode }, '实训题评分：评分模式确定');
 
     let result;
     try {
@@ -383,6 +391,8 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
         scoringRubric: sub.question.scoringRubric || '',
         standardFiles,
         studentFiles,
+        // open：无标准包 → 评价式评分（prompt 不含「标准答案源码」段，system 用评审专家角色）
+        mode: gradeMode,
       });
     } catch (aiErr) {
       logger.error({ err: aiErr, submissionId }, '实训题评分：AI 调用失败，标记失败');

@@ -1,3 +1,4 @@
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -34,6 +35,29 @@ function assertInside(base, ...segments) {
 /** 标准工程包目录（教师上传，绝不可对学生暴露）：uploads/project-questions/{questionId}/standard */
 export function standardDir(questionId) {
   return assertInside(STANDARDS_ROOT, safeSegment(String(questionId)), 'standard');
+}
+
+/**
+ * 是否已上传非空标准工程包（Q9 布置作业软警告 / 提示词预览 / AI 实评共用的唯一判据）。
+ *
+ * 判据与 services/projectGrading.js 一致：
+ *   1) attachmentUrl 非空 → 视为有标准包（教师建题时上传过）；
+ *   2) 兼容历史数据：attachmentUrl 为空但标准包目录仍有文件 → 同样视为有标准包，
+ *      避免把老数据误判成开放性题目。
+ * 两者皆无才是开放性题目（open）。
+ *
+ * @param {number|string} questionId 题目 ID
+ * @param {string|null|undefined} attachmentUrl 题目记录上的标准包相对路径
+ * @returns {boolean}
+ */
+export function hasStandardPackage(questionId, attachmentUrl) {
+  if (attachmentUrl) return true;
+  try {
+    const dir = standardDir(questionId);
+    return fs.existsSync(dir) && fs.readdirSync(dir).length > 0;
+  } catch {
+    return false;
+  }
 }
 
 /** 学生提交版本目录：project-submissions/{questionId}/{studentId}/{version} */

@@ -7,8 +7,10 @@
  *
  * 用途：为「越权矩阵 + 路径穿越防线」提供可回归的自动化证据（agent-nonfunc 交付）。
  */
+import fs from 'fs';
+import path from 'path';
 import projectAssetGuard from '../../src/middleware/projectAssetGuard.js';
-import { safeSegment, assertInside } from '../../src/utils/projectPaths.js';
+import { safeSegment, assertInside, standardDir, hasStandardPackage, STANDARDS_ROOT } from '../../src/utils/projectPaths.js';
 
 /** 构造 (req,res,next) 三元组并同步执行 guard，返回 next 是否被调用 */
 function runGuard(urlPath) {
@@ -89,5 +91,39 @@ describe('projectPaths.assertInside — 越界拦截', () => {
   });
   it('绝对路径段 → 拒绝', () => {
     expect(() => assertInside('/tmp/nonfunc-base', '/etc')).toThrow('Path traversal denied');
+  });
+});
+
+describe('projectPaths.hasStandardPackage — 有无标准工程包的唯一判据（Q9 软警告 / 提示词预览 / AI 实评共用）', () => {
+  const qid = 'test999999';
+  const dir = standardDir(qid);
+
+  afterAll(() => {
+    // 只清理本用例创建的目录：先确认目标确实位于 uploads/project-questions 之内
+    const questionDir = path.dirname(dir);
+    if (questionDir.startsWith(STANDARDS_ROOT + path.sep)) {
+      fs.rmSync(questionDir, { recursive: true, force: true });
+    }
+  });
+
+  it('attachmentUrl 非空 → true（教师建题时上传过标准包）', () => {
+    expect(hasStandardPackage(qid, 'project-questions/1/standard')).toBe(true);
+  });
+
+  it('attachmentUrl 为空且标准包目录无文件 → false（开放性题目）', () => {
+    expect(fs.existsSync(dir)).toBe(false);
+    expect(hasStandardPackage(qid, null)).toBe(false);
+    expect(hasStandardPackage(qid, undefined)).toBe(false);
+  });
+
+  it('attachmentUrl 为空但标准包目录有文件 → true（兼容历史数据）', () => {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'main.py'), 'print(1)');
+    expect(hasStandardPackage(qid, null)).toBe(true);
+  });
+
+  it('非法题目 ID → false（safeSegment 抛错被兜住，不炸请求）', () => {
+    expect(hasStandardPackage('../etc', null)).toBe(false);
+    expect(hasStandardPackage('', null)).toBe(false);
   });
 });
