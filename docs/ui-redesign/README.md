@@ -54,7 +54,7 @@
 | 前置 | rebase 到 master（`152ec99`） | ✅ 已完成 |
 | **Wave 0** | 令牌 + antd 主题桥 + 全局覆盖层（视觉零变化） | ✅ 已完成 |
 | **试点页** | 教师端「作业管理」（KPI / 服务端筛选 / 真实进度 / 状态语义） | ✅ 已完成，真实运行验证通过 |
-| Wave 1 | AppShell + PageShell + ListPage，迁移其余 12 个列表页；侧栏分组与待审核徽标；切全局尺度（14px / 圆角 12） | ⏳ 待开始 |
+| Wave 1 | AppShell + PageShell + ListPage，迁移 13 个列表页；侧栏分组与待审核徽标；切全局尺度（14px / 圆角 12） | 🔄 进行中（团队 `ui-wave1`，6 任务；契约见 [09-wave1-brief.md](./09-wave1-brief.md)，T1 已抽验通过） |
 | Wave 2 | 表单页模板 + ConfirmDialog + 自动保存统一 | ⏳ |
 | Wave 3 | 工作台/作答页（Monaco 三页，先冻交互契约） | ⏳ |
 | Wave 4 | Doc/Login、深色模式、移动端断点收尾 | ⏳ |

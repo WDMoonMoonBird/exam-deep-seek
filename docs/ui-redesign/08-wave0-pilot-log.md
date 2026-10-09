@@ -57,6 +57,20 @@ cd "/Users/you/My Projects/My Vue/Exam-DeepSeek-ui/client" && npm run dev
 
 ---
 
+## 3.1 本地联调须知（踩坑记录）
+
+访问新 UI 必须用 **`http://localhost:5174/exam/`**，不要用 `http://127.0.0.1:5174`。两个坑：
+
+| # | 现象 | 原因 | 处置 |
+|---|---|---|---|
+| 1 | 页面一直转圈 / 打不开 | vite dev 默认按 `localhost` 解析并**只绑定 IPv6 `[::1]`**；浏览器若先走 IPv4 `127.0.0.1` 就连不上 | 起 dev server 时显式绑 IPv4：`npm run dev -- --host 127.0.0.1 --port 5174 --strictPort`（端口必须固定，否则会与主工作区的 5173 实例串位） |
+| 2 | 页面能打开，但登录报「登录失败」 | 后端 CORS 默认只放行 `/^http:\/\/localhost:\d+$/`（`server/src/app.js:45`），**不含 `127.0.0.1`**；而 `.env.development` 让浏览器直连 `http://localhost:3000/api`，Origin 为 `http://127.0.0.1:5174` 时被 CORS 拦掉 | 用 `localhost` 访问即可（实测 290ms 打开、登录成功跳转）。若确实需要 127.0.0.1，可给后端加 `CORS_ORIGIN=http://localhost:5173,http://localhost:5174,http://127.0.0.1:5174`（该环境变量后端已支持，逗号分隔） |
+
+**可用的开发账号**（开发库 `exam_system`，密码=用户名）：`test_teacher`、`e2e_teacher`。
+`teacher_a`（35 份作业、数据最全）**密码不可知**（bcrypt 单向，实测用户名口令不通过，疑被改过）；需要时可由管理员「重置教师密码」恢复为用户名。
+
+---
+
 ## 4. 已知差异与遗留（本轮**有意**没做的）
 
 | 项 | 现状 | 计划 |
