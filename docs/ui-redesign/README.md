@@ -87,3 +87,45 @@
 | R-18 | ✅ **已修复（t22，待 t23 独立验收）**：V3 beforeunload `fetch` 被同名加载器遮蔽（改 `window.fetch` + 加载器更名 `loadAssignment`）、V4 `clearDirty` 失败仍清脏（改 `allSaved` 才清）、V5 Monaco 懒挂载首帧竞态、S3 题号方块键盘不可达（`role=button`+`tabindex`+`aria-label`） | t18/t20/t21 实测 + captain 复核 | **已完成修复** |
 | R-19 | **已知冗余但可靠**（captain 裁决不修）：① `onBeforeUnload` 无脏标记判断 → 有可存小题时即使无改动也重发幂等 keepalive PUT（若改用 dirtySet 做闸门，一旦脏跟踪有缺口会漏存，可靠性优先；将来优化应以「与载入快照比较」为准）② 首屏从 DB 载入答案触发一次冗余保存（watch 既有）③ Monaco 冷启动 `loader.init()` ≈27s → 后续断言窗口约定 ≥45s | t23 §6 | 登记（不修） |
 | R-20 | **Modal 宽档例外条款（captain 定）**：三档 480/640/820 为主；**工作流/内容型弹窗允许第四档 1040**，但必须与 `styles/overrides.css` 的成对 teleport 规则共同维护（参考 `.assign-modal`）。`a-drawer` 宽度不受此约束。 | t24 抽验时发现（Assignments 向导 1040） | 已定（条款） |
+
+---
+
+## Wave 4 收口后的收口池状态（captain 更新 · t28 验收后）
+
+### 已完成（可关闭）
+| # | 项 | 完成于 |
+|---|---|---|
+| R-1 | 请求静默开关 + 三端 Layout 统一入口 | t13 |
+| R-2 | 顶栏令牌化——**以实施落地**：legacy 下 antd 规则 0-3-0 反超 scoped 0-2-0，故在 style.css 用 0-3-1 兜住，三端×两模式计算值 MATCH | t25 |
+| R-4 | 时间格式统一 `YYYY-MM-DD HH:mm` / `YYYY-MM-DD`（+ `formatDateTimeSec` 保秒级精度）；两处页面本地实现消除 | t27 + t29 |
+| R-6 | 代码/日志面语义令牌 `--code-bg`/`--code-fg`（两主题恒定深色），日志区与富文本代码块采用 | t26 + t30（captain 加令牌） |
+| R-7 | 删除 DataTable.vue 死代码 | t13 |
+| R-9 | ListPage 每页条数切换 + 单页隐藏分页栏 | t13 |
+| R-10 | ListPage error 插槽（role=alert + 重试） | t13 |
+| R-11 | RichEditor 6 + ProjectZipUploader 4 处等值字号令牌化 | t26 |
+| R-12 | useConfirm 增可选 width/maskClosable/closable（不传不写配置） | t24 |
+| R-13 | **已决：不新增令牌**（字阶下沿 12px，10/11px 属历史微标签，按 off-scale 登记） | captain |
+| R-14 | Modal 宽度收敛 480/640/820 + 消除字符串写法（例外：R-20 第四档 1040） | t24 + t25 |
+| R-15 | 对话框文案动词化（含 3 处自定义 footer、popconfirm 补 danger） | t24 |
+| R-18 | 作答页四条链路修复（V3 keepalive / V4 兜底重试 / V5 懒挂载 / S3 键盘可达） | t22 |
+
+### 新增（t28 三类整体复核发现）
+| # | 项 | severity | 说明 |
+|---|---|---|---|
+| R-21 | **暗色模式尚不可用（能力缺口）** | high | 令牌层已支持（浅/暗两套 + `--code-*` 恒定深色），但① 全仓**无 `data-theme` 入口**（无开关/无持久化）② antd 组件与富文本正文未适配（表格/编辑器正文 `rgba(0,0,0,.88)` 落在深底上，**对比度 1.19**）。建议作为 **Wave 5 头号项**：入口 + antd 暗色算法 + 富文本/表格适配 + 全站复核 |
+| R-22 | Doc 灯箱缺 Esc 关闭与焦点返回（05-page-specs #22 明文要求） | medium | 键盘用户无法关闭灯箱且焦点丢失 |
+| R-23 | 1024 宽表横向溢出传导到 `.content`（实测 417/187/57px）；设计 M 档「隐藏 P2 列」未落地 | medium | 768 全 0 溢出 ✓，仅 1024 档有问题 |
+
+### 仍待外部条件
+| # | 项 | 阻塞于 |
+|---|---|---|
+| R-5 | 7 个列表接口服务端分页（前端已留 `TODO(P1-7)` 与前端切片） | 后端 |
+| R-16 | 倒计时（设计稿有、代码无，属新增功能） | 用户裁决 |
+| R-17 | 面板折叠后 `activeElement=BODY` | Wave 5 a11y 收尾 |
+| R-19 | 卸载路径冗余幂等 PUT（裁决不修：可靠性优先） | 已结案 |
+| R-20 | Modal 第四档 1040 例外条款（成对维护，已写入代码注释） | 条款 |
+
+### 台账更正（captain 自身错误，留痕）
+1. Modal 宽度原值「560」在本仓库 git 历史中不存在（t24 考证）→ 实际现为 640
+2. `--bg-inverse` 在暗色下**不翻转**（tokens.css:384 起组件级修正块后写生效）——t26 的诊断被否证，t28 实测确认
+3. `style.css` 真实路径为 `client/src/style.css`（契约写成 `styles/style.css`，**第 5 次路径笔误**）→ 规则加强：写路径前 `ls`；**grep 空输出必须先排除「路径不存在」**
