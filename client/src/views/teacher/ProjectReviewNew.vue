@@ -200,6 +200,7 @@ import { message } from 'ant-design-vue';
 import { FileTextOutlined, FolderOutlined } from '@ant-design/icons-vue';
 import loader from '@monaco-editor/loader';
 import { applyMonacoCompat } from '../../infrastructure/monaco/legacyLoaderCompat';
+import { useMonacoTheme } from '../../composables/useMonacoTheme.js';
 import { getClassWithColor } from 'file-icons-js';
 import 'file-icons-js/css/style.css';
 import { getProjectReview, saveProjectReview, regradeProjectSubmission } from '../../api/projects.js';
@@ -247,6 +248,8 @@ const hasStandardFiles = computed(() => (standardFiles.tree?.length || 0) > 0
 
 const activeTree = ref('student'); // 'student' | 'standard'
 const editorContainerRef = ref(null);
+/** 编辑器主题跟随应用主题：ensureTheme() 在 create 之前按当前令牌定义并返回主题名 */
+const { ensureTheme } = useMonacoTheme();
 // 双数据源各自的 IDE 状态（切换源不丢选中/打开的文件）
 // 必须 reactive：computed setter 写普通对象不会触发响应
 const sourceState = reactive({
@@ -307,6 +310,7 @@ async function initMonaco() {
   monaco = await loader.init();
   editor = monaco.editor.create(editorContainerRef.value, {
     value: '', language: 'plaintext', readOnly: true,
+    theme: ensureTheme(monaco),
     minimap: { enabled: true, maxColumn: 80 }, automaticLayout: true,
     fontSize: 13, fontFamily: 'MonacoDSH, monospace', lineNumbers: 'on', scrollBeyondLastLine: false,
     tabSize: 4, renderWhitespace: 'selection', smoothScrolling: true, cursorBlinking: 'smooth',

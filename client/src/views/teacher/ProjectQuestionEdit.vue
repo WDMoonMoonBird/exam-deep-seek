@@ -160,6 +160,7 @@ import { message } from 'ant-design-vue';
 import { LoadingOutlined, FileTextOutlined } from '@ant-design/icons-vue';
 import loader from '@monaco-editor/loader';
 import { applyMonacoCompat } from '../../infrastructure/monaco/legacyLoaderCompat';
+import { useMonacoTheme } from '../../composables/useMonacoTheme.js';
 import RichEditor from '../../components/RichEditor.vue';
 import DOMPurify from 'dompurify';
 import request from '../../api/request.js';
@@ -182,6 +183,8 @@ const hasUploaded = ref(false);
 const uploadKeptCount = ref(0);
 const uploadKeptBytes = ref(0);
 const editorContainerRef = ref(null);
+/** 编辑器主题跟随应用主题：ensureTheme() 在 create 之前按当前令牌定义并返回主题名 */
+const { ensureTheme } = useMonacoTheme();
 const showDescModal = ref(false);
 const showRubricModal = ref(false);
 // AI 提示词预览（编辑页模板，与实评共用构建函数）
@@ -307,6 +310,7 @@ async function initMonaco() {
   registerExtraLanguages();
   editor = monaco.editor.create(editorContainerRef.value, {
     value: '', language: 'plaintext', readOnly: true,
+    theme: ensureTheme(monaco),
     minimap: { enabled: true, maxColumn: 80 }, automaticLayout: true,
     fontSize: 13, fontFamily: 'MonacoDSH, monospace', lineNumbers: 'on', scrollBeyondLastLine: false,
     tabSize: 4, renderWhitespace: 'selection', smoothScrolling: true, cursorBlinking: 'smooth',

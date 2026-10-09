@@ -8,6 +8,7 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import loader from '@monaco-editor/loader';
 import { applyMonacoCompat } from '../infrastructure/monaco/legacyLoaderCompat';
+import { useMonacoTheme } from '../composables/useMonacoTheme.js';
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -26,6 +27,9 @@ let editor = null;
 let subscription = null;
 let monaco = null;
 
+/** 编辑器主题跟随应用主题：ensureTheme() 在 create 之前按当前令牌定义并返回主题名 */
+const { ensureTheme } = useMonacoTheme();
+
 onMounted(async () => {
   // 旧浏览器（:where() 不可用即 Chrome < 88，或可选链不可用即 Chrome < 80）：
   // Monaco 0.55+ 产物无法解析，降级 0.24.0（判定与版本口径以 domain/browserCompat.js 的
@@ -36,6 +40,7 @@ onMounted(async () => {
     value: props.modelValue,
     language: props.language,
     readOnly: props.readOnly,
+    theme: ensureTheme(monaco),
     minimap: { enabled: false },
     automaticLayout: true,
     fontSize: props.fontSize,
