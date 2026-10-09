@@ -16,6 +16,7 @@
           <MenuUnfoldOutlined v-if="collapsed" class="trigger" @click="collapsed = false" />
           <MenuFoldOutlined v-else class="trigger" @click="collapsed = true" />
         </div>
+        <ThemeToggle />
         <a-dropdown>
           <div class="user-area">
             <a-avatar size="small" class="user-avatar">{{ user?.realName?.charAt(0) }}</a-avatar>
@@ -77,6 +78,7 @@ import { useUserStore } from '../../stores/user.js';
 import { message } from 'ant-design-vue';
 import { useConfirm } from '../../composables/useConfirm.js';
 import { useTheme } from '../../composables/useTheme.js';
+import ThemeToggle from '../../components/ThemeToggle.vue';
 import request from '../../api/request.js';
 import { ReadOutlined, TrophyOutlined, UserOutlined, BulbOutlined, PoweroffOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
 
