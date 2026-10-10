@@ -115,7 +115,8 @@
           <template v-if="sq.type === 'code' || !sq.type">
             <div class="sq-editor-toolbar">
               <!-- T5-A2：语言选择器没有可见 label；placeholder 不算可访问名称、aria-label 又会被 antd
-                   渲染到外层 .ant-select div（落不到 role=combobox 的 input）→ 视觉隐藏 label + for/id（与 t7 同法） -->
+                   渲染到外层 .ant-select div（落不到 role=combobox 的 input）→ 视觉隐藏 label + for/id。
+                   .visually-hidden 走 style.css 的全局工具类（与 t7 各页同值），本页不再重复定义 -->
               <label :for="'sq-lang-' + sq.id" class="visually-hidden">第 {{ i + 1 }} 题代码语言</label>
               <a-select
                 :id="'sq-lang-' + sq.id"
@@ -1253,8 +1254,6 @@ onUnmounted(() => {
 }
 .dirty-hint { color: var(--status-warning-fg); }
 .sync-ok { color: var(--status-success-fg); }
-/* T5-A2：无可见 label 的控件用「视觉隐藏 label + for/id」补可访问名称（与 t7 同实现） */
-.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 /* D3：服务端跳过草稿（未入库）时的如实提示 —— 与「未保存」同一警示色 */
 .draft-note { color: var(--status-warning-fg); }
 /* T4-F2 本页份额：语义警示标签改用 B2-2 的全局类 .tag-warning（定义在 style.css，
