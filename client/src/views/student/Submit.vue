@@ -8,7 +8,7 @@
       <h3 class="sp-title">{{ q.title }}</h3>
       <a-tag v-if="isPracticeMode" color="green" size="small">练习 · 第 {{ currentAttempt }} 次</a-tag>
       <a-tag v-if="isPracticeMode && maxAttempts" size="small">可提交 {{ remainingAttempts }} 次</a-tag>
-      <a-tag class="sp-tag-warning">总分 {{ q.maxScore }} 分</a-tag>
+      <a-tag class="tag-warning">总分 {{ q.maxScore }} 分</a-tag>
       <a-tag v-if="totalScored > 0" color="green">得分 {{ totalScored }} / {{ q.maxScore }}</a-tag>
       <a-tag v-if="bestScore != null" color="blue">最高分 {{ bestScore }} / {{ q.maxScore }}</a-tag>
       <span v-if="isExpired" class="sp-expired-tag">已过期</span>
@@ -1241,13 +1241,8 @@ onUnmounted(() => {
 .sync-ok { color: var(--status-success-fg); }
 /* D3：服务端跳过草稿（未入库）时的如实提示 —— 与「未保存」同一警示色 */
 .draft-note { color: var(--status-warning-fg); }
-/* T4-F2 本页份额：语义警示标签（替换 antd 预置 color="orange" 的亮色 3.34:1）
-   实测对比度（浏览器取值）：亮 5.20:1、暗 9.45:1 —— 均走 --status-warning-* 三元组 */
-.sp-tag-warning {
-  background: var(--status-warning-bg);
-  border-color: var(--status-warning-bd);
-  color: var(--status-warning-fg);
-}
+/* T4-F2 本页份额：语义警示标签改用 B2-2 的全局类 .tag-warning（定义在 style.css，
+   值 = --status-warning-* 三元组）；本页不再自带局部实现，避免两套并存 */
 .ended-hint { color: var(--text-tertiary); font-size: var(--fs-body); }
 
 /* 小节标题（可点击折叠） */
