@@ -563,7 +563,7 @@ onBeforeUnmount(() => {
 
 .kind-picker { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; }
 .kind-add-btn { width:56px; height:56px; border-radius:50%; border:2px dashed var(--border-strong); background:var(--bg-surface-2); font-size:24px; color:var(--text-tertiary); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all var(--duration-base); }
-.kind-add-btn:hover { border-color:var(--brand-600); color:var(--brand-600); background:var(--brand-50); }
+.kind-add-btn:hover { border-color:var(--brand-600); color:var(--text-brand); background:var(--bg-selected); }
 .kind-add-btn:disabled { cursor:not-allowed; opacity:.8; animation:upload-pulse var(--duration-loop-pulse) ease-in-out infinite; }
 @keyframes upload-pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }
 .kind-hint { font-size:var(--fs-body-sm); color:var(--text-tertiary); transition:color var(--duration-base); }

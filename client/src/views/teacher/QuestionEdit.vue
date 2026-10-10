@@ -866,7 +866,7 @@ const langs=['c','cpp','csharp','java','python','javascript','typescript','go','
 /* 初始选类型 */
 .kind-picker{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;}
 .kind-add-btn{width:56px;height:56px;border-radius:50%;border:2px dashed var(--border-strong);background:var(--bg-surface-2);font-size:24px;color:var(--text-tertiary);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all var(--duration-base);}
-.kind-add-btn:hover{border-color:var(--brand-600);color:var(--brand-600);background:var(--brand-50);}
+.kind-add-btn:hover{border-color:var(--brand-600);color:var(--text-brand);background:var(--bg-selected);}
 .kind-hint{font-size:var(--fs-body-sm);color:var(--text-tertiary);}
 .lc-left-editor{flex:1;display:flex;flex-direction:column;min-height:0;}
 
@@ -896,7 +896,7 @@ const langs=['c','cpp','csharp','java','python','javascript','typescript','go','
 .sq-del{font-size:var(--fs-body);color:var(--text-disabled);line-height:1;margin-left:2px;}
 .sq-del:hover{color:var(--status-danger-fg);}
 .sq-add{width:28px;height:28px;padding:0;border:none;font-size:var(--fs-title-3);color:var(--text-tertiary);display:inline-flex;align-items:center;justify-content:center;}
-.sq-add:hover{color:var(--brand-600);background:var(--brand-50);}
+.sq-add:hover{color:var(--text-brand);background:var(--bg-selected);}
 
 .lc-left-body{padding:12px 16px;flex:1;overflow-y:auto;min-height:0;display:flex;flex-direction:column;}
 .panel-wrap{min-height:0;display:flex;flex-direction:column;flex:1;}

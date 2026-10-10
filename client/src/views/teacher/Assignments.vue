@@ -566,8 +566,8 @@ onMounted(async () => {
 .pick-panel-title { font-weight: 600; margin-bottom: 8px; font-size: var(--fs-body); }
 .pick-list { margin-top: 8px; max-height: 260px; overflow-y: auto; }
 .pick-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; cursor: pointer; border-radius: var(--radius-xs); font-size: var(--fs-body-sm); }
-.pick-item:hover { background: var(--brand-50); }
-.pick-item.on { background: var(--brand-50); color: var(--brand-700); }
+.pick-item:hover { background: var(--bg-selected); }
+.pick-item.on { background: var(--bg-selected); color: var(--text-brand); }
 .pick-check { font-size: var(--fs-caption); }
 .pick-team { font-size: var(--fs-caption); }
 /* B2-10：本页原有一份 scoped .visually-hidden 副本已删除 —— 全局工具类（src/style.css）是唯一属主，

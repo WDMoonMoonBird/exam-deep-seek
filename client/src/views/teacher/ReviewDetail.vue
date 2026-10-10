@@ -757,8 +757,8 @@ onUnmounted(() => {
 /* 当前激活 */
 .n-box.n-box-active {
   border-color: var(--brand-600);
-  background: var(--brand-50);
-  color: var(--brand-600);
+  background: var(--bg-selected);
+  color: var(--text-brand);
   box-shadow: var(--ring-focus);
 }
 
