@@ -36,10 +36,16 @@
 
     <a-modal title="新增学生" :open="visible" @ok="handleOk" @cancel="visible = false" ok-text="新增学生" cancel-text="取消" :width="480">
       <a-form :model="form">
-        <a-form-item label="学号"><a-input v-model:value="form.username" /></a-form-item>
-        <a-form-item label="姓名"><a-input v-model:value="form.realName" /></a-form-item>
-        <a-form-item label="班级">
-          <a-select v-model:value="form.classIds" mode="multiple" placeholder="选择班级">
+        <!-- T5-A2：可见 label 用 id + html-for 关联（antd FormItem 只有拿到 name/html-for 才渲染 label[for]），
+             不新增 aria-label 以免与可见文案重复 -->
+        <a-form-item label="学号" html-for="admin-student-username">
+          <a-input id="admin-student-username" v-model:value="form.username" />
+        </a-form-item>
+        <a-form-item label="姓名" html-for="admin-student-realname">
+          <a-input id="admin-student-realname" v-model:value="form.realName" />
+        </a-form-item>
+        <a-form-item label="班级" html-for="admin-student-class">
+          <a-select id="admin-student-class" v-model:value="form.classIds" mode="multiple" placeholder="选择班级">
             <a-select-option v-for="c in classes" :key="c.id" :value="c.id">{{ c.name }}</a-select-option>
           </a-select>
         </a-form-item>

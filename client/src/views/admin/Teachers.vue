@@ -47,10 +47,14 @@
 
     <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" :ok-text="isEdit ? '保存修改' : '新增教师'" cancel-text="取消" :width="640">
       <a-form :model="form">
-        <a-form-item label="工号"><a-input v-model:value="form.username" :disabled="isEdit" /></a-form-item>
-        <a-form-item label="姓名"><a-input v-model:value="form.realName" /></a-form-item>
-        <a-form-item label="隶属学校">
-          <a-select :value="undefined" showSearch placeholder="搜索学校添加" :options="availableSchoolOptions" :filterOption="filterSchool" @select="addSchool" style="width: 100%;" />
+        <a-form-item label="工号" html-for="admin-teacher-username">
+          <a-input id="admin-teacher-username" v-model:value="form.username" :disabled="isEdit" />
+        </a-form-item>
+        <a-form-item label="姓名" html-for="admin-teacher-realname">
+          <a-input id="admin-teacher-realname" v-model:value="form.realName" />
+        </a-form-item>
+        <a-form-item label="隶属学校" html-for="admin-teacher-schools">
+          <a-select id="admin-teacher-schools" :value="undefined" showSearch placeholder="搜索学校添加" :options="availableSchoolOptions" :filterOption="filterSchool" @select="addSchool" style="width: 100%;" />
           <div v-if="form.schoolIds.length > 0" class="school-tags">
             <a-tag v-for="sid in form.schoolIds" :key="sid" closable @close="removeSchool(sid)">{{ getSchoolName(sid) }}</a-tag>
           </div>

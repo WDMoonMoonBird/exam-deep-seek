@@ -50,9 +50,11 @@
 
     <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" :ok-text="isEdit ? '保存修改' : '新增班级'" cancel-text="取消" :width="640" wrap-class-name="form-modal">
       <a-form :model="form">
-        <a-form-item label="班级名称"><a-input v-model:value="form.name" /></a-form-item>
-        <a-form-item label="指定教学团队">
-          <a-select v-model:value="form.teamIds" mode="multiple" placeholder="可选，将班级加入指定团队">
+        <a-form-item label="班级名称" html-for="tch-class-name">
+          <a-input id="tch-class-name" v-model:value="form.name" />
+        </a-form-item>
+        <a-form-item label="指定教学团队" html-for="tch-class-teams">
+          <a-select id="tch-class-teams" v-model:value="form.teamIds" mode="multiple" placeholder="可选，将班级加入指定团队">
             <a-select-option v-for="t in teams" :key="t.id" :value="t.id">{{ t.name }}（{{ t.creator?.realName }} 创建）</a-select-option>
           </a-select>
         </a-form-item>
@@ -68,7 +70,8 @@
           <StatusTag tone="success" :text="targetSchool?.name || '请选择'" />
         </p>
         <p class="switch-warn">切换后，该班级的作业和提交记录将迁移至新学校。如该班级已加入教学团队，将自动退出所有团队。</p>
-        <a-select v-model:value="targetSchoolId" placeholder="选择目标学校" class="w-full" :options="otherSchoolOptions" />
+        <label for="tch-class-target-school" class="visually-hidden">选择目标学校</label>
+        <a-select id="tch-class-target-school" v-model:value="targetSchoolId" placeholder="选择目标学校" class="w-full" :options="otherSchoolOptions" />
       </div>
     </a-modal>
   </PageShell>
@@ -207,4 +210,6 @@ onMounted(fetch);
 .w-full {
   width: 100%;
 }
+/* 仅供读屏的字段标签（T5-A2）：视觉不可见，为控件提供可访问名称 */
+.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 </style>

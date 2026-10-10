@@ -24,7 +24,10 @@
       @empty-action="onEmptyAction"
     >
       <template #toolbar>
-        <a-select v-model:value="filterClass" placeholder="选择班级（必选）" allowClear @change="onClassChange" class="w-260">
+        <!-- T5-A2：工具栏筛选没有可见 label，placeholder 不算可访问名称；且 antd 会把 aria-label 渲染到
+             外层 .ant-select div（落不到 role=combobox 的 input 上）→ 用「视觉隐藏 label + for/id 关联」给出真实语义 -->
+        <label for="tch-students-class-filter" class="visually-hidden">按班级筛选</label>
+        <a-select id="tch-students-class-filter" v-model:value="filterClass" placeholder="选择班级（必选）" allowClear @change="onClassChange" class="w-260">
           <a-select-option v-for="c in teacherClasses" :key="c.id" :value="c.id">
             {{ c.name }}
             <StatusTag v-if="c.isTeamClass" tone="accent" text="团队" />
@@ -66,12 +69,14 @@
 
     <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" :ok-text="isEdit ? '保存修改' : '新增学生'" cancel-text="取消" :width="480">
       <a-form :model="form">
-        <a-form-item label="学号">
-          <a-input v-model:value="form.username" :disabled="isEdit && !form._canEditUsername" />
+        <a-form-item label="学号" html-for="tch-student-username">
+          <a-input id="tch-student-username" v-model:value="form.username" :disabled="isEdit && !form._canEditUsername" />
         </a-form-item>
-        <a-form-item label="姓名"><a-input v-model:value="form.realName" /></a-form-item>
-        <a-form-item label="班级">
-          <a-select v-model:value="form.classId" placeholder="选择班级">
+        <a-form-item label="姓名" html-for="tch-student-realname">
+          <a-input id="tch-student-realname" v-model:value="form.realName" />
+        </a-form-item>
+        <a-form-item label="班级" html-for="tch-student-class">
+          <a-select id="tch-student-class" v-model:value="form.classId" placeholder="选择班级">
             <a-select-option v-for="c in teacherClasses" :key="c.id" :value="c.id">{{ c.name }}</a-select-option>
           </a-select>
         </a-form-item>
@@ -539,4 +544,6 @@ onMounted(() => { loadClasses(); fetch(); });
   color: var(--status-danger-fg);
   font-weight: 600;
 }
+/* 仅供读屏的字段标签（T5-A2）：视觉不可见，为控件提供可访问名称 */
+.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 </style>

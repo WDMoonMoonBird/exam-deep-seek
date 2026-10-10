@@ -42,14 +42,16 @@
 
     <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" :ok-text="isEdit ? '保存修改' : '新增班级'" cancel-text="取消" :width="640" wrap-class-name="form-modal">
       <a-form :model="form">
-        <a-form-item label="班级名称"><a-input v-model:value="form.name" /></a-form-item>
-        <a-form-item label="所属学校">
-          <a-select v-model:value="form.schoolId" placeholder="选择学校">
+        <a-form-item label="班级名称" html-for="admin-class-name">
+          <a-input id="admin-class-name" v-model:value="form.name" />
+        </a-form-item>
+        <a-form-item label="所属学校" html-for="admin-class-school">
+          <a-select id="admin-class-school" v-model:value="form.schoolId" placeholder="选择学校">
             <a-select-option v-for="s in schools" :key="s.id" :value="s.id">{{ s.name }}</a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="指定教师">
-          <a-select v-model:value="form.teacherIds" mode="multiple" placeholder="可多选">
+        <a-form-item label="指定教师" html-for="admin-class-teachers">
+          <a-select id="admin-class-teachers" v-model:value="form.teacherIds" mode="multiple" placeholder="可多选">
             <a-select-option v-for="t in teachers" :key="t.id" :value="t.id">{{ t.realName }}（{{ t.username }}）</a-select-option>
           </a-select>
         </a-form-item>

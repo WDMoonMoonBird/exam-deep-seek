@@ -52,7 +52,10 @@
           class="w-260"
           @search="applyFilters"
         />
+        <!-- T5-A2：无可见 label；placeholder 不算可访问名称，aria-label 又落不到 combobox 上 → 隐藏 label + for/id -->
+        <label for="tch-assign-class-filter" class="visually-hidden">按班级筛选</label>
         <a-select
+          id="tch-assign-class-filter"
           v-model:value="filters.classId"
           placeholder="全部班级"
           allow-clear
@@ -60,7 +63,9 @@
           :options="classOptions"
           @change="applyFilters"
         />
+        <label for="tch-assign-status-filter" class="visually-hidden">按状态筛选</label>
         <a-select
+          id="tch-assign-status-filter"
           v-model:value="filters.status"
           placeholder="全部状态"
           allow-clear
@@ -537,4 +542,6 @@ onMounted(async () => {
 .pick-item.on { background: var(--brand-50); color: var(--brand-700); }
 .pick-check { font-size: var(--fs-caption); }
 .pick-team { font-size: var(--fs-caption); }
+/* 仅供读屏的字段标签（T5-A2）：视觉不可见，为控件提供可访问名称 */
+.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 </style>

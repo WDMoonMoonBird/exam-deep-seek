@@ -8,7 +8,10 @@
       <a-tabs v-model:activeKey="tab">
         <a-tab-pane key="teachers" tab="教师管理">
           <div class="mb16">
+            <!-- T5-A2：无可见 label；aria-label 会被 antd 渲染到外层 div，故用隐藏 label + for/id -->
+            <label for="tch-team-teachers" class="visually-hidden">搜索并添加同校教师</label>
             <a-select
+              id="tch-team-teachers"
               v-model:value="selectedTeachers"
               mode="multiple"
               showSearch
@@ -37,7 +40,9 @@
 
         <a-tab-pane key="classes" tab="班级管理">
           <div class="mb16">
+            <label for="tch-team-classes" class="visually-hidden">搜索并添加班级</label>
             <a-select
+              id="tch-team-classes"
               v-model:value="selectedClasses"
               mode="multiple"
               showSearch
@@ -238,4 +243,6 @@ onMounted(() => { fetch(); loadTeachers(); loadClasses(); });
   font-size: var(--fs-body-sm);
   color: var(--text-tertiary);
 }
+/* 仅供读屏的字段标签（T5-A2）：视觉不可见，为控件提供可访问名称 */
+.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 </style>

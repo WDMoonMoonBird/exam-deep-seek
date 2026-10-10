@@ -20,8 +20,9 @@
               style="width:380px;"
             />
           </a-form-item>
-          <a-form-item label="模型">
+          <a-form-item label="模型" html-for="ai-config-model">
             <a-select
+              id="ai-config-model"
               v-model:value="form.model"
               :options="modelOptions"
             />
@@ -41,8 +42,9 @@
       <!-- 并发设置 -->
       <a-card title="⚡ AI 评分并发" size="small" class="config-card">
         <a-form layout="vertical" style="max-width:600px;">
-          <a-form-item label="并发数">
+          <a-form-item label="并发数" html-for="ai-config-concurrency">
             <a-select
+              id="ai-config-concurrency"
               v-model:value="form.concurrency"
               :options="concurrencyOptions"
               @change="onConcurrencyChange"
