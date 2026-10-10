@@ -50,7 +50,13 @@
 
     <div v-if="showFoot" class="table-foot">
       <span>第 {{ current }} 页 · 每页 {{ pageSize }} 条</span>
+      <!-- T5-A2（B2-8）：「每页条数」select 由 antd 在 a-pagination 内部渲染，自身既无 id 也无名称
+           （axe label 规则会命中它）。属主在这里 → 组件自己给一条视觉隐藏 label，并把唯一 id
+           写到那个 input 上（labelSizeChanger，挂载后 + 每次更新后）。
+           仅 showSizeChanger 开启时渲染：未开启时 antd 不渲染该 select，这里也不留悬空 label。 -->
+      <label v-if="showSizeChanger" :for="sizeSelectId" class="visually-hidden">每页条数</label>
       <a-pagination
+        ref="paginationRef"
         :current="current"
         :page-size="pageSize"
         :total="total"
@@ -65,7 +71,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, onMounted, onUpdated, onBeforeUnmount, useId } from 'vue';
 
 /**
  * ListPage —— 列表页容器（Wave 1 骨架组件）
@@ -159,6 +165,25 @@ function onTableChange(pagination, filters, sorter) {
   emit('change', pagination, filters, sorter);
 }
 
+/* =============== 分页「每页条数」的可访问名称（T5-A2 / B2-8） =============== */
+/**
+ * a-pagination 的「每页条数」select 是 antd 内部渲染的 <input role="combobox">，既没有 id 也没有
+ * 可访问名称（11 个列表页里只有 admin/Schools 开启 showSizeChanger，故此前只有它被 axe label 命中）。
+ * 该控件的属主是本组件 → 由本组件渲染隐藏 label（模板中的 .visually-hidden + :for），
+ * 并在挂载后与每次更新后把这个「每实例唯一」的 id 写到它的 input 上；antd 若重渲染把 id 改回自动值，
+ * 下一次更新会立即纠正。页面侧因此无需任何 DOM 补丁（曾于 B2-7 在 admin/Schools 临时补过，B2-8 已删）。
+ * 只写 id 属性：分页行为、showSizeChanger 默认值（false）与切换逻辑完全不变。
+ */
+const paginationRef = ref(null);
+/** 每实例唯一：一个页面可能出现多个 ListPage（当前 12 个页面均只用一个，此处仍按多实例设计） */
+const sizeSelectId = `list-page-size-changer-${useId()}`;
+
+function labelSizeChanger() {
+  if (!props.showSizeChanger) return;                        // 未开启时 antd 不渲染该 select
+  const input = paginationRef.value?.$el?.querySelector?.('input[role="combobox"]');
+  if (input && input.id !== sizeSelectId) input.id = sizeSelectId;
+}
+
 /* ===================== 粘性表头（antd sticky + 滚动阴影） ===================== */
 const cardRef = ref(null);
 const stuck = ref(false);
@@ -245,6 +270,7 @@ function onScroll() {
 onMounted(() => {
   syncStickyContext();
   updateStuck();
+  labelSizeChanger();
   // 滚动事件不冒泡：捕获阶段监听才能收到任意滚动容器（实际是 Layout 的 .content）的滚动
   document.addEventListener('scroll', onScroll, { capture: true, passive: true });
   window.addEventListener('resize', onResize);
@@ -259,6 +285,9 @@ function onResize() {
 /** 页面显式换了滚动宿主时重新解析 */
 watch(() => props.stickyContainer, syncStickyContext);
 
+/** 任何重渲染后重新确认「每页条数」的 id 关联（数据/页码/每页条数变化都会走到这里） */
+onUpdated(labelSizeChanger);
+
 onBeforeUnmount(() => {
   document.removeEventListener('scroll', onScroll, { capture: true });
   window.removeEventListener('resize', onResize);
@@ -267,6 +296,9 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* 视觉隐藏但保留给读屏（T5-A2 既有实现，与 t7/t11 各页逐字一致） */
+.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
 .card {
   background: var(--card-bg);
   border: 1px solid var(--card-bd);
