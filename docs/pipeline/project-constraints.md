@@ -35,15 +35,20 @@
 6. 静态扫描 CSS 自定义属性时，**`setProperty` 不是唯一注入途径**：对象式 `:style`（Vue `:style="{'--x': v}"`）同样能注入，且可能由**祖先注入、后代消费** → 判定"未定义/未引用"前必须同时排查 JS + 模板 + CSS。
 7. **先冻结再测**：任何测量都不得直接读活工作树（实证：合并中读到未解完的冲突标记 → `SyntaxError`）。用 `git archive <commit>` 导出副本再测。
 8. **`git status` 对"未跟踪目录"没有证据力**（round 1 由 Agent C 纠正）：`tests/`、`client/dist` 等**不在 git 跟踪内**（`git ls-files tests` = 0），改动它们时 `git status` 不会显示任何变化 —— 不能据此断言"没被触碰"。必须用**旁证**：`mtime` 对照改动时刻、`find -newermt`、或工作树指纹（`git diff | sha256`）。
+9. **零引用令牌固定用「严格口径」**：**仅在 CSS 注释里被提及不计为引用**（round 1/2 反复出现 64 vs 62 的口径漂移，差额恒为 `--input-h`/`--table-row-h`）。任何报告给出零引用数时，**必须写明口径**。
+10. **行号与计数一律以「冻结树实测」为准，不得采信上一轮报告里的数字**（实证：A 报 `SOURCE_EXTS` 43 项、实为 **37**；报 `collectFiles` 176-197、实为 **176-198** —— 后者若被照抄切片会产出**语法坏树**）。引用行号前先自己数一遍。
+11. **计数必须带词边界**：`grep -c -- '--btn-default-bg'` 会子串命中 `--btn-default-bg-hover`（实测 2 vs 真值 1）。
 
 ## 4 测试口径（Agent C 必须按此执行）
 
 - 命令：`cd server && DATABASE_URL="<测试库>" npm test`，其中测试库 URL 由 `server/.env` 的 `DATABASE_URL` **只替换库名**为 `exam_system_test` 得到（一键脚本：`bash docs/pipeline/scripts/unblock-g2.sh`）。
 - ⚠️ 未指向 `exam_system_test` 时，`server/test/setup.js:35,52` 的白名单护栏会**立即退出码 1 且不打印任何 jest 摘要** —— 那不是崩溃。
-- **全量口径 = 1011 例 / 67 套件**：段1 = 933（= 912 除三套件 + `rule-mutator` 21）、段2 = `fact-extractor` 17、段3 = `rule-executor` 61。
-- ⚠️ 三段用 `&&` 串联，**第一段一红就短路**，后两段静默不跑 → 判定"全绿"前必须确认日志里有 **3 处** `Test Suites:` 摘要。
-- **冻结基线（round 0）**：段1 `13 failed / 920 passed / 933 total`（172s），13 例全在 `rule-mutator.test.js`，已反证为同进程污染（独跑 21/21 绿）。
-- 任何一轮的 failed 数 **> baseline** 即为回归，必须回流 Agent B。
+- **全量口径 = 1011 例 / 67 套件 / 四段**（round 1 起）：
+  段1 = **912**（除三个 tree-sitter 套件外的全部）· 段2 = `fact-extractor` **17** · 段3 = `rule-executor` **61** · 段4 = `rule-mutator` **21**。
+- ⚠️ 四段用 `&&` 串联，**任一段失败即短路，后续段静默不跑** → 判定"全绿"前必须确认日志里有 **4 处** `Test Suites:` 摘要。
+- **当前基线（round 1 起）= `0 failed / 1011 passed`**。历史：round 0 = `13 failed / 920 passed`（全在 `rule-mutator.test.js`，已反证为同进程污染并修复）。
+- **任何一轮 failed > 0 即为回归**，必须回流 Agent B。
+- 取证方式：`ROUND=NN bash docs/pipeline/scripts/unblock-g2.sh`；脚本把 jest 输出重定向进 `test-round-NN.log`，**控制台只回显摘要** → 证据必须从日志取。
 
 ## 5 门禁判据（规范终止条件的本地化，见必改清单 G-7）
 
@@ -55,6 +60,10 @@
 | 后端回归 | failed ≤ baseline（**目标 0**） | §4 命令 |
 | 无障碍 | 不得引入新的 axe 违规 | 页面集需含合并新增页（rule-quality / CheckerWizard） |
 | 轮次上限 | **8 轮** | — |
+
+> **像素复核的可执行形态（round 2 由 Agent C 纠正 Captain 的任务书）**：「亮/暗 × 舒适/紧凑 4 组像素 sha1 全等」**字面不可执行** —— `data-density` 是各 Layout **硬编码**（teacher=compact / student=comfortable / admin=compact），**没有全局密度开关**，同一路由无法在两种密度下渲染。
+> 正确形态 = **每个主题各自做「改前 vs 改后」全等**（改前用 `git archive <commit>` 构建，改后活树构建），并满足两个前提：① 同源两次独立构建必须 **byte-identical**（`diff -rq` 0 行）才可用于判等；② **禁用** asset 文件名 / 字节哈希（源码一变 content hash 必变 → 假阳性）。
+> 若确需"舒适/紧凑"两态对比，须先由实现侧提供可切换的密度机制（属功能变更，不在本流水线授权内）。
 
 ## 6 角色纪律
 
