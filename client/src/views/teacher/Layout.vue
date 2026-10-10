@@ -26,8 +26,9 @@
                         </template><span>评分审核</span>
                         <span v-if="pendingReview > 0" class="sider-badge tnum" :title="pendingTitle">{{ pendingBadge }}</span>
                     </a-menu-item>
-                    <!-- 规则质量（来自 feature/rule-driven-scoring 的合并：按其原意归入「教学」组，紧跟评分审核） -->
-                    <a-menu-item key="/teacher/rule-quality"><template #icon>
+                    <!-- 规则质量：2026-10-11 按用户要求【暂时取消】入口（侧栏隐藏 + 路由重定向）。
+                         恢复：把 FEATURE_RULE_QUALITY 改回 true，并还原 router/index.js 的 rule-quality 路由行。 -->
+                    <a-menu-item v-if="FEATURE_RULE_QUALITY" key="/teacher/rule-quality"><template #icon>
                             <LineChartOutlined />
                         </template><span>规则质量</span></a-menu-item>
                     <a-menu-item key="/teacher/questions"><template #icon>
@@ -156,6 +157,11 @@ const collapsed = ref(false);
  * 隐藏方式复用全局 .visually-hidden（不参与布局 → 几何与截图不变）。 */
 const mainRef = ref(null);
 const pageTitle = ref('');
+
+/** 功能开关：规则质量页入口。2026-10-11 按用户要求【暂时取消】→ false = 隐藏侧栏菜单项。
+ *  恢复：改回 true，并还原 router/index.js 的 rule-quality 路由行。 */
+const FEATURE_RULE_QUALITY = false;
+
 const MENU_TITLES = {
   '/teacher/assignments': '作业管理', '/teacher/review': '评分审核', '/teacher/questions': '题库管理',
   '/teacher/classes': '班级管理', '/teacher/students': '学生管理', '/teacher/teams': '教学团队',

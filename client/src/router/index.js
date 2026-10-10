@@ -36,7 +36,10 @@ const routes = [
       { path: 'teams/:id', component: () => import('../views/teacher/TeamEdit.vue') },
       { path: 'review/:id', component: () => import('../views/teacher/ReviewDetail.vue') },
       { path: 'review/project/:submissionId', name: 'TeacherProjectReviewNew', component: () => import('../views/teacher/ProjectReviewNew.vue') },
-      { path: 'rule-quality', name: 'TeacherRuleQuality', component: () => import('../views/teacher/RuleQuality.vue') },
+      // 规则质量：2026-10-11 按用户要求【暂时取消】→ 改为重定向，直接输入 URL 也不会打开该页。
+      // 恢复：删掉本行 redirect，还原为
+      //   { path: 'rule-quality', name: 'TeacherRuleQuality', component: () => import('../views/teacher/RuleQuality.vue') },
+      { path: 'rule-quality', redirect: '/teacher/review' },
     ],
   },
   {

@@ -34,7 +34,8 @@
            2026-10-10 由验收判据④（走查 button 自动评分器 count=0）发现并补回 ✓
            迁移：分支原有的硬编码成功色（十六进制写法）已改为 var(--status-success-fg)，保持本文件去注释后 hex=0；
            保留 color="red"（实测亮 5.07 / 暗 4.54 达标，按既有规则只改不达标的预置色） -->
-      <span v-if="isTeacher && isEdit" class="checker-btn-wrap">
+      <!-- 自动评分器入口按钮：2026-10-11 按用户要求【暂时取消】（恢复：把 FEATURE_CHECKER_ENTRY 改回 true） -->
+      <span v-if="isTeacher && isEdit && FEATURE_CHECKER_ENTRY" class="checker-btn-wrap">
         <a-button @click="openCheckerModal" :disabled="checkerStatus === 'generating' || checkerStatus === 'calibrating'">
           <template v-if="checkerStatus === 'ready'"><CheckCircleFilled style="color:var(--status-success-fg);margin-right:6px;" />自动评分器</template>
           <template v-else-if="checkerStatus === 'generating' || checkerStatus === 'calibrating'"><LoadingOutlined spin style="margin-right:6px;" />自动评分器生成中…</template>
@@ -263,6 +264,11 @@ function confirmDesc() { form.description = descDraft.value; showDescModal.value
 function confirmRubric() { form.scoringRubric = rubricDraft.value; showRubricModal.value = false; }
 
 // ===== 自动评分器（checker）=====
+/** 功能开关：自动评分器**入口按钮**。2026-10-11 按用户要求【暂时取消】→ false = 隐藏手动入口。
+ *  ⚠️ 注意：保存守卫在「评分器缺失/过期/未确认」时仍会调用 openCheckerModal() 作为逃生通道，本次未改动
+ *  （否则教师将无法保存这类实训题）。恢复：改回 true 即恢复按钮。 */
+const FEATURE_CHECKER_ENTRY = false;
+
 const checkerOpen = ref(false);
 const checkerLoading = ref(false);
 const checkerData = ref({ status: 'none', script: '', meta: { rounds: 0, items: [], subjective: [], error: '', log: [] } });
