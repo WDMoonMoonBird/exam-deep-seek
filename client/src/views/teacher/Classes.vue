@@ -210,6 +210,4 @@ onMounted(fetch);
 .w-full {
   width: 100%;
 }
-/* 仅供读屏的字段标签（T5-A2）：视觉不可见，为控件提供可访问名称 */
-.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 </style>

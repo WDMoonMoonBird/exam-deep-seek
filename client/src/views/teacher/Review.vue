@@ -218,7 +218,4 @@ onUnmounted(() => {
 .dim-text {
   color: var(--text-tertiary);
 }
-
-/* 视觉隐藏但保留给读屏（T5-A2 既有实现，与 t7 各页逐字一致） */
-.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 </style>
