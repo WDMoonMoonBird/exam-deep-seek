@@ -135,3 +135,64 @@
 |---|---|---|---|
 | R-25 | 页面内**既有**写死过渡时长未令牌化（ReviewDetail 6 处：`.15s`/`.2s`/`.25s`/`.3s ease` 等，含 `.collapse-enter-active`、`.material-arrow`）。t42 新增的过渡已全部走 `--duration-*`；这些是改前既有。注意：reduced-motion 降级对它们仍生效（tokens.css 对 `*` 的强制规则），故非功能缺陷，属令牌纯度 | t42 抽验时 captain 发现并核证（本次 diff 0 命中） | Wave 6 / 收口池 |
 | R-26 | 折叠控件形态不一致：ReviewDetail 用原生 `<button>`（语义最佳），ProjectReviewNew 用 `role=button + tabindex=0` + 手写 Enter/Space。建议统一为原生 `<button>`（省掉手写键盘处理） | t42 报告对比发现 | Wave 6 / 收口池 |
+
+---
+
+## 台账更正（Batch 2 · captain 自查，依据 QA 报告 T1-F1..F4）
+
+> QA 指出我的收口池登记不完整。我重扫后确认**三处登记不全 + 一处口径不严**，现更正如下（命令可复算）。
+
+### 更正 1：R-25 的数字严重偏小
+
+| 项 | 原登记 | 实际（重扫） |
+|---|---|---|
+| 写死的过渡/动画时长 | 「ReviewDetail 6 处」 | **42 处**（QuestionEdit 16 / ReviewDetail 6 / ProjectReviewNew 5 / ProjectQuestionEdit 5 / ProjectZipUploader 3 / Doc 2 / style.css 2 / Submit 1） |
+
+复算命令：
+```bash
+grep -rE '(transition|animation)[^:;]*:[^;]*[0-9]+(ms|s)\b' client/src --include='*.vue' --include='*.css' | grep -v 'var(--duration' | wc -l
+# → 42（QA 报 33，差异应在是否计入 animation 与 !important 写法；两者都远大于我原登记的 6）
+```
+
+### 更正 2：R-28（新）—— 我的「hex=0」漏掉了 rgb/rgba 字面量
+
+| 判据 | 结果 |
+|---|---|
+| `.vue` 内 `rgb()/rgba()` 字面量 | **7 处**（`Doc.vue` 6 + `RichEditor.vue` 1） |
+| 具名颜色（white/black/red…） | 0 |
+| `hsl()/hsla()` | 见复算输出 |
+| 3 位 / 8 位 hex 简写 | 见复算输出 |
+
+→ **口径更正**：硬编码色值的判据 = hex（6 位）**+ rgb/rgba + 具名色 + hsl + hex 简写**。此前只报 hex=0，属**口径不严**（结论方向不变：主要债已清，但残留需如实登记）。
+
+复算命令：
+```bash
+grep -rE 'rgba?\(' client/src --include='*.vue' | wc -l        # → 7
+grep -rE '(color|background|border)[^:]*: *(white|black|red|blue|green|gray|grey|orange|yellow|purple)\b' client/src --include='*.vue' | wc -l  # → 0
+```
+
+### 更正 3：R-29（新）—— 零引用的时长令牌
+
+`--duration-instant` **0 引用**、`--duration-page` **0 引用**（`--duration-fast` 1、`--duration-slow` 1、`--duration-base` 11）→ 要么删除这两个令牌，要么在 Batch 3 补齐用法。
+
+### 更正 4：R-30（新）—— 字号字面量的完整清单
+
+| 项 | 数量 |
+|---|---|
+| `.vue` 内 `font-size: Npx` 总数 | **56** |
+| 其中 ≤11px（off-scale 下沿） | **18**（我此前只登记 8 处 → 漏 10 处） |
+| 其中 12–32px 字面量 | **32**（需逐条核对是否有等值令牌可换） |
+
+复算命令：
+```bash
+grep -rE 'font-size: *[0-9]+px' client/src --include='*.vue' | wc -l      # → 56
+grep -rE 'font-size: *(9|10|11)px' client/src --include='*.vue' | wc -l   # → 18
+```
+
+### 我为什么会漏（根因留痕）
+
+1. **判据写得比事实窄**：把「硬编码色值」等同于「6 位 hex」，于是 rgba 与简写天然漏检；
+2. **抽样代替全量**：R-25 只统计了我当时正在看的那一个文件（ReviewDetail），却写成了全局结论；
+3. **登记时未复算**：off-scale 清单是人工列举而非脚本输出，遗漏 10 处。
+
+→ 已固化为规则：**任何写进台账的数字必须附一条可复算命令；凡声称「全部/为零」，必须给出判据的完整定义**。
