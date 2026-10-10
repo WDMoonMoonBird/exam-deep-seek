@@ -92,6 +92,18 @@ export const updateTeam = async (req, res) => {
     }
 
     const { name, teacherIds, classIds } = req.body;
+    // 内容校验（round 7 · 阻断 C6-1）：classIds 必须 ⊆ 本人可见班级（直连 ∪ 团队），
+    // 且**前置到全部写库动作之前**——否则「挂他人班级进自有团队」会先改名成功再 403（部分写入），
+    // 更严重的是：他人班级经 teamClass 进入 getVisibleClassIds ⇒ 本文件其余写守卫对其一律放行
+    // （C 实测跨租户改班 → 重置他生口令 → 越权建学生，四条 200 真实落库）。
+    // 空数组 = 清空团队班级关联（只减不增）⇒ 放行，语义同 canTeacherManageClasses。
+    // 治理边界：本轮只校验「内容归属」，成员/创建者可否改名单 = 拍板项 R6-P10（未扩大）。
+    if (classIds?.length) {
+      const visibleIds = await getVisibleClassIds(req.user.id, getSchoolId(req));
+      if (!classIds.every(cid => visibleIds.includes(+cid))) {
+        return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+      }
+    }
     if (name !== undefined) {
       await prisma.team.update({ where: { id }, data: { name } });
     }

@@ -721,6 +721,12 @@ export const createAssignment = async (req, res) => {
     if (!title || !startTime || !endTime || !questionIds?.length || !classIds?.length) {
       return res.status(400).json({ code: 1001, message: '参数错误', data: null });
     }
+    // 内容校验（round 7 · R-1 收口，A §2.1 #38）：投放班级必须 ⊆ 本人可见班级（直连 ∪ 团队）。
+    // 前置到任何查库/写库动作之前 ⇒ 越权请求零写入；403 契约与同文件其余 body 目标守卫一致。
+    // 空集合不在此判（上方 :721 已把空 classIds 归入既有 400/1001 分支，语义不变）。
+    if (!(await canTeacherManageClasses(req.user.id, classIds, getSchoolId(req)))) {
+      return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+    }
 
     // Q9（2026-08 甲方定案，本次经甲方确认放宽为软警告）：
     // 作业含实训题（type=project）但该题没有标准工程包时，不再直接 400 拒绝，
@@ -730,7 +736,7 @@ export const createAssignment = async (req, res) => {
     // 有标准包的题目零影响：不产生警告、直接创建（与改动前完全一致）。
     // 「有无标准包」判据与 AI 实评一致：hasStandardPackage()。
     // 查询过滤软删除题目；已删题目不可被选入新作业
-    const questions = await prisma.question.findMany({ where: { id: { in: questionIds }, deletedAt: null } });
+    const questions = await prisma.question.findMany({ where: { id: { in: questionIds }, deletedAt: null, teacherId: req.user.id } });
     if (questions.length !== questionIds.length) {
       return res.status(400).json({ code: 1001, message: '部分题目不存在或已删除，无法布置', data: null });
     }

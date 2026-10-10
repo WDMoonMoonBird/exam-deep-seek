@@ -19,10 +19,21 @@ import { standardDir } from '../../src/utils/projectPaths.js';
 const questionFindMany = jest.fn();
 const assignmentCreate = jest.fn();
 
+// round 7：createAssignment 的 classIds 归属守卫（classIds ⊆ getVisibleClassIds）会经
+// teamController.getVisibleClassIds 查询 teacherClass / teamTeacher / teamClass 三个模型。
+// 本套件原先是「部分替身」（只桩 question/assignment）⇒ 必须补齐这三个桩，
+// 否则缺失模型会抛 TypeError（探针实测 8 failed/9）。
+const teacherClassFindMany = jest.fn();
+const teamTeacherFindMany = jest.fn();
+const teamClassFindMany = jest.fn();
+
 jest.unstable_mockModule('../../src/utils/prisma.js', () => ({
   default: {
     question: { findMany: questionFindMany },
     assignment: { create: assignmentCreate },
+    teacherClass: { findMany: teacherClassFindMany },
+    teamTeacher: { findMany: teamTeacherFindMany },
+    teamClass: { findMany: teamClassFindMany },
   },
 }));
 
@@ -35,6 +46,15 @@ const OPEN_QID = 987654321;
 const STD_QID = 987654322;
 /** 非 project 题型 */
 const CODE_QID = 987654323;
+
+/**
+ * 请求替身：补 `query` 桩。
+ *
+ * createAssignment 在入口用 getSchoolId(req)（= req.query.schoolId）做班级可见集的学校过滤；
+ * 原套件只构造了 { body, user } ⇒ req.query 为 undefined。这是**替身缺件**（与 prisma 部分替身同源），
+ * 不是期望值放宽：query 为空对象 ⇒ getSchoolId 返回 null ⇒ 学生过滤维度不启用（与改动前行为一致）。
+ */
+const mockReq = (body, userId, query = {}) => ({ body, user: { id: userId }, query });
 
 function mockRes() {
   const res = {
@@ -64,7 +84,15 @@ const rowsFor = (ids, rows) => rows.filter(r => ids.includes(r.id));
 beforeEach(() => {
   questionFindMany.mockReset();
   assignmentCreate.mockReset();
+  teacherClassFindMany.mockReset();
+  teamTeacherFindMany.mockReset();
+  teamClassFindMany.mockReset();
   assignmentCreate.mockImplementation(async ({ data }) => ({ id: 4242, ...data }));
+  // 可见集桩：教师 7 直连 classId=1（= baseBody 的 classIds[0]）、不属任何团队。
+  // 与下方「teacherId: 7」一致 —— 用例显式声明「这些题目与班级都属于发起教师」。
+  teacherClassFindMany.mockImplementation(async () => [{ classId: 1 }]);
+  teamTeacherFindMany.mockImplementation(async () => []);
+  teamClassFindMany.mockImplementation(async () => []);
   expect(fs.existsSync(standardDir(OPEN_QID))).toBe(false);
   expect(fs.existsSync(standardDir(STD_QID))).toBe(false);
 });
@@ -73,7 +101,7 @@ describe('createAssignment — Q9 无标准工程包分支', () => {
   it('无包 + 未确认 → 400 + code=1007 软警告，且不创建作业', async () => {
     questionFindMany.mockImplementation(async ({ where }) => rowsFor(where.id.in, [openRow]));
     const res = mockRes();
-    await createAssignment({ body: baseBody([OPEN_QID]), user: { id: 7 } }, res);
+    await createAssignment(mockReq(baseBody([OPEN_QID]), 7), res);
 
     expect(res.statusCode).toBe(400);
     expect(res.body.code).toBe(1007);
@@ -95,7 +123,7 @@ describe('createAssignment — Q9 无标准工程包分支', () => {
     questionFindMany.mockImplementation(async ({ where }) => rowsFor(where.id.in, [openRow]));
     const res = mockRes();
     const body = { ...baseBody([OPEN_QID]), confirmWithoutStandardPackage: true };
-    await createAssignment({ body, user: { id: 7 } }, res);
+    await createAssignment(mockReq(body, 7), res);
 
     expect(res.statusCode).toBe(200);
     expect(res.body.code).toBe(0);
@@ -115,7 +143,7 @@ describe('createAssignment — Q9 无标准工程包分支', () => {
       const res = mockRes();
       const body = baseBody([OPEN_QID]);
       if (v !== undefined) body.confirmWithoutStandardPackage = v;
-      await createAssignment({ body, user: { id: 7 } }, res);
+      await createAssignment(mockReq(body, 7), res);
       expect(res.body.code).toBe(1007);
       expect(res.statusCode).toBe(400);
     }
@@ -125,7 +153,7 @@ describe('createAssignment — Q9 无标准工程包分支', () => {
   it('有标准包（attachmentUrl 非空）→ 无警告直接创建（回归）', async () => {
     questionFindMany.mockImplementation(async ({ where }) => rowsFor(where.id.in, [stdRow]));
     const res = mockRes();
-    await createAssignment({ body: baseBody([STD_QID]), user: { id: 7 } }, res);
+    await createAssignment(mockReq(baseBody([STD_QID]), 7), res);
 
     expect(res.statusCode).toBe(200);
     expect(res.body.code).toBe(0);
@@ -136,7 +164,7 @@ describe('createAssignment — Q9 无标准工程包分支', () => {
   it('非 project 题（编程题）→ 不产生警告，直接创建', async () => {
     questionFindMany.mockImplementation(async ({ where }) => rowsFor(where.id.in, [codeRow]));
     const res = mockRes();
-    await createAssignment({ body: baseBody([CODE_QID]), user: { id: 7 } }, res);
+    await createAssignment(mockReq(baseBody([CODE_QID]), 7), res);
 
     expect(res.body.code).toBe(0);
     expect(assignmentCreate).toHaveBeenCalledTimes(1);
@@ -145,7 +173,7 @@ describe('createAssignment — Q9 无标准工程包分支', () => {
   it('混合选题（1 有包 + 1 无包）→ warnings 只含无包题目', async () => {
     questionFindMany.mockImplementation(async ({ where }) => rowsFor(where.id.in, [stdRow, openRow]));
     const res = mockRes();
-    await createAssignment({ body: baseBody([STD_QID, OPEN_QID]), user: { id: 7 } }, res);
+    await createAssignment(mockReq(baseBody([STD_QID, OPEN_QID]), 7), res);
 
     expect(res.body.code).toBe(1007);
     expect(res.body.data.warnings).toHaveLength(1);
@@ -155,7 +183,7 @@ describe('createAssignment — Q9 无标准工程包分支', () => {
     // 确认后同一批题目创建成功，两道题都进作业
     questionFindMany.mockImplementation(async ({ where }) => rowsFor(where.id.in, [stdRow, openRow]));
     const res2 = mockRes();
-    await createAssignment({ body: { ...baseBody([STD_QID, OPEN_QID]), confirmWithoutStandardPackage: true }, user: { id: 7 } }, res2);
+    await createAssignment(mockReq({ ...baseBody([STD_QID, OPEN_QID]), confirmWithoutStandardPackage: true }, 7), res2);
     expect(res2.body.code).toBe(0);
     const create = assignmentCreate.mock.calls[0][0].data.assignmentQuestions.create;
     expect(create).toEqual([{ questionId: STD_QID, sortOrder: 1 }, { questionId: OPEN_QID, sortOrder: 2 }]);
@@ -163,7 +191,7 @@ describe('createAssignment — Q9 无标准工程包分支', () => {
 
   it('参数缺失（无标题/无题目/无班级）→ 400/1001，不查库不落库', async () => {
     const res = mockRes();
-    await createAssignment({ body: { questionIds: [], classIds: [] }, user: { id: 7 } }, res);
+    await createAssignment(mockReq({ questionIds: [], classIds: [] }, 7), res);
     expect(res.statusCode).toBe(400);
     expect(res.body.code).toBe(1001);
     expect(questionFindMany).not.toHaveBeenCalled();
@@ -173,7 +201,7 @@ describe('createAssignment — Q9 无标准工程包分支', () => {
   it('存在已删除/不存在的题目 → 400/1001，不进入警告分支', async () => {
     questionFindMany.mockImplementation(async () => [openRow]); // 只返回 1 行，但请求 2 个 ID
     const res = mockRes();
-    await createAssignment({ body: baseBody([OPEN_QID, 999999999]), user: { id: 7 } }, res);
+    await createAssignment(mockReq(baseBody([OPEN_QID, 999999999]), 7), res);
     expect(res.statusCode).toBe(400);
     expect(res.body.code).toBe(1001);
     expect(assignmentCreate).not.toHaveBeenCalled();
@@ -182,7 +210,7 @@ describe('createAssignment — Q9 无标准工程包分支', () => {
   it('题目查询过滤软删除（where.deletedAt === null）', async () => {
     questionFindMany.mockImplementation(async ({ where }) => rowsFor(where.id.in, [openRow]));
     const res = mockRes();
-    await createAssignment({ body: { ...baseBody([OPEN_QID]), confirmWithoutStandardPackage: true }, user: { id: 7 } }, res);
-    expect(questionFindMany).toHaveBeenCalledWith({ where: { id: { in: [OPEN_QID] }, deletedAt: null } });
+    await createAssignment(mockReq({ ...baseBody([OPEN_QID]), confirmWithoutStandardPackage: true }, 7), res);
+    expect(questionFindMany).toHaveBeenCalledWith({ where: { id: { in: [OPEN_QID] }, deletedAt: null, teacherId: 7 } });
   });
 });

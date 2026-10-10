@@ -619,6 +619,230 @@ describe('ownership-guards · 归属校验收敛（S-2 写路径 + S-6 学生详
     });
   });
 
+  // ================= §1d round 7：C6-1 阻断修复（updateTeam.classIds 内容校验）+ R-1 收口 =================
+
+  describe('round 7 · updateTeam.classIds 内容校验（C6-1：把他人班级挂进自有团队 = 越权链第一环）', () => {
+    it('R23: 成员改团队名 → 200（治理语义未过度收紧：成员可改名单 = R6-P10 拍板项，本轮不动）', async () => {
+      const before = await snapTeam(team.id);
+      const res = await api(tokenC).put('/api/teacher/teams/' + team.id + '?schoolId=' + sA.id, {
+        name: PREFIX + 'team_r7_member_rename',
+      });
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ code: 0, message: '更新成功', data: null });
+      const after = await snapTeam(team.id);
+      expect(after.team.name).toBe(PREFIX + 'team_r7_member_rename');
+      // 名单/班级一律未动（只改名的请求不得顺带改写名单）
+      expect(after.teachers).toEqual(before.teachers);
+      expect(after.classes).toEqual(before.classes);
+    });
+
+    it('R24: ★C6-1 完整链逐环斩断 —— 成员把他人班级挂进自有团队 → 403；随后的改班/重置口令/越权建学生全部 403 且零写入', async () => {
+      const beforeClsA = await snapClass(clsA.id);
+      const beforeTeam = await snapTeam(team.id);
+      const beforeStuA = await snapStudent(stuA.id);
+
+      // 环 1（C 实测：修复前 200 + teamClass(team, clsA) 落库）
+      const hop1 = await api(tokenC).put('/api/teacher/teams/' + team.id + '?schoolId=' + sA.id, {
+        name: PREFIX + 'HACK_TEAM_R7', classIds: [clsA.id],
+      });
+      expectDeniedOperation(hop1, [PREFIX + 'HACK_TEAM_R7']);
+      expect(await snapTeam(team.id)).toEqual(beforeTeam);
+      expect(beforeTeam.classes).toEqual([clsTeam.id]);   // 夹具保证：团队确已挂着班级 ⇒ 被改写会被对拍抓到
+      // 前置事实：clsA 确实存在且挂在该团队之外、由 tA 直连（证明后续断言不是「资源不存在」的假阴性）
+      expect(beforeClsA.name).not.toBe(PREFIX + 'HACK_CLS_A_R7');   // 不写死名字：T13 已把 clsA 改名为 …_renamed
+      expect(await prisma.teacherClass.count({ where: { classId: clsA.id, teacherId: tA.id } })).toBe(1);
+
+      // 环 2（修复前 200：经团队放大的可见集改他班名）
+      const hop2 = await api(tokenC).put('/api/teacher/classes/' + clsA.id + '?schoolId=' + sA.id, {
+        name: PREFIX + 'HACK_CLS_A_R7',
+      });
+      expectDeniedOperation(hop2, [PREFIX + 'HACK_CLS_A_R7']);
+      expect(await snapClass(clsA.id)).toEqual(beforeClsA);
+
+      // 环 3（修复前 200：重置他班学生口令 = 账号接管）
+      const hop3 = await api(tokenC).put('/api/teacher/students/' + stuA.id + '/reset-password?schoolId=' + sA.id);
+      expectDeniedOperation(hop3, ['密码已重置']);
+      const afterStuA = await snapStudent(stuA.id);
+      expect(afterStuA).toEqual(beforeStuA);
+      expect(afterStuA.user.password).toBe(beforeStuA.user.password);
+
+      // 环 4（修复前 200：往他人班级越权建学生）
+      const hop4 = await api(tokenC).post('/api/teacher/students?schoolId=' + sA.id, {
+        username: PREFIX + 'hack_stu_r7', realName: PREFIX + 'HACK_STU_R7', classId: clsA.id,
+      });
+      expectDeniedOperation(hop4);
+      expect(await prisma.user.count({ where: { realName: PREFIX + 'HACK_STU_R7' } })).toBe(0);
+      expect(await snapClass(clsA.id)).toEqual(beforeClsA);
+    });
+
+    it('R25: 混合数组 [本人班级, 他人班级] → 整体 403，不得部分成功（every 语义）', async () => {
+      const before = await snapTeam(team.id);
+      const res = await api(tokenC).put('/api/teacher/teams/' + team.id + '?schoolId=' + sA.id, {
+        name: PREFIX + 'HACK_MIXED_R7', classIds: [clsTeam.id, clsA.id],
+      });
+      expectDeniedOperation(res, [PREFIX + 'HACK_MIXED_R7']);
+      const after = await snapTeam(team.id);
+      expect(after).toEqual(before);
+      expect(after.classes).toEqual([clsTeam.id]);   // 本人班级也没有被写进去（整体拒绝）
+      expect(after.team.name).not.toBe(PREFIX + 'HACK_MIXED_R7');
+    });
+
+    it('R26: 跨校他人班级（另一所学校）→ 403 且零写入', async () => {
+      const before = await snapTeam(team.id);
+      const res = await api(tokenC).put('/api/teacher/teams/' + team.id + '?schoolId=' + sA.id, { classIds: [clsB.id] });
+      expectDeniedOperation(res);
+      expect(await snapTeam(team.id)).toEqual(before);
+    });
+
+    it('R27: 成员挂本人可见班级 → 200（合法路径不误伤：团队仍保留原班级 + 新班级）', async () => {
+      const res = await api(tokenC).put('/api/teacher/teams/' + team.id + '?schoolId=' + sA.id, {
+        classIds: [clsTeam.id, clsHidden.id],
+      });
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ code: 0, message: '更新成功', data: null });
+      const after = await snapTeam(team.id);
+      expect(after.classes).toEqual([clsTeam.id, clsHidden.id].sort((a, b) => a - b));
+      // 复原夹具（夹具自清，避免污染同套件后续用例）
+      await api(tokenC).put('/api/teacher/teams/' + team.id + '?schoolId=' + sA.id, { classIds: [clsTeam.id] });
+      expect((await snapTeam(team.id)).classes).toEqual([clsTeam.id]);
+    });
+
+    it('R28: 创建者把他人班级挂进自有团队 → 403（≠ 成员挂本人班级的合法路径）', async () => {
+      const before = await snapTeam(teamB.id);
+      const res = await api(tokenB).put('/api/teacher/teams/' + teamB.id + '?schoolId=' + sB.id, { classIds: [clsA.id] });
+      expectDeniedOperation(res);
+      expect(await snapTeam(teamB.id)).toEqual(before);
+      expect(before.classes).toEqual([]);
+    });
+
+    it('R29: 非成员/非创建者带 classIds → 403（成员判据先于内容判据），团队零写入', async () => {
+      const before = await snapTeam(teamB.id);
+      const res = await api(tokenA).put('/api/teacher/teams/' + teamB.id + '?schoolId=' + sB.id, {
+        name: PREFIX + 'HACK_TEAMB_R7', classIds: [clsA.id],
+      });
+      expectDeniedOperation(res, [PREFIX + 'HACK_TEAMB_R7']);
+      const after = await snapTeam(teamB.id);
+      expect(after).toEqual(before);
+      expect(after.teachers).toEqual([tB.id]);
+      expect(after.classes).toEqual([]);
+    });
+  });
+
+  describe('round 7 · createAssignment 归属（R-1：questionIds / classIds）', () => {
+    const CLEAN = { asgIds: [], qIds: [] };
+
+    /** 本组专用夹具：一道属于 tB 的编程题（同校、非软删、无标准包告警）——createAssignment.questionIds 的「他人题目」 */
+    async function mkForeignQuestion() {
+      const q = await prisma.question.create({
+        data: { teacherId: tB.id, title: PREFIX + 'R7_他人题', type: 'code', maxScore: 100, difficulty: 'easy' },
+      });
+      CLEAN.qIds.push(q.id);
+      return q;
+    }
+
+    afterEach(async () => {
+      if (CLEAN.asgIds.length) {
+        await prisma.submission.deleteMany({ where: { assignmentId: { in: CLEAN.asgIds } } });
+        await prisma.assignmentClass.deleteMany({ where: { assignmentId: { in: CLEAN.asgIds } } });
+        await prisma.assignmentQuestion.deleteMany({ where: { assignmentId: { in: CLEAN.asgIds } } });
+        await prisma.assignment.deleteMany({ where: { id: { in: CLEAN.asgIds } } });
+        CLEAN.asgIds = [];
+      }
+      if (CLEAN.qIds.length) {
+        await prisma.subQuestion.deleteMany({ where: { questionId: { in: CLEAN.qIds } } });
+        await prisma.assignmentQuestion.deleteMany({ where: { questionId: { in: CLEAN.qIds } } });
+        await prisma.question.deleteMany({ where: { id: { in: CLEAN.qIds } } });
+        CLEAN.qIds = [];
+      }
+    });
+
+    it('R30: 用同校非本人班级建作业 → 403/1003 且 assignment 零写入', async () => {
+      const title = PREFIX + 'R7_ASG_HACK_CLS';
+      const beforeClsA = await snapClass(clsA.id);
+      const res = await api(tokenA).post('/api/teacher/assignments?schoolId=' + sA.id, {
+        title, startTime: '2026-05-01T00:00:00Z', endTime: '2026-06-01T00:00:00Z',
+        questionIds: [qS6.id], classIds: [clsHidden.id],
+      });
+      expectDeniedOperation(res, [title]);
+      expect(await prisma.assignment.count({ where: { title } })).toBe(0);
+      expect(await snapClass(clsA.id)).toEqual(beforeClsA);
+    });
+
+    it('R31: 跨校他人班级建作业 → 403/1003 且零写入', async () => {
+      const title = PREFIX + 'R7_ASG_HACK_CROSS';
+      const res = await api(tokenA).post('/api/teacher/assignments?schoolId=' + sA.id, {
+        title, startTime: '2026-05-01T00:00:00Z', endTime: '2026-06-01T00:00:00Z',
+        questionIds: [qS6.id], classIds: [clsB.id],
+      });
+      expectDeniedOperation(res, [title]);
+      expect(await prisma.assignment.count({ where: { title } })).toBe(0);
+    });
+
+    it('R32: 混合 [本人班级, 他人班级] → 整体 403，零写入（无部分成功）', async () => {
+      const title = PREFIX + 'R7_ASG_HACK_MIXED';
+      const res = await api(tokenA).post('/api/teacher/assignments?schoolId=' + sA.id, {
+        title, startTime: '2026-05-01T00:00:00Z', endTime: '2026-06-01T00:00:00Z',
+        questionIds: [qS6.id], classIds: [clsA.id, clsHidden.id],
+      });
+      expectDeniedOperation(res, [title]);
+      expect(await prisma.assignment.count({ where: { title } })).toBe(0);
+    });
+
+    it('R33: ★R-1 questionIds —— 用他人题目建作业 → 400/1001（既有文案与形状不变），assignment 零写入', async () => {
+      const title = PREFIX + 'R7_ASG_HACK_Q';
+      const foreign = await mkForeignQuestion();
+      // 前置事实：该题确实存在且属于 tB（证明 400 不是「题目不存在」造成的假阴性，而是归属过滤生效）
+      const row = await prisma.question.findUnique({ where: { id: foreign.id }, select: { teacherId: true, deletedAt: true } });
+      expect(row.teacherId).toBe(tB.id);
+      expect(row.deletedAt).toBeNull();
+      const res = await api(tokenA).post('/api/teacher/assignments?schoolId=' + sA.id, {
+        title, startTime: '2026-05-01T00:00:00Z', endTime: '2026-06-01T00:00:00Z',
+        questionIds: [foreign.id], classIds: [clsA.id],
+      });
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({ code: 1001, message: '部分题目不存在或已删除，无法布置', data: null });
+      expect(await prisma.assignment.count({ where: { title } })).toBe(0);
+    });
+
+    it('R34: 混合 [本人题目, 他人题目] → 整体 400/1001，零写入', async () => {
+      const title = PREFIX + 'R7_ASG_HACK_QMIX';
+      const foreign = await mkForeignQuestion();
+      const res = await api(tokenA).post('/api/teacher/assignments?schoolId=' + sA.id, {
+        title, startTime: '2026-05-01T00:00:00Z', endTime: '2026-06-01T00:00:00Z',
+        questionIds: [qChecker.id, foreign.id], classIds: [clsA.id],
+      });
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({ code: 1001, message: '部分题目不存在或已删除，无法布置', data: null });
+      expect(await prisma.assignment.count({ where: { title } })).toBe(0);
+    });
+
+    it('R35: 本人题目 + 他人班级 → 403/1003（班级守卫独立于题目守卫生效）', async () => {
+      const title = PREFIX + 'R7_ASG_HACK_QOK_CLSBAD';
+      const res = await api(tokenA).post('/api/teacher/assignments?schoolId=' + sA.id, {
+        title, startTime: '2026-05-01T00:00:00Z', endTime: '2026-06-01T00:00:00Z',
+        questionIds: [qChecker.id], classIds: [clsHidden.id],
+      });
+      expectDeniedOperation(res, [title]);
+      expect(await prisma.assignment.count({ where: { title } })).toBe(0);
+    });
+
+    it('R36: 本人题目 + 本人可见班级 → 200 且关系行正确落库（合法路径不误伤）', async () => {
+      const title = PREFIX + 'R7_ASG_OK';
+      // 用 qS6（type=code，本人题，不落 Q9 无标准包分支）—— 只验证归属守卫不误伤
+      const res = await api(tokenA).post('/api/teacher/assignments?schoolId=' + sA.id, {
+        title, startTime: '2026-05-01T00:00:00Z', endTime: '2026-06-01T00:00:00Z',
+        questionIds: [qS6.id], classIds: [clsA.id],
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.code).toBe(0);
+      const id = res.body.data.id;
+      CLEAN.asgIds.push(id);
+      const qs = await prisma.assignmentQuestion.findMany({ where: { assignmentId: id }, select: { questionId: true } });
+      expect(qs.map(x => x.questionId)).toEqual([qS6.id]);
+      expect(await prisma.assignmentClass.count({ where: { assignmentId: id, classId: clsA.id } })).toBe(1);
+    });
+  });
+
   // ================= §2 S-6：学生作业详情归属 =================
 
   describe('S-6 学生作业详情归属校验（交接清单 A4）', () => {
