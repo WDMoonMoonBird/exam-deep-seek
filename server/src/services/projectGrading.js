@@ -28,6 +28,7 @@ import {
   getConcurrency,
 } from './deepseek.js';
 import { runRules } from './ruleExecutor.js';
+import { gradeProjectTrustJudge } from './trustJudgeGrader.js';
 import {
   buildFileTree,
   filterProjectFiles,
@@ -508,9 +509,30 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
     // 2026-08-17 检查器方案：脚本就绪时走确定性链路（硬性分项零波动），失败降级原链路
     const checkerReady = sub.question.checkerStatus === 'ready' && !!sub.question.checkerScript;
 
+    // GRADING_MODE 开关（feat/trustjudge-scoring）：trustjudge → TrustJudge sidecar
+    //（sidecar 故障自动降级 legacy）；默认 legacy
+    const gradingMode = process.env.GRADING_MODE === 'trustjudge' ? 'trustjudge' : 'legacy';
+    // 评分后端公共入参（legacy deepseek.gradeProject 与 trustjudge sidecar 共用）：
+    //   mode/fixedItems 由规则驱动评分链路引入（open 模式语义 + 固定分项对齐）。
+    //   注意：trustJudgeGrader 目前只消费 title/description/scoringRubric/standardFiles/studentFiles
+    //   五个字段，其内部「sidecar 故障降级 legacy gradeProject」也只透传这五个字段——
+    //   即 GRADING_MODE=trustjudge 时 open 模式语义与固定分项在 trustjudge 链路（含其降级）不生效。
+    //   此处如实传入：待 trustJudgeGrader 支持透传后即自动生效（跨文件缺口已上报，见 M5 报告）。
+    const gradeArgs = {
+      title: sub.question.title || '未命名项目',
+      description: sub.question.material || '',
+      scoringRubric: sub.question.scoringRubric || '',
+      standardFiles,
+      studentFiles,
+      // open：无标准包 → 评价式评分（prompt 不含「标准答案源码」段，system 用评审专家角色）
+      mode: gradeMode,
+      fixedItems,
+    };
     let result;
     try {
       if (checkerReady) {
+        // 检查器就绪 → 确定性链路优先（规则执行，零 token/零波动）；
+        // GRADING_MODE 只决定「LLM 后端」（legacy deepseek / trustjudge sidecar），不覆盖检查器
         logger.info({ submissionId }, '实训题评分：使用确定性检查脚本');
         result = await gradeWithChecker({
           question: sub.question,
@@ -518,40 +540,26 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
           standardFiles,
           studentFiles,
         });
+      } else if (gradingMode === 'trustjudge') {
+        result = await gradeProjectTrustJudge(gradeArgs);
       } else {
-        result = await gradeProject({
-          title: sub.question.title || '未命名项目',
-          description: sub.question.material || '',
-          scoringRubric: sub.question.scoringRubric || '',
-          standardFiles,
-          studentFiles,
-          // open：无标准包 → 评价式评分（prompt 不含「标准答案源码」段，system 用评审专家角色）
-          mode: gradeMode,
-          fixedItems,
-        });
+        result = await gradeProject(gradeArgs);
       }
     } catch (aiErr) {
       if (checkerReady) {
-        // 检查器失败 → 降级原 LLM 链路（本次评分不中断）
+        // 检查器失败 → 降级原 LLM 链路（本次评分不中断）；降级同样遵循 GRADING_MODE 的后端选择
         logger.warn({ err: aiErr.message, submissionId }, '检查器评分失败，降级 LLM 全量评分');
         try {
-          result = await gradeProject({
-            title: sub.question.title || '未命名项目',
-            description: sub.question.material || '',
-            scoringRubric: sub.question.scoringRubric || '',
-            standardFiles,
-            studentFiles,
-            // 降级链路保持同一评分模式：open 题目不得回退成「对比标准答案」的标准模式 prompt
-            mode: gradeMode,
-            fixedItems,
-          });
+          result = gradingMode === 'trustjudge'
+            ? await gradeProjectTrustJudge(gradeArgs)
+            : await gradeProject(gradeArgs);
         } catch (err2) {
           logger.error({ err: err2, submissionId }, '实训题评分：AI 调用失败，标记失败');
           await markFailed(submissionId, 'AI 评分服务异常');
           return;
         }
       } else {
-        logger.error({ err: aiErr, submissionId }, '实训题评分：AI 调用失败，标记失败');
+        logger.error({ err: aiErr, submissionId, gradingMode }, '实训题评分：AI 调用失败，标记失败');
         await markFailed(submissionId, 'AI 评分服务异常');
         return;
       }
@@ -603,7 +611,7 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
     });
 
     logger.info(
-      { submissionId, aiScore, elapsed: `${Date.now() - start}ms` },
+      { submissionId, aiScore, gradingMode, elapsed: `${Date.now() - start}ms` },
       '实训题 AI 评分完成',
     );
   } catch (err) {
