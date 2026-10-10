@@ -79,8 +79,9 @@
           </div>
         </div>
         <div class="cw-version-row">
+          <label for="cw-rollback-version" class="visually-hidden">历史版本</label>
           <span class="cw-vlabel">历史版本：</span>
-          <a-select v-model:value="rollbackTarget" style="width: 420px" size="small" placeholder="选择要回滚的版本">
+          <a-select id="cw-rollback-version" v-model:value="rollbackTarget" style="width: 420px" size="small" placeholder="选择要回滚的版本">
             <a-select-option v-for="v in versions" :key="v.id" :value="v.id">
               {{ v.version }}（{{ v.status === 'active' ? '当前启用' : v.status === 'draft' ? '草稿' : '已归档' }}）{{ v.reason }} · {{ v.createdAt }}
             </a-select-option>

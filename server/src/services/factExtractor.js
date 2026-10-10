@@ -27,9 +27,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { resolveProjectRoot } from './ruleExecutor.js';
 import {
-  collectSourceFiles, detectLanguage, emptyFacts, extractManifestDeps, extOf,
+  collectSourceFiles, detectLanguage, emptyFacts, extractManifestDeps, extOf, resolveProjectRoot,
 } from './factExtractors/common.js';
 import { extractJsFacts, detectFramework as detectJsFramework } from './factExtractors/javascript.js';
 import { extractJavaFacts, detectJavaFramework } from './factExtractors/java.js';

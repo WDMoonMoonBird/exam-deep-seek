@@ -159,6 +159,7 @@ const pageTitle = ref('');
 const MENU_TITLES = {
   '/teacher/assignments': '作业管理', '/teacher/review': '评分审核', '/teacher/questions': '题库管理',
   '/teacher/classes': '班级管理', '/teacher/students': '学生管理', '/teacher/teams': '教学团队',
+  '/teacher/rule-quality': '规则质量',
 };
 function syncPageTitle() {
   // a-layout-content 是 antd 组件：模板 ref 拿到组件实例，$el 才是它渲染的 <main> 元素

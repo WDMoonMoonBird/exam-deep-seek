@@ -58,12 +58,12 @@
 
   /* 成功 */
   --green-50:  #ecfdf3;  --green-200: #a6f4c5;
-  --green-500: #12b76a;  --green-600: #039855;
+  --green-600: #039855;
   --green-700: #027a48;
 
   /* 警告 */
   --amber-50:  #fffaeb;  --amber-200: #fedf89;
-  --amber-400: #fdb022;  --amber-500: #f79009;  --amber-600: #dc6803;
+  --amber-400: #fdb022;  --amber-600: #dc6803;
   --amber-700: #b54708;
 
   /* 危险 */
@@ -72,7 +72,7 @@
   --red-700:   #b42318;
 
   /* 紫（实训题 / 项目类标识） */
-  --violet-50: #f4f3ff;  --violet-100: #ebe9fe; --violet-500: #7a5af8;
+  --violet-50: #f4f3ff;  --violet-100: #ebe9fe;
   --violet-600: #6938ef;
 
   /* 字号（中文友好：正文 14px / 行高 1.6） */
@@ -214,7 +214,6 @@
   --border-subtle: var(--gray-100);
   --border-default: var(--gray-200);
   --border-strong: var(--gray-300);
-  --border-inverse: rgba(255, 255, 255, 0.10);
   --border-focus: var(--brand-500);
   --border-danger: var(--red-500);
 
@@ -261,7 +260,6 @@
   --border-subtle: rgba(255, 255, 255, 0.06);
   --border-default: rgba(255, 255, 255, 0.12);
   --border-strong: rgba(255, 255, 255, 0.20);
-  --border-inverse: rgba(0, 0, 0, 0.12);
   --border-focus: var(--brand-400);
 
   --status-success-fg: #6ce9a6; --status-success-bg: rgba(3, 152, 85, 0.16); --status-success-bd: rgba(3, 152, 85, 0.36);
@@ -293,6 +291,7 @@
   --btn-primary-bg-hover: var(--brand-700);
   --btn-primary-bg-active: var(--brand-800);
   --btn-primary-fg: var(--text-on-brand);
+  --btn-default-bg: var(--bg-surface);
   --btn-default-bg-hover: var(--gray-50);
   --btn-default-bd: var(--border-strong);
   --btn-text-fg: var(--text-link);

@@ -19,9 +19,14 @@ import { createRequire } from 'node:module';
 import Parser from 'tree-sitter';
 import JS from 'tree-sitter-javascript';
 import { extractFacts } from './factExtractor.js';
+import { resolveProjectRoot } from './factExtractors/common.js';
 import { getJavaParser } from './factExtractors/java.js';
 import { getPythonParser } from './factExtractors/python.js';
 import logger from '../utils/logger.js';
+
+// F-1 循环依赖拆解（round 2）：resolveProjectRoot 的实现已下沉到 factExtractors/common.js，
+// 此处再导出以保持既有对外导出面逐字不变（checkerService.js / ruleMutator.js 从此处 import）。
+export { resolveProjectRoot };
 
 // tree-sitter-vue 的旧版原生绑定（build/Release/*.node）在部分运行时（如 Jest 的模块解析器）
 // 下无法加载：统一走 createRequire 惰性加载，加载/初始化失败一律回退 <script> 提取 + JS 解析。
@@ -933,56 +938,6 @@ export function validateRules(rules) {
     };
   }
   return { ok: true };
-}
-
-/**
- * 工程根探测：rootDir 为解压根；若 rootDir 下只有一个子目录、且该子目录包含源码文件
- * （扩展名命中 SOURCE_EXTS 或含 package.json），返回该子目录；否则返回 rootDir。
- *
- * 供路径解析使用 —— 学生压缩包常见「外层解压根包一个工程目录」结构，规则里的路径
- * （如 package.json）是相对工程目录写的。
- *
- * @param {string} rootDir - 解压根
- * @returns {string} 工程根（绝对路径或原值）
- */
-export function resolveProjectRoot(rootDir) {
-  if (!rootDir || typeof rootDir !== 'string') return rootDir;
-  const root = path.resolve(rootDir);
-  let stat = null;
-  try {
-    stat = fs.statSync(root);
-  } catch {
-    return rootDir;
-  }
-  if (!stat.isDirectory()) return rootDir;
-
-  let subdirs = [];
-  try {
-    subdirs = fs.readdirSync(root, { withFileTypes: true })
-      .filter((e) => e.isDirectory() && !e.name.startsWith('.') && !SKIP_DIRS.has(e.name))
-      .map((e) => e.name);
-  } catch {
-    return rootDir;
-  }
-  if (subdirs.length !== 1) return rootDir;
-
-  // P0-1：清单文件是「工程根」的强信号 —— rootDir 自身含清单（package.json/pom.xml/
-  // build.gradle/requirements.txt/pyproject.toml 等）时，即使只有唯一源码子目录也**不**下钻。
-  // 否则典型 Java 工程（pom.xml + src/）会被误下钻到 src/，清单路径全部失配
-  // （JS 工程 package.json + src/ 同理，属既有潜在缺陷一并修复）。
-  const MANIFEST_NAMES = ['package.json', 'pom.xml', 'build.gradle', 'build.gradle.kts',
-    'requirements.txt', 'pyproject.toml', 'setup.py', 'Pipfile'];
-  const hasRootManifest = MANIFEST_NAMES.some((name) => {
-    try { return fs.statSync(path.join(root, name)).isFile(); } catch { return false; }
-  });
-  if (hasRootManifest) return rootDir;
-
-  const candidate = path.join(root, subdirs[0]);
-  const hasSource = collectFiles(candidate).some((f) => {
-    const name = path.basename(f);
-    return name === 'package.json' || SOURCE_EXTS.has(extOf(f));
-  });
-  return hasSource ? candidate : rootDir;
 }
 
 /**
