@@ -20,8 +20,10 @@ import legacy from '@vitejs/plugin-legacy'
  * 必须整目录（vs 布局）：index 的 vs/editor/editor.main.js 是 AMD 模块，按 vs/ 相对路径再取
  * basic-languages/、language/、monaco.contribution-*.js 与 assets/*.worker-*.js。
  * 路径经 Vite base（/exam/）拼接，故部署前缀下同样成立；nginx 仍只做 dist 静态服务，无需改配置。
- * 旧内核（Chrome < 88）仍走既有兼容分流（infrastructure/monaco/legacyLoaderCompat.js → 0.24.0），
- * 本插件只补现代浏览器这一条，不动既有分流。
+ * 旧内核（Chrome < 88）走既有兼容分流（infrastructure/monaco/legacyLoaderCompat.js），其 0.24.0 资产
+ * 由 public/monaco-legacy/（vendored，来源/版本/升级见该目录 README.md）经 publicDir 提供，
+ * 本插件不管那条（资产是静态的，dev/build 都由 Vite 自己处理）。
+ * 另有 monacoLoaderLocalDefault()：构建期把 loader 的**内置默认**基址也换成本站路径，使产物不含任何 CDN 串。
  * =========================================================================== */
 
 const MONACO_VS_SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'node_modules/monaco-editor/min/vs')
@@ -37,6 +39,32 @@ const MONACO_MIME = {
   '.woff2': 'font/woff2',
   '.svg': 'image/svg+xml',
   '.map': 'application/json; charset=utf-8',
+}
+
+/**
+ * monacoLoaderLocalDefault —— 把 @monaco-editor/loader 的**内置默认**基址
+ * （默认值即 https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs，见该包 lib/{es,cjs}/config/index.js）
+ * 在构建期换成本站路径，使产物里不再出现任何 CDN 串（静态 externals=0）。
+ * 做法：把 loader 内部对 '../config/index.js' 的导入替换为虚拟模块（改配置默认值，而非字符串替换）。
+ * 三处调用点本就会显式 loader.config(...)，即使此处匹配失败也不影响运行；只是静态串会回来，
+ * closeBundle 的守卫会就此告警（不阻断构建）。
+ */
+function monacoLoaderLocalDefault() {
+  const VIRTUAL_ID = '\0monaco-loader-local-default'
+  let base = '/'
+  return {
+    name: 'monaco-loader-local-default',
+    enforce: 'pre',
+    configResolved(config) { base = config.base },
+    resolveId(source, importer) {
+      if (importer && /@monaco-editor[\\/]loader/.test(importer) && /(?:^|\/)config\/index\.js$/.test(source)) return VIRTUAL_ID
+      return null
+    },
+    load(id) {
+      if (id !== VIRTUAL_ID) return null
+      return 'export default { paths: { vs: ' + JSON.stringify(base + MONACO_VS_SUBDIR) + ' } }\n'
+    },
+  }
 }
 
 function monacoLocalVs() {
@@ -77,12 +105,20 @@ function monacoLocalVs() {
       fs.rmSync(dest, { recursive: true, force: true })
       fs.cpSync(MONACO_VS_SRC, dest, { recursive: true })
       console.log(`[monaco-local-vs] 已拷贝本地 Monaco 运行时 → ${path.relative(process.cwd(), dest)}（${Date.now() - t0}ms）`)
+      // 构建守卫：产物不应再出现任何 CDN 串（现代 0.55 = 本地拷贝；旧内核 0.24 = public/monaco-legacy；
+      // loader 内置默认已被 monacoLoaderLocalDefault 换掉）。出现即为回归，明确告警（不阻断构建）。
+      const assetsDir = path.join(outDir, 'assets')
+      const hits = fs.existsSync(assetsDir)
+        ? fs.readdirSync(assetsDir).filter((f) => f.endsWith('.js') && /cdn\.jsdelivr\.net/.test(fs.readFileSync(path.join(assetsDir, f), 'utf8')))
+        : []
+      if (hits.length) console.warn('[monaco-local-vs] ⚠ 产物仍含 CDN 串，请检查 loader 默认替换/兼容分流：' + hits.join(', '))
+      else console.log('[monaco-local-vs] 静态守卫：dist/assets 内 CDN 串 = 0 ✓')
     },
   }
 }
 
 export default defineConfig({
-  plugins: [vue(), legacy({ targets: ['chrome >= 69'] }), monacoLocalVs()],
+  plugins: [vue(), legacy({ targets: ['chrome >= 69'] }), monacoLoaderLocalDefault(), monacoLocalVs()],
   server: {
     port: 5173,
     proxy: {
