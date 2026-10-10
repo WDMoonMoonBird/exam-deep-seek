@@ -6,10 +6,10 @@
         <ArrowLeftOutlined /> 返回
       </a-button>
       <h3 class="sp-title">{{ q.title }}</h3>
-      <a-tag v-if="isPracticeMode" color="green" size="small">练习 · 第 {{ currentAttempt }} 次</a-tag>
+      <a-tag v-if="isPracticeMode" class="tag-success" size="small">练习 · 第 {{ currentAttempt }} 次</a-tag>
       <a-tag v-if="isPracticeMode && maxAttempts" size="small">可提交 {{ remainingAttempts }} 次</a-tag>
       <a-tag class="tag-warning">总分 {{ q.maxScore }} 分</a-tag>
-      <a-tag v-if="totalScored > 0" color="green">得分 {{ totalScored }} / {{ q.maxScore }}</a-tag>
+      <a-tag v-if="totalScored > 0" class="tag-success">得分 {{ totalScored }} / {{ q.maxScore }}</a-tag>
       <a-tag v-if="bestScore != null" color="blue">最高分 {{ bestScore }} / {{ q.maxScore }}</a-tag>
       <span v-if="isExpired" class="sp-expired-tag">已过期</span>
     </div>
@@ -91,13 +91,13 @@
           <!-- 小题头部 -->
           <div class="sq-header">
             <span class="sq-num">第 {{ i + 1 }} 小题</span>
-            <a-tag v-if="sq.type === 'objective'" color="purple" size="small">
+            <a-tag v-if="sq.type === 'objective'" class="tag-accent" size="small">
               {{ getNavLabel(sq, i).replace('第' + (i + 1) + '小题 ', '') || '客观题' }}
             </a-tag>
             <a-tag v-else color="blue" size="small">编程题</a-tag>
             <span class="sq-score">{{ sq.score }} 分</span>
             <span class="sq-status-spacer"></span>
-            <a-tag v-if="subStatuses[sq.id] === 'published' || (isPracticeMode && (subStatuses[sq.id] === 'ai_graded' || subStatuses[sq.id] === 'reviewed'))" color="green" size="small">
+            <a-tag v-if="subStatuses[sq.id] === 'published' || (isPracticeMode && (subStatuses[sq.id] === 'ai_graded' || subStatuses[sq.id] === 'reviewed'))" class="tag-success" size="small">
               得分 {{ subScores[sq.id] }} / {{ sq.score }}
             </a-tag>
             <a-tag v-else-if="subStatuses[sq.id] === 'submitted'" color="blue" size="small">
@@ -114,7 +114,11 @@
           <!-- 主观题：CodeEditor -->
           <template v-if="sq.type === 'code' || !sq.type">
             <div class="sq-editor-toolbar">
+              <!-- T5-A2：语言选择器没有可见 label；placeholder 不算可访问名称、aria-label 又会被 antd
+                   渲染到外层 .ant-select div（落不到 role=combobox 的 input）→ 视觉隐藏 label + for/id（与 t7 同法） -->
+              <label :for="'sq-lang-' + sq.id" class="visually-hidden">第 {{ i + 1 }} 题代码语言</label>
               <a-select
+                :id="'sq-lang-' + sq.id"
                 :value="editorLangs[sq.id] || sq.language || 'cpp'"
                 @change="(v) => editorLangs[sq.id] = v"
                 size="small" class="lang-select"
@@ -395,15 +399,18 @@ async function retryPractice() {
 }
 
 function itemTypeColor(type) {
-  // 题型徽标：judge 不再走 antd 预置 orange（亮 rgb(212,107,8) on rgb(255,247,230) = 3.34:1 不达 AA），
-  // 改由 B2-2 的语义类 .tag-warning 上色（见 itemTypeClass）；其余题型维持原预置色。
-  const map = { choice: 'blue', multi_choice: 'purple', fill: 'green' };
+  // 题型徽标：antd 预置色在某一主题下不达 AA（judge orange 亮 3.34、fill green 亮 3.37、multi_choice purple 暗 3.39）
+  // → 这三类走 B2-2 的语义类（见 itemTypeClass）；choice 的 blue 实测亮 5.50 / 暗 4.91 已达标，维持预置色。
+  const map = { choice: 'blue' };
   return map[type] || 'default';
 }
 
-// 与 style.css 的 .tag-warning 配套（仅 judge 需要语义类兜底）
+// 与 style.css 的 .tag-* 语义类配套：只对「预置色不达标」的三类返回类名（0-2-1 接管三色，不动盒模型）
 function itemTypeClass(type) {
-  return type === 'judge' ? 'tag-warning' : '';
+  if (type === 'judge') return 'tag-warning';
+  if (type === 'fill') return 'tag-success';
+  if (type === 'multi_choice') return 'tag-accent';
+  return '';
 }
 
 function getItemKey(sqId, itemKey) { return `${sqId}_${itemKey}`; }
@@ -1246,6 +1253,8 @@ onUnmounted(() => {
 }
 .dirty-hint { color: var(--status-warning-fg); }
 .sync-ok { color: var(--status-success-fg); }
+/* T5-A2：无可见 label 的控件用「视觉隐藏 label + for/id」补可访问名称（与 t7 同实现） */
+.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 /* D3：服务端跳过草稿（未入库）时的如实提示 —— 与「未保存」同一警示色 */
 .draft-note { color: var(--status-warning-fg); }
 /* T4-F2 本页份额：语义警示标签改用 B2-2 的全局类 .tag-warning（定义在 style.css，
