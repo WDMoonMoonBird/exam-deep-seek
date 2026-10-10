@@ -3,7 +3,9 @@
     <!-- 顶栏：返回条 + 对象名 + 状态徽标（Workbench 壳） -->
     <div class="pr-top wb-top">
       <a-button type="link" size="small" @click="$router.back()">← 返回</a-button>
-      <h3 class="pr-title">{{ question.title }}</h3>
+      <!-- B3-1 ⑤：标题层级与 Layout 的 h1 衔接（h1 → h2 → 页内 h3）：由 h3 提升为 h2，避免 axe heading-order；
+         该类的字号/字重/margin 均已在 CSS 显式声明，标签变化不产生任何视觉差异。 -->
+      <h2 class="pr-title">{{ question.title }}</h2>
       <StatusTag tone="brand" text="实训题" />
       <StatusTag tone="warning" text="BETA" />
       <span class="pr-student">{{ student.realName }} / {{ displayNo }}</span>
@@ -34,7 +36,7 @@
             @dblclick="onTreeDblclick"
           >
             <template #icon="{ type, path }">
-              <FolderOutlined v-if="type === 'directory'" style="color:var(--amber-400);font-size:var(--fs-body);" />
+              <FolderOutlined v-if="type === 'directory'" style="color:var(--status-warning-fg);font-size:var(--fs-body);" />
               <span v-else class="tree-icon fiv-icon" :class="getClassWithColor(path || '')"></span>
             </template>
             <template #title="{ name, type }">
@@ -669,14 +671,14 @@ onBeforeUnmount(() => {
 .pr-panel { flex-shrink:0; background:var(--bg-surface-2); border-top:1px solid var(--border-strong); display:flex; flex-direction:column; }
 .panel-header { display:flex; align-items:center; gap:8px; padding:7px 16px; cursor:pointer; user-select:none; font-size:var(--fs-body-sm); color:var(--text-secondary); border-bottom:1px solid var(--border-subtle); }
 .panel-header:hover { background:var(--bg-sunken); }
-.panel-arrow { font-size:10px; color:var(--text-tertiary); transition:transform .2s ease; }
+.panel-arrow { font-size:10px; color:var(--text-tertiary); transition:transform var(--duration-base) ease; }
 .panel-arrow.open { transform:rotate(90deg); }
 .panel-title { font-weight:600; color:var(--text-primary); }
 .panel-toggle { margin-left:auto; font-size:var(--fs-caption); color:var(--text-tertiary); }
 .panel-body { display:flex; height:250px; overflow:hidden; }
 
 /* 面板折叠/展开原生过渡（max-height 匹配 250px 面板高） */
-.panel-slide-enter-active, .panel-slide-leave-active { transition: max-height .28s ease, opacity .28s ease; }
+.panel-slide-enter-active, .panel-slide-leave-active { transition: max-height var(--duration-slow) ease, opacity var(--duration-slow) ease; }
 .panel-slide-enter-from, .panel-slide-leave-to { max-height:0; opacity:0; }
 .panel-slide-enter-to, .panel-slide-leave-from { max-height:250px; opacity:1; }
 .ai-section { flex:1; overflow:auto; padding:12px 16px; border-right:1px solid var(--border-subtle); }
@@ -693,12 +695,12 @@ onBeforeUnmount(() => {
   max-height: 400px; overflow: auto;
 }
 .ai-score-label { font-size:var(--fs-caption); color:var(--text-tertiary); }
-.ai-score-num { font-size:var(--fs-title-1); font-weight:700; color:var(--brand-600); }
+.ai-score-num { font-size:var(--fs-title-1); font-weight:700; color:var(--text-brand); }
 .ai-collapse { margin-bottom:6px; }
 .ai-collapse :deep(.ant-collapse-item > .ant-collapse-header) { padding:4px 0; font-size:var(--fs-body-sm); color:var(--text-secondary); }
 .bd-row { display:flex; gap:10px; font-size:var(--fs-caption); padding:3px 0; border-bottom:1px dashed var(--border-subtle); }
 .bd-name { flex:1; color:var(--text-primary); }
-.bd-score { color:var(--brand-600); font-weight:600; white-space:nowrap; }
+.bd-score { color:var(--text-brand); font-weight:600; white-space:nowrap; }
 .bd-comment { flex:2; color:var(--text-secondary); }
 .hl-list { margin:4px 0; }
 .hl-item { font-size:12.5px; padding:2px 0; color:var(--text-primary); }
@@ -716,11 +718,11 @@ onBeforeUnmount(() => {
 .t-hint { flex:1; font-size:var(--fs-caption); color:var(--text-tertiary); }
 
 /* ===== 数据源/内容切换动效（0.15s 淡入上移） ===== */
-.pr-fade-enter-active { transition: opacity 0.15s ease, transform 0.15s ease; }
-.pr-fade-leave-active { transition: opacity 0.1s ease; }
+.pr-fade-enter-active { transition: opacity var(--duration-fast) ease, transform var(--duration-fast) ease; }
+.pr-fade-leave-active { transition: opacity var(--duration-instant) ease; }
 .pr-fade-enter-from { opacity: 0; transform: translateY(6px); }
 .pr-fade-leave-to { opacity: 0; }
-.pr-fade-in { animation: prFadeIn 0.15s ease; }
+.pr-fade-in { animation: prFadeIn var(--duration-fast) ease; }
 @keyframes prFadeIn {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }

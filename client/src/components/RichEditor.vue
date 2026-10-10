@@ -169,7 +169,7 @@ onUnmounted(() => {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   overflow: hidden;
-  transition: border-color 0.2s;
+  transition: border-color var(--duration-base);
   background: var(--bg-surface);
 }
 .rich-editor.focused {

@@ -1,7 +1,11 @@
 <template>
   <div class="app-shell" data-density="compact">
+    <!-- B3-1 ⑤ 跳过导航直达主内容（默认视觉隐藏=不参与布局；Tab 聚焦时出现在左上角） -->
+    <a class="skip-link" href="#main-content">跳到主内容</a>
     <a-layout class="layout">
-        <a-layout-sider v-model:collapsed="collapsed" :trigger="null" collapsible :width="SIDER_WIDTH" :collapsedWidth="sidebarCollapsedWidth" breakpoint="lg">
+        <!-- role=complementary：antd 的 a-layout 渲染为 <section>，HTML-AAM 会把 section 内的 <aside> 降级为 generic
+             （CDP 实测 role=generic）→ 显式补 landmark，region 违规才消除；aria-label 给地标命名。 -->
+        <a-layout-sider v-model:collapsed="collapsed" :trigger="null" collapsible :width="SIDER_WIDTH" :collapsedWidth="sidebarCollapsedWidth" breakpoint="lg" role="complementary" aria-label="侧栏">
             <div class="logo">
                 <img src="../../assets/logo.svg" class="logo-img" alt="logo" />
                 <span v-show="!collapsed" class="logo-text"><span class="logo-line1">Deadpan</span><span class="logo-line2">判题</span></span>
@@ -38,7 +42,8 @@
             </a-menu>
         </a-layout-sider>
         <a-layout>
-            <a-layout-header class="topbar app-topbar">
+            <!-- role=banner：同上，<section> 内的 <header> 被降级为 sectionheader（CDP 实测）→ 显式补 banner 地标 -->
+            <a-layout-header class="topbar app-topbar" role="banner">
                 <div class="topbar-left">
                     <MenuUnfoldOutlined v-if="collapsed" class="trigger" @click="collapsed = false" />
                     <MenuFoldOutlined v-else class="trigger" @click="collapsed = true" />
@@ -73,7 +78,9 @@
                     </template>
                 </a-dropdown>
             </a-layout-header>
-            <a-layout-content class="content">
+            <a-layout-content class="content" id="main-content" ref="mainRef">
+                <!-- B3-1 ⑤ 页面 H1：镜像当前页真实标题（页内标题元素 → 侧栏菜单名兜底；非通用词），视觉隐藏 -->
+                <h1 v-if="pageTitle" class="visually-hidden">{{ pageTitle }}</h1>
                 <router-view v-slot="{ Component }">
                     <transition name="tab-fade" mode="out-in">
                         <component :is="Component" />
@@ -122,7 +129,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from 'vue';
+import { ref, reactive, computed, watch, onMounted, onUpdated, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useUserStore } from '../../stores/user.js';
 import request from '../../api/request.js';
@@ -137,6 +144,30 @@ const { confirm } = useConfirm();
 const { mode: themeMode, setMode } = useTheme();
 const user = userStore.user;
 const collapsed = ref(false);
+
+/* ===== B3-1 ⑤ 无障碍骨架：页面 H1 + 地标 + skip-link =====
+ * page-has-heading-one（改前每页 1 命中）：Layout 不自造标题，而是**镜像当前页的真实标题**——
+ *   ① 优先读主内容区里的页内标题元素（PageShell 的 .page-title / 详情页的 .rp-title/.pr-title/.sp-title）；
+ *   ② 取不到时退化为侧栏菜单里当前路由那一条的菜单名（仍是真实标题，不是「页面」「内容」这类通用词）。
+ * 隐藏方式复用全局 .visually-hidden（不参与布局 → 几何与截图不变）。 */
+const mainRef = ref(null);
+const pageTitle = ref('');
+const MENU_TITLES = {
+  '/teacher/assignments': '作业管理', '/teacher/review': '评分审核', '/teacher/questions': '题库管理',
+  '/teacher/classes': '班级管理', '/teacher/students': '学生管理', '/teacher/teams': '教学团队',
+};
+function syncPageTitle() {
+  // a-layout-content 是 antd 组件：模板 ref 拿到组件实例，$el 才是它渲染的 <main> 元素
+  const root = (mainRef.value && mainRef.value.$el) || mainRef.value;
+  if (!root || typeof root.querySelector !== 'function') return;
+  const el = root.querySelector('.page-title, .rp-title, .pr-title, .sp-title, h1:not(.visually-hidden), h2:not(.visually-hidden)');
+  let t = el && el.textContent ? el.textContent.replace(/\s+/g, ' ').trim() : '';
+  if (!t) {
+    const seg = '/' + route.path.split('/').filter(Boolean).slice(0, 2).join('/');
+    t = MENU_TITLES[seg] || '';
+  }
+  pageTitle.value = t.slice(0, 60);
+}
 
 /** 侧栏宽度取自令牌：232 / 折叠 64（docs/ui-redesign/03-components.md §3.4） */
 const SIDER_WIDTH = 'var(--layout-sider-w)';
@@ -182,6 +213,11 @@ onMounted(() => { refreshPendingReview(); });
  * 写在模板里会被这个 prop 吸收、透传不到 ul。
  */
 const navMenuRef = ref(null);
+/** ⑤ 标题镜像：挂载后、每次更新后、路由变化后各同步一次（查询很轻，无副作用） */
+onMounted(() => { syncPageTitle(); });
+onUpdated(syncPageTitle);
+watch(() => route.path, () => nextTick(syncPageTitle));
+
 onMounted(() => {
   const el = navMenuRef.value && navMenuRef.value.$el;
   if (!el || !el.setAttribute) return;
@@ -415,7 +451,7 @@ function handleMenu ({ key }) {
 /* 折叠态：与文字一起隐藏（antd 会把 title-content 置为透明，这里对徽标兜底） */
 .layout :deep(.ant-layout-sider-collapsed .sider-badge) { display: none; }
 
-.flow-title-icon { color: var(--brand-600); margin-right: var(--space-2); }
+.flow-title-icon { color: var(--text-brand); margin-right: var(--space-2); }
 .flow-steps { margin: var(--space-3) 0 var(--space-4); }
 
 .flow-content {

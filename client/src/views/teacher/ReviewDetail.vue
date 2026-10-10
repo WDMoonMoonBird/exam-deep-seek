@@ -5,7 +5,9 @@
       <a-button type="link" size="small" @click="$router.back()">
         ← 返回
       </a-button>
-      <h3 class="rp-title">{{ q.title }}</h3>
+      <!-- B3-1 ⑤：标题层级与 Layout 的 h1 衔接（h1 → h2 → 页内 h3）：由 h3 提升为 h2，避免 axe heading-order；
+         该类的字号/字重/margin 均已在 CSS 显式声明，标签变化不产生任何视觉差异。 -->
+      <h2 class="rp-title">{{ q.title }}</h2>
       <StatusTag v-if="isPracticeMode" tone="success" text="练习模式" />
       <span class="rp-student">{{ studentName }} / {{ displayStudentNo }}</span>
       <StatusTag tone="neutral" :text="'总分 ' + q.maxScore + ' 分'" />
@@ -685,17 +687,17 @@ onUnmounted(() => {
   margin: 14px 0 8px; padding: 6px 4px;
   cursor: pointer; user-select: none;
   font-size:var(--fs-body-sm); font-weight: 600; color: var(--text-secondary);
-  transition: color .15s;
+  transition: color var(--duration-fast);
   border-radius:var(--radius-sm);
 }
 .n-section-head:first-child { margin-top: 0; }
-.n-section-head:hover { color: var(--brand-600); }
+.n-section-head:hover { color: var(--text-brand); }
 .n-section-arrow {
   font-size:var(--fs-body); width: 16px; flex-shrink: 0;
-  transition: transform .25s ease;
+  transition: transform var(--duration-base) ease;
   color: var(--text-tertiary); margin-right: 2px;
 }
-.n-section-head:hover .n-section-arrow { color: var(--brand-600); }
+.n-section-head:hover .n-section-arrow { color: var(--text-brand); }
 .n-section-arrow.collapsed { transform: rotate(-90deg); }
 .n-section-label { flex: 1; }
 .n-section-count {
@@ -709,7 +711,7 @@ onUnmounted(() => {
 .n-grid-wrap {
   max-height: none;
   overflow: visible;
-  transition: max-height .3s ease, opacity .2s ease;
+  transition: max-height var(--duration-slow) ease, opacity var(--duration-base) ease;
   opacity: 1;
 }
 .n-grid-wrap.collapsed {
@@ -775,11 +777,11 @@ onUnmounted(() => {
   background: var(--bg-surface); border-radius:var(--radius-md); border: 1px solid var(--border-subtle);
 }
 .rp-material-bar:hover { background: var(--bg-sunken); }
-.material-arrow { margin-left: auto; font-size: 10px; transition: transform .2s; }
+.material-arrow { margin-left: auto; font-size: 10px; transition: transform var(--duration-base); }
 .material-arrow.open { transform: rotate(180deg); }
 .rp-material-body { overflow: hidden; }
 .rp-material-inner { padding: 12px 16px; background: var(--bg-surface-2); border-radius: 0 0 8px 8px; }
-.collapse-enter-active, .collapse-leave-active { transition: all .25s ease; }
+.collapse-enter-active, .collapse-leave-active { transition: all var(--duration-base) ease; }
 .collapse-enter-from, .collapse-leave-to { opacity: 0; max-height: 0; }
 .collapse-enter-to, .collapse-leave-from { opacity: 1; max-height: 800px; }
 
@@ -797,7 +799,7 @@ onUnmounted(() => {
   border-bottom: 1px solid var(--border-subtle);
 }
 .sq-num { font-size:var(--fs-title-3); font-weight: 700; color: var(--text-primary); }
-.sq-score { margin-left: auto; font-size:var(--fs-body); font-weight: 600; color: var(--brand-600); }
+.sq-score { margin-left: auto; font-size:var(--fs-body); font-weight: 600; color: var(--text-brand); }
 .sq-status-spacer { flex: 1; }
 .sq-stem { margin-bottom: 16px; }
 
@@ -822,7 +824,7 @@ onUnmounted(() => {
   margin-bottom: 14px; padding: 14px 16px;
   border: 2px solid var(--border-subtle); border-radius:var(--radius-md);
   scroll-margin-top: 16px;
-  transition: border-color .2s;
+  transition: border-color var(--duration-base);
 }
 .oi-card.oi-correct { border-color: var(--status-success-bd); background: var(--status-success-bg); }
 .oi-card.oi-wrong { border-color: var(--status-danger-bd); background: var(--status-danger-bg); }
@@ -831,7 +833,7 @@ onUnmounted(() => {
   display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
 }
 .oi-num { font-weight: 700; font-size:var(--fs-body); }
-.oi-score { font-size:var(--fs-caption); color: var(--brand-600); font-weight: 600; }
+.oi-score { font-size:var(--fs-caption); color: var(--text-brand); font-weight: 600; }
 .oi-judge { margin-left: auto; font-size:var(--fs-body-sm); font-weight: 600; }
 .oi-judge.correct { color: var(--status-success-fg); }
 .oi-judge.wrong { color: var(--status-danger-fg); }
@@ -866,7 +868,7 @@ onUnmounted(() => {
   border-bottom: 1px solid var(--border-subtle);
 }
 .sq-review-label { font-size:var(--fs-caption); font-weight: 600; color: var(--text-tertiary); }
-.sq-review-score { font-size:var(--fs-title-2); font-weight: 700; color: var(--brand-600); }
+.sq-review-score { font-size:var(--fs-title-2); font-weight: 700; color: var(--text-brand); }
 .sq-review-fb-row {
   display: flex; gap: 14px; margin-top: 10px;
   align-items: stretch;
@@ -900,7 +902,7 @@ onUnmounted(() => {
   border: 1px solid var(--border-subtle);
 }
 .sq-review-label { font-size:var(--fs-caption); font-weight: 600; color: var(--text-tertiary); }
-.sq-review-score { font-size:var(--fs-title-2); font-weight: 700; color: var(--brand-600); }
+.sq-review-score { font-size:var(--fs-title-2); font-weight: 700; color: var(--text-brand); }
 .sq-review-inline .ant-input-number { flex-shrink: 0; }
 
 /* 底部审核 bar */

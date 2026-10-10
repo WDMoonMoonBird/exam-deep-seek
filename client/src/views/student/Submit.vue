@@ -5,7 +5,9 @@
       <a-button type="link" size="small" @click="$router.back()">
         <ArrowLeftOutlined /> 返回
       </a-button>
-      <h3 class="sp-title">{{ q.title }}</h3>
+      <!-- B3-1 ⑤：标题层级与 Layout 的 h1 衔接（h1 → h2 → 页内 h3）：由 h3 提升为 h2，避免 axe heading-order；
+         该类的字号/字重/margin 均已在 CSS 显式声明，标签变化不产生任何视觉差异。 -->
+      <h2 class="sp-title">{{ q.title }}</h2>
       <a-tag v-if="isPracticeMode" class="tag-success" size="small">练习 · 第 {{ currentAttempt }} 次</a-tag>
       <a-tag v-if="isPracticeMode && maxAttempts" size="small">可提交 {{ remainingAttempts }} 次</a-tag>
       <a-tag class="tag-warning">总分 {{ q.maxScore }} 分</a-tag>
@@ -1341,7 +1343,7 @@ onUnmounted(() => {
 .n-box-active {
   border-color: var(--brand-600);
   background: var(--bg-selected);
-  color: var(--brand-600);
+  color: var(--text-brand);
   box-shadow: var(--ring-focus);
 }
 
@@ -1479,7 +1481,7 @@ onUnmounted(() => {
 .spinner-dot {
   display: inline-block; width: 8px; height: 8px;
   border: 2px solid var(--brand-300); border-top-color: var(--brand-600);
-  border-radius: 50%; animation: spin .8s linear infinite;
+  border-radius: 50%; animation: spin var(--duration-loop-spin) linear infinite;
   vertical-align: middle; margin-right: 2px;
 }
 @keyframes spin { to { transform: rotate(360deg); } }

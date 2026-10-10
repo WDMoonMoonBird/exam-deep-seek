@@ -1,6 +1,10 @@
 <template>
   <a-layout class="layout" data-density="compact">
-    <a-layout-sider v-model:collapsed="collapsed" :trigger="null" collapsible :width="SIDER_WIDTH" :collapsedWidth="sidebarCollapsedWidth" breakpoint="lg">
+    <!-- B3-1 ⑤ 跳过导航直达主内容（绝对定位移出视口：不参与布局，Tab 聚焦时出现） -->
+    <a class="skip-link" href="#main-content">跳到主内容</a>
+    <!-- role=complementary / banner：antd 的 a-layout 渲染为 <section>，HTML-AAM 会把 section 内的
+         <aside>/<header> 降级为 generic/sectionheader（CDP 实测）→ 显式补地标，region 违规才消除 -->
+    <a-layout-sider v-model:collapsed="collapsed" :trigger="null" collapsible :width="SIDER_WIDTH" :collapsedWidth="sidebarCollapsedWidth" breakpoint="lg" role="complementary" aria-label="侧栏">
       <div class="logo">
         <img src="../../assets/logo.svg" class="logo-img" alt="logo" />
         <span v-show="!collapsed" class="logo-text"><span class="logo-line1">Deadpan</span><span class="logo-line2">判题</span></span>
@@ -19,7 +23,7 @@
       </a-menu>
     </a-layout-sider>
     <a-layout>
-      <a-layout-header class="topbar app-topbar">
+      <a-layout-header class="topbar app-topbar" role="banner">
         <div class="topbar-left">
           <MenuUnfoldOutlined v-if="collapsed" class="trigger" @click="collapsed = false" />
           <MenuFoldOutlined v-else class="trigger" @click="collapsed = true" />
@@ -44,7 +48,9 @@
           </template>
         </a-dropdown>
       </a-layout-header>
-      <a-layout-content class="content">
+      <a-layout-content class="content" id="main-content" ref="mainRef">
+        <!-- B3-1 ⑤ 页面 H1：镜像当前页真实标题（页内标题元素 → 侧栏菜单名兜底），视觉隐藏 -->
+        <h1 v-if="pageTitle" class="visually-hidden">{{ pageTitle }}</h1>
         <router-view v-slot="{ Component }">
           <transition name="tab-fade" mode="out-in"><component :is="Component" /></transition>
         </router-view>
@@ -54,7 +60,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue';
+import { ref, watch, onMounted, onUpdated, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useUserStore } from '../../stores/user.js';
 import { BankOutlined, AppstoreOutlined, TeamOutlined, IdcardOutlined, DashboardOutlined, RobotOutlined, BulbOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
@@ -67,6 +73,31 @@ const { confirm } = useConfirm();
 const { mode: themeMode, setMode } = useTheme();
 const user = userStore.user;
 const collapsed = ref(false);
+
+/* ===== B3-1 ⑤ 无障碍骨架：页面 H1（page-has-heading-one 改前每页 1 命中）=====
+ * 不自造标题：优先镜像主内容区里的页内标题元素（PageShell .page-title），取不到时退化为
+ * 侧栏菜单中当前路由那一条的名称（真实标题，非通用词）。隐藏用全局 .visually-hidden（不参与布局）。 */
+const mainRef = ref(null);
+const pageTitle = ref('');
+const MENU_TITLES = {
+  '/admin/schools': '学校管理', '/admin/classes': '班级管理', '/admin/teachers': '教师管理',
+  '/admin/students': '学生管理', '/admin/monitor': '系统监控', '/admin/ai-config': 'AI 配置',
+};
+function syncPageTitle() {
+  // a-layout-content 是 antd 组件：模板 ref 拿到组件实例，$el 才是它渲染的 <main> 元素
+  const root = (mainRef.value && mainRef.value.$el) || mainRef.value;
+  if (!root || typeof root.querySelector !== 'function') return;
+  const el = root.querySelector('.page-title, h1:not(.visually-hidden), h2:not(.visually-hidden)');
+  let t = el && el.textContent ? el.textContent.replace(/\s+/g, ' ').trim() : '';
+  if (!t) {
+    const seg = '/' + route.path.split('/').filter(Boolean).slice(0, 2).join('/');
+    t = MENU_TITLES[seg] || '';
+  }
+  pageTitle.value = t.slice(0, 60);
+}
+onMounted(() => { syncPageTitle(); });
+onUpdated(syncPageTitle);
+watch(() => route.path, () => nextTick(syncPageTitle));
 
 /** 侧栏宽度取自令牌：232 / 折叠 64（docs/ui-redesign/03-components.md §3.4） */
 const SIDER_WIDTH = 'var(--layout-sider-w)';

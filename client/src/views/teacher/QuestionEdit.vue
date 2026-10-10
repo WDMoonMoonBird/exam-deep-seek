@@ -22,7 +22,7 @@
             </a-select>
           </a-form-item>
           <a-form-item label="总分">
-            <span style="font-size:var(--fs-title-3);font-weight:700;color:var(--brand-600);">{{computedMaxScore}} 分</span>
+            <span style="font-size:var(--fs-title-3);font-weight:700;color:var(--text-brand);">{{computedMaxScore}} 分</span>
           </a-form-item>
           <a-form-item>
             <a-button @click="showUploadExam = true" size="small">上传试卷</a-button>
@@ -130,7 +130,7 @@
                       <template #overlay><a-menu @click="onAddItem"><a-menu-item key="choice">单选题</a-menu-item><a-menu-item key="multi_choice">多选题</a-menu-item><a-menu-item key="judge">判断题</a-menu-item><a-menu-item key="fill">填空题</a-menu-item></a-menu></template>
                     </a-dropdown>
                     <span v-if="form.objectiveItems.length" style="font-size:var(--fs-caption);color:var(--text-tertiary);">共 {{form.objectiveItems.length}} 小问</span>
-                    <span style="font-size:var(--fs-body);font-weight:600;color:var(--brand-600);margin-left:auto;">小题 {{computedObjSqScore}} 分</span>
+                    <span style="font-size:var(--fs-body);font-weight:600;color:var(--text-brand);margin-left:auto;">小题 {{computedObjSqScore}} 分</span>
                   </div>
                   <div class="obj-items-scroll">
                     <TransitionGroup name="item-list" tag="div" class="obj-items-list">
@@ -283,7 +283,7 @@
       </a-alert>
       <div :class="{ 'upload-disabled': uploadAnalyzing }">
         <a-upload-dragger v-model:fileList="uploadFileList" :beforeUpload="handleUploadExam" accept=".docx,.xlsx" :maxCount="1" :showUploadList="false" :disabled="uploadAnalyzing">
-          <p class="ant-upload-drag-icon"><inbox-outlined style="color:var(--brand-600);font-size:48px;" /></p>
+          <p class="ant-upload-drag-icon"><inbox-outlined style="color:var(--text-brand);font-size:48px;" /></p>
           <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
           <p class="ant-upload-hint">仅支持 .docx / .xlsx 格式</p>
         </a-upload-dragger>
@@ -865,34 +865,34 @@ const langs=['c','cpp','csharp','java','python','javascript','typescript','go','
 
 /* 初始选类型 */
 .kind-picker{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;}
-.kind-add-btn{width:56px;height:56px;border-radius:50%;border:2px dashed var(--border-strong);background:var(--bg-surface-2);font-size:24px;color:var(--text-tertiary);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;}
+.kind-add-btn{width:56px;height:56px;border-radius:50%;border:2px dashed var(--border-strong);background:var(--bg-surface-2);font-size:24px;color:var(--text-tertiary);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all var(--duration-base);}
 .kind-add-btn:hover{border-color:var(--brand-600);color:var(--brand-600);background:var(--brand-50);}
 .kind-hint{font-size:var(--fs-body-sm);color:var(--text-tertiary);}
 .lc-left-editor{flex:1;display:flex;flex-direction:column;min-height:0;}
 
 /* 题型选择 ↔ 编辑器切换动画 */
-.kind-pick-switch-enter-active,.kind-pick-switch-leave-active{transition:all .25s ease;}
+.kind-pick-switch-enter-active,.kind-pick-switch-leave-active{transition:all var(--duration-base) ease;}
 .kind-pick-switch-enter-from{opacity:0;transform:scale(.9);}
 .kind-pick-switch-leave-to{opacity:0;transform:scale(.9);}
 
 .material-toggle{display:flex;align-items:center;gap:8px;padding:8px 16px;font-size:var(--fs-body-sm);font-weight:500;color:var(--text-secondary);cursor:pointer;user-select:none;border-bottom:1px solid var(--border-subtle);background:var(--bg-surface-2);}
 .material-toggle:hover{background:var(--border-subtle);}
-.material-arrow{margin-left:auto;font-size:10px;transition:transform .2s;}
+.material-arrow{margin-left:auto;font-size:10px;transition:transform var(--duration-base);}
 .material-arrow.open{transform:rotate(180deg);}
 .material-body{overflow:hidden;border-bottom:1px solid var(--border-subtle);}
 .material-body-inner{padding:16px 20px;}
-.collapse-enter-active,.collapse-leave-active{transition:all .25s ease;}
+.collapse-enter-active,.collapse-leave-active{transition:all var(--duration-base) ease;}
 .collapse-enter-from,.collapse-leave-to{opacity:0;max-height:0;}
 .collapse-enter-to,.collapse-leave-from{opacity:1;max-height:600px;}
 
 .lc-left-tabs{display:flex;align-items:center;border-bottom:1px solid var(--border-subtle);background:var(--bg-surface-2);flex-shrink:0;}
-.tab-scroll-btn{flex-shrink:0;width:24px;height:100%;border:none;background:transparent;cursor:pointer;font-size:var(--fs-title-2);color:var(--text-tertiary);display:flex;align-items:center;justify-content:center;transition:color .15s;padding:0;}
-.tab-scroll-btn:hover{color:var(--brand-600);}
+.tab-scroll-btn{flex-shrink:0;width:24px;height:100%;border:none;background:transparent;cursor:pointer;font-size:var(--fs-title-2);color:var(--text-tertiary);display:flex;align-items:center;justify-content:center;transition:color var(--duration-fast);padding:0;}
+.tab-scroll-btn:hover{color:var(--text-brand);}
 .lc-left-tabs-scroll{flex:1;display:flex;align-items:center;gap:4px;padding:8px 4px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;}
 .lc-left-tabs-scroll::-webkit-scrollbar{display:none;}
-.sq-tab{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 12px;border:1px solid transparent;border-radius:var(--radius-sm);background:transparent;cursor:pointer;font-size:var(--fs-body-sm);color:var(--text-secondary);white-space:nowrap;transition:all .15s;}
+.sq-tab{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 12px;border:1px solid transparent;border-radius:var(--radius-sm);background:transparent;cursor:pointer;font-size:var(--fs-body-sm);color:var(--text-secondary);white-space:nowrap;transition:all var(--duration-fast);}
 .sq-tab:hover{background:var(--border-default);}
-.sq-tab.active{background:var(--bg-surface);border-color:var(--border-strong);color:var(--brand-600);font-weight:500;}
+.sq-tab.active{background:var(--bg-surface);border-color:var(--border-strong);color:var(--text-brand);font-weight:500;}
 .sq-del{font-size:var(--fs-body);color:var(--text-disabled);line-height:1;margin-left:2px;}
 .sq-del:hover{color:var(--status-danger-fg);}
 .sq-add{width:28px;height:28px;padding:0;border:none;font-size:var(--fs-title-3);color:var(--text-tertiary);display:inline-flex;align-items:center;justify-content:center;}
@@ -907,7 +907,7 @@ const langs=['c','cpp','csharp','java','python','javascript','typescript','go','
 .upload-disabled{position:relative;opacity:.5;pointer-events:none;user-select:none;}
 
 /* 上传模态框状态切换动效 */
-.upload-status-enter-active,.upload-status-leave-active{transition:all .3s ease;}
+.upload-status-enter-active,.upload-status-leave-active{transition:all var(--duration-slow) ease;}
 .upload-status-enter-from{opacity:0;max-height:0;transform:translateY(-8px);}
 .upload-status-leave-to{opacity:0;max-height:0;transform:translateY(-4px);}
 .upload-status-leave-active{overflow:hidden;}
@@ -915,7 +915,7 @@ const langs=['c','cpp','csharp','java','python','javascript','typescript','go','
 
 .obj-items-scroll{flex:1;overflow-y:auto;min-height:0;}
 .obj-items-list{display:flex;flex-direction:column;gap:10px;padding-top:4px;position:relative;}
-.obj-item-card{border:1px solid var(--border-default);border-radius:var(--radius-md);padding:10px 12px;cursor:pointer;transition:border-color .2s,box-shadow .2s;}
+.obj-item-card{border:1px solid var(--border-default);border-radius:var(--radius-md);padding:10px 12px;cursor:pointer;transition:border-color var(--duration-base),box-shadow var(--duration-base);}
 .obj-item-card:hover{border-color:var(--brand-600);}
 .obj-item-focus{border-color:var(--brand-600);box-shadow:var(--ring-focus);}
 .obj-item-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
@@ -933,7 +933,7 @@ const langs=['c','cpp','csharp','java','python','javascript','typescript','go','
 .lc-right-inner .preview-scroll{overflow-y:auto;padding:var(--space-4);}
 
 .preview-obj-list{display:flex;flex-direction:column;gap:16px;}
-.preview-obj-item{padding:12px;border:1px solid var(--border-subtle);border-radius:var(--radius-md);transition:background .3s;}
+.preview-obj-item{padding:12px;border:1px solid var(--border-subtle);border-radius:var(--radius-md);transition:background var(--duration-slow);}
 .preview-obj-highlight{background:var(--status-warning-bg);border-color:var(--status-warning-bd);}
 .preview-obj-num{font-weight:600;font-size:var(--fs-body);margin-bottom:6px;display:flex;align-items:center;gap:6px;}
 .preview-stem{font-size:var(--fs-body);line-height:1.7;margin-bottom:8px;}
@@ -942,26 +942,26 @@ const langs=['c','cpp','csharp','java','python','javascript','typescript','go','
 .preview-answer-tag{display:inline-block;margin-top:6px;font-size:11px;color:var(--status-success-fg);background:var(--status-success-bg);padding:1px 6px;border-radius:var(--radius-xs);}
 
 /* 动效 */
-.sq-list-enter-active,.sq-list-leave-active,.sq-list-move{transition:all .2s ease;}
+.sq-list-enter-active,.sq-list-leave-active,.sq-list-move{transition:all var(--duration-base) ease;}
 .sq-list-enter-from{opacity:0;transform:scale(.8);}
 .sq-list-leave-to{opacity:0;transform:scale(.8);}
 .sq-list-leave-active{position:absolute;}
-.panel-switch-enter-active,.panel-switch-leave-active{transition:all .15s ease;}
+.panel-switch-enter-active,.panel-switch-leave-active{transition:all var(--duration-fast) ease;}
 .panel-switch-enter-from{opacity:0;transform:translateX(calc(8px * var(--slide-dir)));}
 .panel-switch-leave-to{opacity:0;transform:translateX(calc(-8px * var(--slide-dir)));}
-.tag-switch-enter-active,.tag-switch-leave-active{transition:all .15s ease;}
+.tag-switch-enter-active,.tag-switch-leave-active{transition:all var(--duration-fast) ease;}
 .tag-switch-enter-from{opacity:0;transform:translateX(calc(-12px * var(--slide-dir)));}
 .tag-switch-leave-to{opacity:0;transform:translateX(calc(12px * var(--slide-dir)));}
 
-.item-list-enter-active,.item-list-leave-active{transition:all .3s ease;}
+.item-list-enter-active,.item-list-leave-active{transition:all var(--duration-slow) ease;}
 .item-list-enter-from{opacity:0;transform:translateY(-12px);}
 .item-list-leave-to{opacity:0;transform:translateX(20px);}
 .item-list-leave-active{position:absolute;}
-.item-list-move{transition:transform .3s ease;}
-.opt-list-enter-active,.opt-list-leave-active{transition:all .2s ease;}
+.item-list-move{transition:transform var(--duration-slow) ease;}
+.opt-list-enter-active,.opt-list-leave-active{transition:all var(--duration-base) ease;}
 .opt-list-enter-from{opacity:0;transform:translateX(-10px);}
 .opt-list-leave-to{opacity:0;transform:translateX(10px);}
-.opt-list-move{transition:transform .2s ease;}
+.opt-list-move{transition:transform var(--duration-base) ease;}
 
 /* 主观题富文本编辑器 — 原始两倍高度 */
 .content-item :deep(.tiptap) {

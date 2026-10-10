@@ -29,7 +29,7 @@
         @expand="onTreeExpand"
       >
         <template #icon="{ type, path }">
-          <FolderOutlined v-if="type === 'directory'" style="color:var(--amber-400);font-size:var(--fs-body);" />
+          <FolderOutlined v-if="type === 'directory'" style="color:var(--status-warning-fg);font-size:var(--fs-body);" />
           <span v-else class="tree-icon fiv-icon" :class="getClassWithColor(path || '')"></span>
         </template>
         <template #title="{ name, type }">
@@ -151,10 +151,10 @@ function onTreeExpand(keys) {
 
 /* 圆形选择按钮（还原封装前 kind-picker UI） */
 .kind-picker { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; min-height:120px; }
-.kind-add-btn { width:56px; height:56px; border-radius:50%; border:2px dashed var(--border-strong); background:var(--bg-surface-2); font-size:24px; color:var(--text-tertiary); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .2s; }
+.kind-add-btn { width:56px; height:56px; border-radius:50%; border:2px dashed var(--border-strong); background:var(--bg-surface-2); font-size:24px; color:var(--text-tertiary); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all var(--duration-base); }
 .kind-add-btn:hover { border-color:var(--border-focus); color:var(--text-link); background:var(--bg-selected); }
-.kind-add-btn:disabled { cursor:not-allowed; opacity:.8; animation:upload-pulse 1.2s ease-in-out infinite; }
-.kind-hint { font-size:var(--fs-body-sm); color:var(--text-tertiary); transition:color .2s; }
+.kind-add-btn:disabled { cursor:not-allowed; opacity:.8; animation:upload-pulse var(--duration-loop-pulse) ease-in-out infinite; }
+.kind-hint { font-size:var(--fs-body-sm); color:var(--text-tertiary); transition:color var(--duration-base); }
 @keyframes upload-pulse { 0%,100% { opacity:.6; } 50% { opacity:1; } }
 .zu-tree { flex:1; overflow:auto; margin-top:10px; min-height:0; }
 .zu-tree-head { display:flex; align-items:baseline; gap:8px; margin-bottom:6px; }

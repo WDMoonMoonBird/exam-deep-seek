@@ -478,7 +478,7 @@ onMounted(() => { loadClasses(); fetch(); });
   color: var(--text-tertiary);
 }
 .upload-icon {
-  color: var(--brand-600);
+  color: var(--text-brand);
   font-size: 48px;
 }
 .result-center {

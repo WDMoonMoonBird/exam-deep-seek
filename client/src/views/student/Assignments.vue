@@ -298,21 +298,21 @@ onUnmounted(() => { clearInterval(nowTimer); });
   color: var(--text-secondary);
 }
 .assign-meta .tone-overdue {
-  color: var(--red-600);
+  color: var(--status-danger-fg);
   font-weight: var(--fw-medium);
 }
 .assign-meta .tone-urgent {
-  color: var(--red-600);
+  color: var(--status-danger-fg);
   font-weight: var(--fw-medium);
 }
 .assign-meta .tone-soon {
-  color: var(--amber-700);
+  color: var(--status-warning-fg);
 }
 .assign-meta .tone-normal {
   color: var(--text-tertiary);
 }
 .lock-icon {
-  color: var(--red-600);
+  color: var(--status-danger-fg);
   font-size: var(--fs-caption);
 }
 

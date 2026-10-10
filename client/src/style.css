@@ -69,10 +69,10 @@ h2 { font-size: 28px; line-height: 1.14; }
 h3 { font-size: 21px; line-height: 1.19; }
 
 /* Page transition（时长/缓动保持原值，非 hex 范围） */
-.page-fade-enter-active, .page-fade-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
+.page-fade-enter-active, .page-fade-leave-active { transition: opacity var(--duration-base) ease, transform var(--duration-base) ease; }
 .page-fade-enter-from { opacity: 0; transform: translateY(8px); }
 .page-fade-leave-to { opacity: 0; transform: translateY(-8px); }
-.tab-fade-enter-active, .tab-fade-leave-active { transition: opacity 0.15s ease; }
+.tab-fade-enter-active, .tab-fade-leave-active { transition: opacity var(--duration-fast) ease; }
 .tab-fade-enter-from, .tab-fade-leave-to { opacity: 0; }
 
 /* Rich text content */
@@ -219,6 +219,25 @@ html .ant-layout .ant-layout-header.app-topbar { color: var(--text-primary); }
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* === 跳到主内容（B3-1 ⑤）===
+   三个 Layout 的骨架各放一个：默认绝对定位移出视口（不参与布局、不影响任何页面的几何与截图），
+   键盘聚焦时落到左上角可见。href 指向 <a-layout-content id="main-content">（antd 渲染为 <main>，本身即 main landmark）。 */
+.skip-link {
+  position: absolute;
+  left: var(--space-2);
+  top: var(--space-2);
+  z-index: 3000;
+  padding: 8px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-brand);
+  font-size: var(--fs-body-sm);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-200%);
+}
+.skip-link:focus { transform: none; }
 
 /* === 移动端响应式 === */
 @media (max-width: 768px) {

@@ -192,7 +192,7 @@ async function handleSelectSchool() {
 
 .login-error {
     color: var(--status-danger-fg);
-    font-size: 14px;
+    font-size: var(--fs-body);
     margin-top: 16px;
 }
 </style>

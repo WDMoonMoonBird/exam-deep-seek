@@ -140,7 +140,9 @@
 
       <div v-if="step === 0">
         <a-input-search v-model:value="qKeyword" placeholder="搜索题目" class="mb20" @search="searchQuestions" />
-        <a-table :columns="qCols" :dataSource="questions" rowKey="id" size="small" :scroll="{ x: 'max-content' }" :rowSelection="{ selectedRowKeys: selectedQIds, onChange: onQSelect, type: 'radio' }" :pagination="false">
+        <!-- B3-1 ⑥：rowSelection.columnTitle 给 antd 自动生成的选择列一个「只读屏」列标题 →
+             消除 axe empty-table-header（<th class="ant-table-selection-column"> 改前为空）。视觉零变化。 -->
+        <a-table :columns="qCols" :dataSource="questions" rowKey="id" size="small" :scroll="{ x: 'max-content' }" :rowSelection="{ selectedRowKeys: selectedQIds, onChange: onQSelect, type: 'radio', columnTitle: qSelectColumnTitle }" :pagination="false">
           <template #bodyCell="{ column, record }">
             <template v-if="column.dataIndex === 'difficulty'">{{ difficultyText(record.difficulty) }}</template>
           </template>
@@ -198,7 +200,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, h } from 'vue';
+import { ref, reactive, computed, watch, onMounted, onUpdated, nextTick, h } from 'vue';
 import { message } from 'ant-design-vue';
 import { CheckOutlined, LockOutlined } from '@ant-design/icons-vue';
 import dayjs from 'dayjs';
@@ -324,6 +326,31 @@ const selectedQIds = ref([]);
 const avalClasses = ref([]);
 const selectedCIds = ref([]);
 const classSearch = ref('');
+/** ⑥ 选择列的只读屏列标题（VNode：antd 的 columnTitle 支持 string|VNode；用隐藏 span 保证视觉零变化） */
+const qSelectColumnTitle = h('span', { class: 'visually-hidden' }, '选择题目');
+
+/**
+ * ⑥ 行内「单选」的可访问名称（改前 axe label 命中 = 每个题目行 1 处，9 行即 9 处）：
+ * antd 的 Radio 把透传 attrs 渲染到外层 <label class="ant-radio-wrapper">（CDP 实测 aria-label 落不到
+ * role=radio 的 input），而选择列由 antd Table 内部渲染、页面拿不到声明式入口 → 在弹窗渲染后按行标题
+ * 把 aria-label 补到 input 上（与 t11/t12 对 antd 内部控件的做法一致：先试声明式，落不到才补 DOM）。
+ * 只写 aria-label 属性：勾选行为、受控状态与视觉完全不变。
+ */
+function labelQuestionRadios() {
+  if (!visible.value) return;
+  const rows = document.querySelectorAll('.assign-modal .ant-table-tbody > tr.ant-table-row');
+  rows.forEach((tr) => {
+    const tds = tr.querySelectorAll('td');
+    const title = (tds[1] ? tds[1].innerText : '').replace(/\s+/g, ' ').trim();
+    const input = tr.querySelector('.ant-table-selection-column input[type="radio"], .ant-table-selection-column .ant-radio-input');
+    if (!input || !title) return;
+    const name = '选择题目：' + title.slice(0, 40);
+    if (input.getAttribute('aria-label') !== name) input.setAttribute('aria-label', name);
+  });
+}
+onUpdated(labelQuestionRadios);
+watch(visible, async (v) => { if (v) { await nextTick(); labelQuestionRadios(); } });
+
 const filteredClasses = computed(() => {
   if (!classSearch.value) return avalClasses.value;
   const kw = classSearch.value.toLowerCase();
@@ -493,7 +520,7 @@ onMounted(async () => {
 .kpi { padding: 16px 18px; background: var(--card-bg); border: 1px solid var(--card-bd); border-radius: var(--card-radius); }
 .kpi-label { font-size: var(--fs-body-sm); color: var(--text-secondary); }
 .kpi-value { margin-top: 6px; font-size: var(--fs-display-2); line-height: 1.2; font-weight: 600; letter-spacing: -0.02em; color: var(--text-strong); }
-.kpi-value.tone-warn { color: var(--amber-700); }
+.kpi-value.tone-warn { color: var(--status-warning-fg); }
 .kpi-value small { margin-left: 4px; font-size: var(--fs-body-sm); font-weight: 400; color: var(--text-tertiary); }
 .kpi-sub { margin-top: 4px; font-size: var(--fs-caption); color: var(--text-tertiary); }
 
@@ -509,7 +536,7 @@ onMounted(async () => {
 .cell-title { display: flex; align-items: center; gap: 6px; font-weight: 500; color: var(--text-strong); }
 .cell-title .ellipsis { max-width: 200px; }
 .cell-sub { margin-top: 3px; font-size: var(--fs-caption); color: var(--text-tertiary); }
-.lock-icon { color: var(--red-600); font-size: var(--fs-caption); }
+.lock-icon { color: var(--status-danger-fg); font-size: var(--fs-caption); }
 
 /* 超出 2 个班级后的「+N」计数片（不是状态，走描边样式） */
 .chip-more { display: inline-flex; align-items: center; height: var(--tag-h); padding: 0 var(--tag-pad-x); margin-right: 4px; border-radius: var(--tag-radius); border: 1px solid var(--border-strong); color: var(--text-secondary); font-size: var(--tag-fs); white-space: nowrap; }
@@ -519,9 +546,9 @@ onMounted(async () => {
 .progress-row { display: flex; align-items: center; gap: 8px; }
 .progress { height: 6px; width: 96px; border-radius: var(--radius-pill); background: var(--score-track); overflow: hidden; }
 .progress i { display: block; height: 100%; border-radius: var(--radius-pill); background: var(--brand-500); }
-.tone-overdue { color: var(--red-600); font-weight: 500; }
-.tone-urgent { color: var(--red-600); font-weight: 500; }
-.tone-soon { color: var(--amber-700); }
+.tone-overdue { color: var(--status-danger-fg); font-weight: 500; }
+.tone-urgent { color: var(--status-danger-fg); font-weight: 500; }
+.tone-soon { color: var(--status-warning-fg); }
 .tone-normal { color: var(--text-tertiary); }
 
 .row-actions { display: flex; gap: 4px; justify-content: flex-end; }

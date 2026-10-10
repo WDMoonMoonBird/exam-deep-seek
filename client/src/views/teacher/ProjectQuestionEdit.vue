@@ -23,7 +23,7 @@
 
         <span style="font-size:var(--fs-body);color:var(--text-tertiary);white-space:nowrap;">满分</span>
         <a-input-number v-if="isTeacher" v-model:value="form.maxScore" :min="1" :step="5" style="width:80px;" />
-        <span v-else style="font-weight:700;color:var(--brand-600);">{{ form.maxScore }} 分</span>
+        <span v-else style="font-weight:700;color:var(--text-brand);">{{ form.maxScore }} 分</span>
       </a-space>
     </div>
 
@@ -558,15 +558,15 @@ onBeforeUnmount(() => {
 <style scoped>
 .meta-row { display:flex; align-items:center; gap:var(--space-3); margin-bottom:var(--space-3); flex-wrap:wrap; }
 
-.kind-pick-switch-enter-active,.kind-pick-switch-leave-active { transition: all .25s ease; }
+.kind-pick-switch-enter-active,.kind-pick-switch-leave-active { transition: all var(--duration-base) ease; }
 .kind-pick-switch-enter-from,.kind-pick-switch-leave-to { opacity:0; transform:scale(.9); }
 
 .kind-picker { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; }
-.kind-add-btn { width:56px; height:56px; border-radius:50%; border:2px dashed var(--border-strong); background:var(--bg-surface-2); font-size:24px; color:var(--text-tertiary); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .2s; }
+.kind-add-btn { width:56px; height:56px; border-radius:50%; border:2px dashed var(--border-strong); background:var(--bg-surface-2); font-size:24px; color:var(--text-tertiary); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all var(--duration-base); }
 .kind-add-btn:hover { border-color:var(--brand-600); color:var(--brand-600); background:var(--brand-50); }
-.kind-add-btn:disabled { cursor:not-allowed; opacity:.8; animation:upload-pulse 1.2s ease-in-out infinite; }
+.kind-add-btn:disabled { cursor:not-allowed; opacity:.8; animation:upload-pulse var(--duration-loop-pulse) ease-in-out infinite; }
 @keyframes upload-pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }
-.kind-hint { font-size:var(--fs-body-sm); color:var(--text-tertiary); transition:color .2s; }
+.kind-hint { font-size:var(--fs-body-sm); color:var(--text-tertiary); transition:color var(--duration-base); }
 
 /* 学生端成绩卡片（实训题专用） */
 .student-score-card { margin-bottom:12px; flex-shrink:0; border:1px solid var(--border-default); border-radius:var(--radius-md); background:var(--bg-surface); overflow:hidden; }
@@ -574,12 +574,12 @@ onBeforeUnmount(() => {
 .ssc-head { display:flex; align-items:center; gap:10px; padding:8px 14px; background:var(--bg-surface-2); border-bottom:1px solid var(--border-subtle); }
 .ssc-status { font-weight:600; font-size:var(--fs-body-sm); }
 .ssc-status.success { color:var(--status-success-fg); }
-.ssc-status.info { color:var(--brand-600); }
+.ssc-status.info { color:var(--text-brand); }
 .ssc-status.default { color:var(--text-tertiary); }
 .ssc-time { margin-left:auto; font-size:var(--fs-caption); color:var(--text-tertiary); }
 .ssc-body { display:flex; align-items:flex-start; padding:14px 16px; gap:20px; }
 .ssc-score { display:flex; align-items:baseline; gap:4px; padding-right:20px; border-right:1px solid var(--border-subtle); min-width:110px; }
-.ssc-score-num { font-size:var(--fs-display-1); font-weight:700; color:var(--brand-600); line-height:1; }
+.ssc-score-num { font-size:var(--fs-display-1); font-weight:700; color:var(--text-brand); line-height:1; }
 .ssc-score-max { font-size:var(--fs-body-sm); color:var(--text-tertiary); }
 .ssc-feedback { flex:1; min-width:0; }
 .ssc-feedback-label { font-size:var(--fs-caption); color:var(--text-tertiary); margin-bottom:4px; }
@@ -634,12 +634,12 @@ onBeforeUnmount(() => {
 
 .grade-result { padding: 8px 0; }
 .grade-total { font-size: 24px; font-weight: 700; text-align: center; margin-bottom: 16px; }
-.grade-total span { color: var(--brand-600); }
+.grade-total span { color: var(--text-brand); }
 .grade-breakdown { margin-bottom: 12px; }
 .grade-item { padding: 10px 12px; background: var(--bg-surface-2); border-radius:var(--radius-sm); margin-bottom: 8px; }
 .grade-item-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
 .grade-item-name { font-weight: 600; font-size:var(--fs-body); }
-.grade-item-score { color: var(--brand-600); font-weight: 700; font-size:var(--fs-body); }
+.grade-item-score { color: var(--text-brand); font-weight: 700; font-size:var(--fs-body); }
 .grade-item-comment { font-size:var(--fs-body-sm); color: var(--text-secondary); }
 .grade-highlights { font-size:var(--fs-body-sm); color: var(--status-success-fg); margin-bottom: 8px; }
 .grade-issues { font-size:var(--fs-body-sm); color: var(--status-danger-fg); margin-bottom: 8px; }
@@ -650,7 +650,7 @@ onBeforeUnmount(() => {
 .desc-modal .ProseMirror { min-height:420px; }
 
 /* ===== 代码预览切换动效（0.15s 淡入上移） ===== */
-.pr-fade-in { animation: prFadeIn 0.15s ease; }
+.pr-fade-in { animation: prFadeIn var(--duration-fast) ease; }
 @keyframes prFadeIn {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }

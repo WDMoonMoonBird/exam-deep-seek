@@ -113,12 +113,20 @@
   --ring-focus: 0 0 0 3px rgba(31, 122, 224, 0.28);
   --ring-danger: 0 0 0 3px rgba(240, 68, 56, 0.22);
 
+  /* 浮层（文档页 lightbox 等）：遮罩与浮层内控件底。取值与原字面量逐字相同（R-28 收口，零视觉变化）；
+     亮暗同值——浮层本来就压在内容之上，不随主题翻转（与原实现一致）。 */
+  --overlay-scrim: rgba(0, 0, 0, 0.85);
+  --overlay-control-bg: rgba(255, 255, 255, 0.15);
+  --overlay-control-bg-hover: rgba(255, 255, 255, 0.3);
+
   /* 动效 */
   --duration-instant: 90ms;
   --duration-fast: 150ms;
   --duration-base: 220ms;
   --duration-slow: 320ms;
-  --duration-page: 380ms;
+  /* 循环动画（loading spin / 上传脉冲）：与 UI 过渡刻度不同域，取等值以免改变转速（R-25 收口） */
+  --duration-loop-spin: 800ms;
+  --duration-loop-pulse: 1200ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
@@ -202,6 +210,9 @@
   --text-inverse-muted: rgba(255, 255, 255, 0.72);
   --text-inverse-subtle: rgba(255, 255, 255, 0.48);
   --text-link: var(--brand-600);
+  /* 品牌色强调文本（分数/题号/KPI/图标）：与 --text-link 取值相同但语义不同（避免把分数渲染成链接语义）。
+     亮 = brand-600（5.57:1 on 白）；暗 = brand-300（9.72:1 on #141922）—— 见 docs/reports/b3-tokens/T4-F4-方案.md */
+  --text-brand: var(--brand-600);
   --text-on-brand: var(--gray-0);
 
   /* 边框 */
@@ -253,6 +264,7 @@
   --text-disabled: #5b626e;
   --text-inverse: var(--gray-950);
   --text-link: var(--brand-300);
+  --text-brand: var(--brand-300);   /* 同 --text-link 取值、不同语义（见亮色块注释） */
 
   --border-subtle: rgba(255, 255, 255, 0.06);
   --border-default: rgba(255, 255, 255, 0.12);
@@ -433,7 +445,7 @@ html.legacy :focus { outline: none; box-shadow: var(--ring-focus); border-radius
 @media (prefers-reduced-motion: reduce) {
   :root {
     --duration-instant: 1ms; --duration-fast: 1ms; --duration-base: 1ms;
-    --duration-slow: 1ms; --duration-page: 1ms;
+    --duration-slow: 1ms; --duration-loop-spin: 1ms; --duration-loop-pulse: 1ms;
   }
   *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
 }

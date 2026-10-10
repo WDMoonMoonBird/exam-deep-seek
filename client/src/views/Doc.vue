@@ -4,8 +4,10 @@
         <header class="doc-header">
             <div class="doc-header-inner">
                 <img src="../assets/logo.svg" class="doc-logo" alt="logo" />
-                <span class="doc-title"><span class="doc-title-main">Deadpan 判题</span><span class="doc-title-sep"> ·
-                    </span><span class="doc-title-sub">教师使用文档</span></span>
+                <!-- B3-1 ⑤：page-has-heading-one —— 文档页此前全页无 h1（改前 axe 命中 1）。这里把顶栏文档标题
+                     提升为 h1（真实标题，非通用词）；.doc-title 已声明字号/字重/flex，另在 CSS 里补 margin:0 抵消 h1 默认外边距。 -->
+                <h1 class="doc-title"><span class="doc-title-main">Deadpan 判题</span><span class="doc-title-sep"> ·
+                    </span><span class="doc-title-sub">教师使用文档</span></h1>
                 <a-button type="link" href="/exam/login" class="doc-login-btn">前往登录</a-button>
             </div>
         </header>
@@ -65,7 +67,7 @@
                         </div>
 
                         <img class="doc-img" tabindex="0" :src="'/exam/doc-img/09-parse-modal.png'" alt="AI解析试卷模态框" />
-                        <p style="text-align:center;color:var(--text-tertiary);font-size:13px;margin-top:-12px;">▲ AI 解析试卷弹窗：上传 Word
+                        <p style="text-align:center;color:var(--text-tertiary);font-size:var(--fs-body-sm);margin-top:-12px;">▲ AI 解析试卷弹窗：上传 Word
                             文档，DeepSeek 自动识别题目</p>
 
                         <h3>6.3 编辑题目</h3>
@@ -528,9 +530,9 @@ const sections9to10 = [
         id: 'opensource', title: '13. 开源', content: `
     <p>本项目完全开源，代码托管在 <a href="https://gitee.com/WD_MoonMoonBird/exam-deep-seek" target="_blank">Gitee</a>，欢迎 Star、Fork 和 PR。</p>
     <div style="text-align:center;padding:32px 20px;margin:24px 0;background:linear-gradient(135deg,var(--status-accent-bg),var(--status-info-bg));border-radius:var(--radius-lg);">
-      <p style="font-size:18px;font-weight:600;color:var(--text-primary);margin-bottom:8px;">"From each according to his ability, to each according to his needs."</p>
-      <p style="font-size:15px;color:var(--text-secondary);margin-bottom:16px;">「各尽所能，按需分配」</p>
-      <p style="font-size:13px;color:var(--text-tertiary);">— Karl Marx, <em>Critique of the Gotha Programme</em> / 卡尔·马克思，《哥达纲领批判》（1875）</p>
+      <p style="font-size:var(--fs-title-2);font-weight:600;color:var(--text-primary);margin-bottom:8px;">"From each according to his ability, to each according to his needs."</p>
+      <p style="font-size:var(--fs-body-lg);color:var(--text-secondary);margin-bottom:16px;">「各尽所能，按需分配」</p>
+      <p style="font-size:var(--fs-body-sm);color:var(--text-tertiary);">— Karl Marx, <em>Critique of the Gotha Programme</em> / 卡尔·马克思，《哥达纲领批判》（1875）</p>
     </div>
     <p>开源精神与马克思笔下的理想社会不谋而合：开发者<b>各尽所能</b>贡献代码，使用者<b>各取所需</b>自由获取。代码如知识，共享方能放大其价值。</p>
   `},
@@ -568,6 +570,8 @@ const anchors = allSections.map(s => ({
     z-index: 100;
     background: var(--bg-surface);
     border-bottom: 1px solid var(--border-default);
+    /* R-28：有意保留的字面量 —— 吸顶头装饰投影。--shadow-* 是两级语义刻度（亮 rgba(16,24,40,…) / 暗 rgba(0,0,0,…)），
+       与本值不等价：套用会改变（尤其暗色的）投影强度。按任务书「阴影类属有意者说明并保留」处置。 */
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.10);
     height: 56px;
     display: flex;
@@ -591,9 +595,11 @@ const anchors = allSections.map(s => ({
 }
 
 .doc-title {
-    font-size: 18px;
+    font-size: var(--fs-title-2);
     font-weight: 600;
     flex: 1;
+    margin: 0;            /* h1 提升后抵消浏览器默认外边距，保持与原 span 版逐像素一致 */
+    line-height: 1.4;
 }
 
 .doc-login-btn {
@@ -645,13 +651,13 @@ const anchors = allSections.map(s => ({
 }
 
 .section-body {
-    font-size: 15px;
+    font-size: var(--fs-body-lg);
     line-height: 1.9;
     color: var(--text-primary);
 }
 
 .section-body :deep(h3) {
-    font-size: 18px;
+    font-size: var(--fs-title-2);
     font-weight: 600;
     margin: 28px 0 12px;
 }
@@ -701,7 +707,7 @@ const anchors = allSections.map(s => ({
     padding: 10px 14px;
     white-space: nowrap;
     flex-shrink: 0;
-    font-size: 14px;
+    font-size: var(--fs-body);
 }
 
 .flow-num {
@@ -710,7 +716,7 @@ const anchors = allSections.map(s => ({
     border-radius: 50%;
     background: var(--brand-600);
     color: var(--text-on-brand);
-    font-size: 13px;
+    font-size: var(--fs-body-sm);
     font-weight: 700;
     display: flex;
     align-items: center;
@@ -719,7 +725,7 @@ const anchors = allSections.map(s => ({
 }
 
 .flow-arrow {
-    font-size: 18px;
+    font-size: var(--fs-title-2);
     color: var(--text-disabled);
     flex-shrink: 0;
     align-self: center;
@@ -734,7 +740,7 @@ const anchors = allSections.map(s => ({
     padding: 40px 20px;
     text-align: center;
     color: var(--text-tertiary);
-    font-size: 15px;
+    font-size: var(--fs-body-lg);
     margin: 20px 0;
 }
 
@@ -746,6 +752,7 @@ const anchors = allSections.map(s => ({
 /* 响应式 */
 @media (max-width: 992px) {
     .doc-header {
+        /* R-28：同上（窄屏加强的吸顶头投影，有意保留） */
         box-shadow: 0 2px 12px rgba(0, 0, 0, 0.10), 0 4px 24px rgba(0, 0, 0, 0.08);
     }
 
@@ -755,7 +762,7 @@ const anchors = allSections.map(s => ({
 
     .doc-title-sub {
         display: block;
-        font-size: 14px;
+        font-size: var(--fs-body);
         font-weight: 400;
         color: var(--ink-muted);
     }
@@ -777,7 +784,7 @@ const anchors = allSections.map(s => ({
     }
 
     .doc-table {
-        font-size: 13px;
+        font-size: var(--fs-body-sm);
     }
 
     .doc-table th,
@@ -797,7 +804,7 @@ const anchors = allSections.map(s => ({
 
     .flow-step {
         padding: 8px 10px;
-        font-size: 13px;
+        font-size: var(--fs-body-sm);
     }
 }
 </style>
@@ -807,7 +814,7 @@ const anchors = allSections.map(s => ({
     border-collapse: separate;
     border-spacing: 0;
     margin: 16px 0;
-    font-size: 14px;
+    font-size: var(--fs-body);
     border: 1px solid var(--border-default);
     border-radius: 10px;
     overflow: hidden;
@@ -833,7 +840,7 @@ const anchors = allSections.map(s => ({
 .doc-table th {
     background: var(--bg-surface-2);
     font-weight: 600;
-    font-size: 13px;
+    font-size: var(--fs-body-sm);
     color: var(--text-secondary);
 }
 
@@ -845,7 +852,7 @@ const anchors = allSections.map(s => ({
     padding: 12px 16px;
     border-radius: var(--radius-md);
     margin: 16px 0;
-    font-size: 14px;
+    font-size: var(--fs-body);
     line-height: 1.7;
 }
 
@@ -858,7 +865,7 @@ const anchors = allSections.map(s => ({
 .doc-tag {
     display: inline-block;
     padding: 0 7px;
-    font-size: 12px;
+    font-size: var(--fs-caption);
     line-height: 20px;
     border-radius: 999px;
     margin: 0 2px;
@@ -917,7 +924,7 @@ const anchors = allSections.map(s => ({
     border: 2px solid var(--status-info-bd);
     border-top-color: var(--status-info-fg);
     border-radius: 50%;
-    animation: doc-spin 0.8s linear infinite;
+    animation: doc-spin var(--duration-loop-spin) linear infinite;
 }
 
 .doc-steps {
@@ -957,7 +964,7 @@ const anchors = allSections.map(s => ({
     border-radius: 50%;
     background: var(--brand-600);
     color: var(--text-on-brand);
-    font-size: 12px;
+    font-size: var(--fs-caption);
     font-weight: 700;
     text-align: center;
     line-height: 22px;
@@ -965,12 +972,12 @@ const anchors = allSections.map(s => ({
 
 .doc-step b {
     display: block;
-    font-size: 14px;
+    font-size: var(--fs-body);
     margin-bottom: 2px;
 }
 
 .doc-step span {
-    font-size: 12px;
+    font-size: var(--fs-caption);
     color: var(--text-secondary);
     line-height: 1.5;
 }
@@ -981,7 +988,7 @@ const anchors = allSections.map(s => ({
     top: 50%;
     transform: translateY(-50%);
     color: var(--border-strong);
-    font-size: 16px;
+    font-size: var(--fs-title-3);
     z-index: 1;
 }
 
@@ -996,7 +1003,7 @@ const anchors = allSections.map(s => ({
     border: 1px dashed var(--border-strong);
     border-radius: var(--radius-md);
     background: var(--bg-surface-2);
-    font-size: 14px;
+    font-size: var(--fs-body);
     color: var(--text-secondary);
     line-height: 1.8;
 }
@@ -1027,7 +1034,7 @@ const anchors = allSections.map(s => ({
     bottom: 0;
     left: 0;
     z-index: 9999;
-    background: rgba(0, 0, 0, 0.85);
+    background: var(--overlay-scrim);   /* R-28：原 rgba(0,0,0,.85) → 浮层遮罩令牌（等值） */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1041,7 +1048,7 @@ const anchors = allSections.map(s => ({
     top: 16px;
     right: 24px;
     color: var(--text-inverse);
-    font-size: 32px;
+    font-size: var(--fs-display-1);
     cursor: pointer;
     z-index: 1;
     width: 40px;
@@ -1050,11 +1057,11 @@ const anchors = allSections.map(s => ({
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--overlay-control-bg);   /* R-28：原 rgba(255,255,255,.15) → 浮层控件底令牌（等值） */
 }
 
 .lightbox-close:hover {
-    background: rgba(255, 255, 255, 0.3);
+    background: var(--overlay-control-bg-hover);   /* R-28：原 rgba(255,255,255,.3) → 令牌（等值） */
 }
 
 .lightbox-img {
@@ -1063,12 +1070,13 @@ const anchors = allSections.map(s => ({
     object-fit: contain;
     border-radius: var(--radius-md);
     cursor: default;
+    /* R-28：有意保留的字面量 —— 大图浮层投影（同上，无等值令牌） */
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
 .lightbox-fade-enter-active,
 .lightbox-fade-leave-active {
-    transition: opacity 0.2s;
+    transition: opacity var(--duration-base);
 }
 
 .lightbox-fade-enter-from,
