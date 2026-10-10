@@ -8,7 +8,7 @@
       <h3 class="sp-title">{{ q.title }}</h3>
       <a-tag v-if="isPracticeMode" color="green" size="small">练习 · 第 {{ currentAttempt }} 次</a-tag>
       <a-tag v-if="isPracticeMode && maxAttempts" size="small">可提交 {{ remainingAttempts }} 次</a-tag>
-      <a-tag color="orange">总分 {{ q.maxScore }} 分</a-tag>
+      <a-tag class="sp-tag-warning">总分 {{ q.maxScore }} 分</a-tag>
       <a-tag v-if="totalScored > 0" color="green">得分 {{ totalScored }} / {{ q.maxScore }}</a-tag>
       <a-tag v-if="bestScore != null" color="blue">最高分 {{ bestScore }} / {{ q.maxScore }}</a-tag>
       <span v-if="isExpired" class="sp-expired-tag">已过期</span>
@@ -63,6 +63,7 @@
         </div>
         <div class="sp-nav-footer">
           <span v-if="dirtyCount" class="dirty-hint">{{ dirtyCount }} 题未保存</span>
+          <span v-else-if="draftNoticeText" class="draft-note">{{ draftNoticeText }}</span>
           <span v-else class="sync-ok">草稿已同步</span>
         </div>
       </nav>
@@ -745,6 +746,15 @@ function clearDirty() {
 }
 
 // ===================== 草稿保存 =====================
+// D3：服务端对「已提交 / 已过截止」的草稿会返回 HTTP 200 + 「跳过草稿」（不入库）。
+// 前端若仍按请求成功显示「草稿已同步」，用户刷新后编辑会静默丢失 —— 故单独记账并如实呈现。
+const draftNotice = ref('');   // '' | 'submitted' | 'expired'
+const draftNoticeText = computed(() => {
+  if (draftNotice.value === 'submitted') return '已提交，改动仅在重新提交时保存';
+  if (draftNotice.value === 'expired') return '已过截止时间，改动不再保存';
+  return '';
+});
+
 function getToken() {
   try { return localStorage.getItem('token') || ''; } catch { return ''; }
 }
@@ -756,6 +766,7 @@ async function saveAllDrafts() {
   const questionId = q.value.id;
 
   const tasks = [];
+  const skipped = [];   // 服务端明确跳过（200 但未入库）的题
   for (const sq of subQuestions.value) {
     const sqId = sq.id;
     if (isSqReadonly(sqId)) continue;
@@ -771,7 +782,12 @@ async function saveAllDrafts() {
       // 逐条记录成败（请求形状不变）：失败不清脏，留待下一轮重试（V4）
       request.put(`/student/assignments/${assignmentId}/draft`, {
         questionId, subQuestionId: sqId, answer,
-      }).then(() => true, () => false)
+      }).then((r) => {
+        // D3：HTTP 200 不等于已入库 —— 识别服务端的「跳过」语义
+        const msg = r?.message || '';
+        if (msg.includes('跳过草稿')) skipped.push(msg.includes('已提交') ? 'submitted' : 'expired');
+        return true;
+      }, () => false)
     );
   }
   if (tasks.length === 0) return;
@@ -780,6 +796,9 @@ async function saveAllDrafts() {
   const allSaved = results.every(r => r.status === 'fulfilled' && r.value === true);
   if (allSaved) clearDirty();
   else markDirty();
+  // D3：状态区文案以「是否真的入库」为准，而不是以 HTTP 是否成功为准
+  if (skipped.length) draftNotice.value = skipped.includes('submitted') ? 'submitted' : 'expired';
+  else if (allSaved) draftNotice.value = '';
 }
 
 // 防抖保存
@@ -985,6 +1004,7 @@ async function submitAll() {
       const fail = results.filter(r => r.status === 'rejected').length;
       if (fail === 0) {
         message.success(`全部 ${ok} 题提交成功`);
+        draftNotice.value = '';   // 答案已随提交入库，此前的「改动仅在重新提交时保存」提示随之失效
         currentAttempt.value += 1;
         submittedAttempts.value += 1;
         if (isPracticeMode.value) startPolling();
@@ -1219,6 +1239,15 @@ onUnmounted(() => {
 }
 .dirty-hint { color: var(--status-warning-fg); }
 .sync-ok { color: var(--status-success-fg); }
+/* D3：服务端跳过草稿（未入库）时的如实提示 —— 与「未保存」同一警示色 */
+.draft-note { color: var(--status-warning-fg); }
+/* T4-F2 本页份额：语义警示标签（替换 antd 预置 color="orange" 的亮色 3.34:1）
+   实测对比度（浏览器取值）：亮 5.20:1、暗 9.45:1 —— 均走 --status-warning-* 三元组 */
+.sp-tag-warning {
+  background: var(--status-warning-bg);
+  border-color: var(--status-warning-bd);
+  color: var(--status-warning-fg);
+}
 .ended-hint { color: var(--text-tertiary); font-size: var(--fs-body); }
 
 /* 小节标题（可点击折叠） */
@@ -1241,7 +1270,8 @@ onUnmounted(() => {
 .n-section-head:hover .n-section-arrow { color: var(--text-link); }
 .n-section-label { flex: 1; }
 .n-section-count {
-  font-size: 10px; font-weight: var(--fw-regular); color: var(--text-disabled);
+  /* T4-F3：承载信息（分区题型/问数）而非禁用态 → --text-secondary（亮 5.91:1 / 暗 8.52:1） */
+  font-size: 10px; font-weight: var(--fw-regular); color: var(--text-secondary);
   background: var(--bg-sunken); padding: 0 5px; border-radius: var(--radius-pill);
 }
 
@@ -1291,9 +1321,10 @@ onUnmounted(() => {
 .n-box-partial {
   background: var(--status-warning-bg); border-color: var(--status-warning-bd); color: var(--status-warning-fg);
 }
-/* 未答 */
+/* 未答（格子里的题号是可读信息，不是禁用文本） */
 .n-box-empty {
-  background: var(--bg-surface); border-color: var(--border-default); color: var(--text-disabled);
+  /* T4-F3：--text-disabled 误用 → --text-secondary（亮 6.75:1 / 暗 8.07:1） */
+  background: var(--bg-surface); border-color: var(--border-default); color: var(--text-secondary);
 }
 
 /* 当前激活（规则置于各状态色之后：同优先级即可覆盖，无需提升优先级） */
@@ -1364,7 +1395,8 @@ onUnmounted(() => {
 }
 .placeholder-inner {
   height: 280px; display: flex; align-items: center; justify-content: center;
-  background: var(--bg-surface-2); color: var(--text-disabled); font-size: var(--fs-body);
+  /* T4-F3：占位文案 → --text-tertiary（亮 4.71:1 / 暗 4.65:1，均 ≥4.5） */
+  background: var(--bg-surface-2); color: var(--text-tertiary); font-size: var(--fs-body);
 }
 
 /* 客观题小问卡片 */
