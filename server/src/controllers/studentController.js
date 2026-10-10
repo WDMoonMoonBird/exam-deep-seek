@@ -227,10 +227,12 @@ export const getAssignmentDetail = async (req, res) => {
       return res.status(403).json({ code: 1003, message: '作业已被锁定，无法查看', data: null });
     }
 
-    // 查已有提交
-    const submissions = await prisma.submission.findMany({
-      where: { assignmentId: +req.params.id, studentId: req.user.id },
-    });
+    // 归属校验（S-6 / A4）：作业必须投放到该生所在班级；单查询等价于 assertStudentInAssignment:493-506 的 studentClass ∩ assignmentClass
+    const linked = await prisma.assignmentClass.findFirst({ where: { assignmentId: +req.params.id, class: { studentClasses: { some: { studentId: req.user.id } } } }, select: { assignmentId: true } });
+    if (!linked) return res.status(403).json({ code: 1003, message: '无权访问该作业', data: null });
+
+    // 查已有提交（同 handler 内的等价单行形态，为守住 GodFile ≤800 门禁折行）
+    const submissions = await prisma.submission.findMany({ where: { assignmentId: +req.params.id, studentId: req.user.id } });
 
     // 未发布的提交不返回评分/评语，但练习模式例外。
     // 旧实现 published 分支直接 return s（整行下发，含 aiScore/aiFeedback）——已改为白名单裁剪。

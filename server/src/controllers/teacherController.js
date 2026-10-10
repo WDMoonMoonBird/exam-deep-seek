@@ -13,6 +13,31 @@ import { parseExamPaper, parseExamPaperStream, generateReferenceAnswer } from '.
 /** 获取教师当前学校ID（从 query 参数） */
 function getSchoolId(req) { return req.query.schoolId ? +req.query.schoolId : null; }
 
+/**
+ * 资源归属守卫（round 5 · 安全项 S-2）：写操作前校验目标班级是否落在教师的可见班级内。
+ *
+ * 语义来源与本文件读端点完全一致（getAllClasses:790 / getMyStudents:933 同款调用形态）：
+ * getVisibleClassIds = 直连班级 ∪ 团队班级（teamController.js:146-166）；schoolId 为空时
+ * 沿用其「不做学校过滤」的既有行为。403 契约与 lockAssignment:738 对齐。
+ *
+ * ⚠️ 调用方必须在**任何写库动作之前**调用本函数；未命中时立即 return —— 保证零写入。
+ */
+async function canTeacherManageClass(teacherId, classId, schoolId) {
+  const visibleIds = await getVisibleClassIds(teacherId, schoolId);
+  return visibleIds.includes(+classId);
+}
+
+/** 同上，目标为学生：学生必须属于教师可见的某个班级（班级来源同 assertStudentInAssignment 的口径）。 */
+async function canTeacherManageStudent(teacherId, studentId, schoolId) {
+  const visibleIds = await getVisibleClassIds(teacherId, schoolId);
+  if (visibleIds.length === 0) return false;
+  const link = await prisma.studentClass.findFirst({
+    where: { studentId: +studentId, classId: { in: visibleIds } },
+    select: { classId: true },
+  });
+  return !!link;
+}
+
 // ===================== 学校切换 =====================
 
 export const switchSchool = async (req, res) => {
@@ -834,6 +859,10 @@ export const updateClass = async (req, res) => {
     const { id } = req.params;
     const { name, teamIds } = req.body;
     const schoolId = getSchoolId(req);
+    // 归属校验（S-2）：必须在任何写库动作之前；未命中 → 403 零写入
+    if (!(await canTeacherManageClass(req.user.id, id, schoolId))) {
+      return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+    }
     await prisma.class.update({ where: { id: +id }, data: { name, schoolId } });
     if (teamIds !== undefined) {
       await prisma.teamClass.deleteMany({ where: { classId: +id } });
@@ -851,6 +880,10 @@ export const updateClass = async (req, res) => {
 export const deleteClass = async (req, res) => {
   try {
     const id = +req.params.id;
+    // 归属校验（S-2）：必须在 $transaction 之外、之前完成；未命中 → 403 零写入
+    if (!(await canTeacherManageClass(req.user.id, id, getSchoolId(req)))) {
+      return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+    }
     await prisma.$transaction([
       prisma.studentClass.deleteMany({ where: { classId: id } }),
       prisma.teacherClass.deleteMany({ where: { classId: id } }),
@@ -980,6 +1013,10 @@ export const updateStudent = async (req, res) => {
     // 先查当前学生
     const student = await prisma.user.findFirst({ where: { id: +id, role: 'student' } });
     if (!student) return res.status(404).json({ code: 1004, message: '学生不存在', data: null });
+    // 归属校验（S-2）：既有 404 分支保持原位；此处必须在任何写库动作之前，未命中 → 403 零写入
+    if (!(await canTeacherManageStudent(req.user.id, id, getSchoolId(req)))) {
+      return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+    }
 
     const data = {};
     if (realName !== undefined) data.realName = realName;
@@ -1024,6 +1061,10 @@ export const updateStudent = async (req, res) => {
 export const deleteStudent = async (req, res) => {
   try {
     const { id } = req.params;
+    // 归属校验（S-2）：必须在 $transaction 之外、之前完成；未命中 → 403 零写入
+    if (!(await canTeacherManageStudent(req.user.id, id, getSchoolId(req)))) {
+      return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+    }
     // 软删除：移除班级关联 + 标记删除
     await prisma.$transaction([
       prisma.studentClass.deleteMany({ where: { studentId: +id } }),
@@ -1042,6 +1083,10 @@ export const resetStudentPassword = async (req, res) => {
     const { id } = req.params;
     const student = await prisma.user.findFirst({ where: { id: +id, role: 'student' } });
     if (!student) return res.status(404).json({ code: 1004, message: '学生不存在', data: null });
+    // 归属校验（S-2）：越权判定优先于业务分支；未命中 → 403 零写入（不泄漏该生学号状态）
+    if (!(await canTeacherManageStudent(req.user.id, id, getSchoolId(req)))) {
+      return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+    }
 
     // 密码重置为学号（去掉@学校代码部分）
     const sid = student.username.split('@')[0];

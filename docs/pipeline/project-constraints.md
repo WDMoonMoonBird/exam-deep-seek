@@ -39,6 +39,9 @@
 10. **行号与计数一律以「冻结树实测」为准，不得采信上一轮报告里的数字**（实证：A 报 `SOURCE_EXTS` 43 项、实为 **37**；报 `collectFiles` 176-197、实为 **176-198** —— 后者若被照抄切片会产出**语法坏树**）。引用行号前先自己数一遍。
 12. **`node --check` 不校验 ESM 跨模块绑定**（round 3 由 Agent B 撞出、Agent C 独立复现正反两向）：**删掉本地副本必须与「给被复用方加 export」同批完成** —— 纯语法检查会放行「导入了但对方没导出」的坏绑定，只有**真 import 一次**（或绑定自检）才会抛 `SyntaxError: does not provide an export named ...`。
    最小自检：写入后真 import 一次 + `Object.keys` 对拍；正式门禁见 `scripts/gates/bind-check.mjs`（round 4 落地）。
+13. **门禁自身也必须先冻结再测**（round 4 由 Agent A 指出，本项目门禁真的犯过）：`scripts/gates/arch-metrics.mjs` 曾**混用两种状态源**（文件数来自 `check-layers.mjs` 子进程、行数来自本进程读取，两者读取时刻不同）→ 在被并发写的工作树上会产出**瞬态读数**（实测 1011 vs 真实 1010）。凡门禁/测量脚本，必须**在单次快照内取全部数据**，并打印被测量的 commit 锚点。
+14. **临时起服务必须显式 `PORT=0`**（round 5 由 Agent B 撞出并自报）：`server/src/app.js:152` 是**模块加载即 listen**，任何 import 该 app 的探针都会真起服务；jest 靠 `server/test/setup.js:2` 的 `PORT='0'` 规避。凡自建探针/脚本，必须显式设 `PORT=0` 或 31xx 非特权端口，**严禁占用 `:5173`/`:3000`**。（实证：round 5 的越权探针漏设，意外占用 :3000 约 3 分钟。）
+15. **偶发超时不等于回归**（round 5 由 Agent C 建议）：单次超时/偶发失败必须**隔离复跑一次**，仍失败才算回归；首跑日志要留档以便区分环境性偶发与真回归。（实证：`admin-teacher-delete` 单例 30s 超时、与本轮改动零交集，隔离复跑 2/2 绿。）
 11. **计数必须带词边界**：`grep -c -- '--btn-default-bg'` 会子串命中 `--btn-default-bg-hover`（实测 2 vs 真值 1）。
 
 ## 4 测试口径（Agent C 必须按此执行）
