@@ -211,6 +211,7 @@ import { FileTextOutlined, FolderOutlined } from '@ant-design/icons-vue';
 import loader from '@monaco-editor/loader';
 import { applyMonacoCompat } from '../../infrastructure/monaco/legacyLoaderCompat';
 import { useMonacoTheme } from '../../composables/useMonacoTheme.js';
+import { useMonacoKeyboardA11y } from '../../composables/useMonacoKeyboardA11y.js';
 import { getClassWithColor } from 'file-icons-js';
 import 'file-icons-js/css/style.css';
 import { getProjectReview, saveProjectReview, regradeProjectSubmission } from '../../api/projects.js';
@@ -260,6 +261,8 @@ const activeTree = ref('student'); // 'student' | 'standard'
 const editorContainerRef = ref(null);
 /** 编辑器主题跟随应用主题：ensureTheme() 在 create 之前按当前令牌定义并返回主题名 */
 const { ensureTheme } = useMonacoTheme();
+/** 键盘可达性（QA T5-A5 同类缺陷补齐）：Tab/Shift+Tab 可离开编辑器 + 聚焦元素可读名称 */
+const { attach: attachKeyboardA11y } = useMonacoKeyboardA11y();
 // 双数据源各自的 IDE 状态（切换源不丢选中/打开的文件）
 // 必须 reactive：computed setter 写普通对象不会触发响应
 const sourceState = reactive({
@@ -289,6 +292,7 @@ const fading = ref(true);
 let monaco = null;
 let editor = null;
 let models = {};
+let keyboardA11y = null;
 
 // ===== 顶栏展示 =====
 
@@ -325,6 +329,9 @@ async function initMonaco() {
     fontSize: 13, fontFamily: 'MonacoDSH, monospace', lineNumbers: 'on', scrollBeyondLastLine: false,
     tabSize: 4, renderWhitespace: 'selection', smoothScrolling: true, cursorBlinking: 'smooth',
   });
+  // 键盘逃逸（Tab / Shift+Tab）+ 聚焦元素可读名称；本实例是只读代码预览，缩进等写操作
+  // 由 Monaco 的 writable 前置条件禁用（名称里已注明「内容只读 / 缩进不生效」）
+  keyboardA11y = attachKeyboardA11y(editor, editorContainerRef.value, { readOnly: true });
 }
 
 /**
@@ -603,6 +610,7 @@ onBeforeUnmount(() => {
     else shellMq.removeListener(onShellMq);
   }
   stopPolling();
+  keyboardA11y?.dispose();
   Object.values(models).forEach(m => m.dispose());
   models = {};
   editor?.dispose();

@@ -218,12 +218,42 @@ function format() {
       editor.setValue(braceFormat(code));
       return;
     }
-    // 其他语言：全选后 reindent
+    // 其他语言：全选后 reindent（Monaco 0.55 的 action id 全小写：editor.action.reindentselectedlines）
     editor.setSelection(editor.getModel().getFullModelRange());
-    editor.trigger('format', 'editor.action.reindentSelectedLines');
+    const beforeReindent = editor.getValue();
+    editor.trigger('format', 'editor.action.reindentselectedlines');
+    // Monaco 的 basic-languages 里只有 5 种语言带 indentationRules（python 不在其中）→ 上面可能是空操作。
+    // python 兜底：按「行尾 : 进一级，elif/else/except/finally 先退一级」重排前导空白，
+    // 使「格式化」按钮对 python 题目真的生效（详见下方 pythonFormat 注释与限制）。
+    if (lang === 'python' && editor.getValue() === beforeReindent) {
+      const fixed = pythonFormat(beforeReindent);
+      if (fixed !== beforeReindent) editor.setValue(fixed);
+    }
   } finally {
     if (wasReadOnly) editor.updateOptions({ readOnly: true });
   }
+}
+
+/**
+ * python 最小缩进整理（仅作为 format() 的兜底）：
+ *   · 行尾为 ':' 的行使其后一级缩进；elif/else/except/finally 先退一级再按规则处理；
+ *   · 空行去掉行尾空白；其余内容（除前导空白）保持原样，不改写语句本身；
+ *   · **含三引号字符串（``` / """）时直接返回原文**，避免把字符串内部内容改掉。
+ * 局限（已知）：不处理续行对齐与括号内手工对齐美化——只保证缩进层级正确。
+ */
+function pythonFormat(code) {
+  if (/"""|'''/.test(code)) return code;
+  const tab = '    ';
+  let level = 0;
+  const lines = code.split('\n').map((line) => {
+    const text = line.trim();
+    if (!text) return '';
+    if (/^(elif\b|else\b|except\b|finally\b)/.test(text)) level = Math.max(0, level - 1);
+    const out = tab.repeat(level) + text;
+    if (/:\s*(#.*)?$/.test(text)) level += 1;
+    return out;
+  });
+  return lines.join('\n');
 }
 
 function braceFormat(code) {
