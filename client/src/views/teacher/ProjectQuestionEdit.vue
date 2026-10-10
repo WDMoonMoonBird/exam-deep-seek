@@ -30,6 +30,18 @@
     <template #actions>
       <a-button @click="openDescModal">题目描述</a-button>
       <a-button @click="openRubricModal">评分标准</a-button>
+      <!-- 自动评分器入口（来自 feature/rule-driven-scoring）：首次合并（f7a03fc）解冲突时该块被整块漏掉 ✗，
+           2026-10-10 由验收判据④（走查 button 自动评分器 count=0）发现并补回 ✓
+           迁移：分支原有的硬编码成功色（十六进制写法）已改为 var(--status-success-fg)，保持本文件去注释后 hex=0；
+           保留 color="red"（实测亮 5.07 / 暗 4.54 达标，按既有规则只改不达标的预置色） -->
+      <span v-if="isTeacher && isEdit" class="checker-btn-wrap">
+        <a-button @click="openCheckerModal" :disabled="checkerStatus === 'generating' || checkerStatus === 'calibrating'">
+          <template v-if="checkerStatus === 'ready'"><CheckCircleFilled style="color:var(--status-success-fg);margin-right:6px;" />自动评分器</template>
+          <template v-else-if="checkerStatus === 'generating' || checkerStatus === 'calibrating'"><LoadingOutlined spin style="margin-right:6px;" />自动评分器生成中…</template>
+          <template v-else>自动评分器</template>
+        </a-button>
+        <a-tag v-if="checkerStatus === 'failed'" color="red" size="small" style="margin:0;">评分器生成失败</a-tag>
+      </span>
       <a-button v-if="isTeacher && isEdit" @click="showPromptPreview">查看 AI 提示词</a-button>
       <a-button v-if="isTeacher" type="primary" @click="handleSave">保存</a-button>
       <a-button v-else type="primary" :disabled="!hasUploaded || submitting || (isStudent && studentSubmission && studentSubmission.status !== 'draft')" :loading="submitting" @click="handleSubmit">
