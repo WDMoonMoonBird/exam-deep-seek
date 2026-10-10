@@ -49,7 +49,13 @@
     </ListPage>
 
     <a-modal title="创建团队" :open="createVisible" @ok="handleCreate" @cancel="createVisible = false" ok-text="创建团队" cancel-text="取消" :width="480" wrap-class-name="form-modal">
-      <a-form><a-form-item label="团队名称"><a-input v-model:value="createName" /></a-form-item></a-form>
+      <!-- T5-A2 残留（B3-2）：可见 label 用 id + html-for 关联（antd FormItem 只有拿到 name/html-for 才渲染 label[for]），
+           不要用 aria-label —— antd 会把它渲染到外层 .ant-select/.ant-input-affix 容器，落不到真正聚焦的控件上 -->
+      <a-form>
+        <a-form-item label="团队名称" html-for="team-create-name">
+          <a-input id="team-create-name" v-model:value="createName" />
+        </a-form-item>
+      </a-form>
     </a-modal>
   </PageShell>
 </template>
