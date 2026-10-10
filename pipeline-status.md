@@ -1,6 +1,6 @@
 # pipeline-status.md — 流水线唯一状态入口（规范 §三.4：主调度只读本文件，不加载源码/报告）
 
-round: 5 ｜ phase: REFACTOR（安全收口） ｜ anchor: 7b874b1 ｜ tag: pipeline-start-2026-10-10 = ac60831（可整体回滚）
+round: 6 ｜ phase: REFACTOR（authorization 收口） ｜ anchor: e722f54 ｜ tag: pipeline-start-2026-10-10 = ac60831（可整体回滚）
 spec: docs/AI Agent 软件工程闭环流水线规范（DeepSeek Harness 终极无人值守版｜全自动多轮迭代｜防上下文爆炸｜Skill三技能绑定）.md
 gates: docs/plan/2026-10-10-流水线落地前必改清单.md ｜ constraints: docs/pipeline/project-constraints.md（硬禁令/不改清单/13 条测量纪律/四段口径/门禁）
 archives: docs/pipeline/{audit,refactor,test}-round-NN.md ｜ agents: A=code-analyzer · B=tech-code-refactoring · C=tech-test-automation
@@ -23,7 +23,8 @@ out_of_scope / hard_ban: 见 constraints §2 / §1（严禁 git clean|stash|chec
 | 02 | audit-02 ✅ 60留/4删 | refactor-02 ✅ 6 文件 | test-02 ✅ PASS（axe+像素） | 提交 4b531b8 |
 | 03 | audit-03 ✅ 死代码漂移收敛 | refactor-03 ✅ 3 文件 | test-03 ✅ PASS（含对抗性证伪） | 提交待做 |
 | 04 | audit-04 ✅ **安全专项：S-1/S-2 两个高危** | —（安全项未入 A 的执行集） | — | 已完成审查 |
-| 05 | —（沿用 r4 安全专项） | refactor-05 ✅ S-2 五端点 + S-6 + 22 例越权测试 + bind-check 门禁 | 进行中（对抗性验证） | 进行中 |
+| 05 | —（沿用 r4 安全专项） | refactor-05 ✅ S-2 五端点 + S-6 + 22 例越权测试 | test-05 ✅ PASS（108 例对抗性·0 绕过） | 提交 e722f54 |
+| 06 | 进行中（authorization 系统普查） | 待执行 | 待执行 | 进行中 |
 
 halt: 最多 8 轮，或 constraints §5 六项判据全部达标（GodFile 项已确认不可达 → 收尾按「部分达标」报告）
-next_action: round 5 = B 修 S-2（teacherController 5 个写端点归属校验）+ S-6 + 新增越权测试 + bind-check 门禁 → C 全量回归（基线将变 68 套件 / 1011+N 例）→ 之后转收尾
+next_action: **Captain 已裁决（B 未能收到，须在下一次派发时执行）**：批准 B 的 #5 等价契约（并入既有 findAssignmentContext，不新增仓储方法）｜授权在 round 6b 修 createAssignment 的 questionIds/classIds，边界=只许「补模型桩 + 在既有 toHaveBeenCalledWith 期望里新增键」，严禁删除/放宽断言或改用 objectContaining 弱化，报告须贴 assignment-q9-branches.test.js 完整 diff 供 C 复核；若超出「加桩+加键」即停并回报。round 7 起转收尾。

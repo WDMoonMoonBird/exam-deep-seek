@@ -6,7 +6,7 @@ import { DomainError } from '../domain/errors.js';
 import logger from '../utils/logger.js';
 import { DEFAULT_MAX_SCORE, ABNORMAL_FEEDBACK } from '../constants.js';
 import { resolveSubQuestionScores } from '../utils/scoring.js';
-import { getVisibleClassIds, getTeamTeacherIds } from './teamController.js';
+import { getVisibleClassIds, getTeamTeacherIds, getMyTeamIds } from './teamController.js';
 import { hasStandardPackage } from '../utils/projectPaths.js';
 import { parseExamPaper, parseExamPaperStream, generateReferenceAnswer } from '../services/deepseek.js';
 
@@ -34,6 +34,34 @@ async function canTeacherManageStudent(teacherId, studentId, schoolId) {
   const link = await prisma.studentClass.findFirst({
     where: { studentId: +studentId, classId: { in: visibleIds } },
     select: { classId: true },
+  });
+  return !!link;
+}
+
+/**
+ * 资源归属守卫（round 6 · body 目标资源）：目标班级**集合**必须全部落在教师可见班级内。
+ *
+ * 与 canTeacherManageClass 同源（getVisibleClassIds = 直连 ∪ 团队）；空集合 = 无目标资源 ⇒ 放行
+ * （例如 updateClass 的 teamIds:[] 表示「清空团队关联」，不引入任何他人资源）。
+ */
+async function canTeacherManageClasses(teacherId, classIds, schoolId) {
+  if (!classIds?.length) return true;
+  const visibleIds = await getVisibleClassIds(teacherId, schoolId);
+  return classIds.every(cid => visibleIds.includes(+cid));
+}
+
+/** 同上，目标为团队集合：teamIds 必须 ⊆ 本人所属团队（teamController.getMyTeamIds）。 */
+async function canTeacherManageTeams(teacherId, teamIds) {
+  if (!teamIds?.length) return true;
+  const myTeamIds = await getMyTeamIds(teacherId);
+  return teamIds.every(tid => myTeamIds.includes(+tid));
+}
+
+/** 教师是否属于该学校（schoolId 来自 query 的建资源类写端点用；判据同 switchClassSchool:922）。 */
+async function isTeacherInSchool(teacherId, schoolId) {
+  const link = await prisma.teacherSchool.findFirst({
+    where: { teacherId, schoolId: +schoolId },
+    select: { schoolId: true },
   });
   return !!link;
 }
@@ -838,6 +866,13 @@ export const createClass = async (req, res) => {
     const { name, teamIds } = req.body;
     const schoolId = getSchoolId(req);
     if (!name || !schoolId) return res.status(400).json({ code: 1001, message: '参数错误', data: null });
+    // 归属校验（round 6）：① 不得在自己不属于的学校建班；② body.teamIds ⊆ 本人团队。均在任何写库动作之前
+    if (!(await isTeacherInSchool(req.user.id, schoolId))) {
+      return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+    }
+    if (!(await canTeacherManageTeams(req.user.id, teamIds))) {
+      return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+    }
     const cls = await prisma.class.create({
       data: { name, schoolId, teacherClasses: { create: { teacherId: req.user.id } } },
     });
@@ -861,6 +896,11 @@ export const updateClass = async (req, res) => {
     const schoolId = getSchoolId(req);
     // 归属校验（S-2）：必须在任何写库动作之前；未命中 → 403 零写入
     if (!(await canTeacherManageClass(req.user.id, id, schoolId))) {
+      return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+    }
+    // 归属校验（round 6 · body 目标）：teamIds 必须 ⊆ 本人团队 —— 否则可把班级挂进他人团队，
+    // 使该团队成员在 getVisibleClassIds 中获得写权限（C 实测 403→200 链的第一环）
+    if (!(await canTeacherManageTeams(req.user.id, teamIds))) {
       return res.status(403).json({ code: 1003, message: '无权操作', data: null });
     }
     await prisma.class.update({ where: { id: +id }, data: { name, schoolId } });
@@ -1017,6 +1057,12 @@ export const updateStudent = async (req, res) => {
     if (!(await canTeacherManageStudent(req.user.id, id, getSchoolId(req)))) {
       return res.status(403).json({ code: 1003, message: '无权操作', data: null });
     }
+    // 归属校验（round 6 · body 目标）：目标班级 classId ∈ 本人可见班级。
+    // 源侧已由上方 canTeacherManageStudent 覆盖（不要求「全部源班级可见」= 保留多班共管语义）；
+    // 缺此目标侧校验时，可把学生移入他人班级 ⇒ 他人教师即刻获得该生管理权（账号接管面）
+    if (classId && !(await canTeacherManageClass(req.user.id, classId, getSchoolId(req)))) {
+      return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+    }
 
     const data = {};
     if (realName !== undefined) data.realName = realName;
@@ -1114,6 +1160,10 @@ export const addStudent = async (req, res) => {
     // 获取学校院校代码，拼接完整用户名
     const cls = await prisma.class.findUnique({ where: { id: +classId }, include: { school: true } });
     if (!cls) return res.status(400).json({ code: 1001, message: '班级不存在', data: null });
+    // 归属校验（round 6 · body 目标）：目标班级必须落在本人可见班级内（既有 400 分支保持原位）
+    if (!(await canTeacherManageClass(req.user.id, classId, getSchoolId(req)))) {
+      return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+    }
     const code = cls.school.officialCode || `school${cls.school.id}`;
     const fullUsername = username.includes('@') ? username : `${username}@${code}`;
 
@@ -1143,6 +1193,10 @@ export const batchAddStudents = async (req, res) => {
     // 获取学校院校代码
     const cls = await prisma.class.findUnique({ where: { id: +classId }, include: { school: true } });
     if (!cls) return res.status(400).json({ code: 1001, message: '班级不存在', data: null });
+    // 归属校验（round 6 · body 目标）：目标班级必须落在本人可见班级内（既有 400 分支保持原位）
+    if (!(await canTeacherManageClass(req.user.id, classId, getSchoolId(req)))) {
+      return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+    }
     const code = cls.school.officialCode || `school${cls.school.id}`;
 
     let success = 0;

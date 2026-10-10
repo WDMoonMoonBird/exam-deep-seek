@@ -52,6 +52,12 @@ export const createTeam = async (req, res) => {
     const { name } = req.body;
     const schoolId = getSchoolId(req);
     if (!name || !schoolId) return res.status(400).json({ code: 1001, message: '参数错误', data: null });
+    // 归属校验（round 6）：不得在自己不属于的学校建团队（判据同 switchClassSchool 的 teacherSchool）
+    const inSchool = await prisma.teacherSchool.findFirst({
+      where: { teacherId: req.user.id, schoolId },
+      select: { schoolId: true },
+    });
+    if (!inSchool) return res.status(403).json({ code: 1003, message: '无权操作', data: null });
 
     const team = await prisma.team.create({
       data: {
@@ -75,6 +81,15 @@ export const updateTeam = async (req, res) => {
     const id = +req.params.id;
     const team = await prisma.team.findUnique({ where: { id } });
     if (!team) return res.status(404).json({ code: 1004, message: '团队不存在', data: null });
+    // 归属校验（round 6）：仅创建者或团队成员可改；非成员一律 403 且零写入（在任何写库动作之前）。
+    // 成员互改名单的治理语义属拍板项 R6-P10，本轮只堵「非成员」这一确定越权面。
+    if (team.createdBy !== req.user.id) {
+      const member = await prisma.teamTeacher.findFirst({
+        where: { teamId: id, teacherId: req.user.id },
+        select: { teamId: true },
+      });
+      if (!member) return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+    }
 
     const { name, teacherIds, classIds } = req.body;
     if (name !== undefined) {
@@ -130,6 +145,21 @@ export const leaveTeam = async (req, res) => {
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
   }
 };
+
+// ===== 获取教师所属团队 ID（body 目标团队的归属校验用） =====
+/**
+ * 获取教师所属的团队 ID 列表。
+ *
+ * 用途：写端点收到 body.teamIds 时，必须校验 teamIds ⊆ 本集合（否则教师可把
+ * 自己的班级挂进**他人团队**，从而放大该团队成员的可见集 —— round 6 §3.2 第一环）。
+ *
+ * @param {number} teacherId 教师 ID
+ * @returns {Promise<number[]>} 去重后的团队 ID
+ */
+export async function getMyTeamIds(teacherId) {
+  const rows = await prisma.teamTeacher.findMany({ where: { teacherId }, select: { teamId: true } });
+  return [...new Set(rows.map(r => r.teamId))];
+}
 
 // ===== 获取教师可见班级（直连+团队） =====
 /**

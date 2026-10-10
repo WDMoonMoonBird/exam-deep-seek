@@ -32,12 +32,37 @@ export class SubmissionRepository {
     return this.prisma.submission.update({ where: { id }, data });
   }
 
-  /** 查询作业提交上下文（对齐 submitAnswer/saveDraft 的 select） */
-  findAssignmentContext(assignmentId) {
-    return this.prisma.assignment.findUnique({
+  /**
+   * 查询作业提交上下文（对齐 submitAnswer/saveDraft 的 select）。
+   *
+   * 传入 studentId 时追加**归属收窄**（round 6）：学生必须在该作业已投放的班级内，
+   * 否则返回 null —— 判据与 studentController.assertStudentInAssignment:493-506 同形
+   * （assignmentClass ∩ studentClass），仅查询形态不同。
+   *
+   * 为什么并入本方法而不是新增独立方法：本仓库既有单测
+   * （test/unit/application/submission.use-cases.test.js 的假仓储、test/unit/infrastructure/
+   * persistence-repositories.test.js 的 prisma 替身）**只实现了既有方法**；
+   * 新增 port 方法会让既有套件整体变红（本轮不得改既有测试文件）。契约语义不变：
+   * 「未投放」与「不存在」都返回 null，由用例层区分 404 / 403。
+   *
+   * ⚠️ 不传 studentId 时查询形状与改动前逐字一致（select 白名单不变）。
+   *
+   * @param {number} assignmentId
+   * @param {number} [studentId] 传入时校验该生属于作业投放班级
+   * @returns {Promise<object|null>} 未命中/未投放 ⇒ null
+   */
+  async findAssignmentContext(assignmentId, studentId) {
+    const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       select: { endTime: true, allowResubmit: true, mode: true, maxAttempts: true, locked: true },
     });
+    if (!assignment || studentId == null) return assignment;
+
+    const linked = await this.prisma.assignmentClass.findFirst({
+      where: { assignmentId, class: { studentClasses: { some: { studentId } } } },
+      select: { assignmentId: true },
+    });
+    return linked ? assignment : null;
   }
 
   /** 查询学生某题的提交记录 */

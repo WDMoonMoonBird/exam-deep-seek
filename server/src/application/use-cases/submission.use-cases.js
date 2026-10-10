@@ -12,6 +12,26 @@ export class SubmissionUseCases {
   }
 
   /**
+   * 载入作业上下文并做**班级归属守卫**（round 6）：
+   *   ① 作业不存在 → EntityNotFoundError（404 形状不变）
+   *   ② 作业未投放给该生班级 → DomainError('无权访问该作业', 'LOCKED') ⇒ 既有映射 403 + code 1003
+   *   ③ 命中 → 落回原业务分支（锁定/截止/重复/次数）
+   *
+   * 归属判定下沉到仓储（findAssignmentContext 的第二参数），故 studentController 保持 **0 行改动**
+   * （该文件实测 799 行，GodFile 阈值 800）。越权判定优先于业务分支，避免「是否锁定/是否截止」
+   * 成为作业存在性与投放状态的预言机。
+   *
+   * @throws {EntityNotFoundError|DomainError}
+   */
+  async _loadOwnedAssignment(assignmentId, studentId) {
+    const assignment = await this.submissionRepo.findAssignmentContext(assignmentId, studentId);
+    if (assignment) return assignment;
+    const exists = await this.submissionRepo.findAssignmentContext(assignmentId);
+    if (!exists) throw new EntityNotFoundError('作业不存在');
+    throw new DomainError('无权访问该作业', 'LOCKED');
+  }
+
+  /**
    * 提交答案（等价 submitAnswer）：锁定/截止/防重复/练习次数校验 → 落库（attemptCount 递增）。
    * @param {object} cmd
    * @param {number} cmd.assignmentId
@@ -25,8 +45,7 @@ export class SubmissionUseCases {
    * @throws {DomainError} code=LOCKED（403）/ 其余（400）
    */
   async submit({ assignmentId, studentId, questionId, subQuestionId, answer, force }) {
-    const assignment = await this.submissionRepo.findAssignmentContext(assignmentId);
-    if (!assignment) throw new EntityNotFoundError('作业不存在');
+    const assignment = await this._loadOwnedAssignment(assignmentId, studentId);
 
     if (assignment.locked) throw new DomainError('作业已被锁定，无法提交', 'LOCKED');
 
@@ -62,8 +81,7 @@ export class SubmissionUseCases {
    * @throws {DomainError} code=LOCKED
    */
   async saveDraft({ assignmentId, studentId, questionId, subQuestionId, answer }) {
-    const assignment = await this.submissionRepo.findAssignmentContext(assignmentId);
-    if (!assignment) throw new EntityNotFoundError('作业不存在');
+    const assignment = await this._loadOwnedAssignment(assignmentId, studentId);
     if (assignment.locked) throw new DomainError('作业已被锁定', 'LOCKED');
     if (new Date() > new Date(assignment.endTime)) return { message: '已过截止时间，跳过草稿' };
 
@@ -87,8 +105,7 @@ export class SubmissionUseCases {
    * @throws {DomainError} code=LOCKED 或非练习模式
    */
   async retry({ assignmentId, studentId }) {
-    const assignment = await this.submissionRepo.findAssignmentContext(assignmentId);
-    if (!assignment) throw new EntityNotFoundError('作业不存在');
+    const assignment = await this._loadOwnedAssignment(assignmentId, studentId);
     if (assignment.locked) throw new DomainError('作业已被锁定', 'LOCKED');
     if (assignment.mode !== 'practice') throw new DomainError('仅练习模式支持重新答题');
     await this.submissionRepo.resetByAssignment(assignmentId, studentId);

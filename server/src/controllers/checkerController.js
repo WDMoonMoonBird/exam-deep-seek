@@ -33,8 +33,10 @@ export const getChecker = async (req, res) => {
 export const confirmCheckerHandler = async (req, res) => {
   try {
     const id = +req.params.id;
-    const q = await prisma.question.findUnique({
-      where: { id },
+    // 归属校验（round 6）：题目必须属于调用者；未命中走既有 404 分支（零新增响应形状）。
+    // 与 teacherController:265 的 findFirst({ id, teacherId: req.user.id }) 同口径
+    const q = await prisma.question.findFirst({
+      where: { id, teacherId: req.user.id },
       select: { id: true, type: true },
     });
     if (!q) return res.status(404).json({ code: 1004, message: '题目不存在', data: null });
@@ -65,8 +67,9 @@ export const confirmCheckerHandler = async (req, res) => {
 export const rollbackCheckerHandler = async (req, res) => {
   try {
     const id = +req.params.id;
-    const q = await prisma.question.findUnique({
-      where: { id },
+    // 归属校验（round 6）：同上 —— 未命中走既有 404 分支
+    const q = await prisma.question.findFirst({
+      where: { id, teacherId: req.user.id },
       select: { id: true, type: true },
     });
     if (!q) return res.status(404).json({ code: 1004, message: '题目不存在', data: null });
@@ -94,8 +97,9 @@ export const rollbackCheckerHandler = async (req, res) => {
 export const generateCheckerHandler = async (req, res) => {
   try {
     const id = +req.params.id;
-    const q = await prisma.question.findUnique({
-      where: { id },
+    // 归属校验（round 6）：未命中走既有 404 分支 ⇒ 他人题目不会再触发 fire-and-forget 的 LLM 生成
+    const q = await prisma.question.findFirst({
+      where: { id, teacherId: req.user.id },
       select: { id: true, type: true, checkerStatus: true },
     });
     if (!q) return res.status(404).json({ code: 1004, message: '题目不存在', data: null });

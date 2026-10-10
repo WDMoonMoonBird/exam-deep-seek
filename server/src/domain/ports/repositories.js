@@ -9,7 +9,7 @@
  * @property {(id: number) => Promise<object|null>} findById 按 ID 查询（含题目材料/小题）
  * @property {(id: number) => Promise<object|null>} findScoreContext 评分上下文（status/aiScore/aiFeedback/teacherFeedback/question.type）
  * @property {(id: number, data: object) => Promise<object>} update 更新提交字段
- * @property {(assignmentId: number) => Promise<object|null>} findAssignmentContext 作业提交上下文（endTime/allowResubmit/mode/maxAttempts/locked）
+ * @property {(assignmentId: number, studentId?: number) => Promise<object|null>} findAssignmentContext 作业提交上下文（endTime/allowResubmit/mode/maxAttempts/locked）；传 studentId 时追加归属收窄：学生不在作业投放班级内 ⇒ null（round 6）
  * @property {(assignmentId: number, studentId: number, questionId: number, subQuestionId?: number|null) => Promise<object|null>} findByAssignmentAndQuestion 学生某题提交
  * @property {(data: object) => Promise<object>} create 创建提交
  * @property {(assignmentId: number, studentId: number) => Promise<object>} resetByAssignment 重置为草稿（练习重答）

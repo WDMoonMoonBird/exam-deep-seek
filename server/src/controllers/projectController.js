@@ -29,6 +29,37 @@ const upload = multer({
   },
 });
 
+// ==================== 归属校验（round 6 · body 目标资源） ====================
+
+/**
+ * 教师可见班级（直连 ∪ 团队共享）—— 语义与 teamController.getVisibleClassIds 逐字同形。
+ *
+ * ⚠️ 本文件**内联**实现而非 import：新增 `./teamController.js` 相对导入会多出 1 条边，
+ * 破坏 cycle-check 的「164 条相对导入边」不变量（round 6 硬约束）；且 teachers/classes
+ * 两侧的 schoolId 过滤规则必须与 getVisibleClassIds 完全一致。
+ *
+ * @param {number} teacherId
+ * @param {number|string|null} schoolId 为空时不做学校过滤（沿用 getVisibleClassIds 既有行为）
+ * @returns {Promise<Set<number>>}
+ */
+async function visibleClassIdSet(teacherId, schoolId) {
+  const sid = schoolId ? +schoolId : null;
+  const classScope = sid ? { class: { schoolId: sid } } : {};
+  const direct = await prisma.teacherClass.findMany({ where: { teacherId, ...classScope }, select: { classId: true } });
+  const teamIds = (await prisma.teamTeacher.findMany({ where: { teacherId }, select: { teamId: true } })).map(t => t.teamId);
+  const teamClassIds = teamIds.length
+    ? (await prisma.teamClass.findMany({ where: { teamId: { in: teamIds }, ...classScope }, select: { classId: true } })).map(tc => tc.classId)
+    : [];
+  return new Set([...direct.map(d => d.classId), ...teamClassIds]);
+}
+
+/** body.classIds 必须全部落在教师可见班级内（空数组 = 无目标资源 ⇒ 放行）。 */
+async function canManageProjectClasses(req, classIds) {
+  if (!classIds?.length) return true;
+  const visible = await visibleClassIdSet(req.user.id, req.query.schoolId ? +req.query.schoolId : null);
+  return classIds.every(cid => visible.has(+cid));
+}
+
 // ==================== 实训任务 CRUD ====================
 
 /** GET / — 分页查询任务列表 */
@@ -149,6 +180,11 @@ export const createProject = async (req, res) => {
       return res.status(400).json({ code: 1001, message: '评分权重合计必须为100%', data: null });
     }
 
+    // 归属校验（round 6 · body 目标）：classIds 必须落在本人可见班级内；在任何写库动作之前 ⇒ 未命中零写入
+    if (!(await canManageProjectClasses(req, classIds))) {
+      return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+    }
+
     // 创建任务 + 关联班级 + 文件树记录：整体放入交互式事务，中途失败整体回滚，避免孤儿数据
     // 注：目录迁移/buildTree 属文件系统操作无法回滚，按约定容忍其在事务内执行；
     // 事务保证 project / projectClass / projectFile 三者要么全部成功要么全部回滚
@@ -262,6 +298,11 @@ export const updateProject = async (req, res) => {
     }
     if (Math.abs(mw + aw + aiw - 1) > 0.001) {
       return res.status(400).json({ code: 1001, message: '评分权重合计必须为100%', data: null });
+    }
+
+    // 归属校验（round 6 · body 目标）：classIds 覆盖式改写前先校验归属；未命中零写入
+    if (classIds !== undefined && !(await canManageProjectClasses(req, classIds))) {
+      return res.status(403).json({ code: 1003, message: '无权操作', data: null });
     }
 
     // 更新任务、班级关联、文件记录：整体放入交互式事务，中途失败回滚，避免孤儿数据
