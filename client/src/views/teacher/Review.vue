@@ -153,8 +153,10 @@ onMounted(() => {
   loadClasses();
   fetch();
   const wsUrl = import.meta.env.VITE_WS_URL || undefined;
-  const wsOpts = { transports: ['websocket', 'polling'] };
-  if (!wsUrl) wsOpts.path = '/exam/socket.io';
+  // socket.io 挂在服务端**根路径** /socket.io（server/src/socket.js initSocket 未指定 path）。
+  // 别把 API 前缀当 socket 前缀：/exam/api/ 只是 nginx 对 /api/ 的公开前缀改写；
+  // 写死 /exam/socket.io 会落进 nginx 的 location /exam/ 静态块拿到 SPA HTML → 永远连不上（缺陷 D2）。
+  const wsOpts = { transports: ['websocket', 'polling'], path: '/socket.io' };
   socket = io(wsUrl, wsOpts);
   socket.on('connect', () => socket.emit('join-school', userStore.currentSchool?.id));
   let lastRefresh = 0;

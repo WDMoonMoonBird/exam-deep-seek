@@ -282,8 +282,8 @@ async function exportXlsx() {
 let socket = null;
 function connectSocket() {
   const base = import.meta.env.VITE_WS_URL || undefined;
-  const opts = { transports: ['websocket', 'polling'] };
-  if (!base) opts.path = '/exam/socket.io';
+  // 同 Review.vue：socket 挂在服务端根路径 /socket.io，与 SPA 的 /exam/ 前缀无关（缺陷 D2）
+  const opts = { transports: ['websocket', 'polling'], path: '/socket.io' };
   socket = io(base, opts);
   socket.on('connect', () => { socket.emit('join-school', userStore.currentSchool?.id); });
   let lastRefresh = 0;
