@@ -314,6 +314,9 @@ async function initMonaco() {
   if (monaco) return;
   // 旧浏览器（:where() 不可用即 Chrome < 88，或可选链不可用即 Chrome < 80）：
   // Monaco 0.55+ 产物无法解析，降级 0.24.0（判定与版本口径以 domain/browserCompat.js 为准）
+  // Monaco 运行时本地化（R-1，说明见 components/CodeEditor.vue 同段注释）：vs/ 指向本站资产；
+  // 放在 applyMonacoCompat 之前 → 旧内核仍切既有兼容版路径。
+  loader.config({ paths: { vs: import.meta.env.BASE_URL + 'monaco/vs' } });
   applyMonacoCompat(loader);
   monaco = await loader.init();
   registerExtraLanguages();

@@ -100,6 +100,11 @@ onMounted(async () => {
   // 旧浏览器（:where() 不可用即 Chrome < 88，或可选链不可用即 Chrome < 80）：
   // Monaco 0.55+ 产物无法解析，降级 0.24.0（判定与版本口径以 domain/browserCompat.js 的
   // isLegacyBrowser() 与 infrastructure/monaco/legacyLoaderCompat.js 的 LEGACY_MONACO_VS 为准）
+  // Monaco 运行时本地化（R-1）：loader 默认从 cdn.jsdelivr.net 拉 vs/ 运行时，校园网无外网时
+  // 编辑器完全不可用。这里指到本站资产 <base>/monaco/vs（vite.config.js 的 monacoLocalVs 提供：
+  // dev 走中间件映射 node_modules/monaco-editor/min/vs，build 拷进 dist/monaco/vs）。
+  // 必须放在 applyMonacoCompat 之前：旧内核由它覆盖为既有兼容版路径（既有分流不变）。
+  loader.config({ paths: { vs: import.meta.env.BASE_URL + 'monaco/vs' } });
   applyMonacoCompat(loader);
   monaco = await loader.init();
   editor = monaco.editor.create(editorRef.value, {
