@@ -6,6 +6,9 @@
  *   2. 响应组装：totalScore/breakdown/highlights/issues/overallComment 字段齐全，round/clamp 行为；
  *   3. 分项推导：parseRubricItems（“第一项…N 分”分段、40 字截断、无标题 → []）；
  *   4. 降级路径：sidecar 5xx / 网络不可达 / 4xx / 畸形响应 → 重试后降级调用 legacy gradeProject。
+ *   5. mode/fixedItems 让位与透传（M6 防回归）：open 或带有效固定分项 → 不调 sidecar、显式走 legacy；
+ *      无 mode/fixedItems → sidecar 契约（body 6 字段 + 正则推导 items）不变；
+ *      sidecar 故障降级 → legacy 收到 mode（不静默丢弃）。
  *
  * 实现：jest.unstable_mockModule 对 src/services/deepseek.js 打桩（避免降级时真实调 API），
  *       mock globalThis.fetch 模拟 sidecar。
@@ -202,5 +205,65 @@ describe('gradeProjectTrustJudge（sidecar HTTP 契约与降级）', () => {
     expect(gradeProject).not.toHaveBeenCalled();
     expect(r.totalScore).toBe(88);
     expect(r.breakdown).toHaveLength(2);
+  });
+
+  // ===== M6：open / fixedItems 显式让位 与 降级透传（防 GRADING_MODE=trustjudge 下静默丢语义）=====
+  // 背景（已核实）：sidecar 的 GradeRequest 仅 6 字段且 extra="ignore"，build_messages 无条件渲染
+  // 「标准答案」段，items 走 rubric 正则推导 → open 语义与固定分项在 sidecar 路径上根本不存在。
+  // 故 Node 侧显式让位：open 或带有效 fixedItems 时不调 sidecar，直接 legacy，并记一条 info 日志。
+
+  it('mode=open → 不调用 sidecar，显式让位 legacy gradeProject（mode=open 随行）', async () => {
+    fetchMock.mockResolvedValue(httpResp(200, SIDE_OK));
+    const r = await grader.gradeProjectTrustJudge({ ...gradeArgs, mode: 'open' });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(gradeProject).toHaveBeenCalledTimes(1);
+    const [arg] = gradeProject.mock.calls[0];
+    expect(arg.mode).toBe('open');
+    expect(r.overallComment).toBe('legacy comment');
+  });
+
+  it('带有效 fixedItems → 不调用 sidecar，显式让位 legacy（fixedItems 原样传递）', async () => {
+    fetchMock.mockResolvedValue(httpResp(200, SIDE_OK));
+    const fixedItems = [{ item: '功能完整性', maxScore: 60 }, { item: '代码规范', maxScore: 40 }];
+    await grader.gradeProjectTrustJudge({ ...gradeArgs, mode: 'standard', fixedItems });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(gradeProject).toHaveBeenCalledTimes(1);
+    const [arg] = gradeProject.mock.calls[0];
+    expect(arg.fixedItems).toEqual(fixedItems);
+  });
+
+  it('既有契约不变：无 mode/fixedItems → 仍走 sidecar，body 仍是原 6 字段 + 正则推导 items', async () => {
+    fetchMock.mockResolvedValue(httpResp(200, SIDE_OK));
+    const r = await grader.gradeProjectTrustJudge(gradeArgs);
+    expect(gradeProject).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(Object.keys(body).sort()).toEqual(['items', 'maxScore', 'rubric', 'standardFiles', 'studentFiles', 'title']);
+    expect(body.items).toEqual([
+      { id: 'i1', item: '项目初始化与可运行', maxScore: 10 },
+      { id: 'i2', item: '登录功能', maxScore: 20 },
+    ]);
+    expect(r.totalScore).toBe(88);
+  });
+
+  it('sidecar 故障降级 → legacy 收到 mode（不静默丢弃）', async () => {
+    fetchMock.mockResolvedValue(httpResp(500, {}));
+    await grader.gradeProjectTrustJudge({ ...gradeArgs, mode: 'standard' });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(gradeProject).toHaveBeenCalledTimes(1);
+    const [arg] = gradeProject.mock.calls[0];
+    expect(arg.mode).toBe('standard');
+    expect(arg.title).toBe(gradeArgs.title);
+  });
+
+  it('normalizeFixedItems：过滤非法项并规整字段（对齐 sidecar 的 1~500 整数校验）', () => {
+    expect(grader.normalizeFixedItems(null)).toEqual([]);
+    expect(grader.normalizeFixedItems([
+      { item: '', maxScore: 10 },
+      { item: 'x', maxScore: 0 },
+      { item: 'y', maxScore: 501 },
+    ])).toEqual([]);
+    expect(grader.normalizeFixedItems([{ item: '  健壮性  ', maxScore: '20' }]))
+      .toEqual([{ item: '健壮性', maxScore: 20 }]);
   });
 });

@@ -514,10 +514,6 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
     const gradingMode = process.env.GRADING_MODE === 'trustjudge' ? 'trustjudge' : 'legacy';
     // 评分后端公共入参（legacy deepseek.gradeProject 与 trustjudge sidecar 共用）：
     //   mode/fixedItems 由规则驱动评分链路引入（open 模式语义 + 固定分项对齐）。
-    //   注意：trustJudgeGrader 目前只消费 title/description/scoringRubric/standardFiles/studentFiles
-    //   五个字段，其内部「sidecar 故障降级 legacy gradeProject」也只透传这五个字段——
-    //   即 GRADING_MODE=trustjudge 时 open 模式语义与固定分项在 trustjudge 链路（含其降级）不生效。
-    //   此处如实传入：待 trustJudgeGrader 支持透传后即自动生效（跨文件缺口已上报，见 M5 报告）。
     const gradeArgs = {
       title: sub.question.title || '未命名项目',
       description: sub.question.material || '',
@@ -528,6 +524,31 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
       mode: gradeMode,
       fixedItems,
     };
+
+    // 【M6 · 方案 b：显式让位】sidecar 不支持 open 语义与固定分项 —— 三条静态边界见
+    // KNOWN_ISSUES.md「P2 已知限制」第 14 条（GradeRequest 仅 6 字段且 extra=ignore →
+    // 额外字段被静默丢弃；build_messages 无条件输出 Reference 段；items 由 rubric 正则推导）。
+    // 命中时不让 mode/fixedItems 在跨语言边界上被静默丢弃，而是明确改走已支持这两项能力的
+    // legacy gradeProject：一处判断，能力不丢，也不再有「传了=生效」的静默分歧。
+    const sidecarGap = gradeMode === 'open' || (Array.isArray(fixedItems) && fixedItems.length > 0);
+    const useTrustJudge = gradingMode === 'trustjudge' && !sidecarGap;
+    /** 仅当「本会选 sidecar 但因缺口让位」时记一条可检索的 info 日志 */
+    const logSidecarDelegate = () => {
+      if (gradingMode === 'trustjudge' && sidecarGap) {
+        logger.info(
+          {
+            submissionId,
+            gradingMode,
+            delegateTo: 'legacy',
+            reason: gradeMode === 'open' ? 'sidecar 不支持 open 语义' : 'sidecar 不支持固定分项',
+            mode: gradeMode,
+            fixedItemCount: Array.isArray(fixedItems) ? fixedItems.length : 0,
+          },
+          'sidecar 不支持 open/fixedItems 语义，本次改走 legacy gradeProject',
+        );
+      }
+    };
+
     let result;
     try {
       if (checkerReady) {
@@ -540,9 +561,10 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
           standardFiles,
           studentFiles,
         });
-      } else if (gradingMode === 'trustjudge') {
+      } else if (useTrustJudge) {
         result = await gradeProjectTrustJudge(gradeArgs);
       } else {
+        logSidecarDelegate();
         result = await gradeProject(gradeArgs);
       }
     } catch (aiErr) {
@@ -550,9 +572,12 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
         // 检查器失败 → 降级原 LLM 链路（本次评分不中断）；降级同样遵循 GRADING_MODE 的后端选择
         logger.warn({ err: aiErr.message, submissionId }, '检查器评分失败，降级 LLM 全量评分');
         try {
-          result = gradingMode === 'trustjudge'
-            ? await gradeProjectTrustJudge(gradeArgs)
-            : await gradeProject(gradeArgs);
+          if (useTrustJudge) {
+            result = await gradeProjectTrustJudge(gradeArgs);
+          } else {
+            logSidecarDelegate();
+            result = await gradeProject(gradeArgs);
+          }
         } catch (err2) {
           logger.error({ err: err2, submissionId }, '实训题评分：AI 调用失败，标记失败');
           await markFailed(submissionId, 'AI 评分服务异常');

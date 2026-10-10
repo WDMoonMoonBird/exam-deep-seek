@@ -96,6 +96,17 @@
 11. 校准上限 3 轮（2026-08-18 由 8 轮收紧）；缺陷候选豁免 + 阈值（≥90）达标进 review
 12. 保存守卫：标准包更换检测依赖前端上传事件；服务端 inputsSnapshot 存指纹可做更强校验
 13. 帮助弹窗/UI 文案未接入 i18n；学生端明细渲染用规则中文标签（FACT_LABELS/evidence）
+14. 【trustjudge sidecar 语义边界（M6 核实，2026-10-10）】Node 侧 `gradeProjectTrustJudge` 与
+    sidecar（trustjudge-server/app.py）的契约边界三条：① `GradeRequest` 仅 6 字段且
+    `model_config={"extra":"ignore"}` → Node 传入的 mode / fixedItems 会被**静默丢弃**（不报 422、
+    不记日志）；② `build_messages` **无条件**输出 `== Reference / standard solution ==` 段、
+    system 恒为批判式角色 → **open 语义在 sidecar 路径上不存在**（开放题只渲染 `(none provided)`）；
+    ③ sidecar 的 items 来自 `parseRubricItems(rubric)` 正则推导，**不消费** ensureRubricItems 的固定分项。
+    → 现行处理（M6）：Node 在 `gradeProjectTrustJudge` 入口做**显式让位**——`mode==='open'` 或
+    `fixedItems` 有效时直接走 legacy `gradeProject`（两类能力均已支持）并记 info 日志；
+    sidecar 故障降级路径同样透传 mode/fixedItems（不再有静默分歧）。
+    → 后续待办（属功能开发/产品判断，非合并修复范围）：若要 sidecar 自身支持 open 与固定分项，
+    需为 `GradeRequest`/`build_messages` 增加评审式角色 + 可选参考解答段 + 以 fixedItems 作评分单元。
 
 ## 运行备忘
 

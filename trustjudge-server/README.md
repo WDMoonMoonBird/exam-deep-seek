@@ -113,4 +113,10 @@ curl 示例（请自行替换引号内的字段）：
 - trustjudge_core.py 中 extract_middle_dict 额外支持了 DeepSeek 分词器把多位分数
   拆成多个 token 的情况（1~3 位整数，详见模块 docstring），这是相对原仓库唯一的
   功能性增强；compute_softmax_weighted_score 与原文逐行一致。
-
+- **本服务不支持的入参（M6 核实，2026-10-10）**：`GradeRequest` 只有 title/rubric/maxScore/
+  standardFiles/studentFiles/items 六个字段且 `model_config={"extra":"ignore"}` —— Node 侧除这六个
+  字段外的入参（如 mode / fixedItems）会被**静默丢弃**；`build_messages` 无条件输出
+  `== Reference / standard solution ==` 段（开放题只会渲染成 `(none provided)`）；items 由 rubric
+  文本正则推导，不消费调用方的固定分项。
+  因此 Node 侧 `gradeProjectTrustJudge` 在 `mode==='open'` 或带有效固定分项时**显式让位**给
+  legacy gradeProject（不再把语义寄希望于本服务）；取舍与后续对齐待办见 KNOWN_ISSUES.md「P2 已知限制」第 14 条。
