@@ -19,7 +19,11 @@
       @empty-action="onEmptyAction"
     >
       <template #toolbar>
+        <!-- T5-A2（B2-7）：筛选下拉没有可见 label，placeholder 不算可访问名称；antd 会把 aria-label 渲染到
+             外层 .ant-select div（落不到 role=combobox 的 input）→ 用「视觉隐藏 label + for/id 关联」（与 t7 同法） -->
+        <label for="review-class-filter" class="visually-hidden">按班级筛选</label>
         <a-select
+          id="review-class-filter"
           v-model:value="selectedClass"
           :options="classOptions"
           showSearch
@@ -214,4 +218,7 @@ onUnmounted(() => {
 .dim-text {
   color: var(--text-tertiary);
 }
+
+/* 视觉隐藏但保留给读屏（T5-A2 既有实现，与 t7 各页逐字一致） */
+.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 </style>
