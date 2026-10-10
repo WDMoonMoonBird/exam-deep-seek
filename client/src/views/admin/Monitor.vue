@@ -140,6 +140,11 @@ onUnmounted(() => { clearInterval(timer); });
   background: var(--code-bg);
   border-radius: var(--radius-lg);
   padding: var(--space-4);
+  /* T4-F6：本面板是「恒定深色内容面」，面板内的一切文字都取该面的配套字色。
+     空态 <a-empty> 的 .ant-empty-description 自带 antd 的 colorTextDescription（面向浅色面），
+     不继承容器色 → 亮色实测 1.08:1（深底深字，不可见）。这里给出容器兜底色，
+     并对空态描述做一次显式覆盖（--status-系列 / --text-系列都面向浅色面，不能用于此处）。 */
+  color: var(--code-fg);
 }
 .log-viewer pre {
   color: var(--code-fg);
@@ -149,5 +154,12 @@ onUnmounted(() => { clearInterval(timer); });
   white-space: pre-wrap;
   word-break: break-all;
   font-family: var(--font-mono);
+}
+/* 覆盖选择器写成 .ant-empty .ant-empty-description（0-3-0，含 scoped 属性后 0-4-0）：
+   既压过 antd 运行时的 :where(.hash).ant-empty-description（0-1-0），
+   也压过 Chrome 69 legacy（hash-priority="high"）的 .hash.ant-empty-description（0-2-0），
+   故无需在 legacy-patch.css 再补一份。实测亮色 1.08:1 → 10.01:1。 */
+.log-viewer :deep(.ant-empty .ant-empty-description) {
+  color: var(--code-fg);
 }
 </style>

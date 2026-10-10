@@ -9,11 +9,18 @@
       <div class="lc-top">
         <a-form layout="inline" :model="form">
           <a-form-item><a-input v-model:value="form.title" placeholder="大题标题" style="width:260px;font-size:var(--fs-title-2);font-weight:700;" /></a-form-item>
-          <a-form-item><a-select v-model:value="form.difficulty" style="width:100px;">
-            <a-select-option value="easy">简单</a-select-option>
-            <a-select-option value="medium">中等</a-select-option>
-            <a-select-option value="hard">困难</a-select-option>
-          </a-select></a-form-item>
+          <!-- T5-A2：本下拉在 a-form-item 内没有可见 label，antd 自动 id #rc_select_N 的可访问名称为空
+               （axe label 规则 critical，实测 AX name = ""，见 tests/ui-redesign-verify/b2-contrast/raw/{before,after}.json 的 Qname 用例）。
+               实测 antd 会把 aria-label 渲染到外层 .ant-select div（落不到 role=combobox 的 input），
+               故按 t7 处理其余 10 页的同一做法：视觉隐藏 label + for/id 关联（不是 aria-label 糊）。 -->
+          <a-form-item>
+            <label for="q-difficulty" class="visually-hidden">题目难度</label>
+            <a-select id="q-difficulty" v-model:value="form.difficulty" style="width:100px;">
+              <a-select-option value="easy">简单</a-select-option>
+              <a-select-option value="medium">中等</a-select-option>
+              <a-select-option value="hard">困难</a-select-option>
+            </a-select>
+          </a-form-item>
           <a-form-item label="总分">
             <span style="font-size:var(--fs-title-3);font-weight:700;color:var(--brand-600);">{{computedMaxScore}} 分</span>
           </a-form-item>
@@ -129,7 +136,7 @@
                     <TransitionGroup name="item-list" tag="div" class="obj-items-list">
                       <div v-for="(item,idx) in form.objectiveItems" :key="item.key" :class="['obj-item-card',{'obj-item-focus':previewFocusKey===item.key}]" @click="onEditCardClick(item.key,$event)">
                         <div class="obj-item-head">
-                          <a-tag :color="itemTypeColor(item.type)" size="small">{{itemTypeLabel(item.type)}}</a-tag>
+                          <a-tag :color="itemTypeColor(item.type)" :class="itemTypeTagClass(item.type)" size="small">{{itemTypeLabel(item.type)}}</a-tag>
                           <span style="font-size:var(--fs-caption);color:var(--text-tertiary);">第{{idx+1}}小问</span>
                           <a-input-number v-model:value="item.score" :min="0" :step="0.01" :precision="2" placeholder="均分" size="small" style="width:70px;margin-left:auto;" @change="onItemScoreChange(item)" />分
                           <a-popconfirm title="确认删除该小问？" description="该小问的题干与选项将一并移除，不可撤销。" ok-text="删除小问" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="removeItem(idx)"><a-button size="small" type="text" danger @click.stop>×</a-button></a-popconfirm>
@@ -179,7 +186,7 @@
                   <div class="lc-editor-header">
                     <span class="lc-editor-label"><CodeOutlined /> 参考答案</span>
                     <a-tag color="blue" style="margin-left:6px;">第 {{activeIndex+1}} 小题</a-tag>
-                    <a-tag v-if="aiTag" color="orange" style="margin-left:4px;font-size:11px;">{{aiTag}}</a-tag>
+                    <a-tag v-if="aiTag" class="tag-warning" style="margin-left:4px;font-size:11px;">{{aiTag}}</a-tag>
                     <div class="lc-editor-actions">
                       <a-select v-model:value="form.language" size="small" style="width:120px;"><a-select-option v-for="l in langs" :key="l" :value="l">{{l}}</a-select-option></a-select>
                       <a-button size="small" type="text" @click="formatCode" title="格式化代码">
@@ -200,7 +207,7 @@
                   <div class="lc-editor-wrap preview-scroll">
                     <div v-if="form.objectiveItems.length" class="preview-obj-list">
                       <div v-for="(item,idx) in form.objectiveItems" :key="item.key" :id="'preview-'+item.key" :class="['preview-obj-item',{'preview-obj-highlight':previewFocusKey===item.key}]">
-                        <div class="preview-obj-num">{{idx+1}}. <a-tag :color="itemTypeColor(item.type)" size="small" style="font-size:10px;">{{itemTypeLabel(item.type)}}</a-tag></div>
+                        <div class="preview-obj-num">{{idx+1}}. <a-tag :color="itemTypeColor(item.type)" :class="itemTypeTagClass(item.type)" size="small" style="font-size:10px;">{{itemTypeLabel(item.type)}}</a-tag></div>
                         <div class="preview-stem" :class="{'preview-stem-code':isCodeStem(item.stem)}">{{item.stem||'(待填写)'}}</div>
                         <div v-if="item.type==='choice'" class="preview-choice"><a-radio-group :value="item.answer" disabled style="display:flex;flex-direction:column;gap:4px;"><a-radio v-for="opt in item.options" :key="opt.key" :value="opt.key" disabled>{{opt.key}}. {{opt.text||'(待填写)'}}</a-radio></a-radio-group><span class="preview-answer-tag">答案: {{item.answer}}</span></div>
                         <div v-if="item.type==='multi_choice'" class="preview-choice"><a-checkbox-group :value="(item.answer||'').split(',').filter(Boolean)" disabled style="display:flex;flex-direction:column;gap:4px;"><a-checkbox v-for="opt in item.options" :key="opt.key" :value="opt.key" disabled>{{opt.key}}. {{opt.text||'(待填写)'}}</a-checkbox></a-checkbox-group><span class="preview-answer-tag">答案: {{item.answer}}</span></div>
@@ -479,6 +486,10 @@ function onEditCardClick(key,e){e.currentTarget?.scrollIntoView?.({behavior:'smo
 function scrollPreviewTo(key){previewFocusKey.value=key;nextTick(()=>{const el=document.getElementById('preview-'+key);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});});}
 function itemTypeLabel(t){const m={choice:'单选',multi_choice:'多选',judge:'判断',fill:'填空'};return m[t]||t;}
 function itemTypeColor(t){const m={choice:'blue',multi_choice:'purple',judge:'orange',fill:'green'};return m[t]||'default';}
+/** T4-F2 类别收口（动态预置色）：题型徽标里三类解析成 antd 预置色且不达 AA —— judge→orange 亮 3.34:1、
+    fill→green 亮 3.37:1、multi_choice→purple 暗 3.39:1 → 改走全局语义类（style.css，0-2-1 会接管三色，
+    上面 :color 的预置色对这些类型只作保留写法，实际渲染由类决定）；choice→blue 亮 5.45:1 达标，按 captain 决定不动。 */
+function itemTypeTagClass(t){const m={judge:'tag-warning',fill:'tag-success',multi_choice:'tag-accent'};return m[t]||null;}
 
 // 设置
 function resetSettings(){tempSettings.classificationMode=objectiveSettings.classificationMode;tempSettings.multiChoiceScoring=objectiveSettings.multiChoiceScoring;}

@@ -10,14 +10,14 @@
         <!-- 教师模式：可编辑 / 学生模式：只读 -->
         <a-input v-if="isTeacher" v-model:value="form.title" :placeholder="isEdit?'编辑实训题':'新建实训题'" style="width:260px;font-size:var(--fs-title-2);font-weight:700;" />
         <span v-else style="font-size:var(--fs-title-2);font-weight:700;">{{ form.title || '实训题' }}</span>
-        <a-tag color="orange" size="small" style="margin:0;">BETA</a-tag>
+        <a-tag class="tag-warning" size="small" style="margin:0;">BETA</a-tag>
 
         <a-select v-if="isTeacher" v-model:value="form.difficulty" style="width:100px;">
           <a-select-option value="easy">简单</a-select-option>
           <a-select-option value="medium">中等</a-select-option>
           <a-select-option value="hard">困难</a-select-option>
         </a-select>
-        <a-tag v-else :color="form.difficulty==='easy'?'green':form.difficulty==='hard'?'red':'orange'">
+        <a-tag v-else :color="form.difficulty==='easy'?'green':form.difficulty==='hard'?'red':'orange'" :class="difficultyTagClass">
           {{ form.difficulty === 'easy' ? '简单' : form.difficulty === 'hard' ? '困难' : '中等' }}
         </a-tag>
 
@@ -266,6 +266,11 @@ const form = reactive({
   packageFile: null,
   tempId: '',
 });
+
+/** T4-F2 类别收口（动态预置色）：学生只读态的难度徽标里 easy→green 亮 3.37:1、medium→orange 亮 3.34:1
+ *  不达 AA → 改走全局语义类；hard→red 亮 5.11:1 达标，保持 antd 预置色不动。
+ *  （语义类选择器 0-2-1 高于 .ant-tag-<预设色>，三色由类接管，盒模型不变。） */
+const difficultyTagClass = computed(() => (form.difficulty === 'easy' ? 'tag-success' : form.difficulty === 'medium' ? 'tag-warning' : null));
 
 // 学生端只读渲染题目描述：教师 RichEditor 产出的 HTML 可能携带脚本，渲染前必须用 DOMPurify 净化
 const safeDescriptionHtml = computed(() => {

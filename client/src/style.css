@@ -93,7 +93,7 @@ h3 { font-size: 21px; line-height: 1.19; }
 .ant-card { border: 1px solid var(--card-bd); box-shadow: none; }
 
 /* === 语义标签类（B2-2 对比度修复 · T4-F2）===
-   背景：<a-tag color="orange"> 走 antd 预置色板（亮 #d46b08 on #fff7e6 = 3.34:1，12px 不达 AA），
+   背景：<a-tag color="orange"> 走 antd 预置色板（亮色实测 3.34:1，12px 不达 AA；预置色板值不经 CSS 变量），
    预置色板不经过 CSS 变量，主题层（antd-theme.js）拿不到它，故改为「语义类 + 令牌三元组」。
    用法（替代 color="orange"，其余属性保持不变）：
      <a-tag class="tag-warning" size="small">BETA</a-tag>
@@ -137,7 +137,7 @@ html .ant-tag.tag-neutral {
 /* === 危险操作文本色（B2-2 对比度修复 · T4-F1）===
    antd 的 danger 文本按钮取 colorError：亮 rgb(255,77,79) on 白 = 3.27:1（hover 更浅，2.39:1）、
    暗 rgb(220,68,70) on --bg-surface = 4.16:1 —— 14px 正文都不达 4.5:1。
-   改用语义令牌 --status-danger-fg（亮 #b42318 = 6.57:1 / 暗 #fda29b = 9.08:1）。
+   改用语义令牌 --status-danger-fg（浏览器实测亮 6.57:1 / 暗 9.08:1）。
    两处刻意排除：
      1) .ant-btn-primary：实心 danger 按钮是「白字 on colorError」，改字色会得到不可读组合；
      2) [disabled] / .ant-btn-disabled：禁用态由 antd 统一弱化，不应被本规则提亮（WCAG 对 inactive 豁免）。
@@ -176,6 +176,23 @@ html .ant-layout .ant-layout-header.app-topbar { color: var(--text-primary); }
 
 /* 表单类弹窗最大宽度：对齐 R-14 的 480/640/820 档位（工作流型弹窗见各页的成对 wrap-class 规则） */
 .form-modal .ant-modal { max-width: 820px; }
+
+/* === 仅供读屏的工具类（T5-A2「无可见 label 的控件」统一做法）===
+   t7 在 10 个页面用的是同值 scoped 副本；这里给一份全局版，供后续同类修复复用（值逐字相同：
+   Login.vue:199-209 与 t7 各页）。用法：<label for="控件id" class="visually-hidden">真实语义名称</label>
+   并给控件一个稳定 id —— 不要用 aria-label：实测 antd 会把它渲染到 .ant-select 外层 div，
+   落不到 role=combobox 的 input（b2-contrast/raw/{before,after}.json 的 Qname 用例）。 */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 
 /* === 移动端响应式 === */
 @media (max-width: 768px) {

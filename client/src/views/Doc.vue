@@ -88,12 +88,12 @@
                 </section>
 
                 <section id="project" class="doc-section">
-                    <h2 class="section-title">7. 实训题管理 <a-tag color="orange" size="small" style="margin-left:4px;vertical-align:middle;">BETA</a-tag></h2>
+                    <h2 class="section-title">7. 实训题管理 <a-tag class="tag-warning" size="small" style="margin-left:4px;vertical-align:middle;">BETA</a-tag></h2>
                     <div class="section-body">
                         <p>实训题 = 完整工程项目实践任务（如「用户管理系统（前端）」）。学生上传项目压缩包，系统自动进行 AI 评分：<b>上传了标准工程包</b> → 与标准包<b>对比评分</b>；<b>未上传标准工程包</b>（开放性题目）→ 只依据评分标准做<b>评价式评分</b>，不与参考答案对比。</p>
 
                         <h3>① 新增实训题</h3>
-                        <p>进入<b>题库管理</b>，点击右上角「新增题目」→ 下拉选择<b>实训题</b> <a-tag color="orange" size="small">BETA</a-tag>：</p>
+                        <p>进入<b>题库管理</b>，点击右上角「新增题目」→ 下拉选择<b>实训题</b> <a-tag class="tag-warning" size="small">BETA</a-tag>：</p>
                         <img class="doc-img" tabindex="0" :src="'/exam/doc-img/10-project-new.png'" alt="新增实训题" />
                         <ul>
                             <li>填写<b>题目名称 / 难度 / 满分</b>；</li>
@@ -550,7 +550,8 @@ const anchors = allSections.map(s => ({
     key: s.id,
     href: `#${s.id}`,
     title: s.id === 'project'
-        ? () => h('span', null, ['7. 实训题', h(Tag, { color: 'orange', size: 'small', style: 'margin-left:4px;' }, { default: () => 'BETA' })])
+        // T4-F2：BETA 标签改走全局语义类 .tag-warning（令牌三元组，定义见 src/style.css）
+        ? () => h('span', null, ['7. 实训题', h(Tag, { class: 'tag-warning', size: 'small', style: 'margin-left:4px;' }, { default: () => 'BETA' })])
         : s.title,
 }));
 </script>

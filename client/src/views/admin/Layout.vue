@@ -5,7 +5,7 @@
         <img src="../../assets/logo.svg" class="logo-img" alt="logo" />
         <span v-show="!collapsed" class="logo-text"><span class="logo-line1">Deadpan</span><span class="logo-line2">判题</span></span>
       </div>
-      <a-menu v-model:selectedKeys="selectedKeys" theme="dark" mode="inline" @click="onMenuClick">
+      <a-menu ref="navMenuRef" v-model:selectedKeys="selectedKeys" theme="dark" mode="inline" @click="onMenuClick">
         <!-- 导航分组与顺序：docs/ui-redesign/01-information-architecture.md §2.2
              分组标题不用 a-menu-item-group（其 li/ul 无 role，会打断 menuitem 的 ARIA 父子链）；详见 teacher/Layout.vue 同处注释。 -->
         <div key="g-organization" role="presentation" class="ant-menu-item-group-title">组织</div>
@@ -54,7 +54,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useUserStore } from '../../stores/user.js';
 import { BankOutlined, AppstoreOutlined, TeamOutlined, IdcardOutlined, DashboardOutlined, RobotOutlined, BulbOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
@@ -76,6 +76,33 @@ const sidebarCollapsedWidth = ref(window.innerWidth < 992 ? 0 : SIDER_COLLAPSED_
 window.addEventListener('resize', () => { sidebarCollapsedWidth.value = window.innerWidth < 992 ? 0 : SIDER_COLLAPSED_WIDTH; });
 const selectedKeys = ref([route.path]);
 watch(() => route.path, (p) => { selectedKeys.value = [p]; });
+
+/**
+ * T7-O2（QA §3.4「侧栏键盘不可达」）：antd 把菜单项渲染成 li[role=menuitem][tabindex=-1]，
+ * 而 ul.ant-menu 默认不可聚焦 → 实测 Tab 循环完全跳过侧栏（轨迹见 b2-contrast/raw/before.json 的 T7O2）。
+ * 最小修复：① 菜单容器给一个 Tab 停靠点 + 可读名称；② 容器获得焦点后方向键在菜单项间移动焦点
+ * （Enter/Space 激活仍由菜单项自身处理，实测可导航到目标路由）。
+ * 不改 DOM 结构、不改 ARIA 角色，菜单项维持 roving tabindex=-1（与 role=menu 模式一致）。
+ * 为何用 ref 写属性：tabindex 是 antd Menu 的具名 prop（es/menu/src/Menu.js:42）且组件内部未使用，
+ * 写在模板里会被这个 prop 吸收、透传不到 ul。 */
+const navMenuRef = ref(null);
+onMounted(() => {
+  const el = navMenuRef.value && navMenuRef.value.$el;
+  if (!el || !el.setAttribute) return;
+  el.setAttribute('tabindex', '0');
+  el.setAttribute('aria-label', '主导航菜单');
+  el.addEventListener('keydown', onMenuKeydown);
+});
+function onMenuKeydown(e) {
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  const items = Array.prototype.slice.call((e.currentTarget || e.target).querySelectorAll('.ant-menu-item:not(.ant-menu-item-disabled)'));
+  if (!items.length) return;
+  e.preventDefault();
+  const cur = items.indexOf(document.activeElement);
+  const step = e.key === 'ArrowDown' ? 1 : -1;
+  const next = cur < 0 ? (step > 0 ? 0 : items.length - 1) : (cur + step + items.length) % items.length;
+  items[next].focus();
+}
 function onMenuClick ({ key }) {
   router.push(key);
   if (window.innerWidth < 992) collapsed.value = true;

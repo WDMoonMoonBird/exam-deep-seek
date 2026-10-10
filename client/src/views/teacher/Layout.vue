@@ -6,7 +6,7 @@
                 <img src="../../assets/logo.svg" class="logo-img" alt="logo" />
                 <span v-show="!collapsed" class="logo-text"><span class="logo-line1">Deadpan</span><span class="logo-line2">判题</span></span>
             </div>
-            <a-menu v-model:selectedKeys="selectedKeys" theme="dark" mode="inline" @click="onMenuClick">
+            <a-menu ref="navMenuRef" v-model:selectedKeys="selectedKeys" theme="dark" mode="inline" @click="onMenuClick">
                 <!-- 导航分组与顺序：docs/ui-redesign/01-information-architecture.md §2.2
                      分组标题不用 a-menu-item-group：它渲染出的 li/ul 无 role，会打断 menuitem 的 ARIA 父子链，
                      产生 axe 的 aria-required-children / aria-required-parent / list / listitem 四类违规
@@ -170,6 +170,35 @@ async function refreshPendingReview() {
 }
 
 onMounted(() => { refreshPendingReview(); });
+
+/**
+ * T7-O2（QA §3.4「侧栏键盘不可达」）：antd 把菜单项渲染成 li[role=menuitem][tabindex=-1]，
+ * 而 ul.ant-menu 默认不可聚焦 → 实测 Tab 循环为 body → 主题按钮 → 筛选框 → 分页 → body，
+ * 侧栏 0 命中（按键轨迹见 tests/ui-redesign-verify/b2-contrast/raw/before.json 的 T7O2.tabTrace）。
+ * 最小修复：① 菜单容器给一个 Tab 停靠点 + 可读名称；② 容器获得焦点后方向键在菜单项间移动焦点
+ * （Enter/Space 激活仍由菜单项自身处理，实测可导航到目标路由）。
+ * 不改 DOM 结构、不改 ARIA 角色，菜单项维持 roving tabindex=-1（与 role=menu 模式一致）。
+ * 为何用 ref 写属性：tabindex 是 antd Menu 的具名 prop（es/menu/src/Menu.js:42）且组件内部未使用，
+ * 写在模板里会被这个 prop 吸收、透传不到 ul。
+ */
+const navMenuRef = ref(null);
+onMounted(() => {
+  const el = navMenuRef.value && navMenuRef.value.$el;
+  if (!el || !el.setAttribute) return;
+  el.setAttribute('tabindex', '0');
+  el.setAttribute('aria-label', '主导航菜单');
+  el.addEventListener('keydown', onMenuKeydown);
+});
+function onMenuKeydown(e) {
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  const items = Array.prototype.slice.call((e.currentTarget || e.target).querySelectorAll('.ant-menu-item:not(.ant-menu-item-disabled)'));
+  if (!items.length) return;
+  e.preventDefault();
+  const cur = items.indexOf(document.activeElement);
+  const step = e.key === 'ArrowDown' ? 1 : -1;
+  const next = cur < 0 ? (step > 0 ? 0 : items.length - 1) : (cur + step + items.length) % items.length;
+  items[next].focus();
+}
 
 function resetPwdForm() {
   pwdActiveKey.value = [];
@@ -362,7 +391,12 @@ function handleMenu ({ key }) {
     height: 100%;
 }
 
-/* 侧栏徽标：待审核数（深色侧栏上的 danger 三元组，见 03-components.md §3.4） */
+/* 侧栏徽标：待审核数（深色侧栏上的 danger 三元组，见 03-components.md §3.4）
+   T4-F5：暗色的 --status-danger-bg 是半透明（rgba(217,45,32,.16)），直接叠在「选中项」实底
+   （antd 派生主色 rgb(3,90,176)）上会把背景提亮 → 实测 3.90:1（12px/600 需 4.5:1）。
+   这里先铺一层不透明 --sider-bg（侧栏在两种主题下都是深色面），再用同色平铺渐变把半透明层叠上去，
+   使合成结果与父级底色无关（暗色 8.88:1）；浅色下 --status-danger-bg 本身不透明（= --red-50），
+   底板被完全覆盖 → 视觉零变化（实测仍 6.05:1）。 */
 .sider-badge {
     flex: none;
     margin-inline-start: auto;
@@ -370,7 +404,8 @@ function handleMenu ({ key }) {
     height: var(--tag-h);
     padding: 0 var(--tag-pad-x);
     border-radius: var(--radius-pill);
-    background: var(--status-danger-bg);
+    background-color: var(--sider-bg);
+    background-image: linear-gradient(var(--status-danger-bg), var(--status-danger-bg));
     color: var(--status-danger-fg);
     font-size: var(--tag-fs);
     line-height: var(--tag-h);

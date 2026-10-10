@@ -87,10 +87,12 @@
       >
         <span class="panel-arrow" :class="{ open: !collapsed }">▸</span>
         <span class="panel-title">评分面板</span>
-        <a-tag v-if="aiScore != null" color="green" size="small">AI {{ aiScore }} 分</a-tag>
+        <!-- T4-F2 类别收口：antd green 预置色亮 3.37:1 不达 AA → 走令牌语义类；
+             red 实测亮 5.07 / 暗 4.54、blue 亮 5.50 / 暗 4.91 均达标，保持预置色不动。 -->
+        <a-tag v-if="aiScore != null" class="tag-success" size="small">AI {{ aiScore }} 分</a-tag>
         <a-tag v-if="gradingState === 'failed'" color="red" size="small">评分异常</a-tag>
         <a-tag v-if="status === 'reviewed'" color="blue" size="small">已审核</a-tag>
-        <a-tag v-if="status === 'published'" color="green" size="small">已发布</a-tag>
+        <a-tag v-if="status === 'published'" class="tag-success" size="small">已发布</a-tag>
         <span class="panel-toggle">{{ collapsed ? '展开' : '收起' }}</span>
       </div>
 
@@ -102,7 +104,7 @@
             <span class="ai-score-label">AI 评分</span>
             <span class="ai-score-num">{{ aiScore ?? '—' }}<span v-if="maxScore && aiScore != null"> / {{ maxScore }}</span></span>
             <a-tag v-if="gradingState === 'failed'" color="red">评分异常</a-tag>
-            <a-tag v-else-if="status === 'submitted' && !aiResult" color="orange">评分中</a-tag>
+            <a-tag v-else-if="status === 'submitted' && !aiResult" class="tag-warning">评分中</a-tag>
             <a-popconfirm
               v-if="gradingState === 'failed'"
               title="将重新调用 AI 评分，完成后自动刷新"

@@ -11,7 +11,7 @@
         <template #overlay>
           <a-menu @click="onNewQuestion">
             <a-menu-item key="code">编程题</a-menu-item>
-            <a-menu-item key="project"><span>实训题 <a-tag color="orange" size="small">BETA</a-tag></span></a-menu-item>
+            <a-menu-item key="project"><span>实训题 <a-tag class="tag-warning" size="small">BETA</a-tag></span></a-menu-item>
           </a-menu>
         </template>
       </a-dropdown>
