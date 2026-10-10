@@ -53,19 +53,6 @@ export const RULE_TYPES = [
   'normalized_text',  // {path, text}     —— 归一化（去全部空白）后包含匹配
 ];
 
-/**
- * 源码扩展名白名单（resolveProjectRoot 探测「子目录是否含源码」用）。
- * @type {Set<string>}
- */
-export const SOURCE_EXTS = new Set([
-  // 前端
-  'js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx', 'vue', 'svelte', 'html', 'css', 'scss', 'sass', 'less',
-  // 后端
-  'java', 'py', 'go', 'c', 'cpp', 'h', 'hpp', 'cc', 'cxx', 'cs', 'rb', 'php', 'rs', 'kt', 'swift',
-  // 脚本/数据/配置
-  'sh', 'bash', 'sql', 'json', 'yml', 'yaml', 'xml', 'toml', 'ini',
-]);
-
 /** 递归遍历时跳过的目录名（node_modules 等第三方/构建产物） */
 const SKIP_DIRS = new Set([
   'node_modules', '.git', 'dist', 'build', '.idea', '.vscode', 'target',
@@ -154,7 +141,7 @@ function clampScore(score, maxScore) {
  * @param {string} absPath - 绝对路径
  * @returns {string}
  */
-function extOf(absPath) {
+export function extOf(absPath) {
   const name = path.basename(absPath);
   const idx = name.lastIndexOf('.');
   if (idx <= 0) return '';
@@ -167,7 +154,7 @@ function extOf(absPath) {
  * @param {string} pattern - glob 模式
  * @returns {RegExp}
  */
-function globToRegExp(pattern) {
+export function globToRegExp(pattern) {
   const escaped = String(pattern).replace(/[.+^${}()|[\]\\]/g, '\\$&');
   const re = escaped.replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]');
   return new RegExp('^' + re + '$');
@@ -178,7 +165,7 @@ function globToRegExp(pattern) {
  * @param {string} dir - 绝对目录路径
  * @returns {string[]} 绝对路径列表
  */
-function collectFiles(dir) {
+export function collectFiles(dir) {
   const out = [];
   const walk = (abs) => {
     let entries;
@@ -209,7 +196,7 @@ function collectFiles(dir) {
  * @param {string} relPath - 规则参数里的相对路径
  * @returns {string|null} 合法绝对路径；越界/非法返回 null
  */
-function resolveWithinRoot(projectRoot, relPath) {
+export function resolveWithinRoot(projectRoot, relPath) {
   if (typeof relPath !== 'string' || relPath.length === 0) return null;
   const root = path.resolve(projectRoot);
   const abs = path.resolve(root, relPath);
@@ -222,7 +209,7 @@ function resolveWithinRoot(projectRoot, relPath) {
  * @param {string} absPath - 绝对路径
  * @returns {{ok: boolean, content?: string, error?: string}}
  */
-function readFileUtf8(absPath) {
+export function readFileUtf8(absPath) {
   try {
     const content = fs.readFileSync(absPath, 'utf8');
     return { ok: true, content };

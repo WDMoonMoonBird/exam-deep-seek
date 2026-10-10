@@ -37,6 +37,8 @@
 8. **`git status` 对"未跟踪目录"没有证据力**（round 1 由 Agent C 纠正）：`tests/`、`client/dist` 等**不在 git 跟踪内**（`git ls-files tests` = 0），改动它们时 `git status` 不会显示任何变化 —— 不能据此断言"没被触碰"。必须用**旁证**：`mtime` 对照改动时刻、`find -newermt`、或工作树指纹（`git diff | sha256`）。
 9. **零引用令牌固定用「严格口径」**：**仅在 CSS 注释里被提及不计为引用**（round 1/2 反复出现 64 vs 62 的口径漂移，差额恒为 `--input-h`/`--table-row-h`）。任何报告给出零引用数时，**必须写明口径**。
 10. **行号与计数一律以「冻结树实测」为准，不得采信上一轮报告里的数字**（实证：A 报 `SOURCE_EXTS` 43 项、实为 **37**；报 `collectFiles` 176-197、实为 **176-198** —— 后者若被照抄切片会产出**语法坏树**）。引用行号前先自己数一遍。
+12. **`node --check` 不校验 ESM 跨模块绑定**（round 3 由 Agent B 撞出、Agent C 独立复现正反两向）：**删掉本地副本必须与「给被复用方加 export」同批完成** —— 纯语法检查会放行「导入了但对方没导出」的坏绑定，只有**真 import 一次**（或绑定自检）才会抛 `SyntaxError: does not provide an export named ...`。
+   最小自检：写入后真 import 一次 + `Object.keys` 对拍；正式门禁见 `scripts/gates/bind-check.mjs`（round 4 落地）。
 11. **计数必须带词边界**：`grep -c -- '--btn-default-bg'` 会子串命中 `--btn-default-bg-hover`（实测 2 vs 真值 1）。
 
 ## 4 测试口径（Agent C 必须按此执行）

@@ -15,6 +15,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { resolveProjectRoot } from './factExtractors/common.js';
 
 /** 递归收集目录下全部文件（相对 posix 路径），跳过常见第三方/构建目录 */
 export function collectFiles(rootDir, { skipDirs = ['node_modules', '.git', 'dist', 'build', 'target', '.idea', '.vscode'] } = {}) {
@@ -41,28 +42,9 @@ export function collectFiles(rootDir, { skipDirs = ['node_modules', '.git', 'dis
 /** 源码扩展名（import 检查只关心这些） */
 const SRC_EXTS = new Set(['js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx', 'vue', 'java', 'py']);
 
-/** 目录内是否含源码（判断"工程根"用：跳过纯资源目录） */
-export function hasSourceFiles(dir) {
-  try {
-    return collectFiles(dir).some((f) => SRC_EXTS.has(f.split('.').pop().toLowerCase()));
-  } catch { return false; }
-}
-
-/**
- * 解析工程根：若 rootDir 仅一个含源码的子目录则下钻（与 ruleExecutor 语义一致）。
- */
-export function resolveProjectRoot(rootDir) {
-  if (!rootDir || typeof rootDir !== 'string') return rootDir;
-  let subdirs = [];
-  try {
-    subdirs = fs.readdirSync(rootDir, { withFileTypes: true })
-      .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
-      .map((e) => e.name);
-  } catch { return rootDir; }
-  if (subdirs.length !== 1) return rootDir;
-  const candidate = path.join(rootDir, subdirs[0]);
-  return hasSourceFiles(candidate) ? candidate : rootDir;
-}
+// C-1（round 3）：本文件原有的私有 resolveProjectRoot 已删除，统一改用 factExtractors/common.js
+// 的单一实现（含 P0-1 清单短路与 SKIP_DIRS 过滤）。此处再导出以保持既有导出面不变。
+export { resolveProjectRoot };
 
 /**
  * 收集源码文件中 import 的相对路径引用（js/ts/vue/jsx 的 import/require；

@@ -36,15 +36,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { runRules, resolveProjectRoot } from './ruleExecutor.js';
+import { collectFiles, extOf, globToRegExp, readFileUtf8, resolveWithinRoot, runRules, resolveProjectRoot } from './ruleExecutor.js';
 import { extractFacts } from './factExtractor.js';
 import logger from '../utils/logger.js';
 
 /** 干扰串（contains_text / contains_regex 替换用；与目标文本冲突时规则会被判 weak） */
 const MUTATION_PLACEHOLDER = '__RULE_MUTATED__';
-
-/** 递归遍历时跳过的目录名（与 ruleExecutor/factExtractor 一致） */
-const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.idea', '.vscode', 'target']);
 
 /** fact 变异扫描的源码扩展名（import/调用只会出现在源码中） */
 const SOURCE_EXTS = new Set(['js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx', 'vue']);
@@ -75,88 +72,6 @@ const FACT_MUTATION = {
   hasFastAPI: { fileNeedle: /\bfastapi\b/ },
   hasPydantic: { fileNeedle: /\bpydantic\b/ },
 };
-
-// ==================== 内部工具（与 ruleExecutor 同语义，本模块自包含） ====================
-
-/**
- * 递归收集目录下全部普通文件（跳过隐藏项与 SKIP_DIRS）。
- * @param {string} dir - 绝对目录路径
- * @returns {string[]} 绝对路径列表
- */
-function collectFiles(dir) {
-  const out = [];
-  const walk = (abs) => {
-    let entries;
-    try {
-      entries = fs.readdirSync(abs, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const e of entries) {
-      if (e.name.startsWith('.')) continue;
-      const childAbs = path.join(abs, e.name);
-      if (e.isDirectory()) {
-        if (SKIP_DIRS.has(e.name)) continue;
-        walk(childAbs);
-      } else if (e.isFile()) {
-        out.push(childAbs);
-      }
-    }
-  };
-  walk(dir);
-  return out;
-}
-
-/**
- * 取文件扩展名（小写，无扩展名返回空串）。
- * @param {string} absPath - 绝对路径
- * @returns {string}
- */
-function extOf(absPath) {
-  const name = path.basename(absPath);
-  const idx = name.lastIndexOf('.');
-  if (idx <= 0) return '';
-  return name.slice(idx + 1).toLowerCase();
-}
-
-/**
- * 简化 glob → 正则（与 ruleExecutor.globToRegExp 同语义）：`*` 通配（不跨目录分隔符）、
- * `?` 单字符（不跨目录分隔符），其余原样转义。
- * @param {string} pattern - glob 模式
- * @returns {RegExp}
- */
-function globToRegExp(pattern) {
-  const escaped = String(pattern).replace(/[.+^${}()|[\]\\]/g, '\\$&');
-  const re = escaped.replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]');
-  return new RegExp('^' + re + '$');
-}
-
-/**
- * 把相对路径解析到工程根内；防穿越（与 ruleExecutor.resolveWithinRoot 同语义）。
- * @param {string} projectRoot - 工程根
- * @param {string} relPath - 规则参数里的相对路径
- * @returns {string|null}
- */
-function resolveWithinRoot(projectRoot, relPath) {
-  if (typeof relPath !== 'string' || relPath.length === 0) return null;
-  const root = path.resolve(projectRoot);
-  const abs = path.resolve(root, relPath);
-  if (abs === root || abs.startsWith(root + path.sep)) return abs;
-  return null;
-}
-
-/**
- * 读取 UTF-8 文件内容；失败返回 { ok: false, error }（不抛错）。
- * @param {string} absPath - 绝对路径
- * @returns {{ok: boolean, content?: string, error?: string}}
- */
-function readFileUtf8(absPath) {
-  try {
-    return { ok: true, content: fs.readFileSync(absPath, 'utf8') };
-  } catch (err) {
-    return { ok: false, error: (err && err.code) || (err && err.message) || String(err) };
-  }
-}
 
 /**
  * 写入 UTF-8 文件内容；失败返回 { ok: false, error }（不抛错）。

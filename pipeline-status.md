@@ -1,6 +1,6 @@
 # pipeline-status.md — 流水线唯一状态入口（规范 §三.4：主调度只读本文件，不加载源码/报告）
 
-round: 3 ｜ phase: AUDIT ｜ anchor: 4b531b8（tag: pipeline-start-2026-10-10 = ac60831，可整体回滚）
+round: 4 ｜ phase: AUDIT（复审 + 安全专项） ｜ anchor: 4b531b8（tag: pipeline-start-2026-10-10 = ac60831，可整体回滚）
 spec: docs/AI Agent 软件工程闭环流水线规范（DeepSeek Harness 终极无人值守版｜全自动多轮迭代｜防上下文爆炸｜Skill三技能绑定）.md
 gates: docs/plan/2026-10-10-流水线落地前必改清单.md ｜ constraints: docs/pipeline/project-constraints.md（硬禁令/不改清单/11 条测量纪律/四段口径/门禁）
 archives: docs/pipeline/{audit,refactor,test}-round-NN.md ｜ agents: A=code-analyzer · B=tech-code-refactoring · C=tech-test-automation
@@ -19,7 +19,8 @@ out_of_scope / hard_ban: 见 constraints §2 / §1（严禁 git clean|stash|chec
 | 00 | audit-00（基准全量） | — | 段1 13 failed/920（假红） | 基准建立 |
 | 01 | audit-01 ✅ 105=44+61 | refactor-01 ✅ | test-01 ✅ PASS | 提交 8fb2c1d |
 | 02 | audit-02 ✅ 60留/4删 | refactor-02 ✅ 6 文件 | test-02 ✅ PASS（axe+像素） | 提交 4b531b8 |
-| 03 | 进行中 | 待执行 | 待执行 | 进行中 |
+| 03 | audit-03 ✅ 死代码漂移收敛 | refactor-03 ✅ 3 文件 | test-03 ✅ PASS（含对抗性证伪） | 提交待做 |
+| 04 | 进行中（复审+安全专项） | 待执行 | 待执行 | 进行中 |
 
 halt: 最多 8 轮，或 constraints §5 六项判据全部达标（GodFile 项已确认不可达 → 收尾按「部分达标」报告）
-next_action: round 3 = A 增量审查（R4 defectPrecheck 第三份 resolveProjectRoot / 空 catch 7 / console.log 19）→ B ≤8 文件 → C 全量回归
+next_action: round 4 = A 做「安全专项审查 + 质量收敛确认」（round 0 明示未覆盖安全维度）→ B ≤8 文件 → C 全量回归；若无可执行项则转收尾（写 99-summary.md）
