@@ -5,7 +5,7 @@
  * 新增敏感列时黑名单会静默泄漏，白名单则编译期即可发现缺失字段。
  */
 
-const EMPTY_ENVELOPE = { kind: 'project', currentVersion: 0, history: [], grading: { state: 'none', version: 0, attempts: 0, error: null, prevStatus: null } };
+const EMPTY_ENVELOPE = { kind: 'project', currentVersion: 0, history: [], grading: { state: 'none', version: 0, attempts: 0, error: null, prevStatus: null, ruleVersionHash: null } };
 
 /**
  * 将 Submission.answer（Text 字段，JSON 字符串）解析为版本信封对象。
@@ -23,8 +23,9 @@ export function parseProjectAnswer(answer) {
           attempts: Number(obj.grading.attempts) || 0,
           error: obj.grading.error || null,
           prevStatus: obj.grading.prevStatus || null, // 教师重评前状态（Worker 完成后恢复）
+          ruleVersionHash: obj.grading.ruleVersionHash || null, // 本次评分使用的规则版本（Team C 冻结）
         }
-      : { state: 'none', version: 0, attempts: 0, error: null, prevStatus: null };
+      : { state: 'none', version: 0, attempts: 0, error: null, prevStatus: null, ruleVersionHash: null };
     return {
       kind: obj.kind || 'project',
       currentVersion: Number(obj.currentVersion) || 0,
@@ -92,5 +93,6 @@ export function toTeacherView(submission) {
     finalScore: submission.finalScore ?? null,
     teacherFeedback: submission.teacherFeedback ?? null,
     grading: env.grading,
+    ruleVersionHash: env.grading?.ruleVersionHash ?? null,
   };
 }

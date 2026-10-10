@@ -36,6 +36,7 @@ const routes = [
       { path: 'teams/:id', component: () => import('../views/teacher/TeamEdit.vue') },
       { path: 'review/:id', component: () => import('../views/teacher/ReviewDetail.vue') },
       { path: 'review/project/:submissionId', name: 'TeacherProjectReviewNew', component: () => import('../views/teacher/ProjectReviewNew.vue') },
+      { path: 'rule-quality', name: 'TeacherRuleQuality', component: () => import('../views/teacher/RuleQuality.vue') },
     ],
   },
   {

@@ -78,6 +78,33 @@
         <a-empty v-else-if="!promptLoading" description="暂无数据" :image="false" />
       </a-spin>
     </a-modal>
+    <!-- 自动评分器模态框（§十一 界面改造：三步向导，原型阶段 mock=true）
+         交互规则：右上角 X 始终可关闭（生成/校准/确认阶段右下角均无按钮）；
+         ESC 仅在非生成阶段可用，遮罩点击始终不可关；完成阶段右下角为「完成」；
+         内容超高时滚动条在弹窗体内滚动 -->
+    <a-modal
+      v-model:open="checkerOpen"
+      title="自动评分器"
+      width="880px"
+      :closable="true"
+      :mask-closable="false"
+      :keyboard="checkerCanClose"
+      :body-style="{ maxHeight: '68vh', overflowY: 'auto' }"
+      :footer="checkerStatus === 'ready' ? undefined : null"
+    >
+      <CheckerWizard
+        :question-id="route.params.id"
+        :max-score="form.maxScore || 100"
+        :mock="false"
+        :project-tree="externalTree"
+        @status-change="onCheckerStatusChange"
+        @confirm="() => (checkerOpen = false)"
+      />
+      <!-- 仅完成阶段显示「完成」；其余阶段 footer 整体隐藏（无按钮、无空白条），关闭只靠右上角 X -->
+      <template v-if="checkerStatus === 'ready'" #footer>
+        <a-button type="primary" @click="checkerOpen = false">完成</a-button>
+      </template>
+    </a-modal>
 
     <!-- 学生端：成绩卡片（实训题专用，R4 成绩唯一开关；未出分时仅显示提交状态） -->
     <div v-if="isStudent && studentSubmission" class="student-score-card" :class="{ pending: !canStudentSeeScoreNow }">
@@ -157,7 +184,7 @@
 import { reactive, ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { message } from 'ant-design-vue';
-import { LoadingOutlined, FileTextOutlined } from '@ant-design/icons-vue';
+import { LoadingOutlined, FileTextOutlined, CheckCircleOutlined, CheckCircleFilled } from '@ant-design/icons-vue';
 import loader from '@monaco-editor/loader';
 import { applyMonacoCompat } from '../../infrastructure/monaco/legacyLoaderCompat';
 import { useMonacoTheme } from '../../composables/useMonacoTheme.js';
@@ -170,6 +197,7 @@ import { getLanguage } from '../../domain/fileLang.js';
 import ProjectZipUploader from '../../components/ProjectZipUploader.vue';
 import FormPage from '../../components/FormPage.vue';
 import { formatDateTimeSec } from '../../domain/format.js';
+import CheckerWizard from '../../components/checker/CheckerWizard.vue';
 
 const props = defineProps({ mode: { type: String, default: 'teacher' } });
 const isTeacher = computed(() => props.mode === 'teacher');
@@ -212,6 +240,7 @@ async function showPromptPreview() {
     promptLoading.value = false;
   }
 }
+// 注：本分支曾于 2026-08-18 按「教师零成本」原则移除「查看 AI 提示词」功能；合并时保留 master 的既有功能（不让合并替产品做决定）。如需下线请另行决策。
 // 模态框草稿（确定才写回 form，取消即还原）
 const descDraft = ref('');
 const rubricDraft = ref('');
@@ -220,6 +249,109 @@ function openDescModal() { descDraft.value = form.description; showDescModal.val
 function openRubricModal() { rubricDraft.value = form.scoringRubric; showRubricModal.value = true; }
 function confirmDesc() { form.description = descDraft.value; showDescModal.value = false; }
 function confirmRubric() { form.scoringRubric = rubricDraft.value; showRubricModal.value = false; }
+
+// ===== 自动评分器（checker）=====
+const checkerOpen = ref(false);
+const checkerLoading = ref(false);
+const checkerData = ref({ status: 'none', script: '', meta: { rounds: 0, items: [], subjective: [], error: '', log: [] } });
+const checkerTimer = ref(null);
+
+const checkerStatus = computed(() => checkerData.value.status || 'none');
+const checkerMeta = computed(() => checkerData.value.meta || { rounds: 0, items: [], subjective: [], error: '', log: [] });
+// 生成/校准期间禁用 ESC（右上角 X 始终可用）；避免生成中误按键盘关闭
+const checkerCanClose = computed(() => checkerStatus.value !== 'generating' && checkerStatus.value !== 'calibrating');
+// 评分器状态是否已从后端加载（页面加载即拉取，供头部状态与保存守卫使用）
+let checkerLoadedOnce = false;
+// 标准工程包更换后评分器过期标记（重新生成时清除）
+const checkerStale = ref(false);
+
+/** 页面加载时拉取一次评分器状态（后端真实数据；重进页面无需重新生成评分器） */
+async function ensureCheckerState() {
+  const id = route.params.id;
+  if (!id) return;
+  try {
+    await fetchChecker();
+    checkerLoadedOnce = true;
+    if (checkerStatus.value === 'generating' || checkerStatus.value === 'calibrating') startCheckerPoll();
+  } catch (e) { /* 后端未就绪时忽略 */ }
+}
+
+/** 向导状态回调：同步头部按钮状态；重新生成时清除标准包过期标记 */
+function onCheckerStatusChange(s) {
+  checkerData.value.status = s;
+  if (s === 'generating') checkerStale.value = false;
+}
+const checkerLogs = computed(() => checkerMeta.value.log || []);
+
+async function fetchChecker() {
+  const id = route.params.id;
+  if (!id) return;
+  try {
+    const r = await request.get('/teacher/questions/' + id + '/checker');
+    if (!r.data) return;
+    checkerData.value = {
+      ...checkerData.value,
+      ...r.data,
+      meta: { ...checkerData.value.meta, ...(r.data.meta || {}) },
+    };
+    if (checkerStatus.value !== 'generating') stopCheckerPoll();
+  } catch (e) {
+    message.error('获取自动评分器状态失败：' + (e.response?.data?.message || e.message));
+    stopCheckerPoll();
+  }
+}
+
+function startCheckerPoll() {
+  stopCheckerPoll();
+  checkerTimer.value = setInterval(fetchChecker, 3000);
+}
+
+function stopCheckerPoll() {
+  if (checkerTimer.value) {
+    clearInterval(checkerTimer.value);
+    checkerTimer.value = null;
+  }
+}
+
+async function openCheckerModal() {
+  // §十一 改造：状态与轮询移交 CheckerWizard 管理（含 mock 流程）
+  checkerOpen.value = true;
+}
+
+async function handleGenerateChecker() {
+  const id = route.params.id;
+  if (!id) return;
+  checkerLoading.value = true;
+  try {
+    const r = await request.post('/teacher/questions/' + id + '/checker/generate');
+    if (r.data) {
+      checkerData.value = {
+        ...checkerData.value,
+        ...r.data,
+        meta: { ...checkerData.value.meta, ...(r.data.meta || {}) },
+      };
+    } else {
+      checkerData.value.status = 'generating';
+    }
+    startCheckerPoll();
+  } catch (e) {
+    message.error('生成失败：' + (e.response?.data?.message || e.message));
+  } finally {
+    checkerLoading.value = false;
+  }
+}
+
+async function copyScript() {
+  try {
+    await navigator.clipboard.writeText(checkerData.value.script || '');
+    message.success('已复制');
+  } catch (e) {
+    message.error('复制失败，请手动选择复制');
+  }
+}
+
+// 模态框关闭时停止轮询
+watch(checkerOpen, (open) => { if (!open) stopCheckerPoll(); });
 
 const activePath = ref('');
 const fileContents = new Map();
@@ -372,6 +504,46 @@ watch(activePath, () => {
 
 async function handleSave() {
   if (!form.title) return message.warn('请输入题目名称');
+
+  // 保存守卫（2026-08-18）：实训题必须有已确认启用的自动评分器；新建题首次保存放行（评分器按题目 id 生成）
+  if (isEdit.value) {
+    if (!checkerLoadedOnce) await ensureCheckerState();
+    const st = checkerStatus.value;
+    if (checkerStale.value) {
+      message.warning('标准工程包已更换，请重新生成自动评分器');
+      openCheckerModal();
+      return;
+    }
+    if (st === 'generating' || st === 'calibrating') {
+      message.warning('自动评分器生成中，请稍候再保存');
+      return;
+    }
+    if (st === 'review') {
+      message.warning('自动评分器已生成但未确认启用，请打开自动评分器完成确认');
+      openCheckerModal();
+      return;
+    }
+    if (st !== 'ready') {
+      message.warning('请先生成自动评分器（当前状态：' + st + '）');
+      openCheckerModal();
+      return;
+    }
+    // 输入一致性：评分标准/满分/题目描述变更 → 评分器过期（描述为 HTML，双方去标签后比较）
+    const snap = checkerMeta.value?.inputsSnapshot;
+    if (snap) {
+      const stripHtml = (s) => String(s || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+      const changed = [];
+      if (String(snap.rubric || '') !== String(form.scoringRubric || '').trim()) changed.push('评分标准');
+      if (Number(snap.maxScore) !== Number(form.maxScore)) changed.push('满分');
+      if (stripHtml(snap.description) !== stripHtml(form.description)) changed.push('题目描述');
+      if (changed.length) {
+        message.warning('已变更：' + changed.join('、') + '，请重新生成自动评分器');
+        openCheckerModal();
+        return;
+      }
+    }
+  }
+
   const payload = { title: form.title, difficulty: form.difficulty, maxScore: form.maxScore, type: 'project', material: form.description, scoringRubric: form.scoringRubric };
   try {
     if (isEdit.value) {
@@ -381,7 +553,7 @@ async function handleSave() {
       // 标准工程包可选：未上传即开放性题目（attachmentUrl 为 null），payload 不携带 tempId
       if (form.tempId) payload.tempId = form.tempId;
       await request.post('/teacher/questions', payload);
-      message.success('创建成功');
+      message.success('创建成功，请为该题生成自动评分器');
     }
     router.push('/teacher/questions');
   } catch (e) {
@@ -406,6 +578,11 @@ async function onZipReady({ tree, fileContents: fc, keptCount, keptBytes }) {
 
   if (isTeacher.value && form.packageFile) {
     await teacherUpload(form.packageFile.blob, form.packageFile.name);
+  }
+
+  // 标准工程包更换 → 已有自动评分器视为过期（保存守卫拦截并引导重新生成）
+  if (checkerLoadedOnce && checkerData.value.status && checkerData.value.status !== 'none') {
+    checkerStale.value = true;
   }
 
   await nextTick();
@@ -509,6 +686,8 @@ async function loadQuestion() {
           if (first) openFile(first.path, first.name, first.language);
         }
       }
+      // 评分器状态持久化在后端：页面加载即拉取（重进页面无需重新生成）
+      await ensureCheckerState();
       return;
     }
 
@@ -550,6 +729,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   keyboardA11y?.dispose();
+  stopCheckerPoll();
   Object.values(models).forEach(m => m.dispose());
   editor?.dispose();
 });
@@ -631,6 +811,18 @@ onBeforeUnmount(() => {
   font-size:var(--fs-caption); line-height: 1.6; white-space: pre-wrap; word-break: break-all;
   max-height: 400px; overflow: auto;
 }
+
+/* 自动评分器（checker） */
+.checker-btn-wrap { display: inline-flex; align-items: center; gap: 6px; }
+.checker-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.8; margin: 0; }
+.checker-actions { text-align: center; margin-top: 16px; }
+.checker-generating { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 18px 0; font-size: 14px; color: var(--text-secondary); }
+.checker-log-list { max-height: 260px; overflow-y: auto; border: 1px solid var(--border-default); border-radius: 6px; padding: 8px 12px; background: var(--bg-sunken); margin-top: 14px; }
+.checker-log-item { font-size: 13px; line-height: 1.9; color: var(--text-primary); }
+.checker-ready { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; background: var(--status-success-bg); border: 1px solid var(--status-success-bd); border-radius: 6px; color: var(--status-success-fg); font-size: 13px; margin-bottom: 12px; }
+.checker-ready .anticon { margin-top: 3px; }
+.checker-script-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.checker-script-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
 
 .grade-result { padding: 8px 0; }
 .grade-total { font-size: 24px; font-weight: 700; text-align: center; margin-bottom: 16px; }

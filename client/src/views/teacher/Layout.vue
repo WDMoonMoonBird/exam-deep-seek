@@ -26,6 +26,10 @@
                         </template><span>评分审核</span>
                         <span v-if="pendingReview > 0" class="sider-badge tnum" :title="pendingTitle">{{ pendingBadge }}</span>
                     </a-menu-item>
+                    <!-- 规则质量（来自 feature/rule-driven-scoring 的合并：按其原意归入「教学」组，紧跟评分审核） -->
+                    <a-menu-item key="/teacher/rule-quality"><template #icon>
+                            <LineChartOutlined />
+                        </template><span>规则质量</span></a-menu-item>
                     <a-menu-item key="/teacher/questions"><template #icon>
                             <DatabaseOutlined />
                         </template><span>题库管理</span></a-menu-item>
@@ -137,7 +141,7 @@ import { message } from 'ant-design-vue';
 import { useConfirm } from '../../composables/useConfirm.js';
 import { useTheme } from '../../composables/useTheme.js';
 import ThemeToggle from '../../components/ThemeToggle.vue';
-import { QuestionCircleOutlined, UserOutlined, NodeIndexOutlined, UserSwitchOutlined, PoweroffOutlined, AppstoreOutlined, IdcardOutlined, DatabaseOutlined, FileTextOutlined, SafetyCertificateOutlined, TeamOutlined, BookOutlined, ExperimentOutlined, BulbOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
+import { QuestionCircleOutlined, UserOutlined, NodeIndexOutlined, UserSwitchOutlined, PoweroffOutlined, AppstoreOutlined, IdcardOutlined, DatabaseOutlined, FileTextOutlined, SafetyCertificateOutlined, TeamOutlined, BookOutlined, ExperimentOutlined, BulbOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined, LineChartOutlined } from '@ant-design/icons-vue';
 
 const router = useRouter(); const route = useRoute(); const userStore = useUserStore();
 const { confirm } = useConfirm();

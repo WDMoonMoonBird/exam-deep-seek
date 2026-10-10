@@ -130,9 +130,12 @@
 
           <div v-if="aiResult" class="ai-block">
             <a-collapse v-if="aiResult.breakdown?.length" ghost size="small" class="ai-collapse">
-              <a-collapse-panel :header="'分项明细（' + aiResult.breakdown.length + ' 项）'" key="breakdown">
+              <a-collapse-panel :header="'评分标准（' + aiResult.breakdown.length + ' 项）'" key="breakdown">
                 <div v-for="(b, i) in aiResult.breakdown" :key="i" class="bd-row">
                   <span class="bd-name">{{ b.item }}</span>
+                  <a-tag v-if="b.kind === 'checker'" color="blue" size="small" style="font-size:10px;">检查</a-tag>
+                  <!-- 合并带回了分支的 antd 预置橙（亮色 3.34:1 不达 AA）→ 改用我方语义类 .tag-warning（亮 5.20 / 暗 9.45）；blue 实测 5.50/4.91 达标故保留原样 -->
+                  <a-tag v-else-if="b.kind === 'ai'" class="tag-warning" size="small" style="font-size:10px;">主观</a-tag>
                   <span class="bd-score">{{ b.score }} / {{ b.maxScore }}</span>
                   <span class="bd-comment">{{ b.comment }}</span>
                 </div>

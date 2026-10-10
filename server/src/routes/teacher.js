@@ -4,6 +4,7 @@ import requireRole from '../middleware/role.js';
 import * as teacher from '../controllers/teacherController.js';
 import * as review from '../controllers/reviewController.js';
 import * as projectReview from '../controllers/projectReviewController.js';
+import * as checker from '../controllers/checkerController.js';
 import * as team from '../controllers/teamController.js';
 
 const router = Router();
@@ -25,6 +26,10 @@ router.get('/questions', teacher.getQuestions);
 router.get('/questions/:id/project-files', teacher.getProjectFiles);
 router.get('/questions/:id/prompt-preview', review.getQuestionPromptPreview);
 router.get('/questions/:id/project-prompt-preview', projectReview.getProjectQuestionPromptPreview);
+router.get('/questions/:id/checker', checker.getChecker);
+router.post('/questions/:id/checker/generate', checker.generateCheckerHandler);
+router.post('/questions/:id/checker/confirm', checker.confirmCheckerHandler);
+router.post('/questions/:id/checker/rollback', checker.rollbackCheckerHandler);
 router.get('/questions/:id', teacher.getQuestion);
 router.post('/questions', teacher.createQuestion);
 router.put('/questions/:id', teacher.updateQuestion);

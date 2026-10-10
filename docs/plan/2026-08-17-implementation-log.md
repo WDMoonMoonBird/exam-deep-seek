@@ -2,7 +2,7 @@
 
 > 项目：Deadpan 判题系统（Exam-DeepSeek）
 > **适用分支：feature/rule-driven-scoring**（本记录所述 checkerService/factExtractor/ruleExecutor 源码均在该分支，最新提交 64c0983；与当前主分支的 projectContextBuilder L0/L1 为两套并行实训题评分路线）
-> 状态：✅ 事实提取（tree-sitter）+ 规则引擎完成（已在 feature/rule-driven-scoring 分支提交，**冻结归档**——不并入主分支，记录留痕备查）
+> 开始：2026-08-17 ｜ 状态：✅ 事实提取（tree-sitter）+ 规则引擎完成（已在 feature/rule-driven-scoring 分支提交；**该计划已于 2026-10-10 随该分支并入 master**，原「冻结归档、不并入主分支」的说法作废，记录留痕备查）
 > 注意：本记录中的测试数字（706/759/787）为该分支全量回归口径；当前主分支基线为 664/677
 > 全量回归 787/787（50+2 独立进程 suites）；check-layers 0 违规（63 文件）
 > 端到端：同代码学生评分完全一致（94/94/67），零波动、批改零 LLM（主观项小调用）

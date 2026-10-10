@@ -75,8 +75,29 @@ describe('开放性实训题全链路（建题无包 → 布置确认 → 提交
   let qid;
   let assignmentId;
   let submissionId;
-  /** 捕获到的评分调用（user prompt 含「【项目题目】」的那次 fetch） */
-  const gradeCalls = [];
+  /**
+   * 被 mock 的全部 AI 出网调用（含正式评分与辅助调用），按发生顺序记录。
+   * 为什么不能按下标取「那次评分调用」：评分链路不只发 1 次 AI 调用——
+   * 2026-08-17 起 gradeProjectSubmission 会先调 ensureRubricItems → summarizeRubricItems
+   * 做「评分标准固定分项」提炼（user prompt 以「【评分标准原文】」开头，解析失败还会重试），
+   * 之后才发正式评分调用。合入该功能后本用例曾把提炼调用当成评分调用（按下标取 [0]）而误红（④⑦）。
+   */
+  const aiCalls = [];
+  /**
+   * 正式评分调用判定：按 prompt 特征过滤，不按调用顺序/下标。
+   * 评分 prompt 由 buildProjectGradePrompt / buildOpenProjectGradePrompt 构建，恒以「【项目题目】」开头；
+   * 与分项提炼（「【评分标准原文】」）、L1 文件选择（「请选出正式评分时」）等辅助调用特征不同。
+   * @param {string} user 该次 AI 调用的 user prompt
+   * @returns {boolean} 是否为正式评分调用
+   */
+  const isGradingCall = (user) => String(user).startsWith('【项目题目】');
+  /**
+   * 本次链路捕获到的正式评分调用（过滤后）。
+   * 注意：过滤不会让断言变宽松——若评分调用缺失/未被记录，这里为空数组，
+   * 长度断言与逐字节断言都会失败（见 ④/⑦，反证见验收记录）。
+   * @returns {Array<{url:string, system:string, user:string, body:object}>}
+   */
+  const gradeCalls = () => aiCalls.filter((c) => isGradingCall(c.user));
   const baseTitle = '开放链路_' + Date.now();
 
   const assignPayload = () => ({
@@ -104,7 +125,8 @@ describe('开放性实训题全链路（建题无包 → 布置确认 → 提交
       if (user.includes('请选出正式评分时')) {
         return jsonResponse({ choices: [{ message: { content: '{"files":[],"reason":"test"}' }, finish_reason: 'stop' }] });
       }
-      gradeCalls.push({ url, system, user, body });
+      // 记录全部调用；「评分调用」在断言处以 prompt 特征过滤（见 gradeCalls()），不按下标
+      aiCalls.push({ url, system, user, body });
       return jsonResponse({
         choices: [{ message: { content: JSON.stringify(MOCK_AI_RESULT) }, finish_reason: 'stop' }],
       });
@@ -199,9 +221,10 @@ describe('开放性实训题全链路（建题无包 → 布置确认 → 提交
     expect(feedback.overallComment).toBe(MOCK_AI_RESULT.overallComment);
     expect(feedback.breakdown[0].item).toBe('功能完整性');
 
-    // 真实捕获的评分请求体
-    expect(gradeCalls).toHaveLength(1);
-    const call = gradeCalls[0];
+    // 真实捕获的评分请求体：按 prompt 特征过滤后应恰有 1 次正式评分
+    // （分项提炼等辅助调用不在此列；若评分调用缺失，本断言即红）
+    expect(gradeCalls()).toHaveLength(1);
+    const call = gradeCalls()[0];
     expect(call.system).toBe(OPEN_PROJECT_ROLE);
     expect(call.system).not.toBe(PROJECT_ROLE);
     expect(call.user).not.toContain('标准答案源码');
@@ -256,8 +279,8 @@ describe('开放性实训题全链路（建题无包 → 布置确认 → 提交
     expect(res.body.data.mode).toBe('open');
     expect(res.body.data.system).toBe(OPEN_PROJECT_ROLE);
     expect(res.body.data.user).not.toContain('标准答案源码');
-    // 与 ④ 捕获的真实评分 prompt 完全一致
-    expect(res.body.data.user).toBe(gradeCalls[0].user);
+    // 与 ④ 捕获的真实评分 prompt 完全一致（同样按特征过滤取评分调用，不按下标）
+    expect(res.body.data.user).toBe(gradeCalls()[0].user);
     // 与预览端点同构：仅学生源码段不同（占位符 vs 真实文件）
     expect(res.body.data.user).toBe(buildOpenProjectGradePrompt({
       title: baseTitle + '_题',

@@ -256,6 +256,8 @@ export const updateQuestion = async (req, res) => {
           title, maxScore: maxScore || existing.maxScore, difficulty,
           material, attachmentUrl, scoringRubric: scoringRubric ?? existing.scoringRubric,
           objectiveSettings: objectiveSettings || undefined,
+          // 2026-08-17：评分标准变化 → 固定分项缓存失效（下次评分重新提炼）
+          rubricItems: null,
         },
       });
       return res.json({ code: 0, message: '更新成功', data: null });
