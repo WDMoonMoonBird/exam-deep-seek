@@ -7,7 +7,7 @@
     "dev": "nodemon src/app.js",
     "start": "node src/app.js",
     "worker": "node src/worker.js",
-    "test": "NODE_OPTIONS=--experimental-vm-modules jest --config test/jest.config.js --runInBand --forceExit --testPathIgnorePatterns=\"(fact-extractor|rule-executor)\" && NODE_OPTIONS=--experimental-vm-modules jest --config test/jest.config.js --runInBand --forceExit test/unit/infrastructure/fact-extractor.test.js && NODE_OPTIONS=--experimental-vm-modules jest --config test/jest.config.js --runInBand --forceExit test/unit/infrastructure/rule-executor.test.js",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest --config test/jest.config.js --runInBand --forceExit --testPathIgnorePatterns=\"(fact-extractor|rule-executor|rule-mutator)\" && NODE_OPTIONS=--experimental-vm-modules jest --config test/jest.config.js --runInBand --forceExit test/unit/infrastructure/fact-extractor.test.js && NODE_OPTIONS=--experimental-vm-modules jest --config test/jest.config.js --runInBand --forceExit test/unit/infrastructure/rule-executor.test.js && NODE_OPTIONS=--experimental-vm-modules jest --config test/jest.config.js --runInBand --forceExit test/unit/infrastructure/rule-mutator.test.js",
     "pretest": "node scripts/check-layers.mjs",
     "test:unit": "NODE_OPTIONS=--experimental-vm-modules jest --config test/jest.config.js --runInBand --forceExit --testPathPatterns=unit",
     "check:layers": "node scripts/check-layers.mjs",
