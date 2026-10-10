@@ -1,28 +1,25 @@
 # pipeline-status.md — 流水线唯一状态入口（规范 §三.4：主调度只读本文件，不加载源码/报告）
 
-round: 2
-phase: AUDIT
-anchor_commit: 8fb2c1d（round 1 已提交）｜run anchor tag: pipeline-start-2026-10-10（= ac60831，可整体回滚）
+round: 3 ｜ phase: AUDIT ｜ anchor: 4b531b8（tag: pipeline-start-2026-10-10 = ac60831，可整体回滚）
 spec: docs/AI Agent 软件工程闭环流水线规范（DeepSeek Harness 终极无人值守版｜全自动多轮迭代｜防上下文爆炸｜Skill三技能绑定）.md
-gates: docs/plan/2026-10-10-流水线落地前必改清单.md
-constraints: docs/pipeline/project-constraints.md   # 每轮固定注入（硬禁令/不改清单/测量纪律/门禁/8 条陷阱）
-archives: docs/pipeline/{audit,refactor,test}-round-NN.md
-agents: A=code-analyzer（= 规范里的 deep-code-analyzer）· B=tech-code-refactoring · C=tech-test-automation
+gates: docs/plan/2026-10-10-流水线落地前必改清单.md ｜ constraints: docs/pipeline/project-constraints.md（硬禁令/不改清单/11 条测量纪律/四段口径/门禁）
+archives: docs/pipeline/{audit,refactor,test}-round-NN.md ｜ agents: A=code-analyzer · B=tech-code-refactoring · C=tech-test-automation
 
-baseline_fail: **0 failed / 1011 passed / 67 套件**（round 1 已达全绿；历史片段 13/920 已修复）
-baseline_layers: 违规 0 / 未分层待迁移 47
-baseline_hard_metrics: hex=0 !important=0 Modal.confirm=0
-baseline_cycle: 1 个 SCC（services/factExtractor.js ↔ services/ruleExecutor.js，共享 resolveProjectRoot 应下沉）
-baseline_tokens_unref: 64（B 组 61 + 新孤儿 --amber-500/--green-500/--violet-500）→ round 2 待裁定
-godfile_threshold: 800（>800=超标，现 10 个；>500=观察，现 19 个）
+baseline_fail: **0 failed / 1011 passed / 67 套件**（四段 912+17+61+21）
+baseline_layers: 违规 0 / 未分层 47 ｜ baseline_cycle: **0 个 SCC**（round 2 已清零）
+baseline_hard_metrics: hex=0 !important=0 Modal.confirm=0 ｜ baseline_tokens_unref: 61（严格口径，可删 0）
+godfile_threshold: 800（>800 现 10 个；>500 现 19 个）
 
+⚠️ 确认不可达（需用户拍板，非 Agent 可解）：① GodFile 10 个（server 拆分必新增 unlayered 文件撞门禁；client 拆分撞视觉铁律，本项目无 ui-guard）
+② M-1b（rule-quality 的 .ant-statistic-title 对比度，同属视觉变更）③ N-1 --duration-page 契约悬空、N-2 12 个 --tag-* 令牌漂移（正解在设计文档侧）
 out_of_scope / hard_ban: 见 constraints §2 / §1（严禁 git clean|stash|checkout -- .|reset --hard|restore .）
 
 | round | audit | refactor | test | 结论 |
 |---|---|---|---|---|
-| 00 | audit-round-00.md（基准全量） | — | 段1 13 failed/920 passed（假红） | 基准建立 |
-| 01 | audit-round-01.md ✅ 105=44+61 | refactor-round-01.md ✅（4 段 + 删 44 令牌） | test-round-01.md ✅ **PASS**（1011/0） | ✅ 已提交 8fb2c1d |
-| 02 | audit-round-02.md ✅（60留/4删） | refactor-round-02.md ✅（6 文件；SCC 1→0） | 进行中（含 axe/像素硬要求） | 进行中 |
+| 00 | audit-00（基准全量） | — | 段1 13 failed/920（假红） | 基准建立 |
+| 01 | audit-01 ✅ 105=44+61 | refactor-01 ✅ | test-01 ✅ PASS | 提交 8fb2c1d |
+| 02 | audit-02 ✅ 60留/4删 | refactor-02 ✅ 6 文件 | test-02 ✅ PASS（axe+像素） | 提交 4b531b8 |
+| 03 | 进行中 | 待执行 | 待执行 | 进行中 |
 
-halt: 最多 8 轮，或 constraints §5 判据全部达标
-next_action: round 2 = A 增量审查（裁定 B 组 64 / --btn-default-bg / 循环依赖 / M-1-M-2 / 空 catch / console.log）→ B ≤8 文件 → C 全量回归+门禁
+halt: 最多 8 轮，或 constraints §5 六项判据全部达标（GodFile 项已确认不可达 → 收尾按「部分达标」报告）
+next_action: round 3 = A 增量审查（R4 defectPrecheck 第三份 resolveProjectRoot / 空 catch 7 / console.log 19）→ B ≤8 文件 → C 全量回归
