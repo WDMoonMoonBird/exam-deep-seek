@@ -165,7 +165,7 @@
             >
               <div class="oi-head">
                 <span class="oi-num">{{ item.key + 1 }}.</span>
-                <a-tag :color="itemTypeColor(item.type)" size="small">{{ itemTypeLabel(item.type) }}</a-tag>
+                <a-tag :color="itemTypeColor(item.type)" :class="itemTypeClass(item.type)" size="small">{{ itemTypeLabel(item.type) }}</a-tag>
                 <span v-if="item.score" class="oi-score">+{{ item.score }} 分</span>
                 <span v-if="isSqReadonly(sq.id) && itemAnswers[getItemKey(sq.id, item.key)]?.correct !== undefined" class="oi-judge" :class="{ correct: itemAnswers[getItemKey(sq.id, item.key)].correct, wrong: !itemAnswers[getItemKey(sq.id, item.key)].correct }">
                   {{ itemAnswers[getItemKey(sq.id, item.key)].correct ? '✓ 正确' : '✗ 错误' }}
@@ -395,8 +395,15 @@ async function retryPractice() {
 }
 
 function itemTypeColor(type) {
-  const map = { choice: 'blue', multi_choice: 'purple', judge: 'orange', fill: 'green' };
+  // 题型徽标：judge 不再走 antd 预置 orange（亮 rgb(212,107,8) on rgb(255,247,230) = 3.34:1 不达 AA），
+  // 改由 B2-2 的语义类 .tag-warning 上色（见 itemTypeClass）；其余题型维持原预置色。
+  const map = { choice: 'blue', multi_choice: 'purple', fill: 'green' };
   return map[type] || 'default';
+}
+
+// 与 style.css 的 .tag-warning 配套（仅 judge 需要语义类兜底）
+function itemTypeClass(type) {
+  return type === 'judge' ? 'tag-warning' : '';
 }
 
 function getItemKey(sqId, itemKey) { return `${sqId}_${itemKey}`; }
