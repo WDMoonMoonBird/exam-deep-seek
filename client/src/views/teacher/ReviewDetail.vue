@@ -72,13 +72,14 @@
         >
           <div class="sq-header">
             <span class="sq-num">第 {{ i + 1 }} 小题</span>
-            <a-tag v-if="sq.type === 'objective'" color="purple" size="small">
+            <!-- T4-F2 类别收口：antd purple 预置色在暗色下 3.39:1 → 走全局语义类 .tag-accent（亮 5.60 / 暗 7.90） -->
+            <a-tag v-if="sq.type === 'objective'" class="tag-accent" size="small">
               {{ getNavLabel(sq, i).replace('第' + (i + 1) + '小题 ', '') || '客观题' }}
             </a-tag>
             <a-tag v-else color="blue" size="small">编程题</a-tag>
             <span class="sq-score">{{ sq.score }} 分</span>
             <span class="sq-status-spacer"></span>
-            <a-tag v-if="getSub(sq.id)" :color="subStatusColor(getSub(sq.id))">
+            <a-tag v-if="getSub(sq.id)" :color="subStatusColor(getSub(sq.id))" :class="subStatusTagClass(getSub(sq.id))">
               {{ subStatusText(getSub(sq.id)) }}
             </a-tag>
           </div>
@@ -114,7 +115,7 @@
             >
               <div class="oi-head">
                 <span class="oi-num">{{ item.key + 1 }}.</span>
-                <a-tag :color="itemTypeColor(item.type)" size="small">{{ itemTypeLabel(item.type) }}</a-tag>
+                <a-tag :color="itemTypeColor(item.type)" :class="itemTypeTagClass(item.type)" size="small">{{ itemTypeLabel(item.type) }}</a-tag>
                 <span v-if="item.score" class="oi-score">+{{ item.score }} 分</span>
                 <span v-if="isItemAnswered(sq.id, item)" class="oi-judge" :class="{ correct: isItemCorrect(sq.id, item), wrong: !isItemCorrect(sq.id, item) }">
                   {{ isItemCorrect(sq.id, item) ? '✓ 正确' : '✗ 错误' }}
@@ -309,6 +310,13 @@ function itemTypeColor(type) {
   const map = { choice: 'blue', multi_choice: 'purple', judge: 'orange', fill: 'green' };
   return map[type] || 'default';
 }
+/** T4-F2 类别收口（动态预置色）：题型徽标里 judge→orange 亮 3.34:1、fill→green 亮 3.37:1、
+    multi_choice→purple 暗 3.39:1 均不达 AA → 走全局语义类（style.css，0-2-1 接管三色）；
+    choice→blue 亮 5.50 / 暗 4.91 达标，保持预览色。 */
+function itemTypeTagClass(type) {
+  const map = { judge: 'tag-warning', fill: 'tag-success', multi_choice: 'tag-accent' };
+  return map[type] || null;
+}
 
 function getSub(sqId) { return subMap.value[sqId] || null; }
 
@@ -466,6 +474,9 @@ function subStatusColor(sub) {
   if (sub?.status === 'ai_graded') return 'green';
   return 'default';
 }
+/** T4-F2 类别收口：提交状态徽标里 green（已发布 / AI 已评分）亮 3.37:1 不达 AA → tag-success；
+    red 亮 5.07 / 暗 4.54、blue 亮 5.50 / 暗 4.91 达标，保持预置色。 */
+function subStatusTagClass(sub) { return subStatusColor(sub) === 'green' ? 'tag-success' : null; }
 
 function subStatusText(sub) {
   if (sub?.aiFeedback === '请联系老师') return '评分异常';
@@ -688,7 +699,9 @@ onUnmounted(() => {
 .n-section-arrow.collapsed { transform: rotate(-90deg); }
 .n-section-label { flex: 1; }
 .n-section-count {
-  font-size: 10px; font-weight: 400; color: var(--text-disabled);
+  /* T4-F3 同源（学生作答页同类名族的遗留实例）：这里承载的是信息（第几小题/问数）而非禁用态，
+     原 --text-disabled 实测亮 2.00:1 / 暗 1.98:1（背景 --border-subtle）→ 取与学生页修复同一令牌 --text-secondary。 */
+  font-size: 10px; font-weight: 400; color: var(--text-secondary);
   background: var(--border-subtle); padding: 0 5px; border-radius:var(--radius-md);
 }
 

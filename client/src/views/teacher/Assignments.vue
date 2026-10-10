@@ -164,7 +164,8 @@
         <div class="pick-panel">
           <div class="pick-panel-title">已选 {{ selectedCIds.length }} 个班</div>
           <div class="pick-list">
-            <a-tag v-for="cid in selectedCIds" :key="cid" closable @close="toggleClass(cid)" :color="classTeamMap[cid] ? 'purple' : 'blue'">
+            <!-- T4-F2 类别收口：团队班走 purple 预置色（暗 3.39:1）→ 团队班加 .tag-accent；普通班 blue 亮 5.50 / 暗 4.91 达标保持预置色 -->
+            <a-tag v-for="cid in selectedCIds" :key="cid" closable @close="toggleClass(cid)" :color="classTeamMap[cid] ? 'purple' : 'blue'" :class="classTeamMap[cid] ? 'tag-accent' : null">
               {{ classNameMap[cid] }}
               <span v-if="classTeamMap[cid]" class="pick-team"> · {{ classTeamMap[cid] }}</span>
             </a-tag>
@@ -542,6 +543,6 @@ onMounted(async () => {
 .pick-item.on { background: var(--brand-50); color: var(--brand-700); }
 .pick-check { font-size: var(--fs-caption); }
 .pick-team { font-size: var(--fs-caption); }
-/* 仅供读屏的字段标签（T5-A2）：视觉不可见，为控件提供可访问名称 */
-.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* B2-10：本页原有一份 scoped .visually-hidden 副本已删除 —— 全局工具类（src/style.css）是唯一属主，
+   值逐字相同；scoped 副本反而会遮蔽全局类（[data-v-*] 优先级更高）。 */
 </style>

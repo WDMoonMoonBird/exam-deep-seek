@@ -139,7 +139,7 @@
                           <a-tag :color="itemTypeColor(item.type)" :class="itemTypeTagClass(item.type)" size="small">{{itemTypeLabel(item.type)}}</a-tag>
                           <span style="font-size:var(--fs-caption);color:var(--text-tertiary);">第{{idx+1}}小问</span>
                           <a-input-number v-model:value="item.score" :min="0" :step="0.01" :precision="2" placeholder="均分" size="small" style="width:70px;margin-left:auto;" @change="onItemScoreChange(item)" />分
-                          <a-popconfirm title="确认删除该小问？" description="该小问的题干与选项将一并移除，不可撤销。" ok-text="删除小问" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="removeItem(idx)"><a-button size="small" type="text" danger @click.stop>×</a-button></a-popconfirm>
+                          <a-popconfirm title="确认删除该小问？" description="该小问的题干与选项将一并移除，不可撤销。" ok-text="删除小问" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="removeItem(idx)"><a-button size="small" type="text" danger aria-label="删除小问" @click.stop>×</a-button></a-popconfirm>
                         </div>
                         <a-textarea v-model:value="item.stem" :rows="2" placeholder="题干" size="small" :style="{fontFamily:isCodeStem(item.stem)?'monospace':'inherit'}" />
                         <div v-if="item.type==='choice'||item.type==='multi_choice'" class="obj-options">
@@ -149,7 +149,7 @@
                               <a-checkbox v-else :checked="(item.answer||'').split(',').includes(opt.key)" @change="toggleMultiAnswer(item,opt.key)" />
                               <span style="font-weight:600;font-size:var(--fs-body-sm);width:18px;">{{opt.key}}.</span>
                               <a-input v-model:value="opt.text" :placeholder="'选项 '+opt.key" size="small" style="flex:1" />
-                              <a-button size="small" type="text" danger @click="removeOption(item,oi)" :disabled="item.options.length<=2">×</a-button>
+                              <a-button size="small" type="text" danger aria-label="删除选项" @click="removeOption(item,oi)" :disabled="item.options.length<=2">×</a-button>
                             </div>
                           </TransitionGroup>
                           <a-button size="small" type="link" @click="addItemOption(item)" :disabled="item.options.length>=8">+ 添加选项</a-button>

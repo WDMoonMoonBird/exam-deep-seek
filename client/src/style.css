@@ -92,6 +92,32 @@ h3 { font-size: 21px; line-height: 1.19; }
 /* AntDV fine-tune */
 .ant-card { border: 1px solid var(--card-bd); box-shadow: none; }
 
+/* === 空态描述文字（B2-9 · t13 追加 A）===
+   antd 表格空态用 .ant-empty-normal / .ant-empty-small 变体，其 .ant-empty-description 取
+   colorTextDisabled（亮 rgba(0,0,0,.25) → 白底 **1.83:1**、暗 rgba(255,255,255,.25) → **2.24:1**），
+   12–14px 正文远低于 4.5:1（验收方 axe color-contrast 命中；QA 报告 §7.2 O2 登记过该默认值）。
+   统一改走空态语义令牌 --empty-fg（= --text-tertiary：亮 #6b7280 于卡片 4.83:1 / 暗 #8b929e 5.65:1）。
+   选择器 html + 三个类（0-3-1）：压过 antd 现代 :where(.hash) 注入与 Chrome 69 legacy（hash 前缀）注入两种模式。
+   注意：`--code-fg` 的「恒定深色内容面」（如 Monitor 的 .log-viewer 空态）由页面 scoped 规则
+   （.log-viewer[data-v] .ant-empty .ant-empty-description = 0-4-0）接管，不受本规则影响。 */
+html .ant-empty.ant-empty-normal .ant-empty-description,
+html .ant-empty.ant-empty-small .ant-empty-description {
+  color: var(--empty-fg);
+}
+
+/* === Steps「等待态」步骤标题（B2-9 · t13 追加 B）===
+   antd 对 .ant-steps-item-wait .ant-steps-item-title 取 colorTextDescription（亮 rgba(0,0,0,.45) →
+   **3.35:1**、暗 rgba(255,255,255,.45) → **4.48:1**，14px 正文低于 4.5:1；QA 报告 §7.2 O5 已登记）。
+   改走 --text-tertiary（亮 #6b7280 = 4.83:1 / 暗 #8b929e = 5.65:1）；当前步（process）与已完成步不动。
+   ⚠️ 必须镜像 antd 的整条子代选择器（实测其规则为
+   ":where(.hash).ant-steps .ant-steps-item-wait > .ant-steps-item-container > .ant-steps-item-content > .ant-steps-item-title"
+   = 0-5-0）—— 只写到 .ant-steps-item-wait .ant-steps-item-title（0-3-0/0-4-1）会被它压过（首轮实测未生效，故这里写全链）。
+   本选择器 = 0-6-1（含 .ant-steps-{horizontal,vertical}），legacy（hash 前缀，0-6-0）同样压得住。 */
+html .ant-steps.ant-steps-horizontal .ant-steps-item-wait > .ant-steps-item-container > .ant-steps-item-content > .ant-steps-item-title,
+html .ant-steps.ant-steps-vertical .ant-steps-item-wait > .ant-steps-item-container > .ant-steps-item-content > .ant-steps-item-title {
+  color: var(--text-tertiary);
+}
+
 /* === 语义标签类（B2-2 对比度修复 · T4-F2）===
    背景：<a-tag color="orange"> 走 antd 预置色板（亮色实测 3.34:1，12px 不达 AA；预置色板值不经 CSS 变量），
    预置色板不经过 CSS 变量，主题层（antd-theme.js）拿不到它，故改为「语义类 + 令牌三元组」。
