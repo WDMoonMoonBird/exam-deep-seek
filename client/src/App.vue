@@ -24,6 +24,9 @@ import { isLegacyBrowser } from './domain/browserCompat';
 import './legacy-patch.css';
 import { createAntdTheme } from './styles/antd-theme';
 import { useTheme } from './composables/useTheme';
+// B3-6（t21）：antd Select 的 aria 运行时同步器（补 aria-expanded、清悬空 aria-activedescendant）——
+// 全站挂一次即可（根组件）。根因与实测见 docs/reports/B3-antd上游aria调查-2026-10-10.md §1/§2。
+import { useSelectAriaSync } from './composables/useSelectAriaSync';
 
 // 现代浏览器（支持 :where）用默认 low 模式：antd 样式低优先级，自定义样式天然覆盖，
 // 行为与未加 StyleProvider 时完全一致（还原头部导航栏等自定义样式）。
@@ -39,4 +42,8 @@ const legacyMode = isLegacyBrowser();
 // Wave 5 · t31：主题随 useTheme().resolved 重新派生（darkAlgorithm/defaultAlgorithm + 重新读 CSS 变量）
 const { resolved: themeResolved } = useTheme();
 const theme = computed(() => createAntdTheme(themeResolved.value));
+
+// aria 同步器：挂载时全量校准一次，之后由 MutationObserver 按 .ant-select-open 增量同步；
+// 卸载/HMR 由 composable 内部（onBeforeUnmount + import.meta.hot.dispose）断开 observer。
+useSelectAriaSync();
 </script>
