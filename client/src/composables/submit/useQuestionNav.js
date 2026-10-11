@@ -8,7 +8,7 @@ import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
 
 export function useQuestionNav({
-  route, confirm,
+  route, confirm, subQuestions,
   answers, itemAnswers, multiAnswerBind, subStatuses, subScores, subFeedbacks, bestScore,
   dirtySet, dirtyCount,
   stopPolling, loadAssignment,

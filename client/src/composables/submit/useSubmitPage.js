@@ -119,7 +119,7 @@ const allSubmitted = computed(() => unsubmittedCount.value === 0);
     onBoxKeydown, toggleCollapse, scrollTo, activateAnchor,
     retryPractice, sqBoxClass,
   } = useQuestionNav({
-    route, confirm,
+    route, confirm, subQuestions,
     answers, itemAnswers, multiAnswerBind, subStatuses, subScores, subFeedbacks, bestScore,
     dirtySet, dirtyCount,
     stopPolling, loadAssignment,
