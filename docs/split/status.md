@@ -5,9 +5,8 @@ plan: docs/plan/2026-10-11-godfile-split-plan.md（§4 顺序 / §5 DoD / §8 �
 constraints: docs/pipeline/project-constraints.md（17 条；**§8.1 的 5 处改造优先于「禁止新增文件」与「未分层不增」**）
 archives: docs/split/<file>-{plan,refactor,verify}.md ｜ anchor: e37d27c
 
-判据（已按拆分任务改造）：新增文件必须落进 domain/application/infrastructure/interface 之一；未分层须下降或持平；cycles=0 为硬不变量；全量 0 failed
 - 未分层数**下降或持平**（**当前 44**）｜ 已刷新基线：**arch 44 / GodFile 6 / 观察带 16**（step4 后，以 scripts/gates/arch-metrics.mjs 为准）
-- **client 步按档判**：A 档 = 5 条判据（L0 切片字节 / L1 冻结 bindingMetadata 对拍 / L2 交互 / ④自由标识符扫描(两遍+正控) / ⑤真运行时对拍(变异+惰性对照)）；B 档（动模板）才强制像素门禁且区域表须先覆盖该路由；axe 缺失用 a11y 树对拍替代
+- **client 步按档判**：A 档 = 5 条判据（L0 切片字节 / L1 冻结 bindingMetadata 对拍 / L2 交互 / ④自由标识符扫描(两遍+正控) / ⑤真运行时对拍(变异+惰性对照)）+ ⑥client 侧替代判据；B 档（动模板）才强制像素门禁
 - ★任何 client 验证必须留痕「被测树绝对路径 + HEAD + 指纹」（本仓有第二 worktree，rig 默认指向它）
 
 | step | 目标 | A | B | C | 提交 |
@@ -18,7 +17,8 @@ archives: docs/split/<file>-{plan,refactor,verify}.md ｜ anchor: e37d27c
 | 3 | checkerService.js（1280 → 10 文件：2 domain + 8 infra，最大 386 行） | ✅ | ✅ | ✅ PASS（49/49 切片全等·门面可达 10/10·**209/209 四维对拍**·27/27 函数全覆盖·变异 5/5） | 287b9b0 |
 | 4 | deepseek.js（1051 → 10 文件：2 domain + 8 infra，最大 221 行） | ✅ | ✅ | ✅ PASS（41/41 切片全等·21 名同对象·I14 双向·94 夹具五维相同·23/23 函数覆盖·禁网 0） | e37d27c |
 | 5 | ProjectQuestionEdit.vue（868 → 348；9 个 composable） | ✅ | ✅ | ✅ PASS（L0 三块·L1 51 名·④扫描 0/正控 3/3·⑤运行时 + 变异 5/5·U1 双模式） | b94407f |
-| 6 | QuestionEdit.vue（983 → **466**；12 个 composable，23–134 行） | ✅（纠：template 实为 **312** 行非 48；style 只 1 块→L0 切 2 段） | ✅（99 块判等·L1 冻结口径 82471B 全等·95 块+2 授权改写·运行时 77/77 字段同·变异 6/6·**④真抓到 1 处未绑定名缺陷**） | 进行中 | — |
+| 6 | QuestionEdit.vue（983 → **466**；12 个 composable） | ✅ | ✅ | ✅ PASS（104 语句 100 全等·L1 冻结口径 82471B·④抓到未绑定名·⑤24 组 20 全等+变异 5/5·client SCC 0·全量 1073 绿） | aa29505 |
+| 7 | ReviewDetail.vue（988 → ≈620；7 个 composable） | ✅（**template 实为 236** 非 47——Captain 第三次同类错误；style 只 1 块⇒L0 切 2 段；**over500 不会降**：236+359=595 不可触碰） | 进行中 | 待执行 | — |
 | 返工 | ★step2 缺陷修复（useQuestionNav 漏注入 subQuestions）+ 判据④回溯扫描 160 文件 | — | ✅ 2 行修复 | ✅ PASS（真 Chromium 真 DOM 7/7 复现·正控 3/3·门禁 44/5/15·ROUND=12 0 failed） | 45947b5 |
 
 强制停止条件：① 需改对外契约或产品语义 ② 同一步两次回流仍不通过（跳下一步）③ 护栏不可用 ④ 触及「不改清单」⑤ 步数走完
@@ -27,10 +27,7 @@ archives: docs/split/<file>-{plan,refactor,verify}.md ｜ anchor: e37d27c
 
 待决清单（需用户拍板）：（空）
 
-⏸ **暂停于 2026-10-11 11:21（用户用餐/断网）** —— 驱动定时器已删除、:3000/:5173 已交还、无任何自动任务在跑。
-  断点状态：step 6 代码已落盘但**未提交**（`client/src/composables/question/` 12 文件 + QuestionEdit.vue 466 行 + QuestionEdit.vue-refactor.md + arch-metrics 基线 4/14）；
-  **C 的 step6 验证未完成**（已验证报告未产出，但已跑出 test-round-13.log）⇒ 恢复后第一件事 = 重派或等待 C 出结论，再提交 step 6。
-  恢复方式：`schedule_create` 重建驱动（每 1500s，标题含「GodFile 拆分推进」），或直接说「继续拆」。
-next_action: step 6-C 验证中（★须自建 client 侧替代判据——cycle-check 根仅 server/src、bind-check 不含 client，对 client 步这两条门禁**空转**）→ 通过后提交并刷新基线（44 / 4 / 14）
-剩余 GodFile（4）：teacherController 1338 · Doc.vue 1106 · ReviewDetail 988 · reviewController 965
-已裁决/已沉淀：约束包第 18 条（tree-sitter 同进程假红根因=JS 包装层重载而原生 .node 缓存）｜ DoD 判据④边界（看不见「被调方声明形参但调用方没传」的跨文件接线错配，只能靠⑤兜）
+（11:21 曾暂停用餐，12:02 已恢复：驱动重建为 schedule-68966552…，step6 已由 C 验证 PASS 并提交 aa29505）
+next_action: step 7-A 分析中（★要求：块边界必须用编译器/配对计数实测——Captain 已连错两次；须给真实 style 块数；须给多形态执行路径表与 5 条判据落地方案）→ B 分批抽 composable → C 按 5 条判据 + client 侧替代判据验证
+剩余 GodFile（3）：Doc.vue 1106（**唯一 B 档**，须先扩像素门禁区域表覆盖其路由）· reviewController 965 · teacherController 1338（**风险最高**，须先补契约测试）
+已装 ESLint（根：eslint@9.39.5 + eslint-plugin-vue@10.11.1；配置 eslint.config.mjs 只查缺陷不查风格；**基线 error=0 / warn=59**，正控 4/4 含 .vue）⇒ 作为第 6 条判据接入每步 DoD ｜ 已沉淀：约束包第 18 条（tree-sitter 假红根因）｜ DoD 判据④边界（看不见跨文件接线错配，只能靠⑤兜）｜ **门禁覆盖缺口**：两条门禁默认不含 client ⇒ **优先给官方脚本传根目录**（cycle-check --root client/src / bind-check client/src，step7 实测可用），确不支持才自建

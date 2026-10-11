@@ -137,6 +137,9 @@
      **不需要像素门禁** —— 模板+样式**逐字节相等**在逻辑上**严格强于**像素相等（字节相同 ⇒ DOM/CSS 相同 ⇒ 渲染相同）；
      此时像素相等是"必然"而非"证据"（step 2-A 原话）。改用**更锋利且更便宜**的三件：
      ① *L0 切片字节判等*：`<template>` 与 `<style>` 块逐字节 cmp（≈10 min）
+        ⚠️ **两侧的行区间必须各自从 `descriptor` 取**（`descriptor.template.loc` / `descriptor.styles[].loc`），**不得沿用写死的固定行号** —— step 7 的 A 实测指出：固定行号会让**改后切片取到空区间**，于是比对**恒等通过**。
+        ⇒ 这是比前几例更危险的形态：**假通过**（前面几例都是假失败）。**凡是「先取切片再比对」的判据，都要先断言切片非空且长度合理。**
+        ★另：**不要用 `grep -n '</template>'` 的首条命中当块边界** —— 本项目已连错三次（step5 把 194 写成 40、step6 把 312 写成 48、step7 把 236 写成 47），根因都是文件内部有嵌套 `<template>`（插槽 / v-for / v-if）。**用 `@vue/compiler-sfc` 的 `parse()` 实测。**
      ② *L1 编译级对拍*：`@vue/compiler-sfc` 的 `compileScript().bindings` + `compileTemplate` 输出逐字节比（≈20–40 min，**模板里 38 个名字一个不漏**）
      ③ *L2 交互验证*：Playwright 覆盖本步**判为「需实测」的项**（见各步 plan）
      ④ **自由标识符扫描**（2026-10-11 step5 新增，**必做**）：扫描每个新模块的「自由标识符」（被引用但未声明 / 未 import / 未注入的名字）必须为 0。
@@ -147,6 +150,12 @@
    - **B 档：触及 `<template>` 或 `<style>` 的步**（如 C5 `Doc.vue` 拆子组件）：**必须**过像素门禁，且**区域表须先扩展**覆盖该文件所在路由；真实 DOM 变更导致选择器消失时门禁给 exit 2，须先调区域表再比。
    - **axe 不可用时的替代判据**（本仓 axe-core 全盘缺失）：A 档下用 `page.accessibility.snapshot()` **逐节点对拍**——模板字节不动则 a11y 树必须相等，这比 axe 只查违规更严；B 档若需 axe，先解决依赖缺失（**不得联网安装**）。
    - ★**被验树必须留痕**：任何 client 验证都要记录**被测源码树的绝对路径 + HEAD + 产物指纹**（本仓存在第二个 worktree `Exam-DeepSeek-ui`，`tests/ui-redesign-verify/rig.sh:9` 的 `CLIENT_DIR` **默认指向它** —— 用它跑验证等于测错代码；必须显式指定主仓库 client）。
+   - ★**门禁覆盖缺口（2026-10-11 step7 修正）**：`cycle-check` 默认只扫 `server/src`、`bind-check` 默认不含 `client` ⇒ 对 client 步这两条**默认空转**。
+     **正确做法是给官方脚本传根目录**（`cycle-check --root client/src`、`bind-check client/src`；step7 实测均绿），**优先用官方脚本而不是自建替代判据** —— 只有官方脚本确实不支持时才自建（自建须带正控与干净树对照）。
+   - ★**ESLint 判据（2026-10-11 新增，第 6 条；server 步同样适用）**：`npx eslint client/src server/src` 必须 **error = 0** 且 **warn ≤ 59**（基线，随时间只降不升）。
+     它能**直接拦住本会话踩过的四类缺陷**：自由标识符（引用但未声明/未 import/未注入）、未绑定名进入 return 面、未使用的声明、拼写错的引用；且**在 `.vue` 的 `<script setup>` 内同样有效**（正控 4/4 实测：`no-undef` 在 `.js` 与 `.vue` 双命中、`no-dupe-keys`、`no-unused-vars` 各命中）。
+     配置在仓库根 `eslint.config.mjs`（**只查缺陷、不查风格**，刻意不引入 stylistic/prettier 规则以免噪音淹没信号）；引擎 `eslint@9.39.5` + `eslint-plugin-vue@10.11.1` + `vue-eslint-parser@10.3.0`（装在**仓库根**，一份配置覆盖 client/src 与 server/src）。
+     ⚠️ **它查不到**：模板内的引用、类型错误、以及「被调方声明了形参但调用方没传」这类**跨文件接线错配**（仍须靠判据⑤真运行时对拍兜住）。
    - ★**区域表必须覆盖本步目标文件所在路由**（用 `--regions`）：默认 6 区域只走 `/exam/teacher/classes`，对 `Submit.vue`/`QuestionEdit.vue`/`ReviewDetail.vue`/`Doc.vue` 等**近乎盲区**（报告 §7 有现成模板与需补的 FIXTURES）
    - ★**像素全等 ≠ 功能无回归**：像素门禁抓不到交互时序、焦点顺序、ARIA、请求行为、控制台报错 → client 步**必须另做交互行为验证**（配方由 step 2-A 产出后固化进本 DoD）+ axe 不引入新违规
    - ⚠️ 真实 DOM 变更（如 C5 `Doc.vue` 拆子组件）会让区域选择器消失 → 门禁给 **exit 2（硬失败，不静默跳过）**，此类步**须先调区域表**再做对比

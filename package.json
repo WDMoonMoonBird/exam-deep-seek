@@ -1,8 +1,16 @@
 {
   "devDependencies": {
-    "docx": "^9.7.1"
+    "@eslint/js": "9.39.5",
+    "docx": "^9.7.1",
+    "eslint": "9.39.5",
+    "eslint-plugin-vue": "10.11.1",
+    "vue-eslint-parser": "10.3.0"
   },
   "dependencies": {
     "@mermaid-js/mermaid-cli": "^11.16.0"
+  },
+  "scripts": {
+    "lint": "eslint client/src server/src",
+    "lint:report": "eslint client/src server/src -f json"
   }
 }
