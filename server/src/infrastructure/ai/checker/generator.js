@@ -11,7 +11,7 @@ import { DEFAULT_THRESHOLD, attachNegativeFeedback, appendVersion, markDefectRep
 import { GENERATE_SYSTEM, buildGenerateUserPrompt, buildCalibrateUserPrompt } from './prompts.js';
 import { callLlm } from './llm.js';
 import { packageFingerprint, collectProjectPaths, validateRulePaths, enrichDeductionSnippets } from './package-inspect.js';
-import { summarizeRubricItems } from '../../../services/deepseek.js';
+import { summarizeRubricItems } from '../deepseek/index.js';
 import { buildFileTree, filterProjectFiles, buildFileTreeText } from '../../../services/projectContextBuilder.js';
 import { standardDir } from '../../../utils/projectPaths.js';
 import { runRules, resolveProjectRoot } from '../../rule/index.js';

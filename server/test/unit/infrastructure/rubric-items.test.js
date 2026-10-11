@@ -1,7 +1,7 @@
 /**
  * rubric-items.test.js — 评分标准固定分项（normalizeRubricItems 纯函数）。
  */
-import { normalizeRubricItems } from '../../../src/services/deepseek.js';
+import { normalizeRubricItems } from '../../../src/infrastructure/ai/deepseek/index.js';
 
 describe('normalizeRubricItems（分项规整）', () => {
   it('正常列表 → 原样保留（旧数据无 automation_level → 按 deterministic 兜底）', () => {

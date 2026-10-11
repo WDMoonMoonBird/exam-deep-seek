@@ -19,7 +19,7 @@ import {
   buildProjectGradePrompt,
   buildOpenProjectGradePrompt,
   gradeProject,
-} from '../../src/services/deepseek.js';
+} from '../../src/infrastructure/ai/deepseek/index.js';
 
 /** 试题参数：标准包与用户包各一个文件，均为 readDirFiles 的落库形态（// 文件名: 前缀） */
 const ARGS = {

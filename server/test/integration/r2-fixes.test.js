@@ -4,7 +4,7 @@
  */
 import { request, loginAsTeacher, getTestData } from './helpers.js';
 import prisma from '../../src/utils/prisma.js';
-import { extractFilesJson } from '../../src/services/deepseek.js';
+import { extractFilesJson } from '../../src/infrastructure/ai/deepseek/index.js';
 import { enforceBudget } from '../../src/services/projectGrading.js';
 
 describe('BUG-R2-A：extractFilesJson 截断宽容解析', () => {

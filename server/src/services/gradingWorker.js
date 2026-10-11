@@ -1,6 +1,6 @@
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
-import { gradeSubmission, getConcurrency } from './deepseek.js';
+import { gradeSubmission, getConcurrency } from '../infrastructure/ai/deepseek/index.js';
 import { ABNORMAL_FEEDBACK } from '../constants.js';
 import { gradeMachine, gradeAST, gradeAI, calculateTotal } from './projectGrader.js';
 import { gradeObjectiveItems, gradeFlatObjective, normalizeAiScore } from '../domain/services/objective-grading.service.js';

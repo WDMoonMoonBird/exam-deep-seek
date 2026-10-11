@@ -153,9 +153,9 @@ function syntheticProjects(args) {
 
 /** LLM 直评：对同一工程重复 N 次 gradeProject；任一失败抛错（调用方跳过该工程） */
 async function gradeProjectRepeated(project, n, args) {
-  const { gradeProject } = await import('../src/services/deepseek.js');
+  const { gradeProject } = await import('../src/infrastructure/ai/deepseek/index.js');
   const { buildGradingContext } = await import('../src/services/projectGrading.js');
-  const { getProjectContextMode } = await import('../src/services/deepseek.js');
+  const { getProjectContextMode } = await import('../src/infrastructure/ai/deepseek/index.js');
   const mode = await getProjectContextMode();
   const ctx = await buildGradingContext({
     mode,

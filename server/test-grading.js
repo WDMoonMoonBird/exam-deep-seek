@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import prisma from './src/utils/prisma.js';
 import logger from './src/utils/logger.js';
-import { gradeSubmission } from './src/services/deepseek.js';
+import { gradeSubmission } from './src/infrastructure/ai/deepseek/index.js';
 
 const mode = process.argv[2]; // 'serial' or 'parallel'
 if (!mode) {

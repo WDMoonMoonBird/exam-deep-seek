@@ -15,12 +15,12 @@
  */
 import { jest } from '@jest/globals';
 
-jest.unstable_mockModule('../../../src/services/deepseek.js', () => ({
+jest.unstable_mockModule('../../../src/infrastructure/ai/deepseek/index.js', () => ({
   gradeProject: jest.fn(),
 }));
 
 const grader = await import('../../../src/services/trustJudgeGrader.js');
-const { gradeProject } = await import('../../../src/services/deepseek.js');
+const { gradeProject } = await import('../../../src/infrastructure/ai/deepseek/index.js');
 
 const FIX_RUBRIC = '评分标准（总分 100 分）\n第一项，项目初始化与可运行，10 分。能正常启动即可。\n第二项，登录功能，20 分。用户名密码校验正确。';
 

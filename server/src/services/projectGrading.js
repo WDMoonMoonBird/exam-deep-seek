@@ -26,7 +26,7 @@ import {
   getProjectContextMode,
   summarizeRubricItems,
   getConcurrency,
-} from './deepseek.js';
+} from '../infrastructure/ai/deepseek/index.js';
 import { runRules } from '../infrastructure/rule/index.js';
 import { gradeProjectTrustJudge } from './trustJudgeGrader.js';
 import {

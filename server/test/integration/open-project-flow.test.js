@@ -25,7 +25,7 @@ import {
 } from '../../src/utils/projectPaths.js';
 import {
   PROJECT_ROLE, OPEN_PROJECT_ROLE, buildOpenProjectGradePrompt,
-} from '../../src/services/deepseek.js';
+} from '../../src/infrastructure/ai/deepseek/index.js';
 
 /** 学生提交的单个源文件（单文件保证上下文文本确定，便于逐字节断言） */
 const STUDENT_FILE = 'src/main.js';

@@ -1,4 +1,4 @@
-import { gradeSubmission, gradeProject } from '../../src/services/deepseek.js';
+import { gradeSubmission, gradeProject } from '../../src/infrastructure/ai/deepseek/index.js';
 import { ABNORMAL_FEEDBACK } from '../../src/constants.js';
 
 // Mock 全局 fetch

@@ -8,7 +8,7 @@ import { DEFAULT_MAX_SCORE, ABNORMAL_FEEDBACK } from '../constants.js';
 import { resolveSubQuestionScores } from '../utils/scoring.js';
 import { getVisibleClassIds, getTeamTeacherIds, getMyTeamIds } from './teamController.js';
 import { hasStandardPackage } from '../utils/projectPaths.js';
-import { parseExamPaper, parseExamPaperStream, generateReferenceAnswer } from '../services/deepseek.js';
+import { parseExamPaper, parseExamPaperStream, generateReferenceAnswer } from '../infrastructure/ai/deepseek/index.js';
 
 /** 获取教师当前学校ID（从 query 参数） */
 function getSchoolId(req) { return req.query.schoolId ? +req.query.schoolId : null; }
@@ -201,7 +201,7 @@ const gradeProject = async (req, res) => {
       return res.status(400).json({ code: 1001, message, data: null });
     }
 
-    const { gradeProject: doGrade } = await import('../services/deepseek.js');
+    const { gradeProject: doGrade } = await import('../infrastructure/ai/deepseek/index.js');
     const result = await doGrade({
       title: q.title,
       description: q.material || '',

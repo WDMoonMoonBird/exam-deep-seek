@@ -26,7 +26,7 @@
  */
 
 import logger from '../utils/logger.js';
-import { gradeProject } from './deepseek.js';
+import { gradeProject } from '../infrastructure/ai/deepseek/index.js';
 
 /** TrustJudge sidecar 基址（FastAPI，仅监听 127.0.0.1） */
 const SIDECAR_URL = 'http://127.0.0.1:8901';

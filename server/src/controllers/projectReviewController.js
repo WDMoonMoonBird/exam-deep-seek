@@ -11,7 +11,7 @@ import logger from '../utils/logger.js';
 import { standardDir, submissionDir, hasStandardPackage } from '../utils/projectPaths.js';
 import { toTeacherView, parseProjectAnswer, serializeProjectAnswer } from '../utils/projectView.js';
 import { enqueueProjectGrade, readDirFiles } from '../services/projectGrading.js';
-import { PROJECT_ROLE, OPEN_PROJECT_ROLE, buildProjectGradePrompt, buildOpenProjectGradePrompt } from '../services/deepseek.js';
+import { PROJECT_ROLE, OPEN_PROJECT_ROLE, buildProjectGradePrompt, buildOpenProjectGradePrompt } from '../infrastructure/ai/deepseek/index.js';
 import { buildFileTree, filterProjectFiles } from '../services/projectContextBuilder.js';
 import { buildTree, isIgnored } from '../utils/fileTree.js';
 // t6：复用 reviewController 的统一归属校验助手（教师可见班级范围），避免同一防线两处实现漂移

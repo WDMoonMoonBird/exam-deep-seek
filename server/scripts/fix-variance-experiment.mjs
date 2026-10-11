@@ -16,7 +16,7 @@ const args = process.argv.slice(2);
 const rounds = Number((args.find(a => a.startsWith('--rounds=')) || '--rounds=5').split('=')[1]) || 5;
 
 // 复用项目 deepseek 的配置加载（getConfig: DB 优先 env 兜底）
-import { getConfig } from '../src/services/deepseek.js';
+import { getConfig } from '../src/infrastructure/ai/deepseek/index.js';
 
 const datasetPath = path.resolve(__dirname, '..', 'test-results', 'trustjudge', 'dataset.jsonl');
 const rows = fs.readFileSync(datasetPath, 'utf8').trim().split('\n').map(l => JSON.parse(l));

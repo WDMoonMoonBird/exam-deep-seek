@@ -10,7 +10,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getConfig } from '../src/services/deepseek.js';
+import { getConfig } from '../src/infrastructure/ai/deepseek/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const datasetPath = path.resolve(__dirname, '..', 'test-results', 'trustjudge', 'dataset.jsonl');

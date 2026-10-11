@@ -392,7 +392,7 @@ export const getMonitor = async (_req, res) => {
 };
 
 // ===================== AI 配置管理 =====================
-import { clearConfigCache } from '../services/deepseek.js';
+import { clearConfigCache } from '../infrastructure/ai/deepseek/index.js';
 
 export const getSettings = async (_req, res) => {
   try {

@@ -14,7 +14,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import mysql from 'mysql2/promise';
-import { gradeProject } from '../src/services/deepseek.js';
+import { gradeProject } from '../src/infrastructure/ai/deepseek/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);

@@ -11,7 +11,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { gradeProject } from '../src/services/deepseek.js';
+import { gradeProject } from '../src/infrastructure/ai/deepseek/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
