@@ -1,0 +1,208 @@
+{
+  "gate": "lint-check",
+  "createdAt": "2026-10-11T04:41:28.133Z",
+  "note": "本仓历史违规快照（3.4 万行从未 lint 过，一次性清零会诱发大面积改写 = 行为变更风险）。判定：只有「基线之外的新违规」才阻断；已存在的违规只统计。比对键 = file + rule + symbol，并按出现次数比对（行号漂移不算新违规）。",
+  "scanRoots": [
+    "client/src",
+    "server/src"
+  ],
+  "scannedFiles": 195,
+  "scannedLines": 33304,
+  "counts": {
+    "no-undef": 0,
+    "no-unused-vars": 31,
+    "no-unresolved-import": 0,
+    "no-dupe-keys": 0,
+    "no-redeclare": 0,
+    "no-const-assign": 0,
+    "parse-error": 0
+  },
+  "violations": [
+    {
+      "file": "client/src/api/checker.js",
+      "line": 71,
+      "rule": "no-unused-vars",
+      "symbol": "TEMPLATES"
+    },
+    {
+      "file": "client/src/api/checker.js",
+      "line": 138,
+      "rule": "no-unused-vars",
+      "symbol": "seq"
+    },
+    {
+      "file": "client/src/components/checker/CheckerWizard.vue",
+      "line": 166,
+      "rule": "no-unused-vars",
+      "symbol": "getHealthReport"
+    },
+    {
+      "file": "client/src/components/checker/CheckerWizard.vue",
+      "line": 166,
+      "rule": "no-unused-vars",
+      "symbol": "getRuleVersions"
+    },
+    {
+      "file": "client/src/composables/submit/useAnswerState.js",
+      "line": 34,
+      "rule": "no-unused-vars",
+      "symbol": "draftTimer"
+    },
+    {
+      "file": "client/src/composables/submit/useAnswerState.js",
+      "line": 35,
+      "rule": "no-unused-vars",
+      "symbol": "deadlineTimer"
+    },
+    {
+      "file": "client/src/views/admin/Monitor.vue",
+      "line": 57,
+      "rule": "no-unused-vars",
+      "symbol": "message"
+    },
+    {
+      "file": "client/src/views/teacher/Layout.vue",
+      "line": 145,
+      "rule": "no-unused-vars",
+      "symbol": "ExperimentOutlined"
+    },
+    {
+      "file": "client/src/views/teacher/ProjectQuestionEdit.vue",
+      "line": 199,
+      "rule": "no-unused-vars",
+      "symbol": "CheckCircleOutlined"
+    },
+    {
+      "file": "client/src/views/teacher/ReviewClass.vue",
+      "line": 203,
+      "rule": "no-unused-vars",
+      "symbol": "reviewSummary"
+    },
+    {
+      "file": "server/src/controllers/projectReviewController.js",
+      "line": 13,
+      "rule": "no-unused-vars",
+      "symbol": "readDirFiles"
+    },
+    {
+      "file": "server/src/controllers/reviewController.js",
+      "line": 354,
+      "rule": "no-unused-vars",
+      "symbol": "count"
+    },
+    {
+      "file": "server/src/controllers/teacherController.js",
+      "line": 7,
+      "rule": "no-unused-vars",
+      "symbol": "DEFAULT_MAX_SCORE"
+    },
+    {
+      "file": "server/src/controllers/teacherController.js",
+      "line": 9,
+      "rule": "no-unused-vars",
+      "symbol": "getTeamTeacherIds"
+    },
+    {
+      "file": "server/src/controllers/teacherController.js",
+      "line": 159,
+      "rule": "no-unused-vars",
+      "symbol": "gradeProject"
+    },
+    {
+      "file": "server/src/controllers/teamController.js",
+      "line": 211,
+      "rule": "no-unused-vars",
+      "symbol": "schoolId"
+    },
+    {
+      "file": "server/src/domain/entities.js",
+      "line": 4,
+      "rule": "no-unused-vars",
+      "symbol": "EntityNotFoundError"
+    },
+    {
+      "file": "server/src/infrastructure/ai/checker/llm.js",
+      "line": 7,
+      "rule": "no-unused-vars",
+      "symbol": "getModel"
+    },
+    {
+      "file": "server/src/infrastructure/ai/deepseek-gateway.js",
+      "line": 69,
+      "rule": "no-unused-vars",
+      "symbol": "controller"
+    },
+    {
+      "file": "server/src/infrastructure/ai/deepseek-gateway.js",
+      "line": 125,
+      "rule": "no-unused-vars",
+      "symbol": "controller"
+    },
+    {
+      "file": "server/src/infrastructure/ai/deepseek-gateway.js",
+      "line": 177,
+      "rule": "no-unused-vars",
+      "symbol": "controller"
+    },
+    {
+      "file": "server/src/infrastructure/ai/deepseek/config.js",
+      "line": 6,
+      "rule": "no-unused-vars",
+      "symbol": "logger"
+    },
+    {
+      "file": "server/src/infrastructure/ai/deepseek/submission-grading.js",
+      "line": 7,
+      "rule": "no-unused-vars",
+      "symbol": "DEFAULT_MAX_SCORE"
+    },
+    {
+      "file": "server/src/infrastructure/execution/ast-analyzer.js",
+      "line": 21,
+      "rule": "no-unused-vars",
+      "symbol": "language"
+    },
+    {
+      "file": "server/src/infrastructure/rule/syntax.js",
+      "line": 20,
+      "rule": "no-unused-vars",
+      "symbol": "nodeRequire"
+    },
+    {
+      "file": "server/src/services/defectScoring.js",
+      "line": 60,
+      "rule": "no-unused-vars",
+      "symbol": "mapping"
+    },
+    {
+      "file": "server/src/services/factExtractors/python.js",
+      "line": 164,
+      "rule": "no-unused-vars",
+      "symbol": "language"
+    },
+    {
+      "file": "server/src/services/projectGrader.js",
+      "line": 8,
+      "rule": "no-unused-vars",
+      "symbol": "fs"
+    },
+    {
+      "file": "server/src/services/projectGrader.js",
+      "line": 9,
+      "rule": "no-unused-vars",
+      "symbol": "path"
+    },
+    {
+      "file": "server/src/services/projectGrader.js",
+      "line": 11,
+      "rule": "no-unused-vars",
+      "symbol": "getLanguageByExt"
+    },
+    {
+      "file": "server/src/services/projectGrader.js",
+      "line": 11,
+      "rule": "no-unused-vars",
+      "symbol": "isIgnored"
+    }
+  ]
+}
