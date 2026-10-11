@@ -30,12 +30,13 @@ html.legacy .app-topbar {
 }
 /* 文字色只固定三端 scoped 样式里显式写过的那几个（现代模式同款令牌值）；
    容器与 .trigger 的 color 刻意不覆写 —— antd 的 .ant-layout-header 给的是
-   rgba(0, 0, 0, 0.88)，与现代模式实测值一字不差，覆写反而会偏离。 */
+   rgba(0, 0, 0, 0.88)，与现代模式实测值一字不差，覆写反而会偏离。
+   .user-sub 是用户菜单第二行「身份 · 单位」；它取代了原来的 .user-info / .user-school
+   （那两个元素三端都已不再产出，选择器一并清掉，避免留着死规则误导后来人）。 */
 html.legacy .app-topbar .user-name {
   color: var(--text-primary) !important;
 }
-html.legacy .app-topbar .user-info,
-html.legacy .app-topbar .user-school,
+html.legacy .app-topbar .user-sub,
 html.legacy .app-topbar .user-caret {
   color: var(--text-tertiary) !important;
 }
@@ -46,12 +47,21 @@ html.legacy .app-topbar .user-caret {
   }
 }
 
-/* ---- 深色侧栏 / 菜单（对应 style.css 的「深色侧栏 / 菜单」块，T7）----
+/* ---- 侧栏 / 菜单（对应 style.css 的侧栏菜单块，T7）----
    high 模式下 antd 的 .ant-menu-dark.css-hash 是 0-2-0，style.css 的
    html .ant-menu-dark（0-1-1）会输，故此处补 html.legacy 前缀（0-2-1）兜底。
-   取值必须与 style.css 一致：--sider-bg / --sider-fg / --sider-fg-active。 */
+   取值必须与 style.css 一致：--sider-bg / --sider-bd（右分隔线）/ --sider-fg /
+   --sider-item-hover-fg（未选中项悬停）/ --sider-fg-active（选中项，白）。
+   侧栏在浅色主题下是白面，深色主题下取值与原先一致，故这里不再叫「深色侧栏」。 */
 html.legacy .ant-layout-sider.ant-layout-sider-dark {
   background: var(--sider-bg) !important;
+  /* 浅色主题下侧栏白面与画布同色系，靠右分隔线划出边界（深色下 --sider-bd = transparent，线不可见） */
+  border-right: 1px solid var(--sider-bd) !important;
+}
+/* 深色主题：分隔线不可见但仍占 1px（固定宽 border-box 侧栏的内容区会被挤窄 1px）→ 归零，
+   与 style.css 的 html[data-theme="dark"] 补偿规则等效（legacy 下 antd 优先级 +1，故带 !important）。 */
+html.legacy[data-theme="dark"] .ant-layout-sider.ant-layout-sider-dark {
+  border-right-width: 0 !important;
 }
 html.legacy .ant-menu-dark {
   background: var(--sider-bg) !important;
@@ -60,7 +70,7 @@ html.legacy .ant-menu-dark .ant-menu-item {
   color: var(--sider-fg) !important;
 }
 html.legacy .ant-menu-dark .ant-menu-item:hover:not(.ant-menu-item-selected):not(.ant-menu-submenu-selected) {
-  color: var(--sider-fg-active) !important;
+  color: var(--sider-item-hover-fg) !important;
 }
 html.legacy .ant-menu-dark .ant-menu-item-selected {
   color: var(--sider-fg-active) !important;
@@ -70,13 +80,68 @@ html.legacy .ant-menu-dark .ant-menu-item-selected::after {
 }
 /* ---- 侧栏菜单药丸 / 悬停底（对应 styles/overrides.css 的侧栏块，T2 引入）----
    high 模式下 antd 的 .ant-menu-item.css-hash 等选择器优先级 +1，会把药丸圆角盖成
-   10px、把悬停底盖成 rgba(0,0,0,0.06)（在近黑侧栏上几乎不可见），故补等效兜底。 */
+   10px、把悬停底盖成 antd 默认的 rgba(0,0,0,0.06)，故补等效兜底。 */
 html.legacy .ant-layout-sider .ant-menu-item,
 html.legacy .ant-layout-sider .ant-menu-submenu-title {
   border-radius: var(--sider-item-radius) !important;
 }
 html.legacy .ant-layout-sider .ant-menu-dark .ant-menu-item:not(.ant-menu-item-selected):hover {
   background: var(--sider-item-hover-bg) !important;
+}
+/* ---- 选中态强调条（对应 styles/overrides.css 的 ③，2026-10-11 改为「药丸外的一枚小标记」）----
+   high 模式下 antd 的 .ant-menu-item.css-hash 优先级 +1，这里补等效兜底并保留过渡（legacy 内核同样能过渡）。 */
+html.legacy .ant-layout-sider .ant-menu:not(.ant-menu-inline-collapsed) > .ant-menu-item {
+  margin-inline: 10px !important;
+  width: calc(100% - 20px) !important;
+  padding-inline-start: 18px !important;
+}
+html.legacy .ant-layout-sider .ant-menu:not(.ant-menu-inline-collapsed) > .ant-menu-item-selected {
+  overflow: visible !important;
+}
+html.legacy .ant-layout-sider .ant-menu-item::before {
+  content: '' !important;
+  position: absolute !important;
+  inset-inline-start: -8px !important;
+  top: 50% !important;
+  width: 3px !important;
+  height: 18px !important;
+  border-radius: var(--radius-pill) !important;
+  background: var(--brand-600) !important;
+  transform: translateY(-50%) scaleY(0) !important;
+  transition: transform var(--duration-base) cubic-bezier(.34, 1.4, .64, 1) !important;
+}
+html.legacy .ant-layout-sider .ant-menu-item-selected::before {
+  transform: translateY(-50%) scaleY(1) !important;
+}
+/* 折叠态回落：条子贴药丸左缘、取白（否则会溢出侧栏） */
+html.legacy .ant-layout-sider-collapsed .ant-menu-item::before {
+  inset-inline-start: 0 !important;
+  background: var(--sider-fg-active) !important;
+}
+html.legacy .ant-layout-sider .ant-menu-item-selected .anticon {
+  transform: scale(1.08) !important;
+}
+
+/* ---- 下拉菜单（对应 styles/overrides.css 的「下拉菜单」块）----
+   high 模式下 antd 的 .ant-dropdown-menu-item.css-hash 优先级 +1，会把行内距/圆角/悬停底盖回去，
+   故补等效兜底（同一批取值）。 */
+html.legacy .ant-dropdown .ant-dropdown-menu {
+  padding: 4px !important;
+  border: 1px solid var(--border-default) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+html.legacy .ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item,
+html.legacy .ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-submenu-title {
+  padding: 6px 10px !important;
+  border-radius: var(--radius-md) !important;
+}
+html.legacy .ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item:not(.ant-dropdown-menu-item-disabled):hover,
+html.legacy .ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-submenu-title:hover {
+  background: var(--bg-surface-2) !important;
+}
+html.legacy .new-q-menu .ant-dropdown-menu .ant-dropdown-menu-item {
+  padding: 6px 8px !important;
 }
 
 /* antd 在 <768px 把弹窗 max-width 收到 calc(100vw - 32px)，style.css 的

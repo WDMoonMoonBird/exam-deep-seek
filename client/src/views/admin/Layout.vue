@@ -32,7 +32,11 @@
         <a-dropdown>
           <div class="user-area">
             <a-avatar size="small" class="user-avatar">{{ user?.realName?.charAt(0) }}</a-avatar>
-            <span class="user-name">{{ user?.realName }}</span>
+            <span class="user-meta">
+              <span class="user-name">{{ user?.realName || user?.username }}</span>
+              <!-- 第二行与第一行重复时不渲染（种子超管 realName 就是「超级管理员」，否则会两行同字） -->
+              <span v-if="roleLine !== (user?.realName || user?.username)" class="user-sub">{{ roleLine }}</span>
+            </span>
             <CaretDownOutlined class="user-caret" />
           </div>
           <template #overlay>
@@ -60,7 +64,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onUpdated, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onUpdated, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useUserStore } from '../../stores/user.js';
 import { BankOutlined, AppstoreOutlined, TeamOutlined, IdcardOutlined, DashboardOutlined, RobotOutlined, BulbOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
@@ -72,6 +76,8 @@ const router = useRouter(); const route = useRoute(); const userStore = useUserS
 const { confirm } = useConfirm();
 const { mode: themeMode, setMode } = useTheme();
 const user = userStore.user;
+/* 顶栏用户菜单第二行「身份」：管理员分超管与普通管理员（取自登录用户信息里的 role） */
+const roleLine = computed(() => (user?.role === 'super_admin' ? '超级管理员' : '管理员'));
 const collapsed = ref(false);
 
 /* ===== B3-1 ⑤ 无障碍骨架：页面 H1（page-has-heading-one 改前每页 1 命中）=====
@@ -161,7 +167,7 @@ function handleMenu({ key }) {
 .layout :deep(.ant-layout-sider) { overflow-y: auto; }
 .logo { display: flex; align-items: center; gap: var(--space-2); height: var(--layout-topbar-h); padding: 0 var(--space-6); overflow: hidden; white-space: nowrap; }
 .logo-img { width: 32px; height: 32px; flex-shrink: 0; }
-.logo-text { color: var(--text-inverse); font-family: var(--font-display); font-weight: var(--fw-semibold); letter-spacing: var(--tracking-tight); display: flex; flex-direction: column; line-height: 1.2; }
+.logo-text { color: var(--sider-fg-strong); /* 跟随侧栏令牌：浅色主题下侧栏为白面，--text-inverse（白）不可见 */ font-family: var(--font-display); font-weight: var(--fw-semibold); letter-spacing: var(--tracking-tight); display: flex; flex-direction: column; line-height: 1.2; }
 .logo-line1 { font-size: var(--fs-body); opacity: 0.85; }
 .logo-line2 { font-size: var(--fs-title-2); }
 .topbar { background: var(--topbar-bg); border-bottom: 1px solid var(--topbar-bd); color: var(--text-primary); padding: 0 var(--space-6); display: flex; align-items: center; justify-content: space-between; height: var(--layout-topbar-h); position: absolute; top: 0; left: 0; right: 0; z-index: var(--z-topbar); transform: translate3d(0, 0, 0); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); }
@@ -173,13 +179,16 @@ function handleMenu({ key }) {
 .trigger:hover { color: var(--text-link); }
 .user-area { display: flex; align-items: center; gap: var(--space-2); cursor: pointer; padding: var(--space-1) var(--space-2); border-radius: var(--radius-md); }
 .user-avatar { background: var(--brand-600); flex-shrink: 0; }
-.user-name { font-size: var(--fs-body); color: var(--text-primary); }
+.user-meta { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.25; min-width: 0; }
+.user-name { font-size: var(--fs-body); font-weight: var(--fw-medium); color: var(--text-primary); white-space: nowrap; }
+.user-sub { font-size: var(--fs-caption); color: var(--text-tertiary); white-space: nowrap; }
 .user-caret { font-size: var(--fs-caption); color: var(--text-tertiary); }
 .content { padding: calc(var(--layout-topbar-h) + var(--space-6)) var(--space-12) var(--space-10); background: var(--bg-canvas); overflow-y: auto; height: 100%; }
 
 @media (max-width: 768px) {
   .topbar { padding: 0 var(--space-3); }
   .content { padding: calc(var(--layout-topbar-h) + var(--space-4)) var(--space-3) var(--space-6); }
-  .user-name { display: none; }
+  /* 窄屏只留头像 + 箭头：姓名与身份整块隐藏 */
+  .user-meta { display: none; }
 }
 </style>

@@ -6,12 +6,27 @@
     :max-width="'var(--layout-content-max)'"
   >
     <template #actions>
-      <a-dropdown>
-        <a-button type="primary">新增题目 <DownOutlined /></a-button>
+      <!-- 新增题目菜单：与欢迎页演示控制台同款（图标 + 主标题 + 副说明两行；展开时箭头旋转 180°）。
+           菜单会被 teleport 到 body，故两行排版写在全局 styles/overrides.css 的 .new-q-menu 块里。 -->
+      <a-dropdown v-model:open="newQOpen" overlay-class-name="new-q-menu" placement="bottomRight">
+        <a-button type="primary">新增题目 <DownOutlined class="new-q-caret" :class="{ up: newQOpen }" /></a-button>
         <template #overlay>
           <a-menu @click="onNewQuestion">
-            <a-menu-item key="code">编程题</a-menu-item>
-            <a-menu-item key="project"><span>实训题 <a-tag class="tag-warning" size="small">BETA</a-tag></span></a-menu-item>
+            <a-menu-item key="code">
+              <span class="nq-row">
+                <CodeOutlined class="nq-ico" />
+                <span class="nq-txt"><b>编程题</b><span class="nq-sub">在线作答 · AI 评分</span></span>
+              </span>
+            </a-menu-item>
+            <a-menu-item key="project">
+              <span class="nq-row">
+                <FolderOpenOutlined class="nq-ico" />
+                <span class="nq-txt">
+                  <b>实训题 <a-tag class="tag-warning" size="small">BETA</a-tag></b>
+                  <span class="nq-sub">上传标准工程包 · 评价式评分</span>
+                </span>
+              </span>
+            </a-menu-item>
           </a-menu>
         </template>
       </a-dropdown>
@@ -79,7 +94,7 @@
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
-import { DownOutlined } from '@ant-design/icons-vue';
+import { DownOutlined, CodeOutlined, FolderOpenOutlined } from '@ant-design/icons-vue';
 import request from '../../api/request.js';
 import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
@@ -89,6 +104,8 @@ import { formatDateTime, difficultyText } from '../../domain/format.js';
 const router = useRouter();
 
 const loading = ref(false);
+/** 「新增题目」下拉是否展开：只用于把按钮上的箭头转 180°（与欢迎页演示一致） */
+const newQOpen = ref(false);
 const list = ref([]);
 const keyword = ref('');
 const pagination = reactive({ current: 1, pageSize: 20, total: 0 });
@@ -168,6 +185,13 @@ function onNewQuestion({ key }) {
 </script>
 
 <style scoped>
+/* 新增题目：展开时箭头旋转 180°（过渡与菜单同一时长） */
+.new-q-caret {
+  transition: transform var(--duration-fast) ease;
+}
+.new-q-caret.up {
+  transform: rotate(180deg);
+}
 .w-260 {
   width: 260px;
 }

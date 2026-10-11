@@ -57,9 +57,11 @@
                 <a-dropdown>
                     <div class="user-area">
                         <a-avatar size="small" class="user-avatar">{{ user?.realName?.charAt(0) }}</a-avatar>
-                        <span class="user-name"><span v-if="userStore.currentSchool">{{ userStore.currentSchool.name }}
-                                ·
-                            </span>教师</span>
+                        <span class="user-meta">
+                            <span class="user-name">{{ user?.realName || user?.username }}</span>
+                            <!-- 第二行与第一行重复时不渲染（种子超管 realName 就是「超级管理员」，否则会两行同字） -->
+                            <span v-if="roleLine !== (user?.realName || user?.username)" class="user-sub">{{ roleLine }}</span>
+                        </span>
                         <CaretDownOutlined class="user-caret" />
                     </div>
                     <template #overlay>
@@ -148,6 +150,9 @@ const router = useRouter(); const route = useRoute(); const userStore = useUserS
 const { confirm } = useConfirm();
 const { mode: themeMode, setMode } = useTheme();
 const user = userStore.user;
+/* 顶栏用户菜单第二行「身份 · 单位」：原来第一行写的是「学校 · 教师」（没有姓名，且身份与单位混在一行），
+   改为第一行姓名、第二行身份·单位；单位未绑定时只留「教师」，不留悬空的分隔点。 */
+const roleLine = computed(() => '教师' + (userStore.currentSchool?.name ? ` · ${userStore.currentSchool.name}` : ''));
 const collapsed = ref(false);
 
 /* ===== B3-1 ⑤ 无障碍骨架：页面 H1 + 地标 + skip-link =====
@@ -350,7 +355,8 @@ function handleMenu ({ key }) {
 }
 
 .logo-text {
-    color: var(--text-inverse);
+    /* 跟随侧栏令牌：浅色主题下侧栏为白面，--text-inverse（白）不可见 */
+    color: var(--sider-fg-strong);
     font-family: var(--font-display);
     font-weight: var(--fw-semibold);
     letter-spacing: var(--tracking-tight);
@@ -417,13 +423,25 @@ function handleMenu ({ key }) {
     flex-shrink: 0;
 }
 
-.user-name {
-    font-size: var(--fs-body);
-    color: var(--text-primary);
+.user-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    line-height: 1.25;
+    min-width: 0;
 }
 
-.user-school {
+.user-name {
+    font-size: var(--fs-body);
+    font-weight: var(--fw-medium);
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.user-sub {
+    font-size: var(--fs-caption);
     color: var(--text-tertiary);
+    white-space: nowrap;
 }
 
 .user-caret {
@@ -438,12 +456,12 @@ function handleMenu ({ key }) {
     height: 100%;
 }
 
-/* 侧栏徽标：待审核数（深色侧栏上的 danger 三元组，见 03-components.md §3.4）
+/* 侧栏徽标：待审核数（侧栏上的 danger 三元组，见 03-components.md §3.4）
    T4-F5：暗色的 --status-danger-bg 是半透明（rgba(217,45,32,.16)），直接叠在「选中项」实底
    （antd 派生主色 rgb(3,90,176)）上会把背景提亮 → 实测 3.90:1（12px/600 需 4.5:1）。
-   这里先铺一层不透明 --sider-bg（侧栏在两种主题下都是深色面），再用同色平铺渐变把半透明层叠上去，
-   使合成结果与父级底色无关（暗色 8.88:1）；浅色下 --status-danger-bg 本身不透明（= --red-50），
-   底板被完全覆盖 → 视觉零变化（实测仍 6.05:1）。 */
+   这里先铺一层不透明 --sider-bg，再用同色平铺渐变把半透明层叠上去，使合成结果与父级底色无关
+   （暗色 8.88:1）；浅色主题下 --sider-bg 是白面，但 --status-danger-bg 本身不透明（= --red-50）
+   会把这层底板完整覆盖 → 视觉零变化（实测仍 6.05:1），故这套写法在两种主题下都成立。 */
 .sider-badge {
     flex: none;
     margin-inline-start: auto;
@@ -486,7 +504,8 @@ function handleMenu ({ key }) {
 @media (max-width: 768px) {
   .topbar { padding: 0 var(--space-3); }
   .content { padding: calc(var(--layout-topbar-h) + var(--space-4)) var(--space-3) var(--space-6); }
-  .user-name { display: none; }
+  /* 窄屏只留头像 + 箭头：姓名与身份·单位整块隐藏 */
+  .user-meta { display: none; }
 }
 </style>
 <style>

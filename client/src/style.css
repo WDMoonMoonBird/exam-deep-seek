@@ -177,21 +177,30 @@ html .ant-btn-dangerous:not(.ant-btn-primary):not([disabled]):not(.ant-btn-disab
   background: var(--status-danger-bg);
 }
 
-/* === 深色侧栏 / 菜单（令牌驱动，见 docs/ui-redesign/03-components.md §3.4）===
+/* === 侧栏 / 菜单（令牌驱动，见 docs/ui-redesign/03-components.md §3.4）===
+   2026-10-11：侧栏底色随主题翻转（浅色=白面 / 深色=近黑面），故本块不再叫「深色侧栏」；
+   悬停文字改用 --sider-item-hover-fg（浅色下深字、深色下白字），选中项仍用 --sider-fg-active
+   （白，压在 brand-600 药丸上）。浅色主题下顶栏与侧栏同为白面，靠 --sider-bd（深色下 = transparent）
+   这条右分隔线划分边界。
    为什么选择器带 html 前缀：antd 的样式是运行时注入的，且它写的是
    :where(.css-hash).ant-menu-dark（:where 不贡献优先级 → 同样是 0-1-0），
    同优先级下后插入的 antd 会反超本文件；加一个元素选择器（0-1-1）即可稳定胜出，
    从而不必再写强制优先级声明（本文件的强制优先级已归零）。
    Chrome 69（StyleProvider hash-priority="high"，antd 选择器带 hash 类、优先级 +1）
-   的等效规则在 src/legacy-patch.css 里 —— 改这里必须同步改那边。 */
-/* 侧栏底色：antd 写的是 :where(.css-hash).ant-layout .ant-layout-sider（0-2-0），
+   的等效规则在 src/legacy-patch.css 里 —— 改这里必须同步改那边。
+   侧栏底色：antd 写的是 :where(.css-hash).ant-layout .ant-layout-sider（0-2-0），
    所以这里用「两个类 + html」（0-2-1）稳定胜出；菜单本身是 0-1-0，用 html 前缀即可。 */
-html .ant-layout-sider.ant-layout-sider-dark { background: var(--sider-bg); }
+html .ant-layout-sider.ant-layout-sider-dark { background: var(--sider-bg); border-right: 1px solid var(--sider-bd); }
 html .ant-menu-dark { background: var(--sider-bg); }
 html .ant-menu-dark .ant-menu-item { color: var(--sider-fg); }
-html .ant-menu-dark .ant-menu-item:hover:not(.ant-menu-item-selected):not(.ant-menu-submenu-selected) { color: var(--sider-fg-active); }
+html .ant-menu-dark .ant-menu-item:hover:not(.ant-menu-item-selected):not(.ant-menu-submenu-selected) { color: var(--sider-item-hover-fg); }
 html .ant-menu-dark .ant-menu-item-selected { color: var(--sider-fg-active); }
 html .ant-menu-dark .ant-menu-item-selected::after { display: none; }
+/* 深色主题下 --sider-bd = transparent：线看不见，但 border-right 仍占 1px —— 侧栏是固定宽的
+   border-box 元素（--layout-sider-w 232px），这 1px 会把内容区挤成 231px，让右对齐的待审核徽标
+   与菜单药丸的右缘比改前内缩 1px。故把深色分支的边框宽度归零（选择器 0-3-1 压过上面的 0-2-1），
+   兑现「深色主题逐像素不变」；浅色分支照旧保留这条分隔线。 */
+html[data-theme="dark"] .ant-layout-sider.ant-layout-sider-dark { border-right-width: 0; }
 
 /* === 顶栏容器色（Wave 4 · R-2）===
    三端 Layout 的 scoped .topbar 规则在 Chrome 69（hash-priority="high"）下会被 antd 的

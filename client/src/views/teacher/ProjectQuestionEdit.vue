@@ -1,10 +1,12 @@
 <template>
+  <!-- compact 只在教师模式生效：学生作答模式完全维持原状（可见标题 = 题目名、无返回链接、无说明）。
+       说明文字按用户要求取消 —— 教师模式那句原本是页头说明，学生模式本来就是空串，故整条 description 不再传 -->
   <FormPage
+    :compact="isTeacher"
     :title="isTeacher ? (isEdit ? '编辑实训题' : '新建实训题') : (form.title || '实训题')"
-    :description="isTeacher ? '实训题支持上传标准工程包；不上传即开放性题目，AI 按评价式评分。' : ''"
     :back="isTeacher ? { text: '返回题库管理', to: '/teacher/questions' } : null"
   >
-    <!-- 基本信息（原页头左组：标题 / 难度 / 满分） -->
+    <!-- 基本信息（原页头左组：标题 / 难度 / 满分）+ 教师操作区（2026-10-11 用户要求：操作按钮与左侧题目输入框同一行） -->
     <div class="meta-row">
       <a-space>
         <!-- 教师模式：可编辑 / 学生模式：只读 -->
@@ -25,11 +27,12 @@
         <a-input-number v-if="isTeacher" v-model:value="form.maxScore" :min="1" :step="5" style="width:80px;" />
         <span v-else style="font-weight:700;color:var(--text-brand);">{{ form.maxScore }} 分</span>
       </a-space>
-    </div>
 
-    <template #actions>
-      <a-button @click="openDescModal">题目描述</a-button>
-      <a-button @click="openRubricModal">评分标准</a-button>
+      <!-- 教师操作区：与上方题目输入框同一行、右对齐（margin-left:auto）。窄屏由 .meta-row 的
+           flex-wrap 自动换行，不挤压输入框。学生模式不渲染这一组（其「提交答案」仍走页头 #actions）。 -->
+      <div v-if="isTeacher" class="meta-actions">
+        <a-button @click="openDescModal">题目描述</a-button>
+        <a-button @click="openRubricModal">评分标准</a-button>
       <!-- 自动评分器入口（来自 feature/rule-driven-scoring）：首次合并（f7a03fc）解冲突时该块被整块漏掉 ✗，
            2026-10-10 由验收判据④（走查 button 自动评分器 count=0）发现并补回 ✓
            迁移：分支原有的硬编码成功色（十六进制写法）已改为 var(--status-success-fg)，保持本文件去注释后 hex=0；
@@ -43,9 +46,14 @@
         </a-button>
         <a-tag v-if="checkerStatus === 'failed'" color="red" size="small" style="margin:0;">评分器生成失败</a-tag>
       </span>
-      <a-button v-if="isTeacher && isEdit" @click="showPromptPreview">查看 AI 提示词</a-button>
-      <a-button v-if="isTeacher" type="primary" @click="handleSave">保存</a-button>
-      <a-button v-else type="primary" :disabled="!hasUploaded || submitting || (isStudent && studentSubmission && studentSubmission.status !== 'draft')" :loading="submitting" @click="handleSubmit">
+        <a-button v-if="isEdit" @click="showPromptPreview">查看 AI 提示词</a-button>
+        <a-button type="primary" @click="handleSave">保存</a-button>
+      </div>
+    </div>
+
+    <!-- 学生模式的操作区仍留在页头右上（教师模式的操作区已并入上面的 .meta-row） -->
+    <template v-if="!isTeacher" #actions>
+      <a-button type="primary" :disabled="!hasUploaded || submitting || (isStudent && studentSubmission && studentSubmission.status !== 'draft')" :loading="submitting" @click="handleSubmit">
         {{ submitting ? '提交中...' : '提交答案' }}
       </a-button>
     </template>
@@ -147,7 +155,7 @@
     <!-- 阶段切换（还原封装前布局）：未上传 = 整页居中圆形按钮；已上传 = 文件树 + Monaco -->
     <Transition name="kind-pick-switch" mode="out-in">
       <!-- 阶段一：整页居中上传入口（圆形按钮 + 提示） -->
-      <div v-if="!hasUploaded" key="picker" class="ide-stage">
+      <div v-if="!hasUploaded" key="picker" class="ide-stage" :class="{ 'ide-stage--compact': isTeacher }">
         <div class="picker-slot">
           <ProjectZipUploader
             :hint="isTeacher ? '点击上传标准工程包' : '点击上传项目文件'"
@@ -163,7 +171,7 @@
       </div>
 
       <!-- 阶段二：VSCode 风格 IDE（左文件树 + 右 Monaco） -->
-      <div v-else key="editor" class="ide-stage">
+      <div v-else key="editor" class="ide-stage" :class="{ 'ide-stage--compact': isTeacher }">
         <div class="ide-body">
           <div class="sidebar">
             <ProjectZipUploader
@@ -235,6 +243,8 @@ onBeforeUnmount(disposePage);
 
 <style scoped>
 .meta-row { display:flex; align-items:center; gap:var(--space-3); margin-bottom:var(--space-3); flex-wrap:wrap; }
+/* 教师操作区：靠 margin-left:auto 推到行尾，与左侧题目输入框同一行（align-items 由父级统一居中） */
+.meta-actions { margin-left:auto; display:flex; align-items:center; gap:var(--space-2); flex-shrink:0; }
 
 .kind-pick-switch-enter-active,.kind-pick-switch-leave-active { transition: all var(--duration-base) ease; }
 .kind-pick-switch-enter-from,.kind-pick-switch-leave-to { opacity:0; transform:scale(.9); }
@@ -265,7 +275,15 @@ onBeforeUnmount(disposePage);
 .ssc-feedback-empty { font-size:var(--fs-body-sm); color:var(--text-disabled); }
 .ssc-pending-hint { display:flex; align-items:center; gap:8px; font-size:var(--fs-body-sm); color:var(--text-tertiary); padding:6px 0; }
 
+/* 工作区高度：视口 − 顶栏(56) − 内容内距(上 24 / 下 40) − 页头 − 基本信息行 − 间隙。
+   300 是按**改版前的页头**（返回条 32 + 12 + 标题 30 + 说明 22 + 20 ≈ 116px）标定的；
+   教师模式页头已 compact 化（实测少占 76px → 单行 32 + 12 边距），故常量由 300 收到 214：
+   把省下的高度连同原来的 10px 呼吸一并还给代码区（实测：改前 600px 高、离底 126px；
+   224 → 676px、离底 50px；再收到 214 → 686px、离底 40px = 恰好贴住内容区的下内距，不再留呼吸带）。
+   注意方向：常量越小、代码区越高（height = 100vh − N）。
+   学生作答模式页头未改（无返回条、标题可见），沿用 300。 */
 .ide-stage { height:calc(100vh - 300px); min-height:480px; display:flex; flex-direction:column; overflow:hidden; }
+.ide-stage--compact { height:calc(100vh - 182px); }
 .picker-slot { flex:1; display:flex; flex-direction:column; min-height:0; }
 /* 开放性实训题说明（仅教师视角）：居中灰字，不挤压上传入口 */
 .open-project-hint { flex-shrink:0; margin:0 auto 20px; padding:0 24px; max-width:760px; font-size:var(--fs-body-sm); line-height:1.8; color:var(--text-tertiary); text-align:center; }

@@ -10,6 +10,70 @@
  * 组件内部样式一律写在该组件的 <style scoped> 里。
  * ==========================================================================*/
 
+/* ============================================================================
+ * 下拉菜单（antd Dropdown，teleport 到 body → 只能写在全局层）
+ *
+ * 2026-10-11 按用户要求，把项目内的下拉菜单统一到欢迎页演示控制台那套观感：
+ *   ① 面板：12px 圆角 + 1px 描边 + --shadow-lg，内边距 4px（antd 默认 4px 但无描边、圆角 8px）；
+ *   ② 行：8px 圆角、更松的 6px/10px 内边距、底色过渡（悬停 --bg-surface-2）；
+ *   ③ 图标 + 两行文案的结构（.nq-row / .nq-ico / .nq-txt / .nq-sub）供「新增题目」这类
+ *      「选类型」菜单使用，副说明用小字灰（与演示页 .mi-text/.mi-sub 同款）。
+ * 只影响 .ant-dropdown 内的菜单：侧栏菜单、Select 下拉（.ant-select-dropdown）都不受影响。
+ * ==========================================================================*/
+/* 选择器带 html 前缀的理由同 style.css：antd 的样式是运行时注入的，同优先级下会反超本文件；
+   加一个元素选择器（0-1-1 → 0-2-1）即可稳定胜出，从而不必写强制优先级。
+   Chrome 69（hash-priority="high"）的等效规则在 src/legacy-patch.css 里 —— 改这里必须同步改那边。 */
+html .ant-dropdown .ant-dropdown-menu {
+  padding: 4px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+/* 行为什么要写到 .ant-dropdown-menu 这一层：antd 生成的是
+   :where(.css-hash).ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item（:where 不贡献优先级 → 0-3-0），
+   只写两层类（0-2-0/0-2-1）会被它反超 —— 实测圆角/内边距被盖回 6px / 5px 12px。
+   故这里写足三层类 + html（0-3-1）稳定胜出，仍然不写强制优先级。 */
+html .ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item,
+html .ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-submenu-title {
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  transition: background-color var(--duration-fast) ease;
+}
+html .ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item:not(.ant-dropdown-menu-item-disabled):hover,
+html .ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-submenu-title:hover {
+  background: var(--bg-surface-2);
+}
+/* 「新增题目」菜单的两行结构（overlay-class-name="new-q-menu"） */
+html .new-q-menu .ant-dropdown-menu {
+  min-width: 236px;
+}
+html .new-q-menu .ant-dropdown-menu .ant-dropdown-menu-item {
+  padding: 6px 8px;
+}
+.nq-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.nq-ico {
+  font-size: var(--fs-title-3);
+  color: var(--text-brand);
+}
+.nq-txt {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+.nq-txt b {
+  font-size: var(--fs-body-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-primary);
+}
+.nq-sub {
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+}
+
 /* 布置作业向导（Modal 会被 teleport 到 body，页面 scoped 样式够不到）
    来源：views/teacher/Assignments.vue 原先的非 scoped <style>，Wave 0 迁移至此，
    消除了该页的全局样式泄漏。 */
@@ -19,7 +83,7 @@
  * 侧栏菜单骨架（docs/ui-redesign/03-components.md §3.4）
  *
  * 作用域限定 .ant-layout-sider：顶栏下拉菜单（.ant-dropdown-menu，teleport 到 body）
- * 不受影响。深色底与文字色目前仍由 style.css 的历史规则接管（该文件不在本任务范围），
+ * 不受影响。侧栏底色与文字色仍由 style.css 的历史规则接管（该块已随主题翻转：浅色=白面深字），
  * 这里只补 antd 令牌够不到、且三端必须一致的四件事：
  *   ① 折叠宽度 —— antd 写死 .ant-menu-inline-collapsed { width: 80px }，
  *      与 232 / 折叠 64 的骨架令牌冲突（会横向溢出侧栏）；
@@ -46,17 +110,52 @@
   align-items: center;
 }
 
-/* ③ 选中态：药丸 + 左侧 3px 强调条（3px 为设计稿值，令牌无对应项） */
-.ant-layout-sider .ant-menu-item-selected::before {
+/* ③ 选中态：药丸 + 左侧 3px 强调条（3px 为设计稿值，令牌无对应项）
+   2026-10-11 按用户要求改成与欢迎页演示控制台一致的样式：强调条移到**药丸左侧的留白里**（不再是压在白药丸上的白条），
+   取 --brand-600，高度 18px（不是整行高），并在切换选中时从 0 竖起 —— 与演示页 .mini-item::before 同一套观感。
+   位置：antd 的 inline 菜单项 margin 是 4px，故 inset-inline-start: -4px 让 3px 条正好落在侧栏左缘（0~3px），
+   与药丸（x=4 起）之间留 1px 底色缝，读起来是「药丸外的一枚小标记」。 */
+/* 展开态：菜单项左右各留 10px（antd 默认 4px），把药丸左侧的留白让出来放强调条；
+   左内距同步 24 → 18，使图标仍落在 x=28（与分组标题 / Logo 的 24px 基线保持原有对齐关系）。
+   注意：只作用于展开态，折叠态（64px 轨道）沿用 antd 自己的居中内距。 */
+.ant-layout-sider .ant-menu:not(.ant-menu-inline-collapsed) > .ant-menu-item {
+  margin-inline: 10px;
+  width: calc(100% - 20px);
+  padding-inline-start: 18px;
+}
+/* antd 给菜单项设了 overflow: hidden（为长标签省略号），会把画到药丸外的强调条裁掉 →
+   仅对「展开态的选中项」放开：折叠态里标签文字仍有宽度，放开会被撑出 43px 横向溢出（会拉出横向滚动条）。
+   本系统侧栏标签都是 4 字以内，展开态放开不会影响省略号逻辑。 */
+.ant-layout-sider .ant-menu:not(.ant-menu-inline-collapsed) > .ant-menu-item-selected {
+  overflow: visible;
+}
+.ant-layout-sider .ant-menu-item::before {
   content: '';
   position: absolute;
-  inset-inline-start: 0;
+  inset-inline-start: -8px;
   top: 50%;
   width: 3px;
-  height: var(--sider-item-h);
-  transform: translateY(-50%);
+  height: 18px;
   border-radius: var(--radius-pill);
+  background: var(--brand-600);
+  transform: translateY(-50%) scaleY(0);
+  transition: transform var(--duration-base) cubic-bezier(.34, 1.4, .64, 1);
+}
+.ant-layout-sider .ant-menu-item-selected::before {
+  transform: translateY(-50%) scaleY(1);
+}
+/* 折叠态（64px 轨道）：药丸已经贴到左缘，条子放到外面会溢出（给侧栏拉出横向滚动条），
+   故回落到旧做法 —— 条子贴药丸左缘、取白（压在 brand-600 药丸上仍清晰）。 */
+.ant-layout-sider-collapsed .ant-menu-item::before {
+  inset-inline-start: 0;
   background: var(--sider-fg-active);
+}
+/* 选中项图标轻微放大（与演示页 .mini-item.on .icon 一致） */
+.ant-layout-sider .ant-menu-item .anticon {
+  transition: transform var(--duration-base) cubic-bezier(.34, 1.4, .64, 1);
+}
+.ant-layout-sider .ant-menu-item-selected .anticon {
+  transform: scale(1.08);
 }
 
 /* 悬停底色（style.css 只接管文字色，底色走令牌） */

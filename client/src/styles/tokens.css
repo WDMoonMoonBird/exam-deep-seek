@@ -337,17 +337,25 @@
   --tag-pad-x: var(--space-2);
   --tag-fs: var(--fs-caption);
 
-  /* 侧栏 */
-  --sider-bg: var(--bg-inverse);
-  --sider-fg: var(--text-inverse-muted);
-  --sider-fg-active: var(--text-inverse);
+  /* 侧栏 —— 随主题翻转，取值原则（2026-10-11 用户要求）：「跟内容区拉开一档面色即可，不用纯白/纯黑」。
+     浅色 = --gray-100（比内容区 --bg-canvas（gray-50）深一档的浅灰面），深色 = --gray-900（见深色块）。
+     为什么不用 --bg-inverse：它的语义是「当前面的反色」，浅色主题下恒为近黑，侧栏因此永远是深色。
+     为什么也不用 --bg-surface：浅色下它是纯白（与顶栏同色），深色下与内容区同色 —— 两种主题都谈不上「色差」。
+     --sider-fg-active（选中项文字）两种主题下都保持白色：选中药丸底色是 brand-600（白字实测 5.57:1）。
+     下列注释里的对比度为验收实测值（Playwright 读计算样式 + WCAG 相对亮度实算，含半透明色的合成）。 */
+  --sider-bg: var(--gray-100);
+  --sider-fg: var(--gray-600);            /* 菜单项文字：灰底 5.91:1 */
+  --sider-fg-strong: var(--gray-900);     /* 悬停文字 / Logo 文字：灰底 15.44:1（悬停底 gray-200 上是 13.95:1） */
+  --sider-fg-active: var(--gray-0);       /* 选中项文字（压在 brand-600 药丸上） */
+  --sider-bd: var(--border-default);      /* 右侧分隔线：浅色下侧栏与画布同属浅色系，靠这条线把边界讲清楚 */
   --sider-item-h: 40px;
   --sider-item-radius: var(--radius-md);
   --sider-item-gap: 2px;
   --sider-item-pad-x: var(--space-3);
-  --sider-item-hover-bg: rgba(255, 255, 255, 0.08);
+  --sider-item-hover-bg: var(--gray-200); /* 悬停底：比侧栏面色再深一档（用 gray-100 会与侧栏同色、看不出来） */
+  --sider-item-hover-fg: var(--sider-fg-strong);
   --sider-item-active-bg: var(--brand-600);
-  --sider-group-fg: var(--text-inverse-subtle);
+  --sider-group-fg: var(--gray-600);      /* 分组标题 12px：灰底 5.91:1（gray-500 在灰底上仅 4.24:1，不达 AA） */
   --sider-icon-size: 16px;
 
   /* 顶栏 */
@@ -383,15 +391,20 @@
 
 /* -------------------------------------------- 深色主题的组件级修正（必须放在组件令牌之后） */
 [data-theme="dark"] {
-  /* 侧栏在深色主题下仍保持深色，与顶栏/内容形成层次 */
+  /* 侧栏：深色主题下取 --gray-900（比内容区 --bg-canvas（gray-950 = #0b0f16）浅一档的深灰面），与顶栏/卡片同面。
+     改前它与内容区同为 #0b0f16 —— 两者之间其实没有任何色差；浅色分支见上面的组件级令牌块，
+     新增的三个 --sider-* 令牌同此原则成对维护。 */
   --bg-inverse: #0b0f16;
   --text-inverse: #ffffff;
   --text-inverse-muted: rgba(255, 255, 255, 0.72);
   --text-inverse-subtle: rgba(255, 255, 255, 0.48);
-  --sider-bg: #0b0f16;
+  --sider-bg: var(--gray-900);
   --sider-fg: rgba(255, 255, 255, 0.72);
+  --sider-fg-strong: #ffffff;
   --sider-fg-active: #ffffff;
+  --sider-bd: transparent;
   --sider-item-hover-bg: rgba(255, 255, 255, 0.08);
+  --sider-item-hover-fg: #ffffff;
   --sider-item-active-bg: var(--brand-600);
   --sider-group-fg: rgba(255, 255, 255, 0.48);
   --skeleton-sheen: rgba(255, 255, 255, 0.08);

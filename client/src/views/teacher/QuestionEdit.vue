@@ -1,7 +1,9 @@
 <template>
+  <!-- compact：标题与说明不再可见（标题仍渲染为视觉隐藏，供 Layout 的页内标题镜像与无障碍语义用），
+       返回按钮并入页头行；说明文字按用户要求取消，故不再传 description -->
   <FormPage
+    compact
     :title="isEdit ? '编辑题目' : '新建题目'"
-    description="支持主观题与客观题；保存前会核对各小题分值。"
     :back="{ text: '返回题库管理', to: '/teacher/questions' }"
   >
     <div class="lc-page-inner">
@@ -337,8 +339,10 @@ onUnmounted(onPageUnmounted);
 </script>
 
 <style scoped>
-/* 工作区：视口 − 顶栏(56) − 内容内距(2×20) − 页头/返回条/动作条（约 200px） */
-.lc-page-inner{height:calc(100vh - 300px);min-height:480px;display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-3);}
+/* 工作区：视口 − 顶栏(56) − 内容内距(2×20) − 页头/返回条/动作条。
+   页头 compact 化后这一块少占 76px（实测：旧页头 120.1px → 单行页头 44px），故常量同步 300 → 224：
+   省下的高度让给工作区，而不是变成页面下方的新留白。 */
+.lc-page-inner{height:calc(100vh - 224px);min-height:480px;display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-3);}
 .lc-top{flex-shrink:0;background:var(--bg-surface);border-radius:var(--radius-lg);padding:12px 20px;box-shadow:var(--shadow-sm);}
 .lc-top :deep(.ant-form-inline){display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .lc-top :deep(.ant-form-item){margin-bottom:0;}
