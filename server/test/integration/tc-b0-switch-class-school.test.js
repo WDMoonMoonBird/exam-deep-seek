@@ -19,10 +19,10 @@ const CODE_B = '29602';
 const CODE_C = '29603';
 
 let sA, sB, sC;
-let tMain, tNoOld, tNoNew, tOutsider;
-let clsA, clsNoOld, clsNoNew, clsOut;
+let tMain, tNoOld, tNoNew, tOutsider, tOtherClass;
+let clsA, clsNoOld, clsNoNew, clsOut, clsOther, clsTarget;
 let teamA;
-let tokenMain, tokenNoOld, tokenNoNew, tokenOutsider;
+let tokenMain, tokenNoOld, tokenNoNew, tokenOutsider, tokenOtherClass;
 
 async function purge() {
   const users = await prisma.user.findMany({ where: { username: { startsWith: PREFIX } }, select: { id: true } });
@@ -67,9 +67,12 @@ async function seed() {
   tNoOld = await mkTeacher('teacher_no_old', 'tca不在旧校');
   tNoNew = await mkTeacher('teacher_no_new', 'tca不在新校');
   tOutsider = await mkTeacher('teacher_outsider', 'tca非本班教师');
+  tOtherClass = await mkTeacher('teacher_other_class', 'tca他班教师');
 
   // tMain：同属 A、B 两校（走通 200）；tNoOld：同属 B 校但不在 A 校（旧校校验失败）；
-  // tNoNew：同属 A 校但不在 B 校（新校校验失败）；tOutsider：在 A 校但非该班教师。
+  // tNoNew：同属 A 校但不在 B 校（新校校验失败）；tOutsider：在 A 校但非该班教师（teacherClass 零行）；
+  // tOtherClass：在 A 校【且 teacherClass 有行，但那一行指向 clsOther】—— 专钉 :963 的 classId 作用域
+  // （即「本班教师」而非「任一班教师」；见 teacherController-B0-B0b-verify.md D2 与 §T-A8）。
   await prisma.teacherSchool.createMany({ data: [
     { teacherId: tMain.id, schoolId: sA.id },
     { teacherId: tMain.id, schoolId: sB.id },
@@ -77,18 +80,25 @@ async function seed() {
     { teacherId: tNoNew.id, schoolId: sA.id },
     { teacherId: tOutsider.id, schoolId: sA.id },
     { teacherId: tOutsider.id, schoolId: sB.id },
+    { teacherId: tOtherClass.id, schoolId: sA.id },
   ] });
 
   clsA = await prisma.class.create({ data: { name: PREFIX + 'class_a', schoolId: sA.id } });
   clsNoOld = await prisma.class.create({ data: { name: PREFIX + 'class_no_old', schoolId: sA.id } });
   clsNoNew = await prisma.class.create({ data: { name: PREFIX + 'class_no_new', schoolId: sA.id } });
   clsOut = await prisma.class.create({ data: { name: PREFIX + 'class_out', schoolId: sA.id } });
+  clsOther = await prisma.class.create({ data: { name: PREFIX + 'class_other', schoolId: sA.id } });
+  clsTarget = await prisma.class.create({ data: { name: PREFIX + 'class_target', schoolId: sA.id } });
 
   await prisma.teacherClass.createMany({ data: [
     { teacherId: tMain.id, classId: clsA.id },
     { teacherId: tNoOld.id, classId: clsNoOld.id },
     { teacherId: tNoNew.id, classId: clsNoNew.id },
     // tOutsider 刻意【不】建 teacherClass 行 ⇒ 命中 :964 的「非本班教师」
+    // tOtherClass 有 teacherClass 行、但指向 clsOther（≠ clsTarget）⇒ 只钉 classId 作用域，且
+    // 其旧校校验可通过（属 A 校）、新校校验必失败（不属 B 校）——
+    // 若 :963 被放宽成 { teacherId } 则本守卫被旁路，响应会变成 :972 的「你不属于目标学校」。
+    { teacherId: tOtherClass.id, classId: clsOther.id },
   ] });
 
   // clsA 挂 1 个团队班（团队名进 200 的拼接文案；迁移后 teamClass 行必须清零）
@@ -100,6 +110,7 @@ async function seed() {
   tokenNoOld = await login('teacher_no_old');
   tokenNoNew = await login('teacher_no_new');
   tokenOutsider = await login('teacher_outsider');
+  tokenOtherClass = await login('teacher_other_class');
 }
 
 async function login(name) {
@@ -155,6 +166,17 @@ describe('T-A · PUT /api/teacher/classes/:id/switch-school（Z1 契约）', () 
     expect(res.body).toEqual({ code: 1003, message: '无权操作', data: null });
     // 该教师同属 B 校（确保命中的是 :964 的「非本班教师」判定，而不是更靠后的新校校验）
     expect(await snapClass(clsOut.id)).toEqual(before);
+  });
+
+  it('T-A8 ★classId 作用域：教师在【别的】班有 teacherClass 行 → 仍须 403 无权操作（零写入）', async () => {
+    // 钉住 :963 的 where { teacherId, classId } 中 classId 的必要性（D2 覆盖缺口）：
+    // 夹具 tOtherClass 在 teacherClass 表【有行】，但那一行指向 clsOther，不是目标班 clsTarget。
+    // 放宽成 { teacherId } 时该守卫被旁路 ⇒ 落到 :972「你不属于目标学校」⇒ 本断言（逐字 '无权操作'）变红。
+    const before = await snapClass(clsTarget.id);
+    const res = await api(tokenOtherClass).put(sw(clsTarget.id), { newSchoolId: sB.id });
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ code: 1003, message: '无权操作', data: null });
+    expect(await snapClass(clsTarget.id)).toEqual(before);
   });
 
   it('T-A5 教师不在【旧】校 → 403 无权操作当前学校（全仓唯一文案 :971，零写入）', async () => {
