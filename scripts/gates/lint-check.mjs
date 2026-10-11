@@ -30,7 +30,16 @@
  *     - 同类违规净增（例如某文件多出一处 no-undef:foo）才算。
  *   基线文件：docs/pipeline/lint-baseline.json（由 --update-baseline 生成/刷新）。
  *
- * 退出码：0 = 无基线外新违规；1 = 有基线外新违规；2 = 执行错误（与既有门禁一致）
+ * ★ 迁移识别（2026-10-11 追加；设计与自证见 docs/pipeline/lint-gate-migration.md）：
+ *   GodFile 拆分把整段代码**逐字搬**到新文件时，同一处缺陷只是换了宿主，它的 file 键随之改变 ⇒
+ *   旧键 resolved、新键 fresh ⇒ 现行判定会把它误读成「新违规」而 exit 1（缺陷本身没有变化）。
+ *   故：把同时出现、且满足下列**全部**条件的 resolved/fresh 成对判为**迁移**，不计入阻断项，单列「已迁移 N 条」：
+ *     rule 相同 + symbol 相同 + **规范化后的代码行文本相同** + 该三元组两侧条数**一一相等**。
+ *   方向一律是收窄假阳性：任一条不满足、或任一侧的文本取不到 ⇒ 不配对 ⇒ 仍然 exit 1（宁可漏判迁移，不可放行真新增）。
+ *   为此 --update-baseline 会在每条基线上附带 text = 该行源码的规范化文本（迁移指纹）；
+ *   旧基线（无 text）仍然可用，只是迁移识别退化为「旧宿主文件行仍可读」时才可能配对。
+ *
+ * 退出码：0 = 无基线外新违规（迁移不算新违规）；1 = 有基线外新违规；2 = 执行错误（与既有门禁一致）
  * 用法：
  *   node scripts/gates/lint-check.mjs                     # 默认：基线对比
  *   node scripts/gates/lint-check.mjs --update-baseline   # 生成/刷新基线
@@ -569,6 +578,136 @@ function diffBaseline(current, baseline) {
   return { fresh, resolved };
 }
 
+// ════════════════════════════════════════════════════════ 迁移识别（resolved ↔ fresh 配对）
+
+/**
+ * 永不参与迁移配对的规则。
+ * parse-error 是**文件级**状态（解析失败 ⇒ 该文件所有规则都被跳过），它的「位置」是文件本身而不是某一行；
+ * 任意两个文件都可能在同一条文本上解析失败 ⇒ 放开配对会产生真实的假阴性。这里选择保守：不配对（仍然阻断）。
+ */
+const MIGRATION_EXCLUDED_RULES = new Set(['parse-error']);
+
+/** 规范化代码行文本：折叠所有空白序列为单个空格 + 去首尾空白；空行 / 取不到（非字符串）⇒ null（null 永不配对） */
+function normalizeSourceText(raw) {
+  if (typeof raw !== 'string') return null;
+  const t = raw.replace(/\s+/g, ' ').trim();
+  return t.length ? t : null;
+}
+
+/**
+ * 读「某文件第 N 行」的源码原文（**未**规范化，规范化统一由 normalizeSourceText 负责）。
+ * file 为相对仓库根的 POSIX 路径（扫描结果与基线用的是同一口径，故 path.resolve(ROOT, file) 可还原）。
+ * 带缓存；读不到（文件已被删 / 行号越界 / IO 异常）返回 null —— 调用方据此 fail-closed。
+ */
+function makeSourceReader() {
+  const cache = new Map();
+  const linesOf = (relFile) => {
+    if (cache.has(relFile)) return cache.get(relFile);
+    let lines = null;
+    try { lines = fs.readFileSync(path.resolve(ROOT, relFile), 'utf8').split('\n'); } catch { lines = null; }
+    cache.set(relFile, lines);
+    return lines;
+  };
+  return (relFile, line) => {
+    const lines = linesOf(relFile);
+    return lines ? (lines[line - 1] ?? null) : null;
+  };
+}
+
+/**
+ * 迁移配对：把「同一处缺陷换了宿主」与「真正新增的缺陷」区分开（动机与自证见 docs/pipeline/lint-gate-migration.md）。
+ *
+ * 配对键（三元组）= rule + symbol + 规范化代码行文本；
+ * 判定：对每个三元组要求 **resolved 条数 === fresh 条数 > 0**（一一配对，不部分配对），且两侧 file 两两不同。
+ * 文本来源（任一侧取不到 ⇒ null ⇒ 该条目不参与配对，保持阻断）：
+ *   resolved 侧 —— ① 基线条目自带的 text（--update-baseline 写入的指纹，旧宿主文件被删也仍在）；
+ *                  ② 退回读当前工作树的「基线的 file:line」（旧宿主仍在且该行未挪动时才可用）；
+ *   fresh    侧 —— 本次扫描树的 file:line 源码。
+ *
+ * @param {object[]} current  本次全量违规（用于判断基线里的哪些行号已不在结果里）
+ * @param {object}   baseline 基线对象
+ * @param {{fresh:object[],resolved:{key:string,delta:number}[]}} diff diffBaseline 的结果
+ * @param {(file:string,line:number)=>string|null} readSource 取源码行原文（未规范化）
+ * @returns {{migrations:object[], blocking:object[], migratedResolved:number}}
+ */
+function detectMigrations(current, baseline, diff, readSource) {
+  const vacant = { migrations: [], blocking: diff ? diff.fresh.slice() : [], migratedResolved: 0 };
+  if (!diff || !diff.fresh.length || !diff.resolved.length) return vacant;
+
+  const groupByKey = (list) => {
+    const m = new Map();
+    for (const v of list) {
+      const k = v.file + '\u0000' + v.rule + '\u0000' + v.symbol;
+      const g = m.get(k);
+      if (g) g.push(v); else m.set(k, [v]);
+    }
+    return m;
+  };
+  const curByKey = groupByKey(current || []);
+  const baseByKey = groupByKey((baseline && baseline.violations) || []);
+
+  // ── resolved 侧：把 delta 落到具体基线条目上。
+  //    优先取「行号也不在本次结果里」的条目（更可能是真消失的那条）；候选不足时退回该键的全部基线条目。
+  const resolvedSide = [];
+  for (const r of diff.resolved) {
+    const parts = r.key.split('\u0000');
+    const file = parts[0], rule = parts[1], symbol = parts[2];
+    if (MIGRATION_EXCLUDED_RULES.has(rule)) continue;                       // 该规则永不配对 ⇒ 保持阻断
+    const baseItems = (baseByKey.get(r.key) || []).slice().sort((a, b) => a.line - b.line);
+    const curLines = new Set((curByKey.get(r.key) || []).map((v) => v.line));
+    let pool = baseItems.filter((it) => !curLines.has(it.line));
+    if (pool.length < r.delta) pool = baseItems;
+    for (const it of pool.slice(0, r.delta)) {
+      const stored = normalizeSourceText(it.text);                          // ① 基线指纹（权威快照）
+      const live = stored ? null : normalizeSourceText(readSource(it.file, it.line)); // ② 旧宿主仍在时的回退
+      resolvedSide.push({ file, rule, symbol, line: it.line, text: stored || live });
+    }
+  }
+
+  // ── fresh 侧：每条都取本次扫描树里该行的源码（与 resolved 侧同形：rule/symbol/file/line/text 全带齐）
+  const freshSide = diff.fresh.map((v, i) => ({
+    i, file: v.file, line: v.line, rule: v.rule, symbol: v.symbol, v,
+    text: normalizeSourceText(readSource(v.file, v.line)),
+  }));
+
+  // ── 按三元组归并（文本取不到的条目不进组 ⇒ 永不配对）
+  const groups = new Map();
+  const push = (side, e) => {
+    if (!e.text) return;
+    const k = e.rule + '\u0000' + e.symbol + '\u0000' + e.text;
+    let g = groups.get(k);
+    if (!g) { g = { rule: e.rule, symbol: e.symbol, text: e.text, resolved: [], fresh: [] }; groups.set(k, g); }
+    g[side].push(e);
+  };
+  for (const e of resolvedSide) push('resolved', e);
+  for (const e of freshSide) push('fresh', e);
+
+  const migrated = new Set();
+  const migrations = [];
+  const cmpPlace = (a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line);
+  for (const g of groups.values()) {
+    if (!g.resolved.length || g.resolved.length !== g.fresh.length) continue; // 多配少配都不配对
+    // 换宿主：resolved 的 file 与 fresh 的 file 必须两两不同。比对键含 file ⇒ 同一键不可能既 resolved 又 fresh，
+    // 这一步是防御性断言（配对逻辑被改坏时立刻退化为不配对 = 仍然阻断）。
+    if (g.resolved.some((r) => g.fresh.some((x) => x.file === r.file))) continue;
+    migrations.push({
+      rule: g.rule, symbol: g.symbol, text: g.text, count: g.resolved.length,
+      from: g.resolved.map((e) => ({ file: e.file, line: e.line })).sort(cmpPlace),
+      to: g.fresh.map((x) => ({ file: x.file, line: x.line })).sort(cmpPlace),
+    });
+    for (const f of g.fresh) migrated.add(f.i);
+  }
+  if (!migrations.length) return vacant;
+  migrations.sort((a, b) => (a.rule < b.rule ? -1 : a.rule > b.rule ? 1
+    : a.symbol < b.symbol ? -1 : a.symbol > b.symbol ? 1
+      : a.from[0].file < b.from[0].file ? -1 : a.from[0].file > b.from[0].file ? 1 : 0));
+  return {
+    migrations,
+    blocking: diff.fresh.filter((_, i) => !migrated.has(i)),
+    migratedResolved: migrations.reduce((n, m) => n + m.count, 0),
+  };
+}
+
 // ════════════════════════════════════════════════════════ 参数与报告
 
 function parseArgs(argv) {
@@ -592,22 +731,32 @@ function parseArgs(argv) {
 
 function buildBaselineJson(res) {
   const { counts } = tally(res.violations);
+  const readSource = makeSourceReader();
   return {
     gate: 'lint-check',
     createdAt: new Date().toISOString(),
     note: '本仓历史违规快照（3.4 万行从未 lint 过，一次性清零会诱发大面积改写 = 行为变更风险）。'
-      + '判定：只有「基线之外的新违规」才阻断；已存在的违规只统计。比对键 = file + rule + symbol，并按出现次数比对（行号漂移不算新违规）。',
+      + '判定：只有「基线之外的新违规」才阻断；已存在的违规只统计。比对键 = file + rule + symbol，并按出现次数比对（行号漂移不算新违规）。'
+      + '每条附 text = 该行源码的规范化文本（折叠空白后），作为「同一处缺陷换宿主」的迁移指纹：'
+      + '配对要求 rule + symbol + text 三项全同且两侧条数一一相等，缺 text 的旧基线仍然可用（迁移识别退化为不配对）。',
     scanRoots: SCAN_ROOTS,
     scannedFiles: res.files,
     scannedLines: res.lines,
     counts,
-    violations: res.violations.map((v) => ({ file: v.file, line: v.line, rule: v.rule, symbol: v.symbol })),
+    violations: res.violations.map((v) => {
+      const text = normalizeSourceText(readSource(v.file, v.line));
+      return { file: v.file, line: v.line, rule: v.rule, symbol: v.symbol, ...(text ? { text } : {}) };
+    }),
   };
 }
 
-function formatReport(res, baseline, diff, args) {
+function formatReport(res, baseline, diff, mig, args) {
   const cur = tally(res.violations);
   const baseCounts = baseline ? tally(baseline.violations || []).counts : Object.fromEntries(RULES.map((r) => [r, 0]));
+  const migrations = mig ? mig.migrations : [];
+  const migratedCount = migrations.reduce((n, m) => n + m.count, 0);
+  const blocked = mig ? mig.blocking : (diff ? diff.fresh : []);   // 阻断项 = 基线外的「真新增」（判定为迁移的不算）
+  const migratedResolved = mig ? mig.migratedResolved : 0;
   const L = [];
   L.push('=== lint-check: 常驻静态检查门禁（' + (baseline ? '基线对比' : '未建立基线') + '）===');
   L.push('扫描面      : ' + SCAN_ROOTS.join(' + ') + '（.vue 只查 <script>/<script setup> 脚本块，模板不查）');
@@ -619,20 +768,36 @@ function formatReport(res, baseline, diff, args) {
   L.push('── 分类统计（基线 → 当前，新增） '.padEnd(78, '─'));
   L.push('  规则                   基线      当前      新增');
   for (const r of RULES) {
-    const nw = diff ? diff.fresh.filter((v) => v.rule === r).length : 0;
-    const flag = nw > 0 ? '  ← 新增' : '';
+    const nw = diff ? diff.fresh.filter((v) => v.rule === r).length : 0;   // 「新增」列 = 基线外的新键（口径与改动前一致）
+    const nb = blocked.filter((v) => v.rule === r).length;                 // 其中真正阻断的（已扣除判定为迁移的）
+    const flag = nb > 0 ? '  ← 新增' : nw > 0 ? '  ← 已迁移（不计入阻断）' : '';
     L.push('  ' + r.padEnd(22) + String(baseCounts[r] ?? 0).padStart(6) + String(cur.counts[r] ?? 0).padStart(10) + String(nw).padStart(10) + flag);
   }
   L.push('  ' + '合计'.padEnd(21) + String((baseline?.violations || []).length).padStart(6) + String(res.violations.length).padStart(10)
     + String(diff ? diff.fresh.length : 0).padStart(10));
+  if (migratedCount > 0) L.push('  · 「新增」列 = 基线外新键（含判定为迁移的 ' + migratedCount + ' 条）；实际阻断项 = ' + blocked.length + ' 条');
   L.push('');
   L.push('── 基线之外的新违规（阻断项） '.padEnd(78, '─'));
   if (!diff) L.push('  （未建立基线，无法判定）');
-  else if (diff.fresh.length === 0) L.push('  （无）');
-  else for (const v of diff.fresh.slice(0, 60)) L.push('  ✗ ' + v.file + ':' + v.line + '  ' + v.rule + '  ' + v.symbol + '  — ' + v.message);
-  if (diff && diff.fresh.length > 60) L.push('  ... 其余 ' + (diff.fresh.length - 60) + ' 条已省略（--json 取全量）');
-  if (diff && diff.resolved.length) L.push('  · 已消除（基线内被修掉）: ' + diff.resolved.reduce((n, x) => n + x.delta, 0) + ' 条');
+  else if (blocked.length === 0) L.push('  （无）');
+  else for (const v of blocked.slice(0, 60)) L.push('  ✗ ' + v.file + ':' + v.line + '  ' + v.rule + '  ' + v.symbol + '  — ' + v.message);
+  if (blocked.length > 60) L.push('  ... 其余 ' + (blocked.length - 60) + ' 条已省略（--json 取全量）');
+  // 「已消除」只算真正修掉的：被判定为迁移的那部分虽然从旧宿主消失，但并没有消失（它换了宿主）
+  const resolvedNet = diff ? diff.resolved.reduce((n, x) => n + x.delta, 0) - migratedResolved : 0;
+  if (resolvedNet > 0) L.push('  · 已消除（基线内被修掉）: ' + resolvedNet + ' 条');
   L.push('');
+  if (migratedCount > 0) {
+    L.push('── 已迁移 ' + migratedCount + ' 条（rule + symbol + 规范化行文本 三项全同、两侧条数一一相等） '.padEnd(78, '─'));
+    L.push('  （同一处缺陷换宿主：不计入阻断项，也不计入「已消除」）');
+    for (const m of migrations) {
+      L.push('  ⇄ ' + m.rule + '  ' + m.symbol + '  ｜ ' + m.text);
+      for (let i = 0; i < Math.max(m.from.length, m.to.length); i++) {
+        const a = m.from[i], b = m.to[i];
+        L.push('      ' + (a ? a.file + ':' + a.line : '（无）') + '   →   ' + (b ? b.file + ':' + b.line : '（无）'));
+      }
+    }
+    L.push('');
+  }
   L.push('── 基线内违规 Top ' + args.top + ' 文件（只统计、不阻断） '.padEnd(78, '─'));
   if (cur.topFiles.length === 0) L.push('  （无）');
   else for (const [f, n] of cur.topFiles.slice(0, args.top)) L.push('  ' + String(n).padStart(5) + '  ' + f);
@@ -642,9 +807,10 @@ function formatReport(res, baseline, diff, args) {
     for (const v of res.violations) L.push('  ' + v.file + ':' + v.line + '  ' + v.rule + '  ' + v.symbol);
     L.push('');
   }
-  const verdict = !baseline ? 'NO-BASELINE' : diff.fresh.length ? 'FAIL' : 'PASS';
-  L.push(verdict === 'PASS' ? '结论：PASS（无基线外新违规）'
-    : verdict === 'FAIL' ? '结论：FAIL（发现 ' + diff.fresh.length + ' 条基线之外的新违规）'
+  const verdict = !baseline ? 'NO-BASELINE' : blocked.length ? 'FAIL' : 'PASS';
+  const migNote = migratedCount > 0 ? '；另有 ' + migratedCount + ' 条为同一处缺陷换宿主（迁移），不计入阻断' : '';
+  L.push(verdict === 'PASS' ? '结论：PASS（无基线外新违规' + (migratedCount > 0 ? '；' + migratedCount + ' 条为迁移，不计入阻断' : '') + '）'
+    : verdict === 'FAIL' ? '结论：FAIL（发现 ' + blocked.length + ' 条基线之外的新违规' + migNote + '）'
       : '结论：无法判定（基线缺失）');
   return { text: L.join('\n'), verdict };
 }
@@ -875,6 +1041,111 @@ function selfTest() {
       lines.push('  ' + (ok ? '✓' : '✗') + ' ' + desc);
       if (!ok) failures.push('基线对比逻辑自检失败：' + desc);
     }
+
+    // ── ⑤ 迁移配对逻辑（同一处缺陷换宿主 vs 真新增）—— 纯逻辑：源码行由注入的假读取器提供，不碰磁盘
+    const place = (file, line, rule, symbol) => ({ file, line, rule, symbol, message: '' });
+    let fakeTree = {};
+    const fakeRead = (file, line) => fakeTree[file + ':' + line] ?? null;
+    const migCases = [
+      {
+        desc: '成对迁移（rule+symbol+行文本全同，1↔1）⇒ 记为迁移、不阻断（缩进/空白不同不影响：规范化折叠空白）',
+        base: [place('server/src/controllers/old.js', 354, 'no-unused-vars', 'count')],
+        cur: [place('server/src/interface/http/batch.js', 42, 'no-unused-vars', 'count')],
+        text: { 'server/src/controllers/old.js:354': '    let count = 0;', 'server/src/interface/http/batch.js:42': '\t  let   count = 0;  ' },
+        expect: { migrations: 1, migrated: 1, blocking: 0 },
+      },
+      {
+        desc: '成对迁移 2↔2（同一三元组两条）⇒ 记为 1 组、迁移 2 条、不阻断',
+        base: [place('a/old.js', 10, 'no-unused-vars', 'count'), place('a/old.js', 30, 'no-unused-vars', 'count')],
+        cur: [place('a/new1.js', 5, 'no-unused-vars', 'count'), place('a/new2.js', 7, 'no-unused-vars', 'count')],
+        text: { 'a/old.js:10': 'let count = 0;', 'a/old.js:30': 'let count = 0;', 'a/new1.js:5': 'let count = 0;', 'a/new2.js:7': 'let count = 0;' },
+        expect: { migrations: 1, migrated: 2, blocking: 0 },
+      },
+      {
+        desc: '部分迁移（2 组可配对 + 1 条真新增）⇒ 配对 2 条、剩下 1 条仍阻断',
+        base: [place('a/oldA.js', 1, 'no-unused-vars', 'count'), place('a/oldB.js', 2, 'no-unused-vars', 'foo')],
+        cur: [place('a/newA.js', 3, 'no-unused-vars', 'count'), place('a/newB.js', 4, 'no-unused-vars', 'foo'), place('a/newC.js', 9, 'no-unused-vars', 'bar')],
+        text: { 'a/oldA.js:1': 'let count = 0;', 'a/oldB.js:2': 'const foo = 1;', 'a/newA.js:3': 'let count = 0;', 'a/newB.js:4': 'const foo = 1;', 'a/newC.js:9': 'const bar = 2;' },
+        expect: { migrations: 2, migrated: 2, blocking: 1 },
+      },
+      {
+        desc: '代码文本不同（count = 0 → count = 1）⇒ 不配对、仍阻断',
+        base: [place('a/old.js', 10, 'no-unused-vars', 'count')],
+        cur: [place('a/new.js', 5, 'no-unused-vars', 'count')],
+        text: { 'a/old.js:10': 'let count = 0;', 'a/new.js:5': 'let count = 1;' },
+        expect: { migrations: 0, migrated: 0, blocking: 1 },
+      },
+      {
+        desc: 'symbol 改名（count → count2）⇒ 不配对、仍阻断',
+        base: [place('a/old.js', 10, 'no-unused-vars', 'count')],
+        cur: [place('a/new.js', 5, 'no-unused-vars', 'count2')],
+        text: { 'a/old.js:10': 'let count = 0;', 'a/new.js:5': 'let count2 = 0;' },
+        expect: { migrations: 0, migrated: 0, blocking: 1 },
+      },
+      {
+        desc: 'rule 不同（no-unused-vars → no-undef，symbol 与文本都相同）⇒ 不配对、仍阻断',
+        base: [place('a/old.js', 10, 'no-unused-vars', 'count')],
+        cur: [place('a/new.js', 5, 'no-undef', 'count')],
+        text: { 'a/old.js:10': 'let count = 0;', 'a/new.js:5': 'let count = 0;' },
+        expect: { migrations: 0, migrated: 0, blocking: 1 },
+      },
+      {
+        desc: '条数不等（resolved 2 / fresh 1）⇒ 一条都不配、仍阻断',
+        base: [place('a/old.js', 10, 'no-unused-vars', 'count'), place('a/old.js', 30, 'no-unused-vars', 'count')],
+        cur: [place('a/new.js', 5, 'no-unused-vars', 'count')],
+        text: { 'a/old.js:10': 'let count = 0;', 'a/old.js:30': 'let count = 0;', 'a/new.js:5': 'let count = 0;' },
+        expect: { migrations: 0, migrated: 0, blocking: 1 },
+      },
+      {
+        desc: '条数不等反向（resolved 1 / fresh 2）⇒ 一条都不配、仍阻断 2 条',
+        base: [place('a/old.js', 10, 'no-unused-vars', 'count')],
+        cur: [place('a/new.js', 5, 'no-unused-vars', 'count'), place('a/new.js', 9, 'no-unused-vars', 'count')],
+        text: { 'a/old.js:10': 'let count = 0;', 'a/new.js:5': 'let count = 0;', 'a/new.js:9': 'let count = 0;' },
+        expect: { migrations: 0, migrated: 0, blocking: 2 },
+      },
+      {
+        desc: '旧宿主已删除且基线无 text（旧文本取不到）⇒ fail-closed、不配对、仍阻断',
+        base: [place('a/deleted.js', 10, 'no-unused-vars', 'count')],
+        cur: [place('a/new.js', 5, 'no-unused-vars', 'count')],
+        text: { 'a/new.js:5': 'let count = 0;' },
+        expect: { migrations: 0, migrated: 0, blocking: 1 },
+      },
+      {
+        desc: 'parse-error 永不参与配对（文件级状态，不是某一行的缺陷）⇒ 仍阻断',
+        base: [place('a/old.js', 1, 'parse-error', '<syntax>')],
+        cur: [place('a/new.js', 1, 'parse-error', '<syntax>')],
+        text: { 'a/old.js:1': 'export function broken( { return 1; }', 'a/new.js:1': 'export function broken( { return 1; }' },
+        expect: { migrations: 0, migrated: 0, blocking: 1 },
+      },
+      {
+        desc: '新旧宿主同一 file（合成反例：比对键的互斥性被破坏）⇒ 防御性拒绝配对、仍阻断',
+        base: [place('a/same.js', 10, 'no-unused-vars', 'count')],
+        cur: [place('a/same.js', 99, 'no-unused-vars', 'count')],
+        text: { 'a/same.js:10': 'let count = 0;', 'a/same.js:99': 'let count = 0;' },
+        fakeDiff: {
+          fresh: [place('a/same.js', 99, 'no-unused-vars', 'count')],
+          resolved: [{ key: 'a/same.js\u0000no-unused-vars\u0000count', delta: 1 }],
+        },
+        expect: { migrations: 0, migrated: 0, blocking: 1 },
+      },
+    ];
+    lines.push('');
+    lines.push('── ⑤ 迁移配对逻辑（同一处缺陷换宿主 vs 真新增） '.padEnd(74, '─'));
+    let migHits = 0;
+    for (const c of migCases) {
+      fakeTree = c.text || {};
+      const b = { violations: c.base };
+      const d = c.fakeDiff || diffBaseline(c.cur, b);
+      const m = detectMigrations(c.cur, b, d, fakeRead);
+      const got = { migrations: m.migrations.length, migrated: m.migrations.reduce((n, x) => n + x.count, 0), blocking: m.blocking.length };
+      const ok = got.migrations === c.expect.migrations && got.migrated === c.expect.migrated && got.blocking === c.expect.blocking;
+      if (ok) migHits++;
+      lines.push('  ' + (ok ? '✓' : '✗') + ' ' + c.desc);
+      lines.push('        实测 迁移组 ' + got.migrations + ' / 迁移条数 ' + got.migrated + ' / 阻断 ' + got.blocking
+        + '　期望 迁移组 ' + c.expect.migrations + ' / 迁移条数 ' + c.expect.migrated + ' / 阻断 ' + c.expect.blocking);
+      if (!ok) failures.push('迁移配对逻辑自检失败：' + c.desc);
+    }
+    lines.push('  小计：' + migHits + '/' + migCases.length + ' 条迁移用例符合预期');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -912,6 +1183,7 @@ function main() {
     console.log('文件        : ' + path.relative(ROOT, BASELINE_PATH));
     console.log('扫描        : ' + res.files + ' 文件 / ' + res.lines + ' 行');
     console.log('违规总数    : ' + res.violations.length + (before ? '（旧基线 ' + (before.violations || []).length + '）' : '（此前无基线）'));
+    console.log('迁移指纹    : 每条附带 text = 该行源码的规范化文本（供「同一处缺陷换宿主」的迁移配对使用）');
     for (const r of RULES) console.log('  ' + r.padEnd(22) + String(counts[r] || 0).padStart(6));
     console.log('Top 文件：');
     for (const [f, n] of topFiles.slice(0, args.top)) console.log('  ' + String(n).padStart(5) + '  ' + f);
@@ -920,7 +1192,8 @@ function main() {
 
   const baseline = readBaseline();
   const diff = baseline ? diffBaseline(res.violations, baseline) : null;
-  const { text, verdict } = formatReport(res, baseline, diff, args);
+  const mig = diff ? detectMigrations(res.violations, baseline, diff, makeSourceReader()) : null;
+  const { text, verdict } = formatReport(res, baseline, diff, mig, args);
 
   if (args.json) {
     console.log(JSON.stringify({
@@ -934,6 +1207,8 @@ function main() {
       baseline: baseline ? { path: path.relative(ROOT, BASELINE_PATH), total: (baseline.violations || []).length, createdAt: baseline.createdAt } : null,
       newViolations: diff ? diff.fresh : null,
       resolved: diff ? diff.resolved : null,
+      blockingViolations: diff ? (mig ? mig.blocking : diff.fresh) : null,   // 新增字段：扣除迁移后的真·阻断项（= 退出码依据）
+      migrations: diff ? (mig ? mig.migrations : []) : null,                  // 新增字段：判定为「同一处缺陷换宿主」的配对明细
       violations: args.list || args.rule ? res.violations.filter((v) => !args.rule || v.rule === args.rule) : undefined,
       verdict,
     }, null, 2));

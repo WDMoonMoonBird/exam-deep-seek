@@ -1,7 +1,7 @@
 {
   "gate": "lint-check",
-  "createdAt": "2026-10-11T04:41:28.133Z",
-  "note": "本仓历史违规快照（3.4 万行从未 lint 过，一次性清零会诱发大面积改写 = 行为变更风险）。判定：只有「基线之外的新违规」才阻断；已存在的违规只统计。比对键 = file + rule + symbol，并按出现次数比对（行号漂移不算新违规）。",
+  "createdAt": "2026-10-11T05:22:03.584Z",
+  "note": "本仓历史违规快照（3.4 万行从未 lint 过，一次性清零会诱发大面积改写 = 行为变更风险）。判定：只有「基线之外的新违规」才阻断；已存在的违规只统计。比对键 = file + rule + symbol，并按出现次数比对（行号漂移不算新违规）。每条附 text = 该行源码的规范化文本（折叠空白后），作为「同一处缺陷换宿主」的迁移指纹：配对要求 rule + symbol + text 三项全同且两侧条数一一相等，缺 text 的旧基线仍然可用（迁移识别退化为不配对）。",
   "scanRoots": [
     "client/src",
     "server/src"
@@ -22,187 +22,218 @@
       "file": "client/src/api/checker.js",
       "line": 71,
       "rule": "no-unused-vars",
-      "symbol": "TEMPLATES"
+      "symbol": "TEMPLATES",
+      "text": "const TEMPLATES = ["
     },
     {
       "file": "client/src/api/checker.js",
       "line": 138,
       "rule": "no-unused-vars",
-      "symbol": "seq"
+      "symbol": "seq",
+      "text": "function mockEvidence(ruleType, seq) {"
     },
     {
       "file": "client/src/components/checker/CheckerWizard.vue",
       "line": 166,
       "rule": "no-unused-vars",
-      "symbol": "getHealthReport"
+      "symbol": "getHealthReport",
+      "text": "getCheckerStatus, generateChecker, confirmChecker, rollbackChecker, getHealthReport, getRuleVersions,"
     },
     {
       "file": "client/src/components/checker/CheckerWizard.vue",
       "line": 166,
       "rule": "no-unused-vars",
-      "symbol": "getRuleVersions"
+      "symbol": "getRuleVersions",
+      "text": "getCheckerStatus, generateChecker, confirmChecker, rollbackChecker, getHealthReport, getRuleVersions,"
     },
     {
       "file": "client/src/composables/submit/useAnswerState.js",
       "line": 34,
       "rule": "no-unused-vars",
-      "symbol": "draftTimer"
+      "symbol": "draftTimer",
+      "text": "let draftTimer = null;"
     },
     {
       "file": "client/src/composables/submit/useAnswerState.js",
       "line": 35,
       "rule": "no-unused-vars",
-      "symbol": "deadlineTimer"
+      "symbol": "deadlineTimer",
+      "text": "let deadlineTimer = null;"
     },
     {
       "file": "client/src/views/admin/Monitor.vue",
       "line": 57,
       "rule": "no-unused-vars",
-      "symbol": "message"
+      "symbol": "message",
+      "text": "import { message } from 'ant-design-vue';"
     },
     {
       "file": "client/src/views/teacher/Layout.vue",
       "line": 145,
       "rule": "no-unused-vars",
-      "symbol": "ExperimentOutlined"
+      "symbol": "ExperimentOutlined",
+      "text": "import { QuestionCircleOutlined, UserOutlined, NodeIndexOutlined, UserSwitchOutlined, PoweroffOutlined, AppstoreOutlined, IdcardOutlined, DatabaseOutlined, FileTextOutlined, SafetyCertificateOutlined, TeamOutlined, BookOutlined, ExperimentOutlined, BulbOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined, LineChartOutlined } from '@ant-design/icons-vue';"
     },
     {
       "file": "client/src/views/teacher/ProjectQuestionEdit.vue",
       "line": 199,
       "rule": "no-unused-vars",
-      "symbol": "CheckCircleOutlined"
+      "symbol": "CheckCircleOutlined",
+      "text": "import { LoadingOutlined, FileTextOutlined, CheckCircleOutlined, CheckCircleFilled } from '@ant-design/icons-vue';"
     },
     {
       "file": "client/src/views/teacher/ReviewClass.vue",
       "line": 203,
       "rule": "no-unused-vars",
-      "symbol": "reviewSummary"
+      "symbol": "reviewSummary",
+      "text": "const reviewSummary = computed(() => {"
     },
     {
       "file": "server/src/controllers/projectReviewController.js",
       "line": 13,
       "rule": "no-unused-vars",
-      "symbol": "readDirFiles"
+      "symbol": "readDirFiles",
+      "text": "import { enqueueProjectGrade, readDirFiles } from '../services/projectGrading.js';"
     },
     {
       "file": "server/src/controllers/reviewController.js",
       "line": 354,
       "rule": "no-unused-vars",
-      "symbol": "count"
+      "symbol": "count",
+      "text": "let count = 0;"
     },
     {
       "file": "server/src/controllers/teacherController.js",
       "line": 7,
       "rule": "no-unused-vars",
-      "symbol": "DEFAULT_MAX_SCORE"
+      "symbol": "DEFAULT_MAX_SCORE",
+      "text": "import { DEFAULT_MAX_SCORE, ABNORMAL_FEEDBACK } from '../constants.js';"
     },
     {
       "file": "server/src/controllers/teacherController.js",
       "line": 9,
       "rule": "no-unused-vars",
-      "symbol": "getTeamTeacherIds"
+      "symbol": "getTeamTeacherIds",
+      "text": "import { getVisibleClassIds, getTeamTeacherIds, getMyTeamIds } from './teamController.js';"
     },
     {
       "file": "server/src/controllers/teacherController.js",
       "line": 159,
       "rule": "no-unused-vars",
-      "symbol": "gradeProject"
+      "symbol": "gradeProject",
+      "text": "const gradeProject = async (req, res) => {"
     },
     {
       "file": "server/src/controllers/teamController.js",
       "line": 211,
       "rule": "no-unused-vars",
-      "symbol": "schoolId"
+      "symbol": "schoolId",
+      "text": "export async function getTeamTeacherIds(teacherId, schoolId) {"
     },
     {
       "file": "server/src/domain/entities.js",
       "line": 4,
       "rule": "no-unused-vars",
-      "symbol": "EntityNotFoundError"
+      "symbol": "EntityNotFoundError",
+      "text": "import { SubmissionClosedError, DuplicateSubmissionError, IllegalStateError, EntityNotFoundError } from './errors.js';"
     },
     {
       "file": "server/src/infrastructure/ai/checker/llm.js",
       "line": 7,
       "rule": "no-unused-vars",
-      "symbol": "getModel"
+      "symbol": "getModel",
+      "text": "import { getBaseUrl, getApiKey, getModel } from '../deepseek/index.js';"
     },
     {
       "file": "server/src/infrastructure/ai/deepseek-gateway.js",
       "line": 69,
       "rule": "no-unused-vars",
-      "symbol": "controller"
+      "symbol": "controller",
+      "text": "const { res, controller, timer } = await this.#request({"
     },
     {
       "file": "server/src/infrastructure/ai/deepseek-gateway.js",
       "line": 125,
       "rule": "no-unused-vars",
-      "symbol": "controller"
+      "symbol": "controller",
+      "text": "const { res, controller, timer } = await this.#request({"
     },
     {
       "file": "server/src/infrastructure/ai/deepseek-gateway.js",
       "line": 177,
       "rule": "no-unused-vars",
-      "symbol": "controller"
+      "symbol": "controller",
+      "text": "const { res, controller, timer } = await this.#request({"
     },
     {
       "file": "server/src/infrastructure/ai/deepseek/config.js",
       "line": 6,
       "rule": "no-unused-vars",
-      "symbol": "logger"
+      "symbol": "logger",
+      "text": "import logger from '../../../utils/logger.js';"
     },
     {
       "file": "server/src/infrastructure/ai/deepseek/submission-grading.js",
       "line": 7,
       "rule": "no-unused-vars",
-      "symbol": "DEFAULT_MAX_SCORE"
+      "symbol": "DEFAULT_MAX_SCORE",
+      "text": "import { ABNORMAL_FEEDBACK, DEFAULT_MAX_SCORE } from '../../../constants.js';"
     },
     {
       "file": "server/src/infrastructure/execution/ast-analyzer.js",
       "line": 21,
       "rule": "no-unused-vars",
-      "symbol": "language"
+      "symbol": "language",
+      "text": "async analyze(dir, language = 'java') {"
     },
     {
       "file": "server/src/infrastructure/rule/syntax.js",
       "line": 20,
       "rule": "no-unused-vars",
-      "symbol": "nodeRequire"
+      "symbol": "nodeRequire",
+      "text": "const nodeRequire = createRequire(import.meta.url);"
     },
     {
       "file": "server/src/services/defectScoring.js",
       "line": 60,
       "rule": "no-unused-vars",
-      "symbol": "mapping"
+      "symbol": "mapping",
+      "text": "const mapping = ["
     },
     {
       "file": "server/src/services/factExtractors/python.js",
       "line": 164,
       "rule": "no-unused-vars",
-      "symbol": "language"
+      "symbol": "language",
+      "text": "export function extractPythonFacts({ projectRoot, files, facts, state, language }) {"
     },
     {
       "file": "server/src/services/projectGrader.js",
       "line": 8,
       "rule": "no-unused-vars",
-      "symbol": "fs"
+      "symbol": "fs",
+      "text": "import fs from 'fs';"
     },
     {
       "file": "server/src/services/projectGrader.js",
       "line": 9,
       "rule": "no-unused-vars",
-      "symbol": "path"
+      "symbol": "path",
+      "text": "import path from 'path';"
     },
     {
       "file": "server/src/services/projectGrader.js",
       "line": 11,
       "rule": "no-unused-vars",
-      "symbol": "getLanguageByExt"
+      "symbol": "getLanguageByExt",
+      "text": "import { getLanguageByExt, isIgnored } from '../utils/fileTree.js';"
     },
     {
       "file": "server/src/services/projectGrader.js",
       "line": 11,
       "rule": "no-unused-vars",
-      "symbol": "isIgnored"
+      "symbol": "isIgnored",
+      "text": "import { getLanguageByExt, isIgnored } from '../utils/fileTree.js';"
     }
   ]
 }
