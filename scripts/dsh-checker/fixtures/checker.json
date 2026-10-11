@@ -1,0 +1,129 @@
+{
+  "schema_version": "checker/1",
+  "checker_id": "sha256:be8996bb07af5b44d9c75545e0fdced216133ac1a0fbb4165532e06c2b251ba7",
+  "assignment_ref": {
+    "assignment_id": "A-2026-10-11-fixture",
+    "question_id": "Q-UserManagement",
+    "rubric_hash": "sha256:afe275fc9916c5ce3295688d39eee424ac156e3a57f6568c200c861a2d7ecfbd",
+    "standard_hash": "sha256:40462a0515a6995ee1c6c4d6659f115aa581e30392bb403619285a3fe388819b"
+  },
+  "generated": {
+    "session_id": "fixture-session-0001",
+    "model": "none(人工夹具)",
+    "created_at": "2026-10-11T23:00:00+08:00",
+    "generator": "dsh-checker/fixtures-build"
+  },
+  "scoring": {
+    "max_score": 100,
+    "aggregate": "sum_clamped",
+    "rounding": "half_up_1",
+    "zero_credit_rule": "missing_required_path"
+  },
+  "input_contract": {
+    "project_root_glob": "**/package.json",
+    "required_paths": [
+      "src/main.js"
+    ],
+    "ignore": [
+      "node_modules/**",
+      ".git/**",
+      "dist/**"
+    ],
+    "encoding": "utf-8"
+  },
+  "predicates": [
+    {
+      "id": "P01",
+      "group": "工程结构",
+      "item": "存在工程根 package.json",
+      "max_score": 10,
+      "rule_type": "file_exists",
+      "params": {
+        "path": "package.json"
+      }
+    },
+    {
+      "id": "P02",
+      "group": "登录",
+      "item": "登录页文件存在",
+      "max_score": 20,
+      "rule_type": "file_exists",
+      "params": {
+        "path": "src/views/Login.vue"
+      }
+    },
+    {
+      "id": "P03",
+      "group": "状态管理",
+      "item": "user store 做了持久化",
+      "max_score": 30,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/stores/user.js",
+        "pattern": "localStorage|pinia-plugin-persist",
+        "min_count": 1
+      },
+      "deductions": [
+        {
+          "code": "NO_PERSIST",
+          "when": "hit==0",
+          "delta": -1.0
+        }
+      ]
+    },
+    {
+      "id": "P04",
+      "group": "页面齐备",
+      "item": "页面文件与入口都在",
+      "max_score": 15,
+      "rule_type": "glob_covers",
+      "params": {
+        "patterns": [
+          "src/views/*.vue",
+          "src/main.js"
+        ]
+      }
+    },
+    {
+      "id": "P05",
+      "group": "入口接线",
+      "item": "main.js 装配 Pinia",
+      "max_score": 25,
+      "rule_type": "contains_text",
+      "params": {
+        "path": "src/main.js",
+        "text": "createPinia",
+        "min_count": 1
+      },
+      "deductions": [
+        {
+          "code": "NO_ROUTER",
+          "when": "hit==1",
+          "delta": -5.0
+        }
+      ]
+    }
+  ],
+  "deductions": [
+    {
+      "code": "MISSING_FILE",
+      "match": {
+        "status": "missing",
+        "rule_type": "*"
+      },
+      "delta": -1.0
+    },
+    {
+      "code": "EMPTY_FILE",
+      "match": {
+        "status": "empty",
+        "rule_type": "*"
+      },
+      "delta": -0.5
+    }
+  ],
+  "evidence_policy": {
+    "require_line": true,
+    "quote_max_chars": 120
+  }
+}

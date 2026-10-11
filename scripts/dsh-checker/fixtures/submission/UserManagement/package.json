@@ -1,0 +1,9 @@
+{
+  "name": "usermgmt",
+  "version": "1.0.0",
+  "dependencies": {
+    "vue": "^3.4.0",
+    "pinia": "^2.1.0",
+    "axios": "^1.6.0"
+  }
+}
