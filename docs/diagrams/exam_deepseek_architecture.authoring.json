@@ -1,0 +1,361 @@
+{
+  "version": 1,
+  "kind": "cards",
+  "template": "stack-arch",
+  "template_version": 1,
+  "id": "n_15394cc0dcb8",
+  "title": "Exam-DeepSeek 系统总体架构",
+  "role": "layout",
+  "columns": 2,
+  "flow": "column",
+  "items": [
+    {
+      "id": "fe_ui",
+      "title": "前端渲染层 · client/interface",
+      "role": "section",
+      "columns": 2,
+      "flow": "row",
+      "items": [
+        {
+          "id": "n_6164cbf1e3d8",
+          "title": "教师端：建题 / 布置作业 / 三栏审核",
+          "role": "entity"
+        },
+        {
+          "id": "n_af59d7fd8a52",
+          "title": "学生端：答题 / 提交 / 成绩卡片",
+          "role": "entity"
+        },
+        {
+          "id": "n_b8baafd13a2b",
+          "title": "管理端：学校 / 班级 / 系统配置",
+          "role": "entity"
+        },
+        {
+          "id": "n_1439ffa1bf5d",
+          "title": "路由与通用组件（Ant Design Vue）",
+          "role": "entity"
+        },
+        {
+          "id": "n_411a97f4aa43",
+          "title": "Monaco 编辑器：文件树 + 多 tab",
+          "role": "entity"
+        }
+      ]
+    },
+    {
+      "id": "fe_app",
+      "title": "前端应用层 · client/application（用例外观）",
+      "role": "section",
+      "columns": 2,
+      "flow": "row",
+      "items": [
+        {
+          "id": "n_0872ec635235",
+          "title": "Pinia stores：会话 / 评分审核状态",
+          "role": "entity"
+        },
+        {
+          "id": "n_bc51b461742a",
+          "title": "composables：认证 / 提交 / 评分 / 上传",
+          "role": "entity"
+        }
+      ]
+    },
+    {
+      "id": "fe_infra",
+      "title": "前端领域与基础设施 · client/domain + infrastructure",
+      "role": "section",
+      "columns": 2,
+      "flow": "row",
+      "items": [
+        {
+          "id": "n_1c65ec276c51",
+          "title": "纯函数：uploadFilter / format / fileLang",
+          "role": "entity"
+        },
+        {
+          "id": "n_236d704023ec",
+          "title": "axios API 适配器（领域端点封装）",
+          "role": "entity"
+        },
+        {
+          "id": "n_b3cb4a4bb2eb",
+          "title": "token 存取（本地存储）",
+          "role": "entity"
+        },
+        {
+          "id": "n_c2729713694c",
+          "title": "socket.io-client 实时通道",
+          "role": "entity"
+        }
+      ]
+    },
+    {
+      "id": "gateway",
+      "title": "接入与部署",
+      "role": "section",
+      "columns": 2,
+      "flow": "row",
+      "items": [
+        {
+          "id": "n_983b0cf71b79",
+          "title": "Nginx：静态托管 + /api 反向代理",
+          "role": "entity"
+        },
+        {
+          "id": "n_07dfc9bd87f1",
+          "title": "SSL 证书与 HTTPS 入口",
+          "role": "entity"
+        },
+        {
+          "id": "n_45d681bf50ad",
+          "title": "PM2：Node 进程守护",
+          "role": "entity"
+        }
+      ]
+    },
+    {
+      "id": "grading",
+      "title": "异步评分执行（worker 独立进程）",
+      "role": "section",
+      "columns": 2,
+      "flow": "row",
+      "items": [
+        {
+          "id": "n_e836f4706175",
+          "title": "评分队列 + 并发信号量（3 并发）",
+          "role": "entity"
+        },
+        {
+          "id": "n_0dec965e831c",
+          "title": "三引擎加权：机器 / AST / AI",
+          "role": "entity"
+        },
+        {
+          "id": "n_f575f851df91",
+          "title": "状态机：pending → grading → done",
+          "role": "entity"
+        },
+        {
+          "id": "n_830292499638",
+          "title": "DeepSeek 调用：180s 超时 / 重试",
+          "role": "entity"
+        },
+        {
+          "id": "n_cf27f06b202a",
+          "title": "审核放分：reviewed 才可见成绩",
+          "role": "entity"
+        }
+      ]
+    },
+    {
+      "id": "be_interface",
+      "title": "后端接口层 · interface（只做翻译）",
+      "role": "section",
+      "columns": 2,
+      "flow": "row",
+      "items": [
+        {
+          "id": "n_7cc25a726c03",
+          "title": "声明式路由表（auth / teacher / student）",
+          "role": "entity"
+        },
+        {
+          "id": "n_fbf28f6efc7b",
+          "title": "薄控制器：参数 → 用例 → 响应",
+          "role": "entity"
+        },
+        {
+          "id": "n_115a3beb2e21",
+          "title": "中间件：JWT / 角色 / 资源守卫 / 限流",
+          "role": "entity"
+        },
+        {
+          "id": "n_a0c4f4da2429",
+          "title": "Socket.IO：领域事件 → 前端推送",
+          "role": "entity"
+        }
+      ]
+    },
+    {
+      "id": "be_app",
+      "title": "后端应用层 · application（用例编排）",
+      "role": "section",
+      "columns": 2,
+      "flow": "row",
+      "items": [
+        {
+          "id": "n_9fcedabccd69",
+          "title": "用例：认证 / 题库 / 作业 / 提交 / 评分 / 项目",
+          "role": "entity"
+        },
+        {
+          "id": "n_c53377019a4a",
+          "title": "评分编排器：机器 → AST → AI → 加权",
+          "role": "entity"
+        },
+        {
+          "id": "n_8ede431ee84d",
+          "title": "命令与 DTO：入参校验 / 幂等键",
+          "role": "entity"
+        }
+      ]
+    },
+    {
+      "id": "be_domain",
+      "title": "后端领域层 · domain（零框架依赖）",
+      "role": "section",
+      "columns": 2,
+      "flow": "row",
+      "items": [
+        {
+          "id": "n_fd6036754f0c",
+          "title": "实体与聚合（用户 / 题目 / 提交 / 项目）",
+          "role": "entity"
+        },
+        {
+          "id": "n_c2e4ff1effff",
+          "title": "值对象：Score / Status / 评分标准",
+          "role": "entity"
+        },
+        {
+          "id": "n_0892f3392988",
+          "title": "领域服务：分值校验 / 加权 / 截止判定",
+          "role": "entity"
+        },
+        {
+          "id": "n_25edcbe71574",
+          "title": "端口：仓储 / AI 网关 / 执行器 / 事件 / UoW",
+          "role": "entity"
+        },
+        {
+          "id": "n_514b6f908ee6",
+          "title": "领域事件：评分完成 / 项目评分完成",
+          "role": "entity"
+        }
+      ]
+    },
+    {
+      "id": "be_infra",
+      "title": "后端基础设施层 · infrastructure（实现端口）",
+      "role": "section",
+      "columns": 2,
+      "flow": "row",
+      "items": [
+        {
+          "id": "n_7531747bc01a",
+          "title": "Prisma 仓储适配器（记录 ↔ 领域对象）",
+          "role": "entity"
+        },
+        {
+          "id": "n_2534836f65f2",
+          "title": "DeepSeek 网关：缓存 / 重试 / 限流",
+          "role": "entity"
+        },
+        {
+          "id": "n_e8388aa3030a",
+          "title": "编译与 AST 执行器",
+          "role": "entity"
+        },
+        {
+          "id": "n_e90d1e6b0a55",
+          "title": "文件存储：Zip-Slip 防护 / 版本目录",
+          "role": "entity"
+        },
+        {
+          "id": "n_aeee0ac70686",
+          "title": "Socket 通知适配器 / 内存限流器",
+          "role": "entity"
+        },
+        {
+          "id": "n_b28a6c930ff6",
+          "title": "组合根 bootstrap：装配 / 迁移 / seed",
+          "role": "entity"
+        }
+      ]
+    },
+    {
+      "id": "external",
+      "title": "数据与外部服务",
+      "role": "section",
+      "columns": 2,
+      "flow": "row",
+      "items": [
+        {
+          "id": "n_57cbf8d8c8dc",
+          "title": "MySQL 8（Prisma 业务库）",
+          "role": "entity"
+        },
+        {
+          "id": "n_fad42a3c5de7",
+          "title": "uploads：标准包 / 学生版本提交",
+          "role": "entity"
+        },
+        {
+          "id": "n_dfcc1a6a7fb8",
+          "title": "DeepSeek API（OpenAI 兼容，可配）",
+          "role": "entity"
+        }
+      ]
+    }
+  ],
+  "direction": "down",
+  "edges": [
+    {
+      "from": "fe_ui",
+      "to": "fe_app",
+      "label": "调用用例外观"
+    },
+    {
+      "from": "fe_app",
+      "to": "fe_infra",
+      "label": "经适配器与纯规则"
+    },
+    {
+      "from": "fe_infra",
+      "to": "gateway",
+      "label": "HTTPS / WSS 请求"
+    },
+    {
+      "from": "gateway",
+      "to": "be_interface",
+      "label": "反向代理 /api"
+    },
+    {
+      "from": "be_interface",
+      "to": "be_app",
+      "label": "调用用例"
+    },
+    {
+      "from": "be_app",
+      "to": "be_domain",
+      "label": "编排领域对象"
+    },
+    {
+      "from": "be_infra",
+      "to": "be_domain",
+      "label": "实现端口（依赖倒置）"
+    },
+    {
+      "from": "be_app",
+      "to": "grading",
+      "label": "评分入队"
+    },
+    {
+      "from": "grading",
+      "to": "be_infra",
+      "label": "复用适配器"
+    },
+    {
+      "from": "be_infra",
+      "to": "external",
+      "label": "读写库 / 文件 / 模型"
+    },
+    {
+      "from": "be_interface",
+      "to": "fe_infra",
+      "label": "推送评分结果"
+    }
+  ]
+}

@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Diagram Preview</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Arial, sans-serif;
+      background: #f5f7fb;
+      color: #1f2937;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 16px;
+      padding: 24px;
+      background:
+        radial-gradient(circle at top, rgba(59, 130, 246, 0.08), transparent 35%),
+        #f5f7fb;
+    }
+    .actions {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .action-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+    }
+    .quota-hint {
+      font-size: 13px;
+      color: #4b5563;
+      margin: 0;
+      text-align: center;
+    }
+    .action-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 0 18px;
+      border-radius: 999px;
+      border: 1px solid #d1d5db;
+      background: #ffffff;
+      color: #111827;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+      cursor: pointer;
+    }
+    .feedback-button {
+      background: #16a34a;
+      border-color: #15803d;
+      color: #ffffff;
+    }
+    .primary-download {
+      background: #2563eb;
+      border-color: #1d4ed8;
+      color: #ffffff;
+    }
+    .export-select {
+      min-height: 42px;
+      padding: 0 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 999px;
+      background: #ffffff;
+      color: #111827;
+      font-size: 14px;
+    }
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-bottom: 16px;
+      width: 100%;
+    }
+    .tab-button {
+      padding: 8px 16px;
+      border-radius: 999px;
+      border: 1px solid #d1d5db;
+      background: #ffffff;
+      color: #374151;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .tab-button:hover {
+      background: #f3f4f6;
+    }
+    .tab-button.active {
+      background: #3b82f6;
+      color: #ffffff;
+      border-color: #3b82f6;
+    }
+    .canvas {
+      width: min(100%, 1600px);
+      min-width: 0;
+      padding: 24px;
+      border-radius: 20px;
+      background: #ffffff;
+      box-shadow: 0 18px 48px rgba(15, 23, 42, 0.12);
+    }
+    .view-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .view-button {
+      padding: 6px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      background: #ffffff;
+      color: #374151;
+      cursor: pointer;
+    }
+    .view-button[aria-pressed="true"] {
+      border-color: #3b82f6;
+      background: #eff6ff;
+      color: #1d4ed8;
+    }
+    .view-status {
+      color: #6b7280;
+      font-size: 12px;
+    }
+    .diagram-viewport {
+      width: 100%;
+      height: clamp(240px, 66vh, 900px);
+      overflow: auto;
+      overscroll-behavior: contain;
+    }
+    .diagram-frame {
+      width: 100%;
+      margin: 0 auto;
+    }
+    .tab-content {
+      display: none;
+      width: 100%;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    .diagram-frame > svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      max-width: none;
+    }
+    .deep-edit-panel {
+      display: flex;
+      gap: 12px;
+      width: min(96vw, 1600px);
+      align-items: center;
+    }
+    .deep-edit-panel input {
+      flex: 1;
+      min-height: 42px;
+      padding: 0 18px;
+      border-radius: 999px;
+      border: 1px solid #d1d5db;
+      background: #ffffff;
+      font-size: 14px;
+      color: #111827;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+    }
+    .deep-edit-panel input:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+    .deep-edit-submit {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: #ffffff;
+      white-space: nowrap;
+    }
+    .deep-edit-submit:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .deep-edit-error {
+      width: min(96vw, 1600px);
+      margin: 0;
+      font-size: 13px;
+      color: #dc2626;
+      display: none;
+    }
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .modal-dialog {
+      width: min(92vw, 420px);
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 18px 48px rgba(15, 23, 42, 0.24);
+    }
+    .modal-dialog h3 {
+      margin: 0;
+      font-size: 16px;
+      color: #111827;
+    }
+    .modal-desc {
+      margin: 0;
+      font-size: 13px;
+      color: #4b5563;
+    }
+    .modal-dialog input {
+      padding: 10px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    .modal-dialog input:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+    .modal-status {
+      margin: 0;
+      font-size: 13px;
+      min-height: 18px;
+    }
+    .modal-status.ok {
+      color: #16a34a;
+    }
+    .modal-status.err {
+      color: #dc2626;
+    }
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .modal-actions button {
+      flex: 1;
+      min-height: 36px;
+      border-radius: 8px;
+      border: 1px solid #d1d5db;
+      background: #ffffff;
+      color: #111827;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .modal-actions button.primary {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: #ffffff;
+    }
+    .modal-link {
+      font-size: 13px;
+      color: #3b82f6;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="actions">
+    <div class="action-buttons">
+      <a class="action-button feedback-button" href="https://pptx.chenxitech.site/feedback?session_id=bdeb4afd-361e-43e1-8d59-49440016d6d4&amp;run_id=38a86166-7fb8-483d-ba51-2a741d5f9b1a" target="_blank" rel="noopener noreferrer">💡 提交反馈领免费 API Key</a>
+      <button class="action-button primary-download" id="download-visio-button" type="button">下载 Visio (.vsdx)</button>
+      <select class="export-select" id="ppt-format" aria-label="选择 PPT 格式或 SVG">
+        <optgroup label="PPT 格式">
+          <option value="pptx-native">PPT：可编辑形状</option>
+          <option value="pptx-svg">PPT：嵌入 SVG</option>
+          <option value="pptx">PPT：兼容格式</option>
+        </optgroup>
+        <optgroup label="其他格式">
+          <option value="svg">SVG 原图</option>
+        </optgroup>
+      </select>
+      <button class="action-button" id="download-other-button" type="button">下载所选格式</button>
+      <button class="action-button" id="api-key-config-button" type="button">🔑 编辑额度 Key</button>
+    </div>
+    <p class="quota-hint">🎁 提交反馈并完成邮箱验证，可免费领取更多额度</p>
+    <p class="modal-status" id="download-status" role="status" aria-live="polite"></p>
+  </div>
+  <div class="canvas">
+    
+    <div class="view-controls" role="group" aria-label="图示缩放">
+      <button class="view-button" type="button" data-view="width" aria-pressed="true" title="适应宽度并保留可读字号，超宽图可横向滚动">适宽</button>
+      <button class="view-button" type="button" data-view="all" aria-pressed="false">全图</button>
+      <button class="view-button" type="button" data-view="actual" aria-pressed="false">原尺寸</button>
+      <span class="view-status" aria-live="polite"></span>
+    </div>
+    <div class="diagram-viewport" tabindex="0" role="region" aria-label="图示，可滚动查看"><div class="diagram-frame"><?xml version="1.0" encoding="utf-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" data-d2-version="v0.8.1-HEAD" preserveAspectRatio="xMinYMin meet" viewBox="0 0 1434 2290" width="1721" height="2748"><svg class="d2-4125748668 d2-svg" width="1434" height="2290" viewBox="-11 -11 1434 2290"><rect x="-11" y="-11" width="1434" height="2290" rx="0" fill="#FFFFFF" class=" fill-N7" stroke-width="0" /><style type="text/css"><![CDATA[
+.d2-4125748668 .text-bold {
+	font-family: "d2-4125748668-font-bold";
+}
+@font-face {
+	font-family: d2-4125748668-font-bold;
+	src: url("data:application/font-woff;base64,d09GRgABAAAAABMUAAoAAAAAHIgAAguFAAAAAAAAAAAAAAAAAAAAAAAAAABPUy8yAAAA9AAAAGAAAABgXxHXrmNtYXAAAAFUAAAAzgAAASJI7ucvZ2x5ZgAAAiQAAAvsAAAQOK+yW7FoZWFkAAAOEAAAADYAAAA2G38e1GhoZWEAAA5IAAAAJAAAACQKfwX4aG10eAAADmwAAADDAAAA5HMqCaRsb2NhAAAPMAAAAHQAAAB0c3x3km1heHAAAA+kAAAAIAAAACAAUQD3bmFtZQAAD8QAAAMvAAAIKgjwVkFwb3N0AAAS9AAAACAAAAAg/9EAMgADAioCvAAFAAACigJYAAAASwKKAlgAAAFeADIBKQAAAgsHAwMEAwICBGAAAvcAAAADAAAAAAAAAABBREJPACAAIP//Au7/BgAAA9gBESAAAZ8AAAAAAfAClAAAACAAA3icjM7LKrQBHMfxz/PO4WWMM+PMMw7jMM6DbJUk2chCzc5SNrJTrsI1uAKUkkNuRLkLC/VXo2Sp3/ZTvy8SGQmKskkJFamsvFTVgkVLajZt2bHnwJG6E2cu3JevIvjllhtu2659h+qOnTr/dvGuICcjF5/xEa/xEs/xFI/xEHdxGzdx+XbdqPjLEutWrVgz//P8T0ZWTt5/TZoVtChq1aZdh05duvXoVdKn34BBQ4aNGDUmVTZuwqQpFdNmzJpTVbPBFwAAAP//AwCnkS4oAAB4nIRXa3Ab13U+92KBJcHlA4/Fi3gvsAuABEhgsVg+QIIUSZCiCIKULFKy+FA4tkSLEqVaUEk7VJQZy3brwJFrqrIcJY6rsSeta2fs0XSquFU67TRONdFMOnXcdDqNY7seNZPORGzKZvwgF527BClQf/IDuJjB3XO++53vO+cuaGEMAM/hy6CBaqgHI7AAosFnCIqCwNGyKMucVSMLyECPYaPy+mtCmAqHqYj3qufJ2VmUm8GXN08eyc3N/W62s1N55QfvKs+js+8C4NIXALgPF6EaDAAmWhR4XuB0Oo1JNHECR99t+EZ9bWMtxdi/uPPOnW+HfhxCw+l0fFFMnlKexsXNwrVrAAAYcgB4BBdBv4VMTFgsrFmn4wQxkUpJSZ7nuNzNR14cH7t0NOpsOxCLHWhz4mL/pTNnXhxcCk2Njh4OAgAicdA9XIQaEsXH+liR5Vgfm0NXlS8//BDV4+LKU1+9srKz91cq9oq9OXRN+eyTT3Bx5aWVTdjehw9uxxRZURINnIEz5FY/vnz5Y1z88svNAmpQ1rb3wke4CBp1ryG3ioubBUDQUFpHN3ARGgCsfl6QLRYxkZIMosGs030yfMz/iLHVHgqvNk8znZ3DPm+8F31PyWXmu8sx0Se4CNqtmD42t4owLm6urdzH9xYugkf932SxWMVUSjaJBk5KplIyR9OcIHBuzLK5P3tMb9RTeoP++KvP0NUaSpoen05SVBWNi8qHzm63u9uJ/JuFe978mOfa559f84zlvfe2c4zgIpi2clhFnpcIDxqBs1hYNvfSGz0UVVcki7YWF5W/fSH59Y67mwU08M3USsd/qTWOldbx1/BVqIdGAK2f5wm87UoLCVJmzq9jzRY0cejpffuePrT13Tc62tc3Osrsf/nEwp/m81dOnHh5/4XC3Nzi4txcYVs7rbgIDJh3aYdjDWKCBOVyHw2dy2YLA+NDyz3pflwUpvIjcy2/QPvnxQiUsQ3jV/FVqAEeIFiJxc8Lu5DSaulkq06HJsrQkOP4C9z8+S3EZ2at+TAbrHMYO0+emyco588pHz46Yvn+c1vwn/rLRr+bphaqawEBV1rHenwVIioj27pI8oIQw+WkVpovY7FaVQQ6ZO65kHiImwjFomLTQV+a73ysv+1MZJ+3R+Cj7ZGHOrMdi0xr7FE373d5XMZAXUu2JXUo2RyZtjd6nG63wW97aCA11QYI7ADYhItAE+Y4ycdyhjs30Bc3cMPKyiaRNCDYW1rHeVwkDtf6eVW099WLRi88c7lDltPffIq58hqaUVaPjowcRaeU669dAVT6HACLuAi1AKKmQpuaH/7o26P11nqqzlaXu/KPuKj8s3QslTomoVbVL3UAGi8ugu+B5yoicJqtXkNrnn3ipaiuTkfpTfrs+azepKfoWjr6fOEHPVW1WkpXW9WFi8pPxePJ5HERxZWfxucl6XgCxTcLKMTnAoEcr/wbIAgAoI1yP5CQT/KxyMcGkFf5Er2rfIS4w+ivVw4re1eIXiKldfQztAF24FRHS8mUrJaJFtSisQaOYJMTKVnSEU3/sH/s4irmwp6egNSy0DF7bFlPeQar7EHTaNrDTGZGD9X7BBv7FVdg8XHlU9HJPW41TeqbXDarqs/e0jq24FtgJi4nSuFoziCy9AMG4vw0a7GgAV+fi2LOrlKufn/6UEt69hCfmmgOm0OMzyvhW2+OOFzdfzBy8InMcnbkmehPjHVqnQOldXQLbYBjlzutdFl926q3D5zuHfrD/tigc4DzSplMqy1m6ghOMF3n9h8odLmts66R3p4cW3/U20j0g0EoraMNfAtM4N3miqC2CpJYwdK2yH87dbpzNhlus+tWl/WUI4ttgtHUZOZSLcw3nhg/1+20jfzFZl/cwS2b7T8x1vUN7h0ArGL/GG2ADTy70BO/0D7iKuJYjai2GOQZfHxP38nOwekWCis/12fjUirOz3zrhtDsTzHdhf3jhUxmod8UrE6JvsMON+oISy3kLAhsAKiAb5OV+EV+wKNkhBge3rMnMNbnSTY01jqYRvfhw+j8KW2jNJFkdCe1Wh/vPqs8BaABfymKabQBLdAJwyozvJSUJRV7eUmJCavIcuWG5hcIQSKRl1mn01R0KdPWb87Pq1t+2zHTNmhq9Noc4Y4Zqdn3V3m6OnlIdnmM/vDY1Ff6V4ZdguByCUI40SMERbuPaex639HWnA5RtSFPY6KBMvY3pfMhZqHGb24fDujrLSZjZ584HkO3I2EhHAqFI8pqwG5t0Ghsdqdri5teUmxVoyDuaJM1cAaVdNrQu0o79yXG9666vM6QDd9687C9aWFauYN8qZDdqrwDpRLIAPAL/D7m1V80tMFzO7Hd+BYwhHfRIMoibeIEmu29RH3n1e//zXfPZPAtZfFHd5T/+PvBJ8n+0joy4ltQr/K607OICP5ppHPVUK2ldUYmyBzZh7nNn1uNCJ3S0uQ5AI0Lbah9xyCSpkOqu+sk9M7aSzycjUu9Jt9wfGzfqssbbCVfLWitxxNtCvnj28drVd4pL9s8oQ0wV+ao5GlZT3lzO0ShtYw7uounLb2r2vn9s9SSOd3ffzqTWezvX8xEY7FoLBote7WrcGD/ua6lXE/vCLEsgdVbGsIWtAEmcANY76NT5ccLVtZ0v82Q47v2Cg/Pp2dT3rRDm+dTE00Rc+gm/vO4g/vjsweXM432/J+gwE6TUc+OLqENMO7il+bvn7xxhGedelutvcHZZUZrk4m4VnuBosIJ5SNAwJbW0XfRBgi77lFJnt+alzvByLR0Y9asez9+nN/jz3h8blfM4e4MPXawfdKzx5F0tLfz3q7wPMN7puyNVpPBYtIzgfbwwIRgO2S2CDZ7XQ3XHuub3tK2obSOFnEBrGp3kSROkmWRuL2iMcJUvn/E8OTSEudi7HqrSWZOTNw+pbt48eyPI0EdtaBjtmKlS+voM7QG5ge0aSi3w38d37vq9jp5y+pyjcYzzCxMo6TySynscKEhpWEg2AyI+ACV0Fp5rlrLU1EWNTe+d7mHTMBqk773+eto7dfBnCDkgr9WGrb7F15Da+B74LmKCFz5Dk/Tl1debNXpdRRdWy1faKuupym6mm75o6U3o3QtTdE1dDNauxsc4vlh7q66DgXvKg3vcdlQKMu9p+YjRV9Ha+SeIZqEioS09X6euquXXmnWW/RUlbHKf/WFl19pZawMVW2uFhD+zRjbxLJN7Fjpf/azzSzbZNlP4jKlbrSJ1qCxUgeyvIuKOrxs8dU7aGNVMKSn/+7yYI1RT1UZqtPPv2lty/+DjjqDtAGXA/3nB/5skBvkPlBqug+W74PB0jr6b/ws1JT9JSXLNhC230f86li3oKpj588fIx97yGoN2W0hmy3EvHH9+uuvX7/+xuPBmcnJKb9/anJyJkhwZwHQv+Ovkvqp7xFSKiWTZpl9bik55D+5tIROH9E7zZsbSwQHIi5En+JnwUn2d2MpWXHHIHB05AYgssHx89l42C/bxlrm+jMzUudU0pa2fP2h3PnHoi1xwZFPiIkjXdLp0ymNdoXEtZTW0S/xsxB+0EeclEjtysKadcTsJNf/5k5x/a5sqKXNOTww0RPi/bJ7uHmuY+4JWZQHexeYRGjaGRACzrBlvoX3Bd2Oh/mmIwfiWQvVkOvuPNBEzqRR706/Us8kQHKne92feJUpNfc7malsdJV3RGce6chEg63Jqc7JEwlfrKftUacQDrgiaSbY6k+HWGcH05wXO4ZtlHMokcpHZvOxQQtlH80kxmLoa9HWYDQQFJqVD4SQM+gymCRXpAUQdJXW4R68Rd71rBVVv8KLIs+LIiMJIUkKCRLhsAluIx+Kk3c9WRLZpt/dnp8nM6wLPoV76DuYhjgAkEs0gtrSUZTC75G9VpOoqb199ParmmMb3yL/+WEG/QanSE5Z4iRR2mos//L22yfffnvm5vzNm/M3yb5Q6R4+gKvJ/VQryD7JJ8iIRV3ZK8o19OiVLLIY8hcLF/PK/1E78xh+hta230V7V9Ga0gCo9BZuhwP4fZLPUHHGYCwWDMZiuD3CcZEIx0Xg/wEAAP//AwCKj3P9AAEAAAACC4XKw81FXw889QABA+gAAAAA2F2ghAAAAADdZi82/jf+xAhtA/EAAQADAAIAAAAAAAAAAQAAA9j+7wAACJj+N/43CG0AAQAAAAAAAAAAAAAAAAAAADl4nCzKMUoDQRhA4fe/QFCMcYQYYmGKuKIkG1sFs8U0guCAoBYewTNYeAP7tNba2HoBe09jQFYIVl/z+cENX2DTrnyiWFHsUXylxJwSvyS7FFcUlxTfOPXu35pDa/ZdcmXd/nTm9D2gcoepDTm+qWw4tksV94wcMvGCHAPOrMgxJnceyC7IztY3xws5PtmLZ3Y9Z+EWvc4GI6XvJj0TRyYuTYxNDE1Mo6aJa2Zrb9k2MfGRkxiQoX3/AwAA//8DAM7DICwAAAAALAAsAFAAdACKAJ4AtADAAN4A7gEgAUIBbgGQAcwCDAIeAjwCWAKSAqgC4AMSAz4DcAOkA8oEMgRUBGAEeASUBMYE6AUUBUQFZAWgBcYF6AYEBjwGaAaYBsQG3AcIB0YHlAeqB7YHwAfOB+IH+ggGCBwAAQAAADkAkAAMAGMABwABAAAAAAAAAAAAAAAAAAQAA3icnJTPbhtlFMV/TmzTCsECRVW6ib4FiyK1Y1MlVdusJqRWRkRx8LggJIQ0tie25fHMyDN2Gp6ANW/BW3TFQ/AciDW619euXRAFK4p1Zub+Od+5537AAX+yT6V6H/itnhqucFS/NrzHvfqF4X1a9T3DVR7VfjdcY1BbGK7zea1j+CPeVn8xfI/j6o+G73NYbRn+mKfVA8Of7Dv+MPwpx7xd4go852fDFQ7JDe9xwA+G93mA1axUeUDTcI3PODJc5wjoMqYkYUzKEMcNY4bMmRFTEBIzY8wNMQMcAT4Jpb5NiRQ5hv/4NiKkZEakFUeUOBJCEiIKRlbxJ83KuNaO0memSLr5lIyI6GnGhIgUR8aQjJSYidYpKcl5SYMGBX3lm1NS4FEwJsEjY8aQBm1aXNJlxJgCR0srCbOQjBtKbom0v7MIUaZPTEphrOakDJSnU36xZgdc4miTa+xm5cutCo9xfKvZwk1iHF/i6b/bYLbdd8UmYqF6ioY9EuV5qxMcqeLS1+cbxSUvcTvps83kwxoNlJ3MekyPuc5f5id5wiTFuUN8QnVQ6B7iONPngFAV+Y6ALhe0eU1Xn306dPC5okvAK81t08HxFW2uONeMQPHyW0sdc8X3OL4m0BipHZs+ork8vSE3dwt3cYacY0quWyAzlvOL8+OdJiw7lG25o1BX9HWPJFL2QFSRPYsYmitydcVUtVx5ozD9BuYI+VrqbN99l21Y2O6ttviOTHfYMTdOMrklow9N1XvPM7f65xExIKOnEX0ypjQoudOzXRMxJ8Fxrj6+0C0p8dc50udOXRIzVQYBqdaZketvZL4JjXt/y/fO7hLZvKnu6GR9ql26SOV0Y0avVb3Vt9BUjjcm0LCpZpYjE5bKy5OK9yXa2+IfqvsLvd0ynnBGRsLgbzfAUzyaHHPCKSPtIJVTFnY7NPWGaPKCUz39hFij5L58ozpJhRM8nnHCCS949p6OKybOuLg1l83ePuec0eb0P51iGd/mjFfrd//e9Vdl2tSzOJ6sn57vPMVH/8OtX/B4677s6C0gm7Owau+24oqIqXBxh5tauId4fwEAAP//AwD0t09RAAADAAAAAAAA/84AMgAAAAAAAAAAAAAAAAAAAAAAAAAA");
+}
+.d2-4125748668 .text-italic {
+	font-family: "d2-4125748668-font-italic";
+}
+@font-face {
+	font-family: d2-4125748668-font-italic;
+	src: url("data:application/font-woff;base64,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");
+}]]>
+.md p,.md ul,.md ol,.md dl,.md table,.md pre,.md details{margin-bottom:0!important;}.md li>p{margin-top:0!important;}.md li+li{margin-top:0!important;}.md ul,.md ol{padding-left:1.5em!important;}</style><style type="text/css"><![CDATA[.shape {
+  shape-rendering: geometricPrecision;
+  stroke-linejoin: round;
+}
+.connection {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.blend {
+  mix-blend-mode: multiply;
+  opacity: 0.5;
+}
+
+		.d2-4125748668 .fill-N2{fill:#676C7E;}
+		.d2-4125748668 .fill-N7{fill:#FFFFFF;}
+		.d2-4125748668 .stroke-B2{stroke:#0D32B2;}.appendix text.text{fill:#0A0F25}.md{--color-fg-default:#0A0F25;--color-fg-muted:#676C7E;--color-fg-subtle:#9499AB;--color-canvas-default:#FFFFFF;--color-canvas-subtle:#EEF1F8;--color-border-default:#0D32B2;--color-border-muted:#0D32B2;--color-neutral-muted:#EEF1F8;--color-accent-fg:#0D32B2;--color-accent-emphasis:#0D32B2;--color-attention-subtle:#676C7E;--color-danger-fg:red;}.light-code{display: block}.dark-code{display: none}]]></style><g class="aGVhZGluZw=="><g class="shape" ></g><text x="206.5" y="28" fill="#000000" class="text-bold" style="text-anchor:middle;font-size:28px">Exam-DeepSeek 系统总体架构</text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOA== layout"><g class="shape" ><rect x="0" y="56" width="1412" height="2213" stroke="transparent" fill="transparent" style="stroke-width:0;" /></g></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2ZlX3Vp section"><g class="shape" ><rect x="188" y="140" width="424" height="339" rx="8" stroke="#2563EB" fill="#F0F4FE" style="stroke-width:2;" /></g><text x="400" y="165" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:20px"><tspan x="400" dy="0">前端渲染层 · client/</tspan><tspan x="400" dy="23">interface</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2ZlX2FwcA== section"><g class="shape" ><rect x="188" y="563" width="424" height="253" rx="8" stroke="#2563EB" fill="#F0F4FE" style="stroke-width:2;" /></g><text x="400" y="588" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:20px"><tspan x="400" dy="0">前端应用层 · client/</tspan><tspan x="400" dy="23">application（用例外观）</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2ZlX2luZnJh section"><g class="shape" ><rect x="188" y="900" width="424" height="364" rx="8" stroke="#2563EB" fill="#F0F4FE" style="stroke-width:2;" /></g><text x="400" y="925" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:20px"><tspan x="400" dy="0">前端领域与基础设施 · client/</tspan><tspan x="400" dy="23">domain + infrastructure</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2dhdGV3YXk= section"><g class="shape" ><rect x="188" y="1348" width="424" height="389" rx="8" stroke="#2563EB" fill="#F0F4FE" style="stroke-width:2;" /></g><text x="400" y="1373" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:20px">接入与部署</text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2dyYWRpbmc= section"><g class="shape" ><rect x="188" y="1821" width="424" height="364" rx="8" stroke="#2563EB" fill="#F0F4FE" style="stroke-width:2;" /></g><text x="400" y="1846" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:20px"><tspan x="400" dy="0">异步评分执行（worker 独立进程</tspan><tspan x="400" dy="23">）</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2ludGVyZmFjZQ== section"><g class="shape" ><rect x="800" y="140" width="424" height="339" rx="8" stroke="#2563EB" fill="#F0F4FE" style="stroke-width:2;" /></g><text x="1012" y="165" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:20px"><tspan x="1012" dy="0">后端接口层 · interface（只做</tspan><tspan x="1012" dy="23">翻译）</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2FwcA== section"><g class="shape" ><rect x="800" y="563" width="424" height="253" rx="8" stroke="#2563EB" fill="#F0F4FE" style="stroke-width:2;" /></g><text x="1012" y="588" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:20px"><tspan x="1012" dy="0">后端应用层 · application（用</tspan><tspan x="1012" dy="23">例编排）</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2RvbWFpbg== section"><g class="shape" ><rect x="800" y="900" width="424" height="364" rx="8" stroke="#2563EB" fill="#F0F4FE" style="stroke-width:2;" /></g><text x="1012" y="925" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:20px"><tspan x="1012" dy="0">后端领域层 · domain（零框架</tspan><tspan x="1012" dy="23">依赖）</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2luZnJh section"><g class="shape" ><rect x="800" y="1348" width="424" height="389" rx="8" stroke="#2563EB" fill="#F0F4FE" style="stroke-width:2;" /></g><text x="1012" y="1373" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:20px"><tspan x="1012" dy="0">后端基础设施层 · </tspan><tspan x="1012" dy="23">infrastructure（实现端口）</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2V4dGVybmFs section"><g class="shape" ><rect x="800" y="1821" width="424" height="364" rx="8" stroke="#2563EB" fill="#F0F4FE" style="stroke-width:2;" /></g><text x="1012" y="1846" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:20px">数据与外部服务</text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2ZlX3VpLm5fbl82MTY0Y2JmMWUzZDg= entity"><g class="shape" ><rect x="196" y="196" width="200" height="78" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="296" y="232.5" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="296" dy="0">教师端：建题 / 布置</tspan><tspan x="296" dy="20.5">作业 / 三栏审核</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2ZlX3VpLm5fbl9hZjU5ZDdmZDhhNTI= entity"><g class="shape" ><rect x="404" y="196" width="200" height="78" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="504" y="232.5" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="504" dy="0">学生端：答题 / 提交</tspan><tspan x="504" dy="20.5"> / 成绩卡片</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2ZlX3VpLm5fbl9iOGJhYWZkMTNhMmI= entity"><g class="shape" ><rect x="196" y="282" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="296" y="331" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="296" dy="0">管理端：学校 / 班级</tspan><tspan x="296" dy="20.5"> / 系统配置</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2ZlX3VpLm5fbl8xNDM5ZmZhMWJmNWQ= entity"><g class="shape" ><rect x="404" y="282" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="504" y="322" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="504" dy="0">路由与通用组件（</tspan><tspan x="504" dy="19.666667">Ant Design Vue</tspan><tspan x="504" dy="19.666667">）</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2ZlX3VpLm5fbl80MTFhOTdmNGFhNDM= entity"><g class="shape" ><rect x="196" y="393" width="200" height="78" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="296" y="429.5" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="296" dy="0">Monaco 编辑器：</tspan><tspan x="296" dy="20.5">文件树 + 多 tab</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2ZlX2FwcC5uX25fMDg3MmVjNjM1MjM1 entity"><g class="shape" ><rect x="196" y="619" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="296" y="668" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="296" dy="0">Pinia stores：</tspan><tspan x="296" dy="20.5">会话 / 评分审核状态</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2ZlX2FwcC5uX25fYmM1MWI0NjE3NDJh entity"><g class="shape" ><rect x="404" y="619" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="504" y="659" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="504" dy="0">composables：认</tspan><tspan x="504" dy="19.666667">证 / 提交 / 评分 / </tspan><tspan x="504" dy="19.666667">上传</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2ZlX2luZnJhLm5fbl8xYzY1ZWMyNzZjNTE= entity"><g class="shape" ><rect x="196" y="956" width="200" height="128" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="296" y="999.5" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="296" dy="0">纯函数：</tspan><tspan x="296" dy="19.25">uploadFilter / </tspan><tspan x="296" dy="19.25">format / </tspan><tspan x="296" dy="19.25">fileLang</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2ZlX2luZnJhLm5fbl8yMzZkNzA0MDIzZWM= entity"><g class="shape" ><rect x="404" y="956" width="200" height="128" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="504" y="1017.5" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="504" dy="0">axios API 适配</tspan><tspan x="504" dy="20.5">器（领域端点封装）</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2ZlX2luZnJhLm5fbl9iM2NiNGE0YmIyZWI= entity"><g class="shape" ><rect x="196" y="1092" width="200" height="78" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="296" y="1128.5" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="296" dy="0">token 存取（本地</tspan><tspan x="296" dy="20.5">存储）</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2ZlX2luZnJhLm5fbl9jMjcyOTcxMzY5NGM= entity"><g class="shape" ><rect x="404" y="1092" width="200" height="78" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="504" y="1128.5" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="504" dy="0">socket.io-</tspan><tspan x="504" dy="20.5">client 实时通道</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2dhdGV3YXkubl9uXzk4M2IwY2Y3MWI3OQ== entity"><g class="shape" ><rect x="196" y="1384" width="200" height="78" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="296" y="1420.5" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="296" dy="0">Nginx：静态托管 +</tspan><tspan x="296" dy="20.5"> /api 反向代理</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2dhdGV3YXkubl9uXzA3ZGZjOWJkODdmMQ== entity"><g class="shape" ><rect x="404" y="1384" width="200" height="78" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="504" y="1420.5" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="504" dy="0">SSL 证书与 </tspan><tspan x="504" dy="20.5">HTTPS 入口</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2dhdGV3YXkubl9uXzQ1ZDY4MWJmNTBhZA== entity"><g class="shape" ><rect x="196" y="1470" width="200" height="78" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="296" y="1506.5" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="296" dy="0">PM2：Node 进程</tspan><tspan x="296" dy="20.5">守护</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2dyYWRpbmcubl9uX2U4MzZmNDcwNjE3NQ== entity"><g class="shape" ><rect x="196" y="1877" width="200" height="78" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="296" y="1913.5" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="296" dy="0">评分队列 + 并发信号</tspan><tspan x="296" dy="20.5">量（3 并发）</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2dyYWRpbmcubl9uXzBkZWM5NjVlODMxYw== entity"><g class="shape" ><rect x="404" y="1877" width="200" height="78" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="504" y="1913.5" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="504" dy="0">三引擎加权：机器 / </tspan><tspan x="504" dy="20.5">AST / AI</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2dyYWRpbmcubl9uX2Y1NzVmODUxZGY5MQ== entity"><g class="shape" ><rect x="196" y="1963" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="296" y="2003" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="296" dy="0">状态机：pending </tspan><tspan x="296" dy="19.666667">→ grading → </tspan><tspan x="296" dy="19.666667">done</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2dyYWRpbmcubl9uXzgzMDI5MjQ5OTYzOA== entity"><g class="shape" ><rect x="404" y="1963" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="504" y="2012" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="504" dy="0">DeepSeek 调用：</tspan><tspan x="504" dy="20.5">180s 超时 / 重试</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2dyYWRpbmcubl9uX2NmMjdmMDZiMjAyYQ== entity"><g class="shape" ><rect x="196" y="2074" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="296" y="2114" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="296" dy="0">审核放分：</tspan><tspan x="296" dy="19.666667">reviewed 才可见</tspan><tspan x="296" dy="19.666667">成绩</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2ludGVyZmFjZS5uX25fN2NjMjVhNzI2YzAz entity"><g class="shape" ><rect x="808" y="196" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="908" y="236" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="908" dy="0">声明式路由表（auth</tspan><tspan x="908" dy="19.666667"> / teacher / </tspan><tspan x="908" dy="19.666667">student）</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2ludGVyZmFjZS5uX25fZmJmMjhmNmVmYzdi entity"><g class="shape" ><rect x="1016" y="196" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="1116" y="245" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="1116" dy="0">薄控制器：参数 → </tspan><tspan x="1116" dy="20.5">用例 → 响应</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2ludGVyZmFjZS5uX25fMTE1YTNiZWIyZTIx entity"><g class="shape" ><rect x="808" y="307" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="908" y="347" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="908" dy="0">中间件：JWT / 角</tspan><tspan x="908" dy="19.666667">色 / 资源守卫 / 限</tspan><tspan x="908" dy="19.666667">流</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2ludGVyZmFjZS5uX25fYTBjNGY0ZGEyNDI5 entity"><g class="shape" ><rect x="1016" y="307" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="1116" y="356" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="1116" dy="0">Socket.IO：领域</tspan><tspan x="1116" dy="20.5">事件 → 前端推送</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2FwcC5uX25fOWZjZWRhYmNjZDY5 entity"><g class="shape" ><rect x="808" y="619" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="908" y="659" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="908" dy="0">用例：认证 / 题库 /</tspan><tspan x="908" dy="19.666667"> 作业 / 提交 / 评分</tspan><tspan x="908" dy="19.666667"> / 项目</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2FwcC5uX25fYzUzMzc3MDE5YTRh entity"><g class="shape" ><rect x="1016" y="619" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="1116" y="659" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="1116" dy="0">评分编排器：机器 →</tspan><tspan x="1116" dy="19.666667"> AST → AI → </tspan><tspan x="1116" dy="19.666667">加权</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2FwcC5uX25fOGVkZTQzMWVlODRk entity"><g class="shape" ><rect x="808" y="730" width="200" height="78" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="908" y="766.5" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="908" dy="0">命令与 DTO：入参</tspan><tspan x="908" dy="20.5">校验 / 幂等键</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2RvbWFpbi5uX25fZmQ2MDM2NzU0ZjBj entity"><g class="shape" ><rect x="808" y="956" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="908" y="996" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="908" dy="0">实体与聚合（用户 / </tspan><tspan x="908" dy="19.666667">题目 / 提交 / 项目</tspan><tspan x="908" dy="19.666667">）</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2RvbWFpbi5uX25fYzJlNGZmMWVmZmZm entity"><g class="shape" ><rect x="1016" y="956" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="1116" y="1005" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="1116" dy="0">值对象：Score / </tspan><tspan x="1116" dy="20.5">Status / 评分标准</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2RvbWFpbi5uX25fMDg5MmYzMzkyOTg4 entity"><g class="shape" ><rect x="808" y="1067" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="908" y="1116" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="908" dy="0">领域服务：分值校验 </tspan><tspan x="908" dy="20.5">/ 加权 / 截止判定</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2RvbWFpbi5uX25fMjVlZGNiZTcxNTc0 entity"><g class="shape" ><rect x="1016" y="1067" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="1116" y="1107" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="1116" dy="0">端口：仓储 / AI </tspan><tspan x="1116" dy="19.666667">网关 / 执行器 / 事</tspan><tspan x="1116" dy="19.666667">件 / UoW</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2RvbWFpbi5uX25fNTE0YjZmOTA4ZWU2 entity"><g class="shape" ><rect x="808" y="1178" width="200" height="78" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="908" y="1214.5" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="908" dy="0">领域事件：评分完成 </tspan><tspan x="908" dy="20.5">/ 项目评分完成</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2luZnJhLm5fbl83NTMxNzQ3YmMwMWE= entity"><g class="shape" ><rect x="808" y="1404" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="908" y="1444" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="908" dy="0">Prisma 仓储适配</tspan><tspan x="908" dy="19.666667">器（记录 ↔ 领域对</tspan><tspan x="908" dy="19.666667">象）</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2luZnJhLm5fbl8yNTM0ODM2ZjY1ZjI= entity"><g class="shape" ><rect x="1016" y="1404" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="1116" y="1453" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="1116" dy="0">DeepSeek 网关：</tspan><tspan x="1116" dy="20.5">缓存 / 重试 / 限流</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2luZnJhLm5fbl9lODM4OGFhMzAzMGE= entity"><g class="shape" ><rect x="808" y="1515" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="908" y="1564" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="908" dy="0">编译与 AST 执行</tspan><tspan x="908" dy="20.5">器</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2luZnJhLm5fbl9lOTBkMWU2YjBhNTU= entity"><g class="shape" ><rect x="1016" y="1515" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="1116" y="1555" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="1116" dy="0">文件存储：Zip-</tspan><tspan x="1116" dy="19.666667">Slip 防护 / 版本</tspan><tspan x="1116" dy="19.666667">目录</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2luZnJhLm5fbl9hZWVlMGFjNzA2ODY= entity"><g class="shape" ><rect x="808" y="1626" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="908" y="1675" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="908" dy="0">Socket 通知适配器</tspan><tspan x="908" dy="20.5"> / 内存限流器</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2JlX2luZnJhLm5fbl9iMjhhNmM5MzBmZjY= entity"><g class="shape" ><rect x="1016" y="1626" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="1116" y="1666" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="1116" dy="0">组合根 bootstrap</tspan><tspan x="1116" dy="19.666667">：装配 / 迁移 / </tspan><tspan x="1116" dy="19.666667">seed</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2V4dGVybmFsLm5fbl81N2NiZjhkOGM4ZGM= entity"><g class="shape" ><rect x="808" y="1857" width="200" height="78" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="908" y="1893.5" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="908" dy="0">MySQL 8（</tspan><tspan x="908" dy="20.5">Prisma 业务库）</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2V4dGVybmFsLm5fbl9mYWQ0MmEzYzVkZTc= entity"><g class="shape" ><rect x="1016" y="1857" width="200" height="78" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="1116" y="1893.5" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="1116" dy="0">uploads：标准包 /</tspan><tspan x="1116" dy="20.5"> 学生版本提交</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC5uX2V4dGVybmFsLm5fbl9kZmNjMWE2YTdmYjg= entity"><g class="shape" ><rect x="808" y="1943" width="200" height="103" rx="3" stroke="#BED0F9" fill="#E3EBFC" style="stroke-width:2;" /></g><text x="908" y="1983" fill="#17334F" class="text-bold" style="text-anchor:middle;font-size:18px"><tspan x="908" dy="0">DeepSeek API</tspan><tspan x="908" dy="19.666667">（OpenAI 兼容，</tspan><tspan x="908" dy="19.666667">可配）</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC4obl9mZV91aSAtJmd0OyBuX2ZlX2FwcClbMF0="><marker id="mk-d2-4125748668-3343672256" markerWidth="10" markerHeight="12" refX="7" refY="6" viewBox="0 0 10 12" orient="auto" markerUnits="userSpaceOnUse"> <polygon points="0,0 10,6 0,12" fill="#58708F" class="connection" stroke-width="2" /> </marker><path d="M 400 480.5 L 400 559.5" stroke="#58708F" fill="none" class="connection" style="stroke-width:2;" marker-end="url(#mk-d2-4125748668-3343672256)" mask="url(#d2-4125748668)" /><text x="400" y="526" fill="#676C7E" class="text-italic fill-N2" style="text-anchor:middle;font-size:14px">调用用例外观</text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC4obl9mZV9hcHAgLSZndDsgbl9mZV9pbmZyYSlbMF0="><path d="M 400 818 L 400 896" stroke="#58708F" fill="none" class="connection" style="stroke-width:2;" marker-end="url(#mk-d2-4125748668-3343672256)" mask="url(#d2-4125748668)" /><text x="400" y="863" fill="#676C7E" class="text-italic fill-N2" style="text-anchor:middle;font-size:14px">经适配器与纯规则</text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC4obl9mZV9pbmZyYSAtJmd0OyBuX2dhdGV3YXkpWzBd"><path d="M 400 1265.5 L 400 1344.5" stroke="#58708F" fill="none" class="connection" style="stroke-width:2;" marker-end="url(#mk-d2-4125748668-3343672256)" mask="url(#d2-4125748668)" /><text x="400" y="1304" fill="#676C7E" class="text-italic fill-N2" style="text-anchor:middle;font-size:14px"><tspan x="400" dy="0">HTTPS / WSS </tspan><tspan x="400" dy="16">请求</tspan></text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC4obl9nYXRld2F5IC0mZ3Q7IG5fYmVfaW50ZXJmYWNlKVswXQ=="><path d="M 497.887829 1346.707862 L 926.224341 482.084276" stroke="#58708F" fill="none" class="connection" style="stroke-width:2;" marker-end="url(#mk-d2-4125748668-3343672256)" mask="url(#d2-4125748668)" /><text x="712.5" y="919" fill="#676C7E" class="text-italic fill-N2" style="text-anchor:middle;font-size:14px">反向代理 /api</text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC4obl9iZV9pbnRlcmZhY2UgLSZndDsgbl9iZV9hcHApWzBd"><path d="M 1012 480.5 L 1012 559.5" stroke="#58708F" fill="none" class="connection" style="stroke-width:2;" marker-end="url(#mk-d2-4125748668-3343672256)" mask="url(#d2-4125748668)" /><text x="1012.5" y="526" fill="#676C7E" class="text-italic fill-N2" style="text-anchor:middle;font-size:14px">调用用例</text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC4obl9iZV9hcHAgLSZndDsgbl9iZV9kb21haW4pWzBd"><path d="M 1012 818 L 1012 896" stroke="#58708F" fill="none" class="connection" style="stroke-width:2;" marker-end="url(#mk-d2-4125748668-3343672256)" mask="url(#d2-4125748668)" /><text x="1012" y="863" fill="#676C7E" class="text-italic fill-N2" style="text-anchor:middle;font-size:14px">编排领域对象</text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC4obl9iZV9pbmZyYSAtJmd0OyBuX2JlX2RvbWFpbilbMF0="><path d="M 1012 1346 L 1012 1268" stroke="#58708F" fill="none" class="connection" style="stroke-width:2;" marker-end="url(#mk-d2-4125748668-3343672256)" mask="url(#d2-4125748668)" /><text x="1012.5" y="1311" fill="#676C7E" class="text-italic fill-N2" style="text-anchor:middle;font-size:14px">实现端口（依赖倒置）</text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC4obl9iZV9hcHAgLSZndDsgbl9ncmFkaW5nKVswXQ=="><path d="M 952.155711 817.813057 L 486.688578 1817.373886" stroke="#58708F" fill="none" class="connection" style="stroke-width:2;" marker-end="url(#mk-d2-4125748668-3343672256)" mask="url(#d2-4125748668)" /><text x="719.5" y="1324" fill="#676C7E" class="text-italic fill-N2" style="text-anchor:middle;font-size:14px">评分入队</text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC4obl9ncmFkaW5nIC0mZ3Q7IG5fYmVfaW5mcmEpWzBd"><path d="M 613.6 1842.3 L 796.8 1704.9" stroke="#58708F" fill="none" class="connection" style="stroke-width:2;" marker-end="url(#mk-d2-4125748668-3343672256)" mask="url(#d2-4125748668)" /><text x="706" y="1778" fill="#676C7E" class="text-italic fill-N2" style="text-anchor:middle;font-size:14px">复用适配器</text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC4obl9iZV9pbmZyYSAtJmd0OyBuX2V4dGVybmFsKVswXQ=="><path d="M 1012 1739 L 1012 1817" stroke="#58708F" fill="none" class="connection" style="stroke-width:2;" marker-end="url(#mk-d2-4125748668-3343672256)" mask="url(#d2-4125748668)" /><text x="1012" y="1784" fill="#676C7E" class="text-italic fill-N2" style="text-anchor:middle;font-size:14px">读写库 / 文件 / 模型</text></g><g class="bl9uXzE1Mzk0Y2MwZGNiOC4obl9iZV9pbnRlcmZhY2UgLSZndDsgbl9mZV9pbmZyYSlbMF0="><path d="M 876.756974 480.566808 L 546.486051 896.866384" stroke="#58708F" fill="none" class="connection" style="stroke-width:2;" marker-end="url(#mk-d2-4125748668-3343672256)" mask="url(#d2-4125748668)" /><text x="711" y="695" fill="#676C7E" class="text-italic fill-N2" style="text-anchor:middle;font-size:14px">推送评分结果</text></g><mask id="d2-4125748668" maskUnits="userSpaceOnUse" x="-11" y="-11" width="1434" height="2290">
+<rect x="-11" y="-11" width="1434" height="2290" fill="white"></rect>
+<rect x="348" y="512" width="104" height="18" fill="black"></rect>
+<rect x="331" y="849" width="138" height="18" fill="black"></rect>
+<rect x="361" y="1290" width="78" height="32" fill="black"></rect>
+<rect x="664" y="905" width="97" height="18" fill="black"></rect>
+<rect x="977" y="512" width="71" height="18" fill="black"></rect>
+<rect x="960" y="849" width="104" height="18" fill="black"></rect>
+<rect x="927" y="1297" width="171" height="18" fill="black"></rect>
+<rect x="684" y="1310" width="71" height="18" fill="black"></rect>
+<rect x="662" y="1764" width="88" height="18" fill="black"></rect>
+<rect x="941" y="1770" width="142" height="18" fill="black"></rect>
+<rect x="659" y="681" width="104" height="18" fill="black"></rect>
+</mask></svg></svg></div></div>
+  </div>
+  <div class="deep-edit-panel" id="deep-edit-panel">
+    <input type="text" id="deep-edit-input" placeholder="描述你想如何修改这张图…" />
+    <button class="action-button deep-edit-submit" id="deep-edit-submit" type="button">深度编辑</button>
+  </div>
+  <p class="deep-edit-error" id="deep-edit-error"></p>
+  <div class="modal-overlay" id="api-key-modal">
+    <div class="modal-dialog">
+      <h3>配置编辑额度 Key</h3>
+      <p class="modal-desc">填写邮件发给您的 ContextWeave Key（含 50 次额度）。浏览器本地保存，深度编辑时由服务端核对额度。</p>
+      <input type="password" id="api-key-input" placeholder="邮件中的 ContextWeave Key" autocomplete="off" />
+      <p class="modal-status" id="api-key-status"></p>
+      <div class="modal-actions">
+        <button id="api-key-save" class="primary" type="button">保存</button>
+        <button id="api-key-close" type="button">关闭</button>
+      </div>
+      <a class="modal-link" href="https://pptx.chenxitech.site/feedback?session_id=bdeb4afd-361e-43e1-8d59-49440016d6d4&amp;run_id=38a86166-7fb8-483d-ba51-2a741d5f9b1a" target="_blank" rel="noopener noreferrer">没有 Key？提交反馈领取 →</a>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const visioButton = document.getElementById("download-visio-button");
+      const otherButton = document.getElementById("download-other-button");
+      const formatSelect = document.getElementById("ppt-format");
+      const downloadStatus = document.getElementById("download-status");
+      const exportEndpoint = "https://pptx.chenxitech.site/export-session/browser";
+      const sessionID = "bdeb4afd-361e-43e1-8d59-49440016d6d4";
+      const canvas = document.querySelector(".canvas");
+      if (!visioButton || !otherButton || !canvas) {
+        return;
+      }
+      
+      const tabButtons = document.querySelectorAll(".tab-button");
+      const tabContents = document.querySelectorAll(".tab-content");
+      const viewport = canvas.querySelector(".diagram-viewport");
+      const viewButtons = canvas.querySelectorAll(".view-button");
+      const viewStatus = canvas.querySelector(".view-status");
+      let viewMode = "width";
+
+      function activeFrame() {
+        const activeContent = canvas.querySelector(".tab-content.active");
+        return (activeContent || viewport).querySelector(".diagram-frame");
+      }
+
+      function updateView(resetScroll) {
+        const frame = activeFrame();
+        const svg = frame && frame.querySelector("svg");
+        if (!svg) return;
+        const box = svg.viewBox && svg.viewBox.baseVal;
+        const declaredWidth = Number((svg.getAttribute("width") || "").replace(/px$/, ""));
+        const declaredHeight = Number((svg.getAttribute("height") || "").replace(/px$/, ""));
+        const width = declaredWidth > 0 ? declaredWidth : box && box.width;
+        const height = declaredHeight > 0 ? declaredHeight : box && box.height;
+        if (!(width > 0 && height > 0)) return;
+
+        // Measure the unscaled SVG text. Keep the source SVG untouched so export
+        // and embedded tooltip code retain their original attributes and styles.
+        let minFontSize = Infinity;
+        svg.querySelectorAll("text, tspan").forEach(text => {
+          const size = parseFloat(window.getComputedStyle(text).fontSize);
+          if (size > 0 && text.textContent.trim()) minFontSize = Math.min(minFontSize, size);
+        });
+        const intrinsicScale = box && box.width > 0 && box.height > 0 ? Math.min(width / box.width, height / box.height) : 1;
+        const readableScale = Number.isFinite(minFontSize) ? Math.min(1, 12 / (minFontSize * intrinsicScale)) : 0.75;
+        // Reserve a scrollbar gutter so remeasuring cannot oscillate at the edge.
+        const availableWidth = Math.max(1, viewport.clientWidth - 18);
+        const availableHeight = Math.max(1, viewport.clientHeight - 18);
+        let scale = 1;
+        if (viewMode === "width") scale = Math.max(readableScale, Math.min(1, availableWidth / width));
+        if (viewMode === "all") scale = Math.min(1, availableWidth / width, availableHeight / height);
+        frame.style.width = (width * scale) + "px";
+        frame.style.height = (height * scale) + "px";
+        const scrollable = width * scale > availableWidth || height * scale > availableHeight;
+        viewStatus.textContent = Math.round(scale * 100) + "%" + (scrollable ? " · 可滚动查看" : "");
+        if (resetScroll) {
+          viewport.scrollLeft = 0;
+          viewport.scrollTop = 0;
+        }
+      }
+
+      viewButtons.forEach(button => {
+        button.addEventListener("click", () => {
+          viewMode = button.getAttribute("data-view");
+          viewButtons.forEach(item => item.setAttribute("aria-pressed", String(item === button)));
+          updateView(true);
+        });
+      });
+      window.addEventListener("resize", () => updateView(false));
+      canvas.addEventListener("diagram-updated", () => updateView(true));
+      updateView(false);
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => updateView(false));
+      
+      tabButtons.forEach(button => {
+        button.addEventListener("click", () => {
+          tabButtons.forEach(btn => btn.classList.remove("active"));
+          tabContents.forEach(content => content.classList.remove("active"));
+          
+          button.classList.add("active");
+          const targetId = button.getAttribute("data-target");
+          const targetContent = document.getElementById(targetId);
+          if (targetContent) {
+            targetContent.classList.add("active");
+          }
+          updateView(true);
+        });
+      });
+
+      function downloadSVG() {
+        let svg = null;
+        if (tabContents.length > 0) {
+          const activeContent = document.querySelector(".tab-content.active");
+          if (activeContent) {
+            svg = activeContent.querySelector("svg");
+          }
+        } else {
+          svg = canvas.querySelector("svg");
+        }
+        
+        if (!svg) {
+          downloadStatus.textContent = "当前页面未找到可导出的 SVG";
+          return;
+        }
+        const serializer = new XMLSerializer();
+        let svgSource = serializer.serializeToString(svg);
+        if (!svgSource.includes("xmlns=")) {
+          svgSource = svgSource.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
+        }
+        if (!svgSource.includes("xmlns:xlink=")) {
+          svgSource = svgSource.replace("<svg", '<svg xmlns:xlink="http://www.w3.org/1999/xlink"');
+        }
+        const blob = new Blob([svgSource], { type: "image/svg+xml;charset=utf-8" });
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        
+        let dlName = "diagram-bdeb4afd-361e-43e1-8d59-49440016d6d4.svg";
+        if (tabContents.length > 0) {
+          const activeBtn = document.querySelector(".tab-button.active");
+          if (activeBtn) {
+            dlName = dlName.replace(".svg", "-" + activeBtn.textContent.trim() + ".svg");
+          }
+        }
+        link.download = dlName;
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+      }
+
+      function downloadSessionFormat(format, button) {
+        if (format === "svg") {
+          downloadSVG();
+          return;
+        }
+        if (!sessionID) {
+          downloadStatus.textContent = "当前页面缺少会话信息，无法导出 Office 文件";
+          return;
+        }
+        button.disabled = true;
+        downloadStatus.textContent = "正在生成文件…";
+        fetch(exportEndpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionID, format: format })
+        }).then(function (response) {
+          return response.json().then(function (data) {
+            if (!response.ok || data.status !== "ok") {
+              throw new Error((data.error && data.error.message) || data.detail || "导出失败");
+            }
+            return data;
+          });
+        }).then(function (data) {
+          if (!data.download_url) throw new Error("服务端未返回下载地址");
+          const link = document.createElement("a");
+          link.href = data.download_url;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          downloadStatus.textContent = "文件已生成，下载即将开始";
+        }).catch(function (error) {
+          downloadStatus.textContent = error.message || "导出失败，请稍后重试";
+        }).finally(function () {
+          button.disabled = false;
+        });
+      }
+
+      visioButton.addEventListener("click", function () {
+        downloadSessionFormat("vsdx-native", visioButton);
+      });
+      otherButton.addEventListener("click", function () {
+        downloadSessionFormat(formatSelect.value, otherButton);
+      });
+    })();
+  </script>
+  <script>
+    (function () {
+      var CW_SESSION_ID = "bdeb4afd-361e-43e1-8d59-49440016d6d4";
+      var CW_RUN_ID = "38a86166-7fb8-483d-ba51-2a741d5f9b1a";
+      var API_KEY_STORAGE_KEY = "cw_quota_api_key";
+      var EDIT_ENDPOINT = "https://pptx.chenxitech.site/session/edit/browser";
+
+      var modal = document.getElementById("api-key-modal");
+      var openButton = document.getElementById("api-key-config-button");
+      var closeButton = document.getElementById("api-key-close");
+      var saveButton = document.getElementById("api-key-save");
+      var keyInput = document.getElementById("api-key-input");
+      var keyStatus = document.getElementById("api-key-status");
+      var editInput = document.getElementById("deep-edit-input");
+      var editButton = document.getElementById("deep-edit-submit");
+      var editError = document.getElementById("deep-edit-error");
+      if (!modal || !openButton || !editButton) {
+        return;
+      }
+
+      function setKeyStatus(message, ok) {
+        keyStatus.textContent = message;
+        keyStatus.className = "modal-status " + (ok ? "ok" : "err");
+      }
+
+      function openModal() {
+        var saved = localStorage.getItem(API_KEY_STORAGE_KEY);
+        if (saved) {
+          keyInput.value = saved;
+          setKeyStatus("已加载本地保存的 Key", true);
+        } else {
+          keyInput.value = "";
+          setKeyStatus("", true);
+        }
+        modal.style.display = "flex";
+      }
+
+      function closeModal() {
+        modal.style.display = "none";
+      }
+
+      function showEditError(message) {
+        editError.textContent = message;
+        editError.style.display = "block";
+      }
+
+      function hideEditError() {
+        editError.textContent = "";
+        editError.style.display = "none";
+      }
+
+      // 页面加载时若已保存 Key，则回填（password 输入框自动掩码显示）
+      var existingKey = localStorage.getItem(API_KEY_STORAGE_KEY);
+      if (existingKey) {
+        keyInput.value = existingKey;
+      }
+
+      openButton.addEventListener("click", openModal);
+      closeButton.addEventListener("click", closeModal);
+      modal.addEventListener("click", function (event) {
+        if (event.target === modal) {
+          closeModal();
+        }
+      });
+
+      saveButton.addEventListener("click", function () {
+        var key = keyInput.value.trim();
+        if (!key) {
+          setKeyStatus("请输入 Key", false);
+          return;
+        }
+        localStorage.setItem(API_KEY_STORAGE_KEY, key);
+        setKeyStatus("已保存到浏览器本地", true);
+      });
+
+      editButton.addEventListener("click", function () {
+        var instruction = editInput.value.trim();
+        if (!instruction) {
+          showEditError("请先描述你想如何修改这张图");
+          return;
+        }
+        if (!CW_SESSION_ID) {
+          showEditError("当前页面缺少 session_id，无法进行深度编辑");
+          return;
+        }
+        var key = localStorage.getItem(API_KEY_STORAGE_KEY);
+        if (!key) {
+          openModal();
+          setKeyStatus("请填写并保存邮件中的额度 Key", false);
+          return;
+        }
+        hideEditError();
+        editButton.disabled = true;
+        editButton.textContent = "生成中…";
+        fetch(EDIT_ENDPOINT, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-API-Key": key
+          },
+          body: JSON.stringify({ session_id: CW_SESSION_ID, instruction: instruction })
+        }).then(function (resp) {
+          return resp.json().then(function (data) {
+            if (!resp.ok) {
+              if (resp.status === 401 || resp.status === 403) {
+                throw new Error("额度 Key 无效，请核对邮件中的 ContextWeave Key");
+              }
+              if (resp.status === 402) {
+                throw new Error("编辑额度已用完，请通过页面上方的反馈入口领取更多额度");
+              }
+              var detail = (data && data.detail) ? data.detail : ("请求失败（HTTP " + resp.status + "）");
+              throw new Error(detail);
+            }
+            return data;
+          });
+        }).then(function (data) {
+          if (!data || !data.svg) {
+            throw new Error("响应中缺少 svg 内容");
+          }
+          var activeTab = document.querySelector(".tab-content.active");
+          var target = (activeTab || document.querySelector(".diagram-viewport")).querySelector(".diagram-frame");
+          target.innerHTML = data.svg;
+          document.querySelector(".canvas").dispatchEvent(new Event("diagram-updated"));
+          hideEditError();
+        }).catch(function (err) {
+          showEditError(err.message || "深度编辑失败，请稍后重试");
+        }).finally(function () {
+          editButton.disabled = false;
+          editButton.textContent = "深度编辑";
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -28,3 +28,17 @@ server/test/test-report.html
 server/test/qrcode.svg
 
 ~$*
+
+# ===== 流水线 / 实验产物（体积大或为本地状态，不入库）=====
+# 实验数据与注入测试集（87M，可由生成器复现）
+实验/
+# 验证用临时脚本与探针（2888 文件 / 198M，用户约定「测试不入库」）
+tests/
+# 本地工具状态
+.VSCodeCounter/
+.agent-teams/
+.cw_skill/
+# 一次性探针脚本
+server/tmp-probe-ref-answer.mjs
+# 由 .md 生成的 PDF（可随时重新生成，避免入库后过期）
+docs/**/*.pdf
