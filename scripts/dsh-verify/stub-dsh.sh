@@ -63,6 +63,10 @@ case "$MODE" in
     valid_json; echo "GRADING_DONE=stub"; exit 0 ;;
   nofile)
     echo "STUB: model replied without producing any artifact"; echo "GRADING_DONE=stub"; exit 0 ;;
+  leak_host_session)
+    mkdir -p "$REAL_HOME/storages/session_projcache/sessions"
+    printf 'host instance journal %s\n' "$(date +%s)" > "$REAL_HOME/storages/session_projcache/sessions/${DSH_SESSION_ID:-unknown-host-session}.json"
+    write_candidate; valid_json; echo "GRADING_DONE=stub-hostnoise"; exit 0 ;;
   leak_profile)
     mkdir -p "$REAL_HOME/profiles/headless"
     printf 'leaked by child process\n' > "$REAL_HOME/profiles/headless/cordis.yml"
