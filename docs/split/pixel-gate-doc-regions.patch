@@ -1,0 +1,154 @@
+diff --git a/scripts/gates/pixel-diff.mjs b/scripts/gates/pixel-diff.mjs
+index c6428fb..1b1dbdb 100644
+--- a/scripts/gates/pixel-diff.mjs
++++ b/scripts/gates/pixel-diff.mjs
+@@ -13,6 +13,9 @@
+  *   --port-base <n>    静态服务起始端口，默认 3110（逐端口探测占用，显式跳过 3000/5173）
+  *   --timeout <ms>     单区域导航/就绪超时，默认 30000
+  *   --regions <file>   覆盖默认区域表（JSON 数组，字段见 DEFAULT_REGION_AREAS）
++ *   --with-doc-regions 在默认 6 区域之外**追加** Doc.vue（/exam/doc）的 8 个区域
++ *                      （2 主题 × 顶栏/正文侧栏/内容区/首章节）。不带此开关时行为与本扩展前
++ *                      逐字节一致（默认仍是 6 区域）。与 --regions 同用时以 --regions 为准。
+  *   --workdir <dir>    中间产物根目录，默认 /tmp/pixel-gate
+  *
+  * 退出码：
+@@ -64,19 +67,29 @@
+  *   · 亮/暗互异自检：同一侧 light 与 dark 的像素若相同，说明主题没生效
+  *     （data-theme 未落），该区域等于白测一半 → 直接判「无法判定」。
+  *
+- * 【区域划分】（默认 2 主题 × 3 区域 = 6 个区域；--regions 可覆盖）
++ * 【区域划分】（默认 2 主题 × 3 区域 = 6 个区域；--regions 可覆盖；--with-doc-regions 追加）
+  *   主题 light / dark（localStorage['ui-theme']，经 useTheme 写到 <html data-theme>）
+  *   区域 sider   侧栏底盘      .ant-layout-sider      （布局骨架，零数据依赖）
+  *        content 主内容区      #main-content          （/exam/teacher/classes 页面正文）
+  *        modal   弹窗          .ant-modal-content     （点「新增班级」打开）
++ *   ── 追加表（--with-doc-regions；Route：/exam/doc，Doc.vue，公共路由无需登录）──────────
++ *   区域 docheader 顶栏        header.doc-header     （品牌 + 标题 + 登录入口，结构性区块）
++ *        docnav   正文侧栏      aside.doc-sidebar     （页内目录锚点导航）
++ *        docbody  内容区        main.doc-main         （该页的「页面主体」：整页正文容器，单张长图）
++ *        docintro 首章节        main .doc-section#intro（第一章；id 是侧栏目录锚点契约，
++ *                                                      单章节高度可控、不随正文增长）
++ *   选择器口径：**语义标签 + 本页自有类名**（header/aside/main），不用 .ant-*（该页无 antd 布局件）；
++ *   不绑 an-anchor 内部结构（.ant-anchor-* 是 antd 实现细节，且该页正文仍处拆分中）。
++ *   正文侧栏/首章节用「语义标签 + 类/id」双约束，避免换路由时误伤其它页（.doc-sidebar 全仓唯一）。
+  *   依据：round 2（docs/pipeline/test-round-02.md 7.4）已实证该划分可执行；
+  *   计划书 5 的「4 组」字面形态（亮/暗 × 舒适/紧凑）在本仓不可执行 ——
+  *   data-density 是各 Layout 硬编码，无全局密度开关，同一路由无法在两种密度下渲染。
+  *   故采用「每主题各自改前/改后全等」这一可执行形态。
+  *
+  * 【必须知道它抓不到什么】（详见 docs/split/pixel-gate-report.md「已知局限」）
+- *   · 只截 3 个区域 × 1 条路由 → 不覆盖被拆分的具体文件（Submit.vue / Doc.vue …）。
+- *     拆某个 .vue 时，必须用 --regions 把该文件所在路由补进来，否则本门禁对它近乎盲区。
++ *   · 默认只截 3 个区域 × 1 条路由 → 不覆盖被拆分的具体文件（Submit.vue / Doc.vue …）。
++ *     Doc.vue 已由 --with-doc-regions 补入（4 区域 × 2 主题，见上）；
++ *     其余文件拆分时仍需用 --regions 把该文件所在路由补进来，否则本门禁对它近乎盲区。
+  *   · 用夹具而非真数据 → 不覆盖真实数据形态（长文本、空态、异常态）下的渲染。
+  *   · 静态像素：抓不到交互时序、键盘可达性、请求行为、控制台报错。
+  *     a11y 与行为需另有门禁（axe / 行为对拍），像素全等不等于功能无回归。
+@@ -142,13 +155,50 @@ const DEFAULT_REGIONS = ['light', 'dark'].flatMap((theme) =>
+   DEFAULT_REGION_AREAS.map((a) => Object.assign({ id: theme + '.' + a.area, theme }, a))
+ );
+ 
++// ── 追加区域表：Doc.vue（/exam/doc）────────────────────────────────────────────
++// 为什么必须补：默认 3 区域只走 /exam/teacher/classes，对 Doc.vue 所在路由是盲区
++//   （见 docs/split/pixel-gate-report.md §5 局限 1）。拆 Doc.vue（B 档，要动模板）前
++//   必须先把该路由纳入，否则「6 区域全等」不能作为该文件的零回归证据。
++// 进入条件：router/index.js 里 /doc 是【公共路由】（beforeEach 显式放行 to.path === '/doc'），
++//   不需要登录、不校验角色、无路由参数；故装置仍种 token/user（与既有做法一致）但该页不依赖它们。
++// 选择器口径（与既有 3 区域同级）：语义容器，不绑 an-* 实现细节、不绑 .ant-anchor-*；
++//   Doc.vue 是独立页（无 teacher/student Layout、无 .ant-layout-sider、无 #main-content）。
++const ROUTE_DOC = '/exam/doc';
++const DOC_REGION_AREAS = [
++  {
++    area: 'docheader', selector: 'header.doc-header', url: ROUTE_DOC,
++    ready: '.doc-section',
++    witness: { selector: 'header.doc-header h1.doc-title', min: 1, label: '顶栏文档标题 h1' },
++  },
++  {
++    area: 'docnav', selector: 'aside.doc-sidebar', url: ROUTE_DOC,
++    ready: '.doc-section',
++    witness: { selector: 'aside.doc-sidebar .ant-anchor-link', min: 5, label: '页内目录锚点项' },
++  },
++  {
++    area: 'docbody', selector: 'main.doc-main', url: ROUTE_DOC,
++    ready: '.doc-section',
++    witness: { selector: 'main.doc-main .doc-section', min: 8, label: '正文章节' },
++  },
++  {
++    // 首章节：id="intro" 是页内锚点契约（侧栏目录 href=#intro），比类名更不易被拆分改动；
++    // 只截单章节 → 高度可控（实测整页 main.doc-main 高 21629px，全页截图既慢又易触 PNG 尺寸上限）。
++    area: 'docintro', selector: 'main.doc-main .doc-section#intro', url: ROUTE_DOC,
++    ready: '.doc-section',
++    witness: { selector: '#intro .section-body .ant-steps-item', min: 6, label: '简介步骤条节点' },
++  },
++];
++const DOC_REGIONS = ['light', 'dark'].flatMap((theme) =>
++  DOC_REGION_AREAS.map((a) => Object.assign({ id: theme + '.' + a.area, theme }, a))
++);
++
+ // ───────────────────────────────────────────────────────────── 小工具
+ const now = () => new Date().toISOString();
+ const sha1 = (buf) => crypto.createHash('sha1').update(buf).digest('hex');
+ const short = (s, n) => String(s).slice(0, n === undefined ? 10 : n);
+ 
+ function parseArgs(argv) {
+-  const out = { json: false, keep: false, portBase: 3110, timeout: 30000, regions: null, workdir: '/tmp/pixel-gate' };
++  const out = { json: false, keep: false, portBase: 3110, timeout: 30000, regions: null, withDocRegions: false, workdir: '/tmp/pixel-gate' };
+   for (let i = 0; i < argv.length; i++) {
+     const a = argv[i];
+     const next = () => { const v = argv[++i]; if (v === undefined) throw new Error(a + ' 缺少取值'); return v; };
+@@ -159,6 +209,7 @@ function parseArgs(argv) {
+     else if (a === '--port-base') out.portBase = Number(next());
+     else if (a === '--timeout') out.timeout = Number(next());
+     else if (a === '--regions') out.regions = next();
++    else if (a === '--with-doc-regions') out.withDocRegions = true;
+     else if (a === '--workdir') out.workdir = next();
+     else if (a === '-h' || a === '--help') { console.log(HELP); process.exit(EXIT.PASS); }
+     else throw new Error('未知参数：' + a);
+@@ -169,7 +220,7 @@ function parseArgs(argv) {
+ const HELP = [
+   '像素门禁 pixel-diff —— 用法：',
+   '  node scripts/gates/pixel-diff.mjs --before <commit> --after <commit|worktree|dir> [--json] [--keep]',
+-  '                                  [--port-base 3110] [--timeout 30000] [--regions <file.json>] [--workdir <dir>]',
++  '                                  [--port-base 3110] [--timeout 30000] [--regions <file.json>] [--with-doc-regions] [--workdir <dir>]',
+   '',
+   '  退出码：0 全区域像素 sha1 相等 / 1 存在不等区域 / 2 无法判定或执行错误',
+   '  口径：只比渲染像素，禁用 asset 文件名与字节哈希（content hash 必变 → 假阳性）',
+@@ -424,7 +475,7 @@ async function main() {
+   const args = parseArgs(process.argv.slice(2));
+   const workdir = args.workdir;
+   const report = {
+-    gate: 'pixel-diff', startedAt: now(), root: ROOT, args: { before: args.before, after: args.after },
++    gate: 'pixel-diff', startedAt: now(), root: ROOT, args: { before: args.before, after: args.after, withDocRegions: !!args.withDocRegions },
+     before: {}, after: {}, builds: {}, determinism: {}, servers: {}, regions: [], unmockedApi: [], guards: {}, warnings: [],
+   };
+ 
+@@ -491,7 +542,13 @@ async function main() {
+   try {
+     const pw = await loadPlaywright();
+     report.playwright = pw.entry;
+-    const regions = args.regions ? JSON.parse(fs.readFileSync(args.regions, 'utf8')) : DEFAULT_REGIONS;
++    // 区域集合（三态，显式优先）：
++    //   --regions <file>     完全接管（既有语义，逐字节不变）
++    //   --with-doc-regions   默认 6 区域 追加 Doc.vue 的 8 个区域（合计 14 个）
++    //   都不给                默认 6 区域（与本扩展前逐字节一致 —— 既有行为零变化）
++    const regions = args.regions ? JSON.parse(fs.readFileSync(args.regions, 'utf8'))
++      : (args.withDocRegions ? DEFAULT_REGIONS.concat(DOC_REGIONS) : DEFAULT_REGIONS);
++    report.regionSet = args.regions ? ('file:' + args.regions) : (args.withDocRegions ? 'default+doc(14)' : 'default(6)');
+     const browser = await pw.chromium.launch({ headless: true });
+     try {
+       for (const region of regions) {
+@@ -586,7 +643,12 @@ function printHuman(r) {
+   console.log('  构建 after  = ' + (r.builds.after.ms / 1000).toFixed(1) + 's / ' + r.builds.after.files + ' 文件  → ' + r.servers.distAfter);
+   console.log('  确定性      = ' + (r.determinism.byteIdentical ? '✓ 同源两次构建 byte-identical（diff -rq 0 行）' : '✗ NOT byte-identical（diff -rq ' + r.determinism.lines + ' 行）'));
+   console.log('  服务端口    = before :' + r.servers.before + '  after :' + r.servers.after + '（绑 127.0.0.1；/api 由内建夹具应答）');
+-  console.log('  区域（' + r.summary.regions + ' 个 = 2 主题 × 侧栏/内容区/弹窗）：');
++  const COMPOSITION = {
++    'default(6)': '2 主题 × 侧栏/内容区/弹窗',
++    'default+doc(14)': '默认 6 + Doc 8（Doc 侧 = 2 主题 × 顶栏/正文侧栏/内容区/首章节）',
++  };
++  const comp = COMPOSITION[r.regionSet] || (r.regionSet || '').replace(/^file:/, '自定义区域表：');
++  console.log('  区域（' + r.summary.regions + ' 个 = ' + comp + '）：');
+   for (const g of r.regions) {
+     const captured = !!(g.before.sha1 && g.after.sha1);
+     if (!captured) {
