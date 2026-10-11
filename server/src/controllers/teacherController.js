@@ -4,10 +4,10 @@ import path from 'path';
 import prisma from '../utils/prisma.js';
 import { DomainError } from '../domain/errors.js';
 import logger from '../utils/logger.js';
-import { DEFAULT_MAX_SCORE, ABNORMAL_FEEDBACK } from '../constants.js';
+import { ABNORMAL_FEEDBACK } from '../constants.js';
 import { resolveSubQuestionScores } from '../utils/scoring.js';
-import { getVisibleClassIds, getTeamTeacherIds, getMyTeamIds } from './teamController.js';
-import { hasStandardPackage } from '../utils/projectPaths.js';
+import { getVisibleClassIds, getMyTeamIds } from './teamController.js';
+import { hasStandardPackage, UPLOADS_ROOT, PROJECTS_ROOT, STANDARDS_ROOT } from '../utils/projectPaths.js';
 import { parseExamPaper, parseExamPaperStream, generateReferenceAnswer } from '../infrastructure/ai/deepseek/index.js';
 
 /** 获取教师当前学校ID（从 query 参数） */
@@ -130,7 +130,7 @@ export const getProjectFiles = async (req, res) => {
     if (!q) return res.status(404).json({ code: 1004, message: '题目不存在', data: null });
     if (!q.attachmentUrl) return res.json({ code: 0, message: 'ok', data: { tree: [] } });
 
-    const dir = path.join(__dirname, '../../uploads', q.attachmentUrl);
+    const dir = path.join(UPLOADS_ROOT, q.attachmentUrl);
     if (!fs.existsSync(dir)) return res.json({ code: 0, message: 'ok', data: { tree: [] } });
 
     // 动态导入 fileTree（ESM 兼容）
@@ -185,7 +185,7 @@ const gradeProject = async (req, res) => {
 
     // R6：开放性题目（attachmentUrl 为空且标准包目录无文件）本就没有标准答案可比对，试评不适用
     const isOpenProject = !hasStandardPackage(q.id, q.attachmentUrl);
-    const standardDir = q.attachmentUrl ? path.join(__dirname, '../../uploads', q.attachmentUrl) : '';
+    const standardDir = q.attachmentUrl ? path.join(UPLOADS_ROOT, q.attachmentUrl) : '';
     const standardFiles = readDirFiles(standardDir)
       .map(f => `// 文件名: ${f.path}\n${f.content}`).join('\n\n');
 
@@ -246,12 +246,12 @@ export const createQuestion = async (req, res) => {
 
       // 将临时上传的 zip 文件移动到正式目录（校验 tempId 格式 + 目录不越界，封堵路径穿越）
       if (tempId) {
-        const projectsRoot = path.resolve(__dirname, '../../uploads/projects');
+        const projectsRoot = PROJECTS_ROOT;
         const srcDir = path.resolve(projectsRoot, String(tempId));
         if (!srcDir.startsWith(projectsRoot + path.sep)) {
           return res.status(400).json({ code: 1001, message: '非法临时目录标识', data: null });
         }
-        const destDir = path.join(__dirname, '../../uploads/project-questions', String(q.id));
+        const destDir = path.join(STANDARDS_ROOT, String(q.id));
         if (fs.existsSync(srcDir)) {
           fs.mkdirSync(path.dirname(destDir), { recursive: true });
           fs.renameSync(srcDir, destDir);
@@ -1287,10 +1287,8 @@ export const batchAddStudents = async (req, res) => {
 
 // ===================== 文件上传 =====================
 import multer from 'multer';
-import { fileURLToPath } from 'url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const uploadDir = path.join(__dirname, '../../uploads/materials');
+const uploadDir = path.join(UPLOADS_ROOT, 'materials');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({
