@@ -20,7 +20,8 @@ archives: docs/split/<file>-{plan,refactor,verify}.md ｜ anchor: e37d27c
 | 6 | QuestionEdit.vue（983 → **466**；12 个 composable） | ✅ | ✅ | ✅ PASS（104 语句 100 全等·L1 冻结口径 82471B·④抓到未绑定名·⑤24 组 20 全等+变异 5/5·client SCC 0·全量 1073 绿） | aa29505 |
 | 7 | ReviewDetail.vue（988 → **620**；7 个 composable） | ✅ | ✅ | ✅ PASS（L0 假通过防线 3/3 验证·65/65 块·L1 冻结口径 32258 字符·**f===t 修正经真值表判定正确**·⑤104/104+变异 6/6·**两道 lint 判据首次实测 = ESLint 0/59、lint-check 31→31**·全量 1073 绿） | b97e633 |
 | ~~8~~ | ~~client/src/views/Doc.vue（1106 行）~~ | **❌ 用户裁定剔除**（纯静态教师手册、不连后端；拆分收益与成本不成比例） | — | — | — |
-| 8 | server/src/controllers/reviewController.js（965 行） | 待派 | 待执行 | 待执行 | — |
+| 8 | reviewController.js（965 → 11 文件：9 搬移 + 2 barrel） | ✅ | ✅（**B0 先补 22+2 例契约测试**·25/25 块判等·barrel 先过 bind-check·**「迁移识别」首次实战报「已迁移 1 条」无需刷基线**） | ✅ PASS（四维对拍 61 例 16 路由全覆盖·变异 7/7·25/25 顶层 53/53 嵌套全执行·全量 1097 passed 0 failed） | c5632b0 |
+| 9 | server/src/controllers/teacherController.js（1338 行，**最后一个**） | 进行中 | 待执行 | 待执行 | — |
 | 返工 | ★step2 缺陷修复（useQuestionNav 漏注入 subQuestions）+ 判据④回溯扫描 160 文件 | — | ✅ 2 行修复 | ✅ PASS（真 Chromium 真 DOM 7/7 复现·正控 3/3·门禁 44/5/15·ROUND=12 0 failed） | 45947b5 |
 
 强制停止条件：① 需改对外契约或产品语义 ② 同一步两次回流仍不通过（跳下一步）③ 护栏不可用 ④ 触及「不改清单」⑤ 步数走完
@@ -30,9 +31,5 @@ archives: docs/split/<file>-{plan,refactor,verify}.md ｜ anchor: e37d27c
 待决清单（需用户拍板）：（空）
 
 （11:21 曾暂停用餐，12:02 已恢复：驱动重建为 schedule-68966552…，step6 已由 C 验证 PASS 并提交 aa29505）
-next_action: 派 step 8-A（reviewController.js 965 接缝分析）｜ 注：Doc.vue 已剔除，其像素门禁区域扩展仍会交付（供将来「更新手册截图」时作辅助核对）
-剩余 GodFile：**reviewController 965（step 8 进行中）→ teacherController 1338（风险最高，须先补契约测试）**；GodFile 目标 3→1（1 = 有意保留的 Doc.vue）
-**待决清单（需用户拍板，只登记不修）**：
-① `reviewController.js:873` 分值钳制遇 `Number('abc')`→NaN 会把 NaN 交给 Prisma（UB）—— 已实测，独立立项
-② `reviewController.js:754` 的 headerCells 把 itemKey/sqId/type/answer/options 全剥掉 ⇒ 前端无法区分客观/主观列 —— 疑似产品缺陷，独立立项
-③ （早前登记）RULE_TYPES 不一致致评分虚高 / generateChecker 幂等分支不可达 / 极端归一化出负分 / validateRulePaths(null) 抛 TypeError
+next_action: step 9-A 分析中（★四问必答：落层用真实门禁判定式预判 / HTTP 契约与越权守卫逐字清单 / **测试覆盖现状与「先补测试」清单** / 调用方与 mock 单点故障排查）
+剩余 GodFile：**仅 teacherController 1338**（+ 有意保留的 Doc.vue 1106）；GodFile 目标 10→1
