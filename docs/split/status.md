@@ -18,7 +18,9 @@ archives: docs/split/<file>-{plan,refactor,verify}.md ｜ anchor: e37d27c
 | 4 | deepseek.js（1051 → 10 文件：2 domain + 8 infra，最大 221 行） | ✅ | ✅ | ✅ PASS（41/41 切片全等·21 名同对象·I14 双向·94 夹具五维相同·23/23 函数覆盖·禁网 0） | e37d27c |
 | 5 | ProjectQuestionEdit.vue（868 → 348；9 个 composable） | ✅ | ✅ | ✅ PASS（L0 三块·L1 51 名·④扫描 0/正控 3/3·⑤运行时 + 变异 5/5·U1 双模式） | b94407f |
 | 6 | QuestionEdit.vue（983 → **466**；12 个 composable） | ✅ | ✅ | ✅ PASS（104 语句 100 全等·L1 冻结口径 82471B·④抓到未绑定名·⑤24 组 20 全等+变异 5/5·client SCC 0·全量 1073 绿） | aa29505 |
-| 7 | ReviewDetail.vue（988 → **620**；7 个 composable） | ✅（template 实为 236 非 47；style 只 1 块⇒2 段；over500 如 A 所料**不降**） | ✅（L0 两侧取自 descriptor·65/65 块·L1 冻结口径+**修掉 A 的 f===t 判据缺陷**·④正负控·⑤104/104+变异 6/6·**GodFile 4→3**·client SCC 0/244 边·bind client 59 模块 0 违规） | 进行中 | — |
+| 7 | ReviewDetail.vue（988 → **620**；7 个 composable） | ✅ | ✅ | ✅ PASS（L0 假通过防线 3/3 验证·65/65 块·L1 冻结口径 32258 字符·**f===t 修正经真值表判定正确**·⑤104/104+变异 6/6·**两道 lint 判据首次实测 = ESLint 0/59、lint-check 31→31**·全量 1073 绿） | b97e633 |
+| ~~8~~ | ~~client/src/views/Doc.vue（1106 行）~~ | **❌ 用户裁定剔除**（纯静态教师手册、不连后端；拆分收益与成本不成比例） | — | — | — |
+| 8 | server/src/controllers/reviewController.js（965 行） | 待派 | 待执行 | 待执行 | — |
 | 返工 | ★step2 缺陷修复（useQuestionNav 漏注入 subQuestions）+ 判据④回溯扫描 160 文件 | — | ✅ 2 行修复 | ✅ PASS（真 Chromium 真 DOM 7/7 复现·正控 3/3·门禁 44/5/15·ROUND=12 0 failed） | 45947b5 |
 
 强制停止条件：① 需改对外契约或产品语义 ② 同一步两次回流仍不通过（跳下一步）③ 护栏不可用 ④ 触及「不改清单」⑤ 步数走完
@@ -28,6 +30,5 @@ archives: docs/split/<file>-{plan,refactor,verify}.md ｜ anchor: e37d27c
 待决清单（需用户拍板）：（空）
 
 （11:21 曾暂停用餐，12:02 已恢复：驱动重建为 schedule-68966552…，step6 已由 C 验证 PASS 并提交 aa29505）
-next_action: step 7-A 分析中（★要求：块边界必须用编译器/配对计数实测——Captain 已连错两次；须给真实 style 块数；须给多形态执行路径表与 5 条判据落地方案）→ B 分批抽 composable → C 按 5 条判据 + client 侧替代判据验证
-剩余 GodFile（3）：Doc.vue 1106（**唯一 B 档**，须先扩像素门禁区域表覆盖其路由）· reviewController 965 · teacherController 1338（**风险最高**，须先补契约测试）
-已装 ESLint（根：eslint@9.39.5 + eslint-plugin-vue@10.11.1；配置 eslint.config.mjs 只查缺陷不查风格；**基线 error=0 / warn=59**，正控 4/4 含 .vue）；另落地离线门禁 scripts/gates/lint-check.mjs（0.55s、自带 8/8 正控、基线 31 条，**有 ESLint 没有的 no-unresolved-import**）⇒ **两道 lint 判据互补**，一并接入每步 DoD ｜ 已沉淀：约束包第 18 条（tree-sitter 假红根因）｜ DoD 判据④边界（看不见跨文件接线错配，只能靠⑤兜）｜ **门禁覆盖缺口**：两条门禁默认不含 client ⇒ **优先给官方脚本传根目录**（cycle-check --root client/src / bind-check client/src，step7 实测可用），确不支持才自建
+next_action: 派 step 8-A（reviewController.js 965 接缝分析）｜ 注：Doc.vue 已剔除，其像素门禁区域扩展仍会交付（供将来「更新手册截图」时作辅助核对）
+剩余 GodFile：**reviewController 965 → teacherController 1338（风险最高，须先补契约测试）**；GodFile 目标 3→1（1 = 有意保留的 Doc.vue）
