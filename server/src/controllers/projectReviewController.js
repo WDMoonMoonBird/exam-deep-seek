@@ -15,7 +15,7 @@ import { PROJECT_ROLE, OPEN_PROJECT_ROLE, buildProjectGradePrompt, buildOpenProj
 import { buildFileTree, filterProjectFiles } from '../services/projectContextBuilder.js';
 import { buildTree, isIgnored } from '../utils/fileTree.js';
 // t6：复用 reviewController 的统一归属校验助手（教师可见班级范围），避免同一防线两处实现漂移
-import { isStudentVisibleToTeacher } from './reviewController.js';
+import { isStudentVisibleToTeacher } from '../infrastructure/review/scope.js';
 import { MAX_TEXT_BYTES } from '../utils/projectArchive.js';
 import fs from 'fs';
 import path from 'path';

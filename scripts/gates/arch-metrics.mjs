@@ -28,7 +28,9 @@ const ROOT = path.resolve(import.meta.dirname, '../..');
 //     （466 < 500 ⇒ 同时离开两个集合，观察带实测 15->14，非预设）
 //   2026-10-11 step7（ReviewDetail.vue 抽 7 个 composable，.vue 988->620）后刷新为 44 / 3 / 14
 //     ⚠️ 观察带**不降**（14->14）：template 236 + style 359 = 595 行不可触碰，该文件结构上无法低于 500
-const BASELINE = { layerViolations: 0, unmigrated: 44, godfileOver800: 3, over500: 14 };
+//   2026-10-11 step8（reviewController 拆 11 文件：9 搬移 + 2 barrel，源已删）后刷新为 43 / 2 / 13
+//     （观察带 14->13：被删的 reviewController.js 965 行原本在 >500 集合内）
+const BASELINE = { layerViolations: 0, unmigrated: 43, godfileOver800: 2, over500: 13 };
 
 const SKIP = new Set(['node_modules', '.git', 'dist', 'coverage', 'uploads']);
 
