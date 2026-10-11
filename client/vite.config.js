@@ -117,8 +117,41 @@ function monacoLocalVs() {
   }
 }
 
+/**
+ * baseSlashRedirect —— 让 "<base>"（不带末尾斜杠，如 /exam）也能进站。
+ *
+ * 病因：vite 的 base 中间件对 "/exam" 直接返回 404（"The server is configured with a public
+ * base URL of /exam/ - did you mean to visit /exam/ instead?"），用户手敲 http://host/exam 会看到
+ * 404 纯文本而不是页面；生产 nginx 的 "location /exam/" 同样不匹配 "/exam"（前缀匹配要求末尾斜杠）。
+ * 做法：在 vite 内部中间件之前拦一层，301 到带斜杠的 base —— 与 nginx 侧新增的
+ * "location = /exam { return 301 /exam/; }" 对齐，dev 与 prod 行为一致。
+ * 注册时机：configureServer 里直接 use() = 注册在内部中间件之前（与 monacoLocalVs 同一手法）。
+ */
+function baseSlashRedirect() {
+  let base = '/'
+  return {
+    name: 'base-slash-redirect',
+    configResolved(config) { base = config.base },
+    configureServer(server) {
+      if (base === '/') return
+      const bare = base.replace(/\/+$/, '')
+      server.middlewares.use((req, res, next) => {
+        const raw = req.url || ''
+        if (raw.split('?')[0] === bare) {
+          const qs = raw.includes('?') ? '?' + raw.split('?').slice(1).join('?') : ''
+          res.statusCode = 301
+          res.setHeader('Location', base + qs)
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+          return res.end('Redirecting to ' + base + qs + '\n')
+        }
+        next()
+      })
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [vue(), legacy({ targets: ['chrome >= 69'] }), monacoLoaderLocalDefault(), monacoLocalVs()],
+  plugins: [vue(), legacy({ targets: ['chrome >= 69'] }), monacoLoaderLocalDefault(), monacoLocalVs(), baseSlashRedirect()],
   server: {
     port: 5173,
     proxy: {

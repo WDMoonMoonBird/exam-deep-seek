@@ -1,6 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router';
 
 const routes = [
+  // 欢迎 / 介绍主页：公开路由（见下方 beforeEach 的白名单）。未登录可浏览；
+  // 已登录也留在本页（主按钮由「教师登录」变为「进入控制台」，按角色进各自首页），不强制跳走。
+  { path: '/', component: () => import('../views/Landing.vue') },
   { path: '/login', component: () => import('../views/Login.vue') },
   {
     path: '/admin',
@@ -78,7 +81,8 @@ router.beforeEach((to) => {
     return true;
   }
 
-  if (to.path === '/doc') {
+  // 公开页：欢迎页与使用文档不需要登录态（欢迎页自身按登录态切换主按钮文案/去向）
+  if (to.path === '/' || to.path === '/doc') {
     return true;
   }
 
