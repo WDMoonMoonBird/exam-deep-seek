@@ -69,7 +69,7 @@
  *   区域 sider   侧栏底盘      .ant-layout-sider      （布局骨架，零数据依赖）
  *        content 主内容区      #main-content          （/exam/teacher/classes 页面正文）
  *        modal   弹窗          .ant-modal-content     （点「新增班级」打开）
- *   依据：round 2（docs/pipeline/test-round-02.md 7.4）已实证该划分可执行；
+ *   依据：round 2（scripts/gates/baselines/test-round-02.md 7.4）已实证该划分可执行；
  *   计划书 5 的「4 组」字面形态（亮/暗 × 舒适/紧凑）在本仓不可执行 ——
  *   data-density 是各 Layout 硬编码，无全局密度开关，同一路由无法在两种密度下渲染。
  *   故采用「每主题各自改前/改后全等」这一可执行形态。

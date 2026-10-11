@@ -9,7 +9,7 @@
  *   ③ 相对 import 指向已被删除的模块：拆分后残留 3 处；
  *   ④ 未使用的声明 / 拼写错的引用：全靠人工阅读发现。
  *
- * 规则（6 条 + 1 条防御性附加项，全部离线 AST 实现，见 docs/pipeline/lint-gate-report.md）：
+ * 规则（6 条 + 1 条防御性附加项，全部离线 AST 实现，见 scripts/gates/baselines/lint-gate-report.md）：
  *   no-undef              引用但未声明 / 未 import / 未注入的标识符【本门禁的核心】
  *   no-unused-vars        声明但从未使用（export 的声明不算未使用；下划线前缀豁免）
  *   no-unresolved-import  相对 import/require 的目标文件不存在（覆盖 export { x } from './y'）
@@ -28,9 +28,9 @@
  *   比对键 = file + rule + symbol，并按“出现次数”比对：
  *     - 行号漂移（同一处违规因上方增删行而挪位）不算新违规；
  *     - 同类违规净增（例如某文件多出一处 no-undef:foo）才算。
- *   基线文件：docs/pipeline/lint-baseline.json（由 --update-baseline 生成/刷新）。
+ *   基线文件：scripts/gates/baselines/lint-baseline.json（由 --update-baseline 生成/刷新）。
  *
- * ★ 迁移识别（2026-10-11 追加；设计与自证见 docs/pipeline/lint-gate-migration.md）：
+ * ★ 迁移识别（2026-10-11 追加；设计与自证见 scripts/gates/baselines/lint-gate-migration.md）：
  *   GodFile 拆分把整段代码**逐字搬**到新文件时，同一处缺陷只是换了宿主，它的 file 键随之改变 ⇒
  *   旧键 resolved、新键 fresh ⇒ 现行判定会把它误读成「新违规」而 exit 1（缺陷本身没有变化）。
  *   故：把同时出现、且满足下列**全部**条件的 resolved/fresh 成对判为**迁移**，不计入阻断项，单列「已迁移 N 条」：
@@ -59,7 +59,7 @@ import { pathToFileURL } from 'node:url';
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const SCAN_ROOTS = ['client/src', 'server/src'];
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'coverage', 'uploads', '.vite', '__snapshots__']);
-const BASELINE_PATH = path.join(ROOT, 'docs/pipeline/lint-baseline.json');
+const BASELINE_PATH = path.join(ROOT, 'scripts/gates/baselines/lint-baseline.json');
 
 /** 判定顺序即输出顺序 */
 const RULES = ['no-undef', 'no-unused-vars', 'no-unresolved-import', 'no-dupe-keys', 'no-redeclare', 'no-const-assign', 'parse-error'];
@@ -615,7 +615,7 @@ function makeSourceReader() {
 }
 
 /**
- * 迁移配对：把「同一处缺陷换了宿主」与「真正新增的缺陷」区分开（动机与自证见 docs/pipeline/lint-gate-migration.md）。
+ * 迁移配对：把「同一处缺陷换了宿主」与「真正新增的缺陷」区分开（动机与自证见 scripts/gates/baselines/lint-gate-migration.md）。
  *
  * 配对键（三元组）= rule + symbol + 规范化代码行文本；
  * 判定：对每个三元组要求 **resolved 条数 === fresh 条数 > 0**（一一配对，不部分配对），且两侧 file 两两不同。
