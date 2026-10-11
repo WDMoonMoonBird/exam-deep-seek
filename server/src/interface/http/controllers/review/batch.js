@@ -75,7 +75,6 @@ export const batchReview = async (req, res) => {
         reviewedStudentIds.add(sid);
       }
     }
-    let count = 0;
     if (toReview.length) {
       // t4：归属校验已在前置全量完成 → 批量写入放同一事务，杜绝「写一半」留下部分生效
       await prisma.$transaction(toReview.map((s) => {
@@ -86,7 +85,6 @@ export const batchReview = async (req, res) => {
           data: { status: 'reviewed', reviewedAt: new Date(), finalScore: s.aiScore, teacherFeedback: isProject ? (s.teacherFeedback || '') : (s.aiFeedback || '') },
         });
       }));
-      count = toReview.length;
     }
     res.json({ code: 0, message: `已审核 ${reviewedStudentIds.size} 名学生`, data: { count: reviewedStudentIds.size } });
   } catch (err) {

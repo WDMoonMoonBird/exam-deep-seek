@@ -30,7 +30,7 @@ function readToken(name) {
   try {
     const v = getComputedStyle(document.documentElement).getPropertyValue(name);
     return v ? v.trim() : '';
-  } catch (e) {
+  } catch {
     return '';
   }
 }

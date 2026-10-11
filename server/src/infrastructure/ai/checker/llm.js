@@ -4,7 +4,7 @@
  */
 
 import logger from '../../../utils/logger.js';
-import { getBaseUrl, getApiKey, getModel } from '../deepseek/index.js';
+import { getBaseUrl, getApiKey } from '../deepseek/index.js';
 
 /** LLM 输出 max_tokens（规则 JSON 长输出，非思考模式，2026-08-17 教训 2） */
 const LLM_MAX_TOKENS = 16000;

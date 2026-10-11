@@ -3,7 +3,7 @@
  * 逐字搬移：本文件内的函数体与源文件对应区间字节相同，未做任何逻辑改动。
  */
 
-import logger from '../../../utils/logger.js';
+import '../../../utils/logger.js';
 import prisma from '../../../utils/prisma.js';
 
 // ===================== 配置读取（优先 DB → 回退 ENV） =====================

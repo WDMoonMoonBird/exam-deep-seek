@@ -196,7 +196,7 @@
 <script setup>
 import { onMounted, onBeforeUnmount } from 'vue';
 import { message } from 'ant-design-vue';
-import { LoadingOutlined, FileTextOutlined, CheckCircleOutlined, CheckCircleFilled } from '@ant-design/icons-vue';
+import { LoadingOutlined, FileTextOutlined, CheckCircleFilled } from '@ant-design/icons-vue';
 import RichEditor from '../../components/RichEditor.vue';
 import ProjectZipUploader from '../../components/ProjectZipUploader.vue';
 import FormPage from '../../components/FormPage.vue';

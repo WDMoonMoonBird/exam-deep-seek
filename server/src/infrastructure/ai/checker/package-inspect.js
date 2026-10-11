@@ -21,7 +21,7 @@ function packageFingerprint(rootDir) {
     };
     walk(rootDir, '');
     return crypto.createHash('sha1').update(lines.sort().join('\n')).digest('hex').slice(0, 12);
-  } catch (err) {
+  } catch {
     return null;
   }
 }
@@ -101,7 +101,7 @@ function enrichDeductionSnippets(projectRoot, objectiveItems, deductions) {
       if (!abs.startsWith(path.resolve(projectRoot) + path.sep)) return it;
       const content = fs.readFileSync(abs, 'utf8').slice(0, 200).replace(/\s+/g, ' ');
       return { ...it, snippet: content };
-    } catch (e) {
+    } catch {
       return it;
     }
   });

@@ -31,8 +31,6 @@ const subFeedbacks = reactive({});    // sqId → string (来自教师或系统�
 const editorLangs = reactive({});     // sqId → language string
 
 const submittingAll = ref(false);
-let draftTimer = null;
-let deadlineTimer = null;
 
 const langs = ['c', 'cpp', 'csharp', 'java', 'python', 'javascript', 'typescript', 'go', 'rust', 'ruby', 'php', 'swift', 'kotlin', 'sql', 'shell', 'r', 'scala', 'perl'];
 

@@ -53,7 +53,7 @@ function repairTruncatedJson(text) {
   const closers = stack.reverse().map((c) => (c === '{' ? '}' : ']')).join('');
   try {
     return JSON.parse(text + closers);
-  } catch (err) {
+  } catch {
     return null;
   }
 }
@@ -64,12 +64,12 @@ function parseLooseJson(raw) {
   const stripped = raw.replace(/\`\`\`[a-zA-Z]*/g, '');
   try {
     return JSON.parse(stripped);
-  } catch (err) { /* 继续尝试 */ }
+  } catch { /* 继续尝试 */ }
   const sliced = extractJsonText(stripped);
   if (sliced) {
     try {
       return JSON.parse(sliced);
-    } catch (err) { /* 截断场景：继续尝试补全 */ }
+    } catch { /* 截断场景：继续尝试补全 */ }
   }
   return repairTruncatedJson(stripped);
 }

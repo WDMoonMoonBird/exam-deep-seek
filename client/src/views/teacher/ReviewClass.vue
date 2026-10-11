@@ -200,12 +200,6 @@ const pageDesc = computed(() => {
   return parts.join(' · ');
 });
 
-const reviewSummary = computed(() => {
-  const total = list.value.filter(r => r.submitted).length;
-  const pending = list.value.filter(r => r.status === 'ai_graded' || r.status === 'submitted').length;
-  return { total, pending };
-});
-
 function formatStudentNo(studentNo, schoolName) {
   if (!studentNo) return '';
   const at = studentNo.lastIndexOf('@');

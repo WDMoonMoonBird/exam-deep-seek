@@ -161,7 +161,7 @@ export function analyzePythonTree(tree, state) {
  * Python 工程事实提取（adapter 入口）：文件计数 + 逐文件解析分析 + 去重集合统一落 facts。
  * @param {object} ctx - { projectRoot, files, facts, state, language }
  */
-export function extractPythonFacts({ projectRoot, files, facts, state, language }) {
+export function extractPythonFacts({ projectRoot, files, facts, state }) {
   // 文件计数
   for (const rel of files) {
     if (extOf(rel) === 'py') facts.pyFiles += 1;

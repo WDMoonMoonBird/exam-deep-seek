@@ -56,10 +56,6 @@ export function scoreDefects({ issues = [], rubricText = '' }) {
 
   // 缺失关键文件 → 对应功能扣分（Login.vue → 登录/路由项；user.js → Pinia 项）
   const keyFiles = issues.filter((i) => i.type === 'missing_key_file');
-  // 标题级映射：文件 → 对应 rubric 分项标题前缀（"第X项"），避免正文关键词误命中
-  const mapping = [
-    { file: 'Login.vue', itemNo: /第[一二三]*项/ }, // 见下方按标题匹配修正
-  ];
   // 简化：把文件→分项标题文字映射（锚定"第X项，标题…"整段，取该段 N 分）
   const itemSegments = [];
   const itemRe = /第\s*[零一二三四五六七八九十百0-9]+\s*[项条部分点][、,，:：]?([^。！？\n]*?)[，,]?\s*(\d{1,3})\s*分/g;

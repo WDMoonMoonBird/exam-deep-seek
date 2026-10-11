@@ -69,7 +69,7 @@ function formatParams(record) {
   const p = record.params || {};
   try {
     return JSON.stringify(p);
-  } catch (e) {
+  } catch {
     return String(p);
   }
 }

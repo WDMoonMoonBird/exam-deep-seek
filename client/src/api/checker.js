@@ -68,12 +68,6 @@ export function getRuleQuality(params = {}) {
 
 // ---------------- Mock 数据工厂（原型交互，数据对齐题目 353 实测） ----------------
 
-const TEMPLATES = [
-  { code: 'vue-frontend-crud', name: 'Vue 前端 CRUD', lang: 'Vue/JS', desc: '路由跳转 / 登录注册 / Pinia / 列表页 / 代码规范', groups: 9 },
-  { code: 'java-backend-api', name: 'Java 后端 API', lang: 'Java', desc: '接口路由 / 参数校验 / 异常兜底 / 数据层', groups: 8 },
-  { code: 'python-algorithm', name: 'Python 算法题', lang: 'Python', desc: '函数定义 / 边界处理 / 复杂度 / 注释', groups: 5 },
-];
-
 const GROUPS = [
   { group: '项目初始化与运行', points: 9, count: 9 },
   { group: '路由与跳转', points: 9, count: 9 },
@@ -135,7 +129,7 @@ function mockParams(ruleType) {
   }
 }
 
-function mockEvidence(ruleType, seq) {
+function mockEvidence(ruleType) {
   const map = {
     file_exists: '工程缺少文件 {path}',
     dir_contains_file: '目录 {dir} 中未找到匹配 {pattern} 的文件',

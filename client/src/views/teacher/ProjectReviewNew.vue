@@ -553,7 +553,7 @@ function startPolling() {
           message.success('重新评分完成');
         }
       }
-    } catch (e) { /* 单次轮询失败忽略，下轮继续 */ }
+    } catch { /* 单次轮询失败忽略，下轮继续 */ }
   }, POLL_INTERVAL);
 }
 

@@ -656,7 +656,7 @@ async function markFailed(submissionId, error) {
     try {
       const cur = await prisma.submission.findUnique({ where: { id: submissionId }, select: { answer: true } });
       resumeStatus = parseProjectAnswer(cur?.answer).grading?.prevStatus || 'submitted';
-    } catch (e) { /* 读取失败走默认 submitted */ }
+    } catch { /* 读取失败走默认 submitted */ }
     await updateEnvelopeGrading(submissionId, (env) => {
       env.grading = { ...env.grading, state: 'failed', finishedAt: new Date().toISOString(), error: String(error || 'unknown') };
       return env;

@@ -66,7 +66,7 @@ export class DeepSeekGateway {
     for (let attempt = 1; attempt <= GRADE_RETRIES; attempt++) {
       try {
         const model = await this.configRepo.getModel();
-        const { res, controller, timer } = await this.#request({
+        const { res, timer } = await this.#request({
           model,
           messages: [
             { role: 'system', content: buildSystemPrompt(req.scoringCriteria) },
@@ -122,7 +122,7 @@ export class DeepSeekGateway {
     for (let attempt = 1; attempt <= PARSE_RETRIES; attempt++) {
       try {
         const model = await this.configRepo.getModel();
-        const { res, controller, timer } = await this.#request({
+        const { res, timer } = await this.#request({
           model,
           messages: [
             { role: 'system', content: PARSE_ROLE + '\n\n' + PARSE_RULES },
@@ -174,7 +174,7 @@ export class DeepSeekGateway {
         return { score: 0, feedback: 'AI 评审不可用：未配置 API Key' };
       }
       const model = await this.configRepo.getModel();
-      const { res, controller, timer } = await this.#request({
+      const { res, timer } = await this.#request({
         model,
         messages: [
           { role: 'system', content: PROJECT_REVIEW_SYSTEM },

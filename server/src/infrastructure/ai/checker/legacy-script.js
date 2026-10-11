@@ -51,6 +51,6 @@ export async function runCheckerScript(script, rootDir) {
     const stderr = String((err && err.stderr) || (err && err.message) || err).slice(0, 500);
     throw new Error('检查脚本执行失败：' + stderr);
   } finally {
-    try { fs.unlinkSync(scriptPath); } catch (e) { /* 忽略清理失败 */ }
+    try { fs.unlinkSync(scriptPath); } catch { /* 忽略清理失败 */ }
   }
 }

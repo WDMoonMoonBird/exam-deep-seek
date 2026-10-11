@@ -4,7 +4,7 @@
  */
 
 import logger from '../../../utils/logger.js';
-import { ABNORMAL_FEEDBACK, DEFAULT_MAX_SCORE } from '../../../constants.js';
+import { ABNORMAL_FEEDBACK } from '../../../constants.js';
 import { getBaseUrl, getApiKey, getModel } from './config.js';
 import { buildSystemPrompt } from '../../../domain/services/deepseek/prompts.js';
 

@@ -18,7 +18,7 @@ export class AstAnalyzer {
    * @param {string} [language] 编程语言（当前实现不依赖）
    * @returns {Promise<{score: number, feedback: string, stats: object}>}
    */
-  async analyze(dir, language = 'java') {
+  async analyze(dir) {
     if (!fs.existsSync(dir)) {
       return { score: 0, feedback: '提交目录不存在', stats: {} };
     }

@@ -233,7 +233,7 @@ function mutateCountRegex(params, root) {
   let re;
   try {
     re = new RegExp(source, 'g');
-  } catch (err) {
+  } catch {
     return { ok: false, reason: '正则无效：' + source };
   }
   const mutated = r.content.replace(re, '');
@@ -264,7 +264,7 @@ function mutateContainsRegex(params, root) {
   let re;
   try {
     re = new RegExp(source);
-  } catch (err) {
+  } catch {
     return { ok: false, reason: '正则无效：' + source };
   }
   const m = re.exec(r.content);
@@ -274,7 +274,7 @@ function mutateContainsRegex(params, root) {
     if (new RegExp(source).test(mutated)) {
       return { ok: false, reason: '替换首个匹配后仍匹配（正则过宽），无法构造确定性不匹配变体' };
     }
-  } catch (err) {
+  } catch {
     return { ok: false, reason: '正则无效：' + source };
   }
   const w = writeFileUtf8(abs, mutated);

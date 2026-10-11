@@ -163,7 +163,7 @@ import HealthReportTable from './HealthReportTable.vue';
 import RuleSummaryCard from './RuleSummaryCard.vue';
 import CodeEditor from '../CodeEditor.vue';
 import {
-  getCheckerStatus, generateChecker, confirmChecker, rollbackChecker, getHealthReport, getRuleVersions,
+  getCheckerStatus, generateChecker, confirmChecker, rollbackChecker,
   mockRules, mockHealthReport, mockVersions,
 } from '../../api/checker.js';
 import { detectProjectType } from '../../domain/projectType.js';
@@ -298,7 +298,7 @@ function applyState(d) {
   logs.value = Array.isArray(meta.log) ? meta.log : [];
   if (d.status === 'review' || d.status === 'ready') {
     let parsed = null;
-    try { parsed = d.script ? JSON.parse(d.script) : null; } catch (e) { parsed = null; }
+    try { parsed = d.script ? JSON.parse(d.script) : null; } catch { parsed = null; }
     rules.value = meta.rules || parsed || rules.value;
     report.value = meta.report || { score: 0, max_score: props.maxScore, threshold: 90, items: [] };
     versions.value = Array.isArray(meta.versions) ? meta.versions : [];
@@ -482,7 +482,7 @@ onMounted(async () => {
     try {
       const d = await refreshState();
       if (d.status === 'generating' || d.status === 'calibrating') pollReal();
-    } catch (e) { /* 后端未就绪 */ }
+    } catch { /* 后端未就绪 */ }
   }
 });
 

@@ -365,7 +365,7 @@ export async function generateChecker(questionId) {
       meta.items = Array.isArray(bestResult.items) ? bestResult.items : [];
       buildReport(meta, bestRules, bestResult.items, bestRules.max_score);
       markDefectReportItems(meta, bestDefectIds);
-    } catch (err) {
+    } catch {
       meta.report = null;
     }
     appendVersion(meta, bestText, 'draft', '多轮最优规则达标（校准得分 ' + bestScore + '/' + maxScore + ' 分，阈值 ≥' + threshold + '），待教师确认');

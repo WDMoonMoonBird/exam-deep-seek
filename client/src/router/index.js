@@ -69,7 +69,7 @@ router.beforeEach((to) => {
   try {
     token = localStorage.getItem('token');
     user = JSON.parse(localStorage.getItem('user'));
-  } catch (e) { /* localStorage 不可用 */ }
+  } catch { /* localStorage 不可用 */ }
 
   if (to.path === '/login') {
     if (token && user) {

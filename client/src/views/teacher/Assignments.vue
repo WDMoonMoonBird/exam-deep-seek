@@ -275,7 +275,7 @@ async function fetchSummary() {
   try {
     const r = await request.get('/teacher/pending-summary');
     Object.assign(summary, r.data || {});
-  } catch (e) {
+  } catch {
     // KPI 是辅助信息，失败不阻塞列表（错误提示由 request 拦截器统一处理）
   }
 }

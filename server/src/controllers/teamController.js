@@ -208,7 +208,7 @@ export async function getVisibleClassIds(teacherId, schoolId) {
 }
 
 // ===== 获取教师团队内的其他教师ID（用于作业/审核共享） =====
-export async function getTeamTeacherIds(teacherId, schoolId) {
+export async function getTeamTeacherIds(teacherId) {
   const teamIds = (await prisma.teamTeacher.findMany({ where: { teacherId }, select: { teamId: true } })).map(t => t.teamId);
   if (!teamIds.length) return [];
   const members = await prisma.teamTeacher.findMany({ where: { teamId: { in: teamIds } }, select: { teacherId: true } });

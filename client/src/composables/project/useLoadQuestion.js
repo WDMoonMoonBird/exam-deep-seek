@@ -67,7 +67,7 @@ async function loadQuestion() {
         if (first) openFile(first.path, first.name, first.language);
       }
     }
-  } catch (e) {
+  } catch {
     message.error('加载失败');
   }
 }

@@ -1,7 +1,7 @@
 // 领域实体：身份、核心状态与关键不变量；持久化与查询由仓储端口负责
 
 import { SubmissionStatus, QuestionType } from './value-objects.js';
-import { SubmissionClosedError, DuplicateSubmissionError, IllegalStateError, EntityNotFoundError } from './errors.js';
+import { SubmissionClosedError, DuplicateSubmissionError, IllegalStateError } from './errors.js';
 
 // 提交聚合：学生针对作业某题目的答案提交（截止后不可提交，状态机单向流转）
 export class Submission {

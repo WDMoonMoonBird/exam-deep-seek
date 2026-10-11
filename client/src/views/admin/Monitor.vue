@@ -54,7 +54,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
-import { message } from 'ant-design-vue';
+import 'ant-design-vue';
 import request from '../../api/request.js';
 import PageShell from '../../components/PageShell.vue';
 import StatusTag from '../../components/StatusTag.vue';

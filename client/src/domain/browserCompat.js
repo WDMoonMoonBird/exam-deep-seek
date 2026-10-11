@@ -20,7 +20,7 @@ export function isLegacyBrowser() {
     }
     // 可选链语法检测（Function 构造器在旧浏览器解析该字符串会抛 SyntaxError）
     new Function('a?.b');
-  } catch (e) {
+  } catch {
     return true;
   }
   return false;

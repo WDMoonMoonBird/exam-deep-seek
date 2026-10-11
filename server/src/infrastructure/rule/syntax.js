@@ -5,7 +5,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
+import 'node:module';
 import Parser from 'tree-sitter';
 import JS from 'tree-sitter-javascript';
 import { getJavaParser } from '../../services/factExtractors/java.js';
@@ -14,10 +14,6 @@ import logger from '../../utils/logger.js';
 import { CHECKABLE_EXTS } from '../../domain/services/rule/constants.js';
 import { errorSummary, extractVueScriptWithOffset, globToRegExp, lineNumberOf } from '../../domain/services/rule/evaluators.js';
 import { collectFiles, extOf, readFileUtf8, resolveWithinRoot } from './file-access.js';
-
-// tree-sitter-vue 的旧版原生绑定（build/Release/*.node）在部分运行时（如 Jest 的模块解析器）
-// 下无法加载：统一走 createRequire 惰性加载，加载/初始化失败一律回退 <script> 提取 + JS 解析。
-const nodeRequire = createRequire(import.meta.url);
 
 /**
  * JS 解析器。注意：tree-sitter 同一 Parser 连续 parse 会使旧树节点失效（缓冲复用），

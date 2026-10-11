@@ -21,12 +21,12 @@ function readStored() {
   try {
     const v = localStorage.getItem(STORAGE_KEY);
     return MODES.indexOf(v) >= 0 ? v : 'system';
-  } catch (e) { return 'system'; }
+  } catch { return 'system'; }
 }
 
 function prefersDark() {
   if (typeof window === 'undefined' || !window.matchMedia) return false;
-  try { return window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) { return false; }
+  try { return window.matchMedia('(prefers-color-scheme: dark)').matches; } catch { return false; }
 }
 
 /** 把解析后的主题写到 <html>：data-theme 驱动 tokens.css 的变量表，color-scheme 驱动原生控件 */
@@ -34,7 +34,7 @@ function applyTheme(theme) {
   if (typeof document === 'undefined') return;
   const el = document.documentElement;
   el.setAttribute('data-theme', theme);
-  try { el.style.colorScheme = theme; } catch (e) { /* 旧内核忽略 */ }
+  try { el.style.colorScheme = theme; } catch { /* 旧内核忽略 */ }
 }
 
 /* ===== 主题切换过渡（Wave 5 · t41）=====
@@ -102,7 +102,7 @@ watch(resolved, (t) => applyTheme(t), { immediate: true, flush: 'sync' });
     const onChange = (e) => { systemDark.value = !!e.matches; };
     if (typeof mql.addEventListener === 'function') mql.addEventListener('change', onChange);
     else if (typeof mql.addListener === 'function') mql.addListener(onChange);
-  } catch (e) { /* 能力不可用时保持初始值 */ }
+  } catch { /* 能力不可用时保持初始值 */ }
 })();
 
 /** 设置模式并持久化；非法值回落 'system' */
@@ -112,7 +112,7 @@ function setMode(next) {
   const nextResolved = v === 'system' ? (systemDark.value ? 'dark' : 'light') : v;
   if (nextResolved !== resolved.value) startThemeTransition();
   mode.value = v;
-  try { localStorage.setItem(STORAGE_KEY, v); } catch (e) { /* 隐私模式等：仅本次会话生效 */ }
+  try { localStorage.setItem(STORAGE_KEY, v); } catch { /* 隐私模式等：仅本次会话生效 */ }
 }
 
 /** 在 light/dark 之间切换（把当前 resolved 取反并写死为显式模式，脱开 system） */

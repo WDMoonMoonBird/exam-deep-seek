@@ -31,7 +31,7 @@ function cssVar(name, fallback) {
   try {
     const value = getComputedStyle(document.documentElement).getPropertyValue(name);
     return (value && value.trim()) || fallback;
-  } catch (e) {
+  } catch {
     return fallback;
   }
 }

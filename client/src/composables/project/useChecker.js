@@ -62,7 +62,7 @@ async function ensureCheckerState() {
     await fetchChecker();
     checkerLoadedOnce = true;
     if (checkerStatus.value === 'generating' || checkerStatus.value === 'calibrating') startCheckerPoll();
-  } catch (e) { /* 后端未就绪时忽略 */ }
+  } catch { /* 后端未就绪时忽略 */ }
 }
 
 /** 向导状态回调：同步头部按钮状态；重新生成时清除标准包过期标记 */
@@ -134,7 +134,7 @@ async function copyScript() {
   try {
     await navigator.clipboard.writeText(checkerData.value.script || '');
     message.success('已复制');
-  } catch (e) {
+  } catch {
     message.error('复制失败，请手动选择复制');
   }
 }

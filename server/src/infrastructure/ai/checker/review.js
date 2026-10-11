@@ -62,7 +62,7 @@ export async function confirmChecker(questionId, body) {
   if ((action === 'to_subjective' || action === 'exempt' || action === 'accept') && Array.isArray(itemIds)) {
     const report = meta.report || { items: [] };
     let rules = null;
-    if (script) { try { rules = JSON.parse(script); } catch (e) { rules = null; } }
+    if (script) { try { rules = JSON.parse(script); } catch { rules = null; } }
     for (const itemId of itemIds) {
       const rep = report.items.find((i) => String(i.id) === String(itemId));
       if (!rep) continue;

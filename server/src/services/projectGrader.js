@@ -5,10 +5,10 @@
  * 对外 API 与拆分前完全一致（gradeMachine / gradeAST / gradeAI / calculateTotal）。
  */
 
-import fs from 'fs';
-import path from 'path';
+import 'fs';
+import 'path';
 import logger from '../utils/logger.js';
-import { getLanguageByExt, isIgnored } from '../utils/fileTree.js';
+import '../utils/fileTree.js';
 import { CompileExecutor } from '../infrastructure/execution/compile-executor.js';
 import { AstAnalyzer } from '../infrastructure/execution/ast-analyzer.js';
 import { buildFileList } from '../infrastructure/execution/project-file-utils.js';

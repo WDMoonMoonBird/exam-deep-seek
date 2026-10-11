@@ -42,7 +42,7 @@ export function useDraftAutosave(options = {}) {
     if (typeof enabled !== 'function') return !!enabled;
     try {
       return !!enabled();
-    } catch (e) {
+    } catch {
       return false;
     }
   }
