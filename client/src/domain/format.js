@@ -15,6 +15,18 @@ export function formatDateTime(d) {
 }
 
 /**
+ * 日期时间拆两行（列表样式 v2）：{ date: 'YYYY-MM-DD', time: 'HH:mm' }。
+ * 用途：表格「创建时间 / 截止时间」列固定两行排版，避免同一列里有的换行、有的不换行。
+ * 空值 → { date:'', time:'' }；无法解析的输入整体放 date（沿用 formatDateTime 的回退输出）。
+ */
+export function splitDateTime(d) {
+  const s = formatDateTime(d);
+  if (!s) return { date: '', time: '' };
+  const i = s.lastIndexOf(' ');
+  return i > 0 ? { date: s.slice(0, i), time: s.slice(i + 1) } : { date: s, time: '' };
+}
+
+/**
  * 日期（仅日期，全站统一）：YYYY-MM-DD —— 月/日零填充。
  * 空值 → ''（同改前）；无法解析的输入沿用 toLocaleDateString 的原有输出（Invalid Date），行为与改前一致。
  */

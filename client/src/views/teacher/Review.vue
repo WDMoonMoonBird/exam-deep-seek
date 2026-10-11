@@ -39,18 +39,19 @@
       </template>
 
       <template #bodyCell="{ column, record }">
+        <!-- 主列：两行式（主 = 作业标题；次 = 班级 · 作答区间 · 应交人数），保持平铺不分组 -->
         <template v-if="column.key === 'info'">
-          <div class="info-cell">
-            <div class="info-title">{{ record.title }}</div>
-            <div class="info-class"><TeamOutlined class="info-icon" />{{ record.className }}</div>
-            <div class="info-time">作答: {{ formatDate(record.startTime) }} ~ {{ formatDate(record.endTime) }}</div>
-          </div>
+          <span class="lp-stack">
+            <b>{{ record.title }}</b>
+            <!-- 日期用 MM-DD：完整 YYYY-MM-DD 两段会让次行自然宽 415px > 列宽 380，把表格顶出容器 21px（实测） -->
+            <span>{{ record.className }} · 作答 {{ fmtMD(record.startTime) }} ~ {{ fmtMD(record.endTime) }}{{ record.totalStudents ? ' · 共 ' + record.totalStudents + ' 人' : '' }}</span>
+          </span>
         </template>
 
         <template v-else-if="column.key === 'aiStatus'">
           <span v-if="!record.submittedCount" class="dim-text">—</span>
-          <StatusTag v-else-if="record.aiPending === 0 && record.abnormal > 0" tone="danger" :text="'评分异常 ' + record.abnormal + ' 人'" />
-          <StatusTag v-else-if="record.aiPending === 0" tone="success" text="已评分" />
+          <StatusTag v-else-if="record.aiPending === 0 && record.abnormal > 0" tone="danger" dot :text="'评分异常 ' + record.abnormal + ' 人'" />
+          <StatusTag v-else-if="record.aiPending === 0" tone="success" dot text="已评分" />
           <StatusTag
             v-else
             tone="neutral"
@@ -61,17 +62,21 @@
 
         <template v-else-if="column.key === 'reviewStatus'">
           <span v-if="!record.submittedCount" class="dim-text">—</span>
-          <StatusTag v-else-if="record.allReviewed" tone="success" text="已审核" />
-          <StatusTag v-else tone="warning" :text="'待审核 ' + record.reviewPending + ' 人'" />
+          <StatusTag v-else-if="record.allReviewed" tone="success" dot text="已审核" />
+          <StatusTag v-else tone="warning" dot :text="'待审核 ' + record.reviewPending + ' 人'" />
         </template>
 
         <template v-else-if="column.key === 'stats'">
-          <div class="tnum">{{ record.submittedCount }} 已交</div>
-          <div class="tnum">{{ record.totalStudents - record.submittedCount }} 未交</div>
+          <span class="lp-progress">
+            <span class="lp-track" :class="{ 'is-ok': record.totalStudents > 0 && record.submittedCount >= record.totalStudents }">
+              <i :style="{ width: progressPercent(record) + '%' }"></i>
+            </span>
+            <span class="lp-num">{{ record.submittedCount }}<u>/{{ record.totalStudents }}</u></span>
+          </span>
         </template>
 
         <template v-else-if="column.key === 'action'">
-          <div class="row-actions">
+          <div class="lp-actions">
             <a-button type="primary" @click="$router.push(`/teacher/review/class/${record.classId}?assignmentId=${record.assignmentId}`)">
               审核
             </a-button>
@@ -85,7 +90,6 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
-import { TeamOutlined } from '@ant-design/icons-vue';
 import { io } from 'socket.io-client';
 import request from '../../api/request.js';
 import { useUserStore } from '../../stores/user.js';
@@ -96,6 +100,9 @@ import ListPage from '../../components/ListPage.vue';
 import StatusTag from '../../components/StatusTag.vue';
 import { formatDate } from '../../domain/format.js';
 
+/** 短日期（MM-DD）：仅供表格次行压缩宽度使用；完整日期仍走 formatDate */
+const fmtMD = (v) => { const s = formatDate(v); return s ? s.slice(5) : ''; };
+
 const userStore = useUserStore();
 const loading = ref(false);
 const list = ref([]);
@@ -105,13 +112,21 @@ const page = reactive({ current: 1, pageSize: 20 });
 const classes = ref([]);
 const classOptions = computed(() => [{ label: '所有班级', value: '' }, ...classes.value.map(c => ({ label: c.name, value: c.id }))]);
 
+// 列表样式 v2：作业/班级两行式主列 + 状态列收敛 + 已交口径改迷你进度条（数值与口径不变，仅换排版）
 const columns = [
-  { title: '题目信息', key: 'info', width: 320 },
-  { title: 'AI状态', key: 'aiStatus', width: 200 },
-  { title: '审核状态', key: 'reviewStatus', width: 140 },
-  { title: '已交/未交', key: 'stats', width: 120, responsive: ['xl'] },
+  { title: '作业 / 班级', key: 'info', width: 380 },
+  { title: 'AI状态', key: 'aiStatus', width: 190 },
+  { title: '审核状态', key: 'reviewStatus', width: 160 },
+  { title: '已交/未交', key: 'stats', width: 170, responsive: ['xl'] },
   { title: '操作', key: 'action', width: 140, align: 'right' },
 ];
+
+/** 已交占比（纯展示派生值，不改变统计口径）：0 人班级按 0% 处理，避免除零 */
+function progressPercent(record) {
+  const total = record.totalStudents || 0;
+  if (total <= 0) return 0;
+  return Math.min(100, Math.round((record.submittedCount / total) * 100));
+}
 
 /** 前端切片：接口全量返回（见上方 TODO(P1-7)） */
 const pagedList = computed(() => list.value.slice((page.current - 1) * page.pageSize, page.current * page.pageSize));
@@ -185,35 +200,6 @@ onUnmounted(() => {
 .muted {
   color: var(--text-tertiary);
   font-size: var(--fs-caption);
-}
-.tnum {
-  font-variant-numeric: tabular-nums;
-}
-.row-actions {
-  display: flex;
-  gap: 4px;
-  justify-content: flex-end;
-}
-.info-cell {
-  line-height: 1.6;
-}
-.info-title {
-  font-weight: 600;
-  font-size: var(--fs-body-lg);
-}
-.info-class {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--fs-body-sm);
-  color: var(--text-tertiary);
-}
-.info-icon {
-  font-size: var(--fs-body);
-}
-.info-time {
-  font-size: var(--fs-caption);
-  color: var(--text-tertiary);
 }
 .dim-text {
   color: var(--text-tertiary);

@@ -24,13 +24,20 @@
       @empty-action="openAdd"
     >
       <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'classes'">
-          <template v-for="c in record.studentClasses" :key="c.classId">
-            <StatusTag v-if="c.class" tone="neutral" :text="c.class.name" />
-          </template>
-          <span v-if="!record.studentClasses?.length" class="muted">—</span>
+        <!-- 学号：等宽字体，横向比对不受字宽影响（列只写了 dataIndex，故按 column.dataIndex 判断） -->
+        <template v-if="column.dataIndex === 'username'">
+          <span class="lp-mono">{{ record.username }}</span>
         </template>
-        <template v-else-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
+
+        <!-- 姓名：两行式（姓名 + 班级名）；班级不再单列，多个班级用「、」连接、超过 2 个折叠为 +N -->
+        <template v-else-if="column.key === 'realName'">
+          <span class="lp-stack">
+            <b>{{ record.realName }}</b>
+            <span>{{ classSummary(record) }}</span>
+          </span>
+        </template>
+
+        <template v-else-if="column.key === 'createdAt'">{{ formatDate(record.createdAt) }}</template>
       </template>
     </ListPage>
 
@@ -59,8 +66,7 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import request from '../../api/request.js';
 import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
-import StatusTag from '../../components/StatusTag.vue';
-import { formatDateTime } from '../../domain/format.js';
+import { formatDate } from '../../domain/format.js';
 const loading = ref(false);
 const list = ref([]);
 const page = reactive({ current: 1, pageSize: 20 });
@@ -68,12 +74,19 @@ const classes = ref([]);
 const visible = ref(false);
 const form = reactive({ username: '', realName: '', classIds: [] });
 
+// 列表样式 v2：姓名列两行式（姓名 + 班级，原「班级」列并入次行）；学号等宽；日期列不换行、窄屏隐藏
 const columns = [
-  { title: '学号', dataIndex: 'username', width: 130, ellipsis: true },
-  { title: '姓名', dataIndex: 'realName', width: 120, ellipsis: true },
-  { title: '班级', key: 'classes', width: 180, responsive: ['xl'] },
-  { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true, responsive: ['xl'] },
+  { title: '学号', dataIndex: 'username', width: 150 },
+  { title: '姓名', key: 'realName', dataIndex: 'realName', width: '1fr' },
+  { title: '创建时间', key: 'createdAt', width: 120, responsive: ['xl'] },
 ];
+
+/** 姓名列次行：班级名（多个用「、」连接，超过 2 个只显示前 2 个 + 「+N」；无班级同改前的「—」） */
+function classSummary(record) {
+  const names = (record.studentClasses || []).map((sc) => sc.class?.name).filter(Boolean);
+  if (!names.length) return '—';
+  return names.length > 2 ? `${names.slice(0, 2).join('、')} +${names.length - 2}` : names.join('、');
+}
 
 /** /admin/students 目前全量返回 → 保持前端切片分页（见模板 TODO(P1-7)） */
 const pagedList = computed(() => {

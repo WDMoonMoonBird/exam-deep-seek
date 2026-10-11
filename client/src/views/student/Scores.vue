@@ -24,17 +24,36 @@
       </template>
 
       <template #bodyCell="{ column, record }">
+        <!-- 作业：两行式（主 = 作业标题；次 = 题型 · 满分[ · 最高分]），宽度 1fr -->
         <template v-if="column.key === 'assignment'">
-          {{ record.assignmentTitle }}
-          <StatusTag v-if="record.mode === 'practice'" tone="accent" text="练习" />
+          <span class="lp-stack">
+            <b>{{ record.assignmentTitle }}</b>
+            <span>{{ assignmentSub(record) }}</span>
+          </span>
         </template>
+
+        <!-- 提交次数：右对齐等宽数字，单位写在 u 里自动弱化 -->
         <template v-else-if="column.key === 'attemptCount'">
-          <span class="tnum">{{ record.attemptCount || 1 }}</span> 次
+          <span class="lp-num">{{ record.attemptCount || 1 }}<u>次</u></span>
         </template>
+
+        <!-- 分数（本页视觉重点）：大字号 + 三档语义色；未出分显示「—」（次要色） -->
         <template v-else-if="column.key === 'score'">
-          <strong class="tnum" :class="scoreBand(record)">{{ record.totalScore }}</strong>
-          <span class="tnum score-max">/ {{ record.maxScore }}</span>
-          <span v-if="record.bestScore != null && record.mode === 'practice'" class="tnum score-best">（最高 {{ record.bestScore }}）</span>
+          <span class="lp-num score-num" :class="scoreBand(record)">
+            <template v-if="record.totalScore == null">—</template>
+            <template v-else>{{ record.totalScore }}<u v-if="record.maxScore != null">/{{ record.maxScore }}</u></template>
+          </span>
+        </template>
+
+        <!-- 状态：沿用本页原有的「练习」标签（accent，加 dot）；考试作业接口只返回已发布的提交，
+             故为「已发布」（success）——措辞与色调沿用全站既有口径（Review.vue 的「已评分」同款）。
+             后端补 status 字段后替换此处即可，见交付报告。 -->
+        <template v-else-if="column.key === 'status'">
+          <StatusTag
+            :tone="record.mode === 'practice' ? 'accent' : 'success'"
+            :text="record.mode === 'practice' ? '练习' : '已发布'"
+            dot
+          />
         </template>
       </template>
     </ListPage>
@@ -54,10 +73,12 @@ const list = ref([]);
 const loading = ref(false);
 const page = reactive({ current: 1, pageSize: 20 });
 
+// 列表样式 v2：主列两行式；数字列右对齐（单位走 u）；分数列大字号分档着色（见 scoped 样式）
 const columns = [
-  { title: '作业', key: 'assignment', width: 220, ellipsis: true },
-  { title: '提交次数', key: 'attemptCount', width: 90 },
-  { title: '分数', key: 'score', width: 140 },
+  { title: '作业', key: 'assignment', width: '1fr' },
+  { title: '提交次数', key: 'attemptCount', width: 110, align: 'right' },
+  { title: '分数', key: 'score', width: 150, align: 'right' },
+  { title: '状态', key: 'status', width: 140 },
 ];
 
 /** 前端切片：接口全量返回，行为与改前 DataTable 的 clientPagination 一致（每页 20 条） */
@@ -76,19 +97,30 @@ function goAssignments() {
 }
 
 /**
- * 分数语义色（阈值见 docs/ui-redesign/03-components.md §Progress）：
- * ≥90 优秀 / 75–89 良好 / 60–74 及格 / <60 不及格；分数或满分缺失时不着色。
+ * 作业列次行：题型 · 满分[ · 最高分]，全部沿用现有字段。
+ * mode 取值 'exam' | 'practice'（server/prisma/schema.prisma 的 Assignment.mode）；
+ * 满分/最高分缺失时各自跳过，不渲染空段。
+ */
+function assignmentSub(record) {
+  const parts = [record.mode === 'practice' ? '练习' : '考试'];
+  if (record.maxScore != null) parts.push('满分 ' + record.maxScore);
+  if (record.bestScore != null) parts.push('最高 ' + record.bestScore);
+  return parts.join(' · ');
+}
+
+/**
+ * 分数分档语义色（class 定义在本页 scoped 样式，不动全局类）：
+ * 得分率 ≥90 绿 / ≥60 品牌蓝 / <60 红；未出分（totalScore 为空）走 is-empty（次要色 + 「—」）。
+ * 满分缺失或非正数时不着色（沿用主色），避免除零产生错误分档。
  */
 function scoreBand(record) {
-  if (record.totalScore == null || record.maxScore == null) return '';
-  const total = Number(record.totalScore);
+  if (record.totalScore == null) return 'is-empty';
   const max = Number(record.maxScore);
-  if (!Number.isFinite(total) || !Number.isFinite(max) || max <= 0) return '';
-  const percent = (total / max) * 100;
-  if (percent >= 90) return 'is-excellent';
-  if (percent >= 75) return 'is-good';
-  if (percent >= 60) return 'is-pass';
-  return 'is-fail';
+  if (!Number.isFinite(max) || max <= 0) return '';
+  const percent = (Number(record.totalScore) / max) * 100;
+  if (percent >= 90) return 'is-high';
+  if (percent >= 60) return 'is-mid';
+  return 'is-low';
 }
 
 async function fetch() {
@@ -106,28 +138,25 @@ onMounted(fetch);
   color: var(--text-tertiary);
   font-size: var(--fs-caption);
 }
-.tnum {
-  font-variant-numeric: tabular-nums;
+
+/* 分数列：本页视觉重点 —— 大字号（19px）+ 三档语义色。
+   .lp-num 是全局工具类，故用「双类」提高优先级，只覆盖本页这一处，不改全局样式；
+   单位（/满分）由 .lp-num > u 自动弱化，不受这里的颜色影响。 */
+.lp-num.score-num {
+  font-size: 19px;
+  font-weight: var(--fw-semibold);
 }
-.score-max {
-  margin-left: 4px;
+.lp-num.score-num.is-high {
+  color: var(--green-600);
+}
+.lp-num.score-num.is-mid {
+  color: var(--brand-600);
+}
+.lp-num.score-num.is-low {
+  color: var(--red-600);
+}
+.lp-num.score-num.is-empty {
   color: var(--text-tertiary);
-}
-.score-best {
-  margin-left: 4px;
-  color: var(--text-tertiary);
-  font-size: var(--fs-body-sm);
-}
-.is-excellent {
-  color: var(--score-excellent);
-}
-.is-good {
-  color: var(--score-good);
-}
-.is-pass {
-  color: var(--score-pass);
-}
-.is-fail {
-  color: var(--score-fail);
+  font-weight: var(--fw-regular);
 }
 </style>

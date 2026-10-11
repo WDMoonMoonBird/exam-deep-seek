@@ -74,6 +74,47 @@ html .new-q-menu .ant-dropdown-menu .ant-dropdown-menu-item {
   color: var(--text-tertiary);
 }
 
+/* ============================================================================
+ * 列表单元格工具类（列表样式 v2，2026-10-12）
+ *
+ * 11 个列表页共用同一套单元格排版，故做成全局类（页面 scoped 样式够不到 a-table 插槽内容时也能用，
+ * 且避免每页各写一份）。约定：页面只负责「用哪个类 + 放什么数据」，不自己发明单元格排版。
+ *   .lp-stack          两行式单元格（主文案 14/500 + 次行 12 灰，均单行省略）
+ *   .lp-stack.is-plain 主文案降级为次要色（用于日期 + 时间这类纯信息）
+ *   .lp-num            右对齐等宽数字；u 标签里放单位（分/人/题），自动弱化
+ *   .lp-mono           等宽文本（学号、院校代码）
+ *   .lp-progress       迷你进度条 + 精确数字
+ *   .lp-actions        操作区（右对齐、紧凑）
+ * ==========================================================================*/
+.lp-stack { display: flex; flex-direction: column; gap: 2px; min-width: 0; max-width: 100%; overflow: hidden; }
+.lp-stack > b {
+  max-width: 100%;
+  font-weight: var(--fw-medium); font-size: var(--fs-body); line-height: 1.35; color: var(--text-strong);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lp-stack > span {
+  max-width: 100%;
+  font-size: var(--fs-caption); line-height: 1.45; color: var(--text-tertiary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lp-stack.is-plain > b { font-weight: var(--fw-regular); font-size: var(--fs-body-sm); color: var(--text-secondary); }
+.lp-num { font-variant-numeric: tabular-nums; font-weight: var(--fw-medium); color: var(--text-primary); }
+.lp-num > u { text-decoration: none; margin-left: 2px; font-weight: var(--fw-regular); font-size: var(--fs-caption); color: var(--text-tertiary); }
+.lp-mono { font-family: var(--font-mono); font-size: var(--fs-body-sm); color: var(--text-secondary); white-space: nowrap; }
+.lp-progress { display: flex; align-items: center; gap: var(--space-2); }
+.lp-progress .lp-track { flex: none; width: 78px; height: 6px; border-radius: var(--radius-pill); background: var(--score-track); overflow: hidden; }
+.lp-progress .lp-track > i { display: block; height: 100%; border-radius: var(--radius-pill); background: var(--brand-600); }
+.lp-progress .lp-track.is-ok > i { background: var(--green-600); }
+.lp-progress .lp-track.is-warn > i { background: var(--amber-600); }
+.lp-avatar {
+  flex: none; width: 24px; height: 24px; border-radius: var(--radius-pill);
+  display: inline-grid; place-items: center; font-size: var(--fs-caption); font-weight: var(--fw-semibold);
+  background: var(--bg-hover); color: var(--text-brand); border: 1px solid var(--border-subtle);
+}
+.lp-name { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.lp-actions { display: flex; align-items: center; gap: var(--space-1); justify-content: flex-end; }
+.lp-actions .ant-btn-link { padding-inline: 4px; }
+
 /* 布置作业向导（Modal 会被 teleport 到 body，页面 scoped 样式够不到）
    来源：views/teacher/Assignments.vue 原先的非 scoped <style>，Wave 0 迁移至此，
    消除了该页的全局样式泄漏。 */

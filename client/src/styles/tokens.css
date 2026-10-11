@@ -159,13 +159,13 @@
   /* ------------------------------------------------------------ 2. 语义：密度 */
   /* comfortable = 学生端 / 公开文档；compact = 教师端 / 管理端 */
   --control-h-sm: 28px; --control-h: 36px; --control-h-lg: 44px;
-  --table-row-h: 52px;  --table-cell-pad-y: 12px; --table-cell-pad-x: 16px;
+  --table-row-h: 64px;  --table-cell-pad-y: 14px; --table-cell-pad-x: 16px;    /* v2：与 compact 统一 */
   --page-pad-y: 28px;   --page-pad-x: 32px;
   --panel-pad: 20px;    --stack-gap: 16px;
 }
 [data-density="compact"] {
   --control-h-sm: 26px; --control-h: 32px; --control-h-lg: 38px;
-  --table-row-h: 44px;  --table-cell-pad-y: 9px;  --table-cell-pad-x: 12px;
+  --table-row-h: 64px;  --table-cell-pad-y: 14px;  --table-cell-pad-x: 16px;   /* v2：单行 50 / 两行 64（原 44） */
   --page-pad-y: 20px;   --page-pad-x: 24px;
   --panel-pad: 16px;    --stack-gap: 12px;
   /* 组件层别名必须在同一子树重新声明：自定义属性在「声明它的元素」上完成 var() 替换后才继承，
@@ -314,8 +314,13 @@
 
   /* 表格 */
   --table-header-bg: var(--bg-surface-2);
-  --table-header-fg: var(--text-secondary);
-  --table-header-fw: var(--fw-semibold);
+  --table-header-fg: var(--text-tertiary);      /* v2：表头降一档，把注意力让给数据 */
+  --table-header-fw: var(--fw-medium);
+  --table-header-fs: var(--fs-caption);         /* v2：12px 小字 + 字距，表头更"标签化" */
+  --table-header-tracking: var(--tracking-wide);
+  --table-head-pad-y: 12px;                     /* v2：表头高 44 = 12×2 + 20 */
+  --table-row-accent: var(--brand-600);         /* v2：悬停/选中行的左侧 2px 强调条 */
+  --table-row-accent-w: 2px;
   --table-header-h: 44px;   /* 行高直接用密度层的 --table-row-h */
   --table-row-hover: var(--gray-50);
   --table-row-selected: var(--brand-50);

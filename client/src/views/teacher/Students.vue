@@ -46,18 +46,28 @@
 
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'username'">
-          <span class="tnum">{{ record._displaySid }}</span>
-          <StatusTag v-if="record._incomplete" tone="warning" text="⚠ 待补全" />
+          <span class="stu-sid">
+            <span class="lp-mono">{{ record._displaySid }}</span>
+            <StatusTag v-if="record._incomplete" tone="warning" text="⚠ 待补全" dot />
+          </span>
         </template>
-        <template v-else-if="column.key === 'school'">{{ record.studentClasses?.[0]?.class?.school?.name || '—' }}</template>
-        <template v-else-if="column.key === 'classes'">
-          <StatusTag v-for="c in record.studentClasses" :key="c.classId" tone="neutral" :text="c.class?.name" />
+        <!-- 姓名列只写了 dataIndex（没有 key）→ 分支必须用 column.dataIndex 判断（同金标页「满分」列）；
+             主行 = 姓名，次行 = 班级名（原独立的「班级」列已并入此行，不再单独成列） -->
+        <template v-else-if="column.dataIndex === 'realName'">
+          <span class="lp-name">
+            <a-avatar :size="24" class="lp-avatar" aria-hidden="true">{{ avatarChar(record) }}</a-avatar>
+            <span class="lp-stack">
+              <b>{{ record.realName }}</b>
+              <span>{{ classText(record) }}</span>
+            </span>
+          </span>
         </template>
-        <template v-else-if="column.key === 'createdAt'">
-          <span class="tnum">{{ formatDateTime(record.createdAt) }}</span>
+        <template v-else-if="column.key === 'school'">
+          <span class="stu-school">{{ record.studentClasses?.[0]?.class?.school?.name || '—' }}</span>
         </template>
+        <template v-else-if="column.key === 'createdAt'">{{ formatDate(record.createdAt) }}</template>
         <template v-else-if="column.key === 'action'">
-          <div class="row-actions">
+          <div class="lp-actions">
             <a-button type="link" @click="openEdit(record)" :disabled="isTeamClass">编辑</a-button>
             <a-popconfirm title="确认删除该学生？" description="删除后该学生的班级关联与全部提交记录将被移除，不可撤销。" ok-text="删除学生" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="del(record.id)" :disabled="isTeamClass">
               <a-button type="link" danger :disabled="isTeamClass">删除</a-button>
@@ -165,7 +175,7 @@ import request from '../../api/request.js';
 import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
 import StatusTag from '../../components/StatusTag.vue';
-import { formatDateTime } from '../../domain/format.js';
+import { formatDate } from '../../domain/format.js';
 import { useConfirm } from '../../composables/useConfirm.js';
 
 /** 命令式确认框（Wave 2 构件 useConfirm）：替代原 antd 命令式调用，行为等价 */
@@ -190,14 +200,30 @@ const selectedClassCount = computed(() => {
   return c?._count?.studentClasses ?? null;
 });
 
+// 列表样式 v2：姓名列两行式（姓名 + 班级名）并「删除独立的班级列」；学校/创建时间列窄屏隐藏（xl）
 const columns = [
   { title: '学号', key: 'username', width: 150, ellipsis: true },
-  { title: '姓名', dataIndex: 'realName', width: 120, ellipsis: true },
-  { title: '学校', key: 'school', width: 180, ellipsis: true, responsive: ['xl'] },
-  { title: '班级', key: 'classes', width: 150 },
-  { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true, responsive: ['xl'] },
-  { title: '操作', key: 'action', width: 160, align: 'right' },
+  // 姓名列宽度 1fr：不设 width —— 固定表格布局下由它吃掉其余列之外的剩余宽度
+  { title: '姓名', dataIndex: 'realName' },
+  { title: '学校', key: 'school', width: 200, ellipsis: true, responsive: ['xl'] },
+  // 创建时间固定单行 formatDate（不做日期 + 时间两行）
+  { title: '创建时间', key: 'createdAt', width: 120, responsive: ['xl'] },
+  { title: '操作', key: 'action', width: 120, align: 'right' },
 ];
+
+/** 姓名列次行（班级名）：1~2 个直接并列；超过 2 个显示前 2 个 + 「+N」 */
+function classText(record) {
+  const names = (record.studentClasses || []).map(sc => sc.class?.name).filter(Boolean);
+  if (!names.length) return '—';
+  return names.length > 2 ? `${names.slice(0, 2).join('、')} +${names.length - 2}` : names.join('、');
+}
+
+/** 姓名列头像首字：取姓名首字；姓名待补全（"(待补全)"）时退化为学号首字 */
+function avatarChar(record) {
+  const name = record.realName || '';
+  const base = (name && !name.startsWith('(')) ? name : (record._displaySid || '?');
+  return base.charAt(0);
+}
 
 /** 前端切片：接口全量返回（见上方 TODO(P1-7)） */
 const pagedList = computed(() => list.value.slice((page.current - 1) * page.pageSize, page.current * page.pageSize));
@@ -438,13 +464,21 @@ onMounted(() => { loadClasses(); fetch(); });
   color: var(--text-tertiary);
   font-size: var(--fs-caption);
 }
-.tnum {
-  font-variant-numeric: tabular-nums;
-}
-.row-actions {
+/* 姓名列：24px 中性头像 + 两行式（姓名 / 班级名）。头像纯装饰（aria-hidden），姓名与班级仍是真实文本。
+   头像与排版复用全局 .lp-name / .lp-avatar（列表样式 v2 底座） */
+/* 学号列：等宽学号 + 待补全标记；列窄到放不下时标记换行（不裁切成半个标签） */
+.stu-sid {
   display: flex;
-  gap: 4px;
-  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+/* 学校列：单行省略 */
+.stu-school {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .w-260 {
   width: 260px;

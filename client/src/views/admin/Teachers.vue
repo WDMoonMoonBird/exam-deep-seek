@@ -24,15 +24,28 @@
       @empty-action="openAdd"
     >
       <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'schools'">
-          <template v-for="ts in record.teacherSchools" :key="ts.schoolId">
-            <StatusTag v-if="ts.school" tone="neutral" :text="ts.school.name" />
-          </template>
-          <span v-if="!record.teacherSchools?.length" class="muted">—</span>
+        <!-- 工号列只写了 dataIndex（没有 key）→ 分支必须用 column.dataIndex 判断（同金标页「满分」列） -->
+        <template v-if="column.dataIndex === 'username'">
+          <span class="lp-mono">{{ record.username }}</span>
         </template>
-        <template v-else-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
+        <!-- 姓名列同样只有 dataIndex → 单行「24px 中性头像 + 姓名」；头像纯装饰（aria-hidden），姓名仍是真实文本 -->
+        <template v-else-if="column.dataIndex === 'realName'">
+          <span class="lp-name">
+            <a-avatar :size="24" class="lp-avatar" aria-hidden="true">{{ avatarChar(record) }}</a-avatar>
+            <span class="lp-stack"><b>{{ record.realName }}</b></span>
+          </span>
+        </template>
+        <!-- 隶属学校：最多 2 个具名 chip，其余折叠为「+N」（长列表不再把行高撑成多行） -->
+        <template v-else-if="column.key === 'schools'">
+          <template v-for="(name, i) in schoolChips(record)" :key="i + '-' + name">
+            <StatusTag tone="neutral" :text="name" />
+          </template>
+          <span v-if="!schoolChips(record).length" class="muted">—</span>
+        </template>
+        <!-- 创建时间：固定单行 formatDate（不做日期 + 时间两行） -->
+        <template v-else-if="column.key === 'createdAt'">{{ formatDate(record.createdAt) }}</template>
         <template v-else-if="column.key === 'action'">
-          <div class="row-actions">
+          <div class="lp-actions">
             <a-button type="link" @click="openEdit(record)">编辑</a-button>
             <a-popconfirm :title="`确认重置「${record.realName}」的密码？`" description="重置后密码将变为该教师工号，旧密码立即失效。" ok-text="重置密码" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="resetPwd(record.id)">
               <a-button type="link">重置密码</a-button>
@@ -71,7 +84,7 @@ import request from '../../api/request.js';
 import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
 import StatusTag from '../../components/StatusTag.vue';
-import { formatDateTime } from '../../domain/format.js';
+import { formatDate } from '../../domain/format.js';
 const loading = ref(false);
 const list = ref([]);
 const page = reactive({ current: 1, pageSize: 20 });
@@ -81,13 +94,26 @@ const modalTitle = ref('');
 const isEdit = ref(false);
 const editId = ref(null);
 const form = reactive({ username: '', realName: '', schoolIds: [] });
+// 列表样式 v2：工号等宽、姓名列（24px 中性头像 + 单行姓名）吃掉剩余宽度、创建时间单行 formatDate
 const columns = [
-  { title: '工号', dataIndex: 'username', width: 130, ellipsis: true },
-  { title: '姓名', dataIndex: 'realName', width: 120, ellipsis: true },
-  { title: '隶属学校', key: 'schools', width: 200, responsive: ['xl'] },
-  { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true, responsive: ['xl'] },
+  { title: '工号', dataIndex: 'username', width: 140, ellipsis: true },
+  // 姓名列宽度 1fr：固定表格布局下由它吃掉其余列之外的剩余宽度
+  { title: '姓名', dataIndex: 'realName', width: '1fr' },
+  { title: '隶属学校', key: 'schools', width: 260, responsive: ['xl'] },
+  { title: '创建时间', key: 'createdAt', width: 120, responsive: ['xl'] },
   { title: '操作', key: 'action', width: 100, align: 'right' },
 ];
+
+/** 隶属学校 chip：最多 2 个具名 chip，其余折叠为「+N」（数据源与原 v-for 同一份，只改展示条数） */
+function schoolChips(record) {
+  const names = (record.teacherSchools || []).map(ts => ts.school?.name).filter(Boolean);
+  return names.length > 2 ? [...names.slice(0, 2), `+${names.length - 2}`] : names;
+}
+
+/** 姓名头像首字（纯装饰，与姓名同源；空姓名退化为「?」） */
+function avatarChar(record) {
+  return (record.realName || '?').charAt(0);
+}
 
 const availableSchoolOptions = computed(() =>
   schools.value.filter(s => !form.schoolIds.includes(s.id)).map(s => ({ label: s.name, value: s.id }))
@@ -172,11 +198,7 @@ onMounted(fetch);
   color: var(--text-tertiary);
   font-size: var(--fs-caption);
 }
-.row-actions {
-  display: flex;
-  gap: var(--space-1);
-  justify-content: flex-end;
-}
+/* 姓名列：24px 中性头像 + 单行姓名（头像与排版复用全局 .lp-name / .lp-avatar / .lp-stack） */
 .school-tags {
   display: flex;
   flex-wrap: wrap;

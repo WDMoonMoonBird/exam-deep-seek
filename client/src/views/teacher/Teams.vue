@@ -27,15 +27,22 @@
       </template>
 
       <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'creator'">{{ record.creator?.realName }}</template>
+        <!-- 团队名称：两行式（主 = 团队名；次 = 成员数）。
+             该列只写了 dataIndex 没有 key，故必须用 column.dataIndex 判断，否则分支永不命中 -->
+        <template v-if="column.dataIndex === 'name'">
+          <span class="lp-stack">
+            <b>{{ record.name }}</b>
+            <span>{{ record._count?.teachers || 0 }} 位成员</span>
+          </span>
+        </template>
+        <template v-else-if="column.key === 'creator'">{{ record.creator?.realName }}</template>
+        <!-- 成员列：渲染保持改前的「N 教师 / N 班级」，数字走 .lp-num（单位写在 u 里弱化） -->
         <template v-else-if="column.key === 'counts'">
-          {{ record._count?.teachers || 0 }} 教师 / {{ record._count?.classes || 0 }} 班级
+          <span class="lp-num">{{ record._count?.teachers || 0 }}<u>教师</u></span> / <span class="lp-num">{{ record._count?.classes || 0 }}<u>班级</u></span>
         </template>
-        <template v-else-if="column.key === 'createdAt'">
-          <span class="tnum">{{ formatDateTime(record.createdAt) }}</span>
-        </template>
+        <template v-else-if="column.key === 'createdAt'">{{ formatDate(record.createdAt) }}</template>
         <template v-else-if="column.key === 'action'">
-          <div class="row-actions">
+          <div class="lp-actions">
             <a-button type="link" @click="$router.push(`/teacher/teams/${record.id}`)">管理</a-button>
             <a-popconfirm v-if="record.createdBy === userStore.user?.id" title="确认删除该团队？" description="删除后团队成员将失去该团队及其班级的访问权限，不可撤销。" ok-text="删除团队" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="del(record.id)">
               <a-button type="link" danger>删除</a-button>
@@ -67,7 +74,7 @@ import request from '../../api/request.js';
 import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
 import { useUserStore } from '../../stores/user.js';
-import { formatDateTime } from '../../domain/format.js';
+import { formatDate } from '../../domain/format.js';
 
 const userStore = useUserStore();
 const loading = ref(false);
@@ -76,12 +83,13 @@ const page = reactive({ current: 1, pageSize: 20 });
 const createVisible = ref(false);
 const createName = ref('');
 
+// 列表样式 v2：主列两行式（团队名 + 成员数）；创建者/创建时间单行 + xl 断点；操作列紧凑右对齐
 const columns = [
-  { title: '团队名称', dataIndex: 'name', width: 200, ellipsis: true },
-  { title: '创建者', key: 'creator', width: 100, responsive: ['xl'] },
+  { title: '团队名称', dataIndex: 'name', width: '1fr' },
+  { title: '创建者', key: 'creator', width: 140, responsive: ['xl'] },
   { title: '成员', key: 'counts', width: 160 },
-  { title: '创建时间', key: 'createdAt', width: 170, responsive: ['xl'] },
-  { title: '操作', key: 'action', width: 160, align: 'right' },
+  { title: '创建时间', key: 'createdAt', width: 120, responsive: ['xl'] },
+  { title: '操作', key: 'action', width: 120, align: 'right' },
 ];
 
 /** 前端切片：接口全量返回（见上方 TODO(P1-7)） */

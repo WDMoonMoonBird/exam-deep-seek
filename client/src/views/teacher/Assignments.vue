@@ -81,13 +81,13 @@
       </template>
 
       <template #bodyCell="{ column, record }">
+        <!-- 主键列：两行式（主 = 作业标题；次 = 共 N 题）。练习/锁定徽标留在主行原位——
+             徽标是 inline-flex，不改变标题行的行盒高度，故行高与其它两行单元格一致 -->
         <template v-if="column.key === 'title'">
-          <div class="cell-title">
-            <span class="ellipsis" :title="record.title">{{ record.title }}</span>
-            <StatusTag v-if="record.mode === 'practice'" tone="accent" text="练习" />
-            <lock-outlined v-if="record.locked" class="lock-icon" title="已锁定" />
-          </div>
-          <div v-if="record.description" class="cell-sub ellipsis" :title="record.description">{{ record.description }}</div>
+          <span class="lp-stack">
+            <b :title="record.title">{{ record.title }} <StatusTag v-if="record.mode === 'practice'" tone="accent" text="练习" /><lock-outlined v-if="record.locked" class="lock-icon" title="已锁定" /></b>
+            <span>共 {{ record._count?.assignmentQuestions || 0 }} 题</span>
+          </span>
         </template>
 
         <template v-else-if="column.key === 'classes'">
@@ -96,15 +96,12 @@
           <span v-if="!record.assignmentClasses?.length" class="muted">—</span>
         </template>
 
-        <template v-else-if="column.key === 'qCount'">
-          <span class="tnum">{{ record._count?.assignmentQuestions || 0 }}</span>
-        </template>
-
+        <!-- 提交进度：迷你进度条 + 精确值（全部提交 → track 转绿 is-ok）；口径仍由 progressOf 决定，数字未改 -->
         <template v-else-if="column.key === 'progress'">
-          <div class="progress-row">
-            <div class="progress"><i :style="{ width: progressOf(record).percent + '%' }"></i></div>
-            <span class="tnum muted">{{ progressOf(record).done }}/{{ progressOf(record).total }}</span>
-          </div>
+          <span class="lp-progress">
+            <span class="lp-track" :class="{ 'is-ok': allSubmitted(record) }"><i :style="{ width: progressOf(record).percent + '%' }"></i></span>
+            <span class="lp-num">{{ progressOf(record).done }}<u>/{{ progressOf(record).total }}</u></span>
+          </span>
         </template>
 
         <template v-else-if="column.key === 'status'">
@@ -116,15 +113,16 @@
           ><StatusTag tone="warning" :text="'待审核 ' + record.pendingReviewCount" /></router-link>
         </template>
 
+        <!-- 截止时间：日期 + 时间固定两行（与「创建时间」列同款 is-plain）；时间维度的语义由「状态」列承担 -->
         <template v-else-if="column.key === 'deadline'">
-          <div class="tnum">{{ formatDateTime(record.endTime) }}</div>
-          <div class="cell-sub">
-            <span :class="'tone-' + deadlineInfo(record.endTime).tone">{{ deadlineInfo(record.endTime).text }}</span>
-          </div>
+          <span class="lp-stack is-plain">
+            <b>{{ splitDateTime(record.endTime).date }}</b>
+            <span>{{ splitDateTime(record.endTime).time }}</span>
+          </span>
         </template>
 
         <template v-else-if="column.key === 'action'">
-          <div class="row-actions">
+          <div class="lp-actions">
             <a-button type="link" size="small" @click="toggleLock(record)">
               {{ record.locked ? '解锁' : '锁定' }}
             </a-button>
@@ -211,7 +209,7 @@ import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
 import StatusTag from '../../components/StatusTag.vue';
 import { useConfirm } from '../../composables/useConfirm.js';
-import { formatDateTime, difficultyText, deadlineInfo, timeStatus } from '../../domain/format.js';
+import { splitDateTime, difficultyText, timeStatus } from '../../domain/format.js';
 
 dayjs.locale('zh-cn');
 
@@ -235,14 +233,17 @@ const statusOptions = [
   { value: 'locked', label: '已锁定' },
 ];
 
+// 列表样式 v2：主键列两行式（标题 + 共 N 题，题数列已并入次行）；提交进度改迷你进度条；
+// 截止时间固定两行；状态/班级沿用既有标签写法（仅列宽收敛）
 const columns = [
-  { title: '作业名称', key: 'title', width: 280 },
-  { title: '班级', key: 'classes', width: 200, responsive: ['xl'] },
-  { title: '题数', key: 'qCount', width: 70, align: 'right', responsive: ['xl'] },
-  { title: '提交进度', key: 'progress', width: 180 },
+  { title: '作业名称', key: 'title', width: 260 },
+  { title: '班级', key: 'classes', width: 180, responsive: ['xl'] },
+  { title: '提交进度', key: 'progress', width: 190 },
+  // 状态列宽保持 170：150 时「已结束 + 待审核 N」两枚标签差 2px 放不下会折成两行（行高 75 > 70），
+  // 实测 170 → 实际列宽 180 / 内容区 148 > 所需 132，稳定单行
   { title: '状态', key: 'status', width: 170 },
-  { title: '截止时间', key: 'deadline', width: 170 },
-  { title: '操作', key: 'action', width: 90, align: 'right' },
+  { title: '截止时间', key: 'deadline', width: 120 },
+  { title: '操作', key: 'action', width: 100, align: 'right' },
 ];
 
 /** 行状态：锁定优先，其次按时间；「待审核 N」单独一枚标签（数据源= pendingReviewCount） */
@@ -262,6 +263,12 @@ function progressOf(record) {
   const done = record.submissionCount || 0;
   const total = record.expectedCount || 0;
   return { done, total, percent: total ? Math.min(100, Math.round((done / total) * 100)) : 0 };
+}
+
+/** 全部提交（进度条 track 转绿 is-ok）：应交 0 人的作业不算「已全交」，避免空进度条显示为完成色 */
+function allSubmitted(record) {
+  const { done, total } = progressOf(record);
+  return total > 0 && done >= total;
 }
 
 function visibleClasses(record) {
@@ -531,27 +538,12 @@ onMounted(async () => {
 .hint-inline { margin-left: var(--space-2); color: var(--text-tertiary); font-size: var(--fs-body-sm); }
 .muted { color: var(--text-tertiary); font-size: var(--fs-caption); }
 .tnum { font-variant-numeric: tabular-nums; }
-.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.cell-title { display: flex; align-items: center; gap: 6px; font-weight: 500; color: var(--text-strong); }
-.cell-title .ellipsis { max-width: 200px; }
-.cell-sub { margin-top: 3px; font-size: var(--fs-caption); color: var(--text-tertiary); }
 .lock-icon { color: var(--status-danger-fg); font-size: var(--fs-caption); }
 
 /* 超出 2 个班级后的「+N」计数片（不是状态，走描边样式） */
 .chip-more { display: inline-flex; align-items: center; height: var(--tag-h); padding: 0 var(--tag-pad-x); margin-right: 4px; border-radius: var(--tag-radius); border: 1px solid var(--border-strong); color: var(--text-secondary); font-size: var(--tag-fs); white-space: nowrap; }
 .tag-link { text-decoration: none; }
 .tag-link:hover { filter: brightness(0.96); }
-
-.progress-row { display: flex; align-items: center; gap: 8px; }
-.progress { height: 6px; width: 96px; border-radius: var(--radius-pill); background: var(--score-track); overflow: hidden; }
-.progress i { display: block; height: 100%; border-radius: var(--radius-pill); background: var(--brand-500); }
-.tone-overdue { color: var(--status-danger-fg); font-weight: 500; }
-.tone-urgent { color: var(--status-danger-fg); font-weight: 500; }
-.tone-soon { color: var(--status-warning-fg); }
-.tone-normal { color: var(--text-tertiary); }
-
-.row-actions { display: flex; gap: 4px; justify-content: flex-end; }
 
 @media (max-width: 1100px) {
   .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }

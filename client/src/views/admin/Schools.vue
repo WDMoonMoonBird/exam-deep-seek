@@ -28,7 +28,7 @@
           <StatusTag v-if="record.level" :tone="levelTone(record.level)" :text="record.level" />
           <span v-else>—</span>
         </template>
-        <template v-else-if="column.key === 'code'">{{ record.officialCode || '—' }}</template>
+        <template v-else-if="column.key === 'code'"><span class="lp-mono">{{ record.officialCode || '—' }}</span></template>
       </template>
     </ListPage>
   </PageShell>
@@ -49,12 +49,15 @@ const schoolPage = reactive({ current: 1, pageSize: 50 });
 /** 每页条数选项（20/50/100/200，与改前 DataTable 一致）—— 交给 ListPage 的每页条数切换渲染 */
 const pageSizeOptions = [20, 50, 100, 200];
 
+// 列表样式 v2：院校代码走等宽（.lp-mono）、学校名称吃掉剩余宽度、层次用状态标签；
+// 省份 / 城市保持两列窄列（便于逐列横向比对），故名称列不再加「省份 · 城市」次行，避免同一信息出现两次
 const columns = [
-  { title: '院校代码', key: 'code', width: 140, responsive: ['xl'] },
-  { title: '学校名称', dataIndex: 'name', width: 220, ellipsis: true },
+  { title: '院校代码', key: 'code', width: 150, responsive: ['xl'] },
+  // 学校名称宽度 1fr：固定表格布局下由它吃掉其余列之外的剩余宽度（长名单行省略，不换行撑高行高）
+  { title: '学校名称', dataIndex: 'name', width: '1fr', ellipsis: true },
   { title: '省份', key: 'province', width: 120 },
   { title: '城市', key: 'city', width: 120 },
-  { title: '层次', key: 'level', width: 80, responsive: ['xl'] },
+  { title: '层次', key: 'level', width: 110, responsive: ['xl'] },
 ];
 
 /** 层次 → 状态色调（取值语义与改前一致，只做视觉分层，不新增取值） */

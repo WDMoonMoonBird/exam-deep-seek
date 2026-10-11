@@ -332,11 +332,13 @@ onBeforeUnmount(() => {
 .tbl :deep(.ant-table-thead > tr > th) {
   background: var(--table-header-bg);
   color: var(--table-header-fg);
-  font-size: var(--fs-body-sm);
-  font-weight: 600;
+  font-size: var(--table-header-fs);
+  font-weight: var(--table-header-fw);
+  letter-spacing: var(--table-header-tracking);
   text-align: left;
   border-bottom: 1px solid var(--border-default);
-  padding: var(--table-cell-pad-y) var(--table-cell-pad-x);
+  padding: var(--table-head-pad-y) var(--table-cell-pad-x);
+  height: var(--table-header-h);
 }
 .tbl :deep(.ant-table-thead > tr > th::before) {
   display: none;
@@ -357,9 +359,16 @@ onBeforeUnmount(() => {
 .tbl :deep(.ant-table-tbody > tr:hover > td) {
   background: var(--table-row-hover);
 }
+/* v2 行态：悬停 / 选中的行在最左单元格画一条 2px 品牌条（用 inset 阴影，不动 tr 的定位） */
+.tbl :deep(.ant-table-tbody > tr:hover > td:first-child) {
+  box-shadow: inset var(--table-row-accent-w) 0 0 var(--table-row-accent);
+}
 /* 选中态：行选择（13 个列表页暂未启用，令牌先行，暗色下同样成立） */
 .tbl :deep(.ant-table-tbody > tr.ant-table-row-selected > td) {
   background: var(--table-row-selected);
+}
+.tbl :deep(.ant-table-tbody > tr.ant-table-row-selected > td:first-child) {
+  box-shadow: inset var(--table-row-accent-w) 0 0 var(--table-row-accent);
 }
 .tbl :deep(.ant-table-tbody > tr:last-child > td) {
   border-bottom: 0;

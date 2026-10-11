@@ -62,7 +62,15 @@
       </template>
 
       <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'type'">
+        <!-- 主键列：两行式（主文案 + 类型·小题数），保持列内上下对齐，横向比较不受影响 -->
+        <template v-if="column.key === 'title'">
+          <span class="lp-stack">
+            <b>{{ record.title }}</b>
+            <span>{{ (record.type === 'project' ? '实训题' : '编程题') + (record._count?.subQuestions ? ' · ' + record._count.subQuestions + ' 个小题' : '') }}</span>
+          </span>
+        </template>
+
+        <template v-else-if="column.key === 'type'">
           <StatusTag
             :tone="record.type === 'project' ? 'accent' : 'brand'"
             :text="record.type === 'project' ? '实训题' : '编程题'"
@@ -70,15 +78,22 @@
         </template>
 
         <template v-else-if="column.dataIndex === 'difficulty'">
-          <StatusTag :tone="difficultyTone(record.difficulty)" :text="difficultyText(record.difficulty)" />
+          <StatusTag :tone="difficultyTone(record.difficulty)" :text="difficultyText(record.difficulty)" dot />
+        </template>
+
+        <template v-else-if="column.dataIndex === 'maxScore'">
+          <span class="lp-num">{{ record.maxScore }}<u>分</u></span>
         </template>
 
         <template v-else-if="column.key === 'createdAt'">
-          <span class="tnum">{{ formatDateTime(record.createdAt) }}</span>
+          <span class="lp-stack is-plain">
+            <b>{{ splitDateTime(record.createdAt).date }}</b>
+            <span>{{ splitDateTime(record.createdAt).time }}</span>
+          </span>
         </template>
 
         <template v-else-if="column.key === 'action'">
-          <div class="row-actions">
+          <div class="lp-actions">
             <a-button type="link" @click="editQuestion(record)">编辑</a-button>
             <a-popconfirm title="确认删除该题目？" description="删除后该题目将从题库移除，已布置作业中的历史记录保留。" ok-text="删除题目" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="del(record.id)">
               <a-button type="link" danger>删除</a-button>
@@ -99,7 +114,7 @@ import request from '../../api/request.js';
 import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
 import StatusTag from '../../components/StatusTag.vue';
-import { formatDateTime, difficultyText } from '../../domain/format.js';
+import { splitDateTime, difficultyText } from '../../domain/format.js';
 
 const router = useRouter();
 
@@ -111,13 +126,14 @@ const keyword = ref('');
 const pagination = reactive({ current: 1, pageSize: 20, total: 0 });
 const hasFilter = computed(() => !!keyword.value);
 
+// 列表样式 v2：主键列两行式（标题 + 类型·小题数）；日期列固定两行；数字右对齐带单位
 const columns = [
-  { title: '标题', dataIndex: 'title', width: 250, ellipsis: true },
-  { title: '类型', key: 'type', width: 90 },
-  { title: '难度', dataIndex: 'difficulty', width: 80, responsive: ['xl'] },
-  { title: '满分', dataIndex: 'maxScore', width: 80, align: 'right' },
-  { title: '创建时间', key: 'createdAt', width: 170, responsive: ['xl'] },
-  { title: '操作', key: 'action', width: 160, align: 'right' },
+  { title: '标题', key: 'title', width: 260 },
+  { title: '类型', key: 'type', width: 96 },
+  { title: '难度', dataIndex: 'difficulty', width: 92, responsive: ['xl'] },
+  { title: '满分', dataIndex: 'maxScore', width: 90, align: 'right' },
+  { title: '创建时间', key: 'createdAt', width: 130, responsive: ['xl'] },
+  { title: '操作', key: 'action', width: 120, align: 'right' },
 ];
 
 /** 难度 → 状态色调（取值语义与改前的 a-tag 配色一致：easy 绿 / medium 橙 / 其余红） */

@@ -24,13 +24,16 @@
       @empty-action="openAdd"
     >
       <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'school'">
-          <StatusTag v-if="record.school" tone="neutral" :text="record.school.name" />
-          <span v-else class="muted">—</span>
+        <!-- 班级名称：两行式（班级名 + 所属学校）；学校不再单列，无学校时沿用改前的「—」 -->
+        <template v-if="column.key === 'name'">
+          <span class="lp-stack">
+            <b>{{ record.name }}</b>
+            <span>{{ record.school?.name || '—' }}</span>
+          </span>
         </template>
-        <template v-else-if="column.key === 'createdAt'">{{ formatDateTime(record.createdAt) }}</template>
+        <template v-else-if="column.key === 'createdAt'">{{ formatDate(record.createdAt) }}</template>
         <template v-else-if="column.key === 'action'">
-          <div class="row-actions">
+          <div class="lp-actions">
             <a-button type="link" @click="openEdit(record)">编辑</a-button>
             <a-popconfirm title="确认删除该班级？" description="删除后该班级的学生/教师关联与作业布置记录一并移除，不可撤销。" ok-text="删除班级" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="del(record.id)">
               <a-button type="link" danger>删除</a-button>
@@ -65,8 +68,7 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import request from '../../api/request.js';
 import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
-import StatusTag from '../../components/StatusTag.vue';
-import { formatDateTime } from '../../domain/format.js';
+import { formatDate } from '../../domain/format.js';
 
 const loading = ref(false);
 const list = ref([]);
@@ -79,11 +81,11 @@ const isEdit = ref(false);
 const editId = ref(null);
 const form = reactive({ name: '', schoolId: undefined, teacherIds: [] });
 
+// 列表样式 v2：班级名称列两行式（班级名 + 所属学校，原「所属学校」列并入次行）；操作列右对齐紧凑
 const columns = [
-  { title: '班级名称', dataIndex: 'name', width: 180, ellipsis: true },
-  { title: '所属学校', key: 'school', width: 200, ellipsis: true, responsive: ['xl'] },
-  { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true, responsive: ['xl'] },
-  { title: '操作', key: 'action', width: 160, align: 'right' },
+  { title: '班级名称', key: 'name', dataIndex: 'name', width: '1fr' },
+  { title: '创建时间', key: 'createdAt', width: 120, responsive: ['xl'] },
+  { title: '操作', key: 'action', width: 120, align: 'right' },
 ];
 
 /** /admin/classes 目前全量返回 → 保持前端切片分页（见模板 TODO(P1-7)） */

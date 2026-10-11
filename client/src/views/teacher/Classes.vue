@@ -27,17 +27,21 @@
       </template>
 
       <template #bodyCell="{ column, record }">
+        <!-- 班级名称：两行式（主 = 班级名；次 = 所属学校，故「所属学校」不再单列）；
+             「团队共享」标签跟随班级名保留（tone 与文案同改前） -->
         <template v-if="column.key === 'name'">
-          {{ record.name }}
-          <StatusTag v-if="record.isTeamClass" tone="accent" :text="'团队共享 · ' + record.ownerTeacherName" />
+          <span class="lp-stack">
+            <b>{{ record.name }}<StatusTag v-if="record.isTeamClass" tone="accent" :text="'团队共享 · ' + record.ownerTeacherName" /></b>
+            <span>{{ record.school?.name || '—' }}</span>
+          </span>
         </template>
-        <template v-else-if="column.key === 'school'">{{ record.school?.name }}</template>
-        <template v-else-if="column.key === 'count'">{{ record._count?.studentClasses ?? 0 }}</template>
-        <template v-else-if="column.key === 'createdAt'">
-          <span class="tnum">{{ formatDateTime(record.createdAt) }}</span>
+        <!-- 人数：右对齐等宽数字，单位写在 u 里（弱化） -->
+        <template v-else-if="column.key === 'count'">
+          <span class="lp-num">{{ record._count?.studentClasses ?? 0 }}<u>人</u></span>
         </template>
+        <template v-else-if="column.key === 'createdAt'">{{ formatDate(record.createdAt) }}</template>
         <template v-else-if="column.key === 'action'">
-          <div class="row-actions">
+          <div class="lp-actions">
             <a-button type="link" @click="openEdit(record)" :disabled="record.isTeamClass">编辑</a-button>
             <a-button v-if="mySchools.length > 1" type="link" @click="openSwitchSchool(record)" :disabled="record.isTeamClass">切换学校</a-button>
             <a-popconfirm title="确认删除该班级？" description="删除后该班级的学生/教师关联与作业布置记录一并移除，不可撤销。" ok-text="删除班级" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="del(record.id)" :disabled="record.isTeamClass">
@@ -85,7 +89,7 @@ import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
 import StatusTag from '../../components/StatusTag.vue';
 import { useUserStore } from '../../stores/user.js';
-import { formatDateTime } from '../../domain/format.js';
+import { formatDate } from '../../domain/format.js';
 const loading = ref(false);
 const list = ref([]);
 const page = reactive({ current: 1, pageSize: 20 });
@@ -109,12 +113,12 @@ const otherSchoolOptions = computed(() =>
     .map(s => ({ label: s.name, value: s.id }))
 );
 
+// 列表样式 v2：主列两行式（班级名 + 所属学校，学校不再单列）；人数右对齐带单位；创建时间单行 + xl 断点
 const columns = [
-  { title: '班级名称', key: 'name', width: 200, ellipsis: true },
-  { title: '所属学校', key: 'school', width: 200, ellipsis: true, responsive: ['xl'] },
-  { title: '人数', key: 'count', width: 70 },
-  { title: '创建时间', key: 'createdAt', width: 170, ellipsis: true, responsive: ['xl'] },
-  { title: '操作', key: 'action', width: 160, align: 'right' },
+  { title: '班级名称', key: 'name', width: '1fr' },
+  { title: '人数', key: 'count', width: 90, align: 'right' },
+  { title: '创建时间', key: 'createdAt', width: 120, responsive: ['xl'] },
+  { title: '操作', key: 'action', width: 120, align: 'right' },
 ];
 
 /** 前端切片：接口全量返回（见上方 TODO(P1-7)） */
