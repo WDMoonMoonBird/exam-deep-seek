@@ -52,7 +52,7 @@
 
 | 护栏 | 内容 | 现状 |
 |---|---|---|
-| P1-1 **像素门禁** | 把 round 2 的实证方法固化为 `scripts/gates/pixel-diff.mjs`：改前用 `git archive <commit>` 构建、改后活树构建（均 `--outDir` 到仓库外），同装置同数据截图，比 **4 组区域像素 sha1**。**禁用** asset 文件名/字节哈希 | 方法已实证，脚本待落地 |
+| P1-1 **像素门禁** | **✅ 已落地** `scripts/gates/pixel-diff.mjs`：改前 `git archive` 冻结 → 两棵树各自 `vite build --outDir` 到仓库外 → 各起 31xx 静态服务 → Playwright 同视口同数据截图 → **逐区域像素 sha1 全等**（可执行形态 = 每主题各自「改前 vs 改后」全等；⚠️ **本仓无全局密度开关**（`data-density` 各 Layout 硬编码），故「亮/暗 × 舒适/紧凑 4 组」**字面不可执行**）。**禁用** asset 文件名/字节哈希。退出码 0/1/2 = 全等/有差异/**无法判定**（截不到图或构建不确定时**拒绝判 PASS**） | 三组自测 + 两组抗假绿已实测通过 |
 | P1-2 **契约对拍** | 后端每个拆分点先写"输入→输出"对拍脚本（round 3 用过：19/19 夹具 + AST 等价对比） | 方法已实证 |
 | P1-3 **回滚锚点** | 每次开拆前打 tag（如 `split-<file>-before`） | 现成做法 |
 | P1-4 **基线刷新** | 拆完重跑 `arch-metrics`；**未分层数下降要更新基线**（47 → 新值），否则门禁会误判"劣化" | 待做 |
@@ -133,7 +133,10 @@
 3. `node scripts/gates/hard-metrics.mjs` → PASS（0/0/0）
 4. **全量后端测试**：`ROUND=NN bash docs/pipeline/scripts/unblock-g2.sh` → 4 处摘要、**0 failed**、套件/用例数按本步变化如实记录（新增测试则数增，属预期）
 5. **client 改动**（Phase 3 每步）：
-   - `scripts/gates/pixel-diff.mjs` → **4 组区域像素 sha1 全等**
+   - `scripts/gates/pixel-diff.mjs` → **逐区域像素 sha1 全等**（可执行形态 = 每主题各自改前/改后全等；「4 组」字面不可执行，本仓无全局密度开关）
+   - ★**区域表必须覆盖本步目标文件所在路由**（用 `--regions`）：默认 6 区域只走 `/exam/teacher/classes`，对 `Submit.vue`/`QuestionEdit.vue`/`ReviewDetail.vue`/`Doc.vue` 等**近乎盲区**（报告 §7 有现成模板与需补的 FIXTURES）
+   - ★**像素全等 ≠ 功能无回归**：像素门禁抓不到交互时序、焦点顺序、ARIA、请求行为、控制台报错 → client 步**必须另做交互行为验证**（配方由 step 2-A 产出后固化进本 DoD）+ axe 不引入新违规
+   - ⚠️ 真实 DOM 变更（如 C5 `Doc.vue` 拆子组件）会让区域选择器消失 → 门禁给 **exit 2（硬失败，不静默跳过）**，此类步**须先调区域表**再做对比
    - axe：**不引入新违规**
    - 禁止重建 `client/dist`（一律 `--outDir` 到仓库外）
 6. **行为对拍**：拆分前后同一批夹具的输入→输出**逐字节相等**（server）/ 组件状态一致（client）
