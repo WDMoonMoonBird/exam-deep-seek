@@ -21,7 +21,7 @@ const ROOT = path.resolve(import.meta.dirname, '../..');
 //   2026-10-11 step1（ruleExecutor 拆 8 文件并落层）后刷新为 46 / 9 / 18
 //   2026-10-11 step2（Submit.vue 抽 9 个 composable，全部 <500 行）后刷新为 46 / 8 / 18（观察带不变）
 //   2026-10-11 step3（checkerService 拆 10 文件并落层：2 domain + 8 infrastructure）后刷新为 45 / 7 / 18
-const BASELINE = { layerViolations: 0, unmigrated: 45, godfileOver800: 7, over500: 18 };
+const BASELINE = { layerViolations: 0, unmigrated: 45, godfileOver800: 7, over500: 17 };
 
 const SKIP = new Set(['node_modules', '.git', 'dist', 'coverage', 'uploads']);
 

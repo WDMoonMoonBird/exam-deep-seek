@@ -1,6 +1,6 @@
 # split-status.md — GodFile 拆分执行状态（唯一入口，≤30 行）
 
-step: 3（server 侧 checkerService.js，**实测 1280 行**）｜ phase: B（分 3 批拆 10 文件）
+step: 4（server 侧 deepseek.js，1051 行）｜ phase: A（接缝与落层分析）
 plan: docs/plan/2026-10-11-godfile-split-plan.md（§4 顺序 / §5 DoD / §8 流程与 5 处改造）
 constraints: docs/pipeline/project-constraints.md（17 条；**§8.1 的 5 处改造优先于「禁止新增文件」与「未分层不增」**）
 archives: docs/split/<file>-{plan,refactor,verify}.md ｜ anchor: 2c9e3d9
@@ -18,7 +18,8 @@ archives: docs/split/<file>-{plan,refactor,verify}.md ｜ anchor: 2c9e3d9
 | 0 | scripts/gates/pixel-diff.mjs | ✅ 三组自测 + 两组抗假绿（exit 2 不冒充 PASS） | — | — | f017151·2c9e3d9 |
 | 1 | server/src/services/ruleExecutor.js → 8 文件 | ✅ | ✅ | ✅ PASS（43/43 切片全等·120 例对拍·门禁证伪 6/6·全量 0 failed） | 06cb6dc |
 | 2 | client/src/views/student/Submit.vue → 9 个 composable（1519→631） | ✅ | ✅ | ✅ PASS（L0/L1 全等 · 7 场景 A/B 对拍 0 差异 · 变异反证 4/4 · GodFile 9→8） | c26c8dc |
-| 3 | server/src/services/checkerService.js（1280 → 10 文件：2 domain + 8 infra，最大 386 行） | ✅ | ✅（49/49 切片全等·导出面 10 名等价·门面丢面坑已修） | 进行中 | — |
+| 3 | checkerService.js（1280 → 10 文件：2 domain + 8 infra，最大 386 行） | ✅ | ✅ | ✅ PASS（49/49 切片全等·门面可达 10/10·**209/209 四维对拍**·27/27 函数全覆盖·变异 5/5） | 287b9b0 |
+| 4 | server/src/services/deepseek.js（1051 行，LLM 网关） | 进行中 | 待执行 | 待执行 | — |
 
 强制停止条件（遇到即停、写入待决清单，不擅自决定）：
 ① 需改对外契约或产品语义 ② 同一步两次回流仍不通过（跳下一步）③ 护栏不可用 ④ 触及「不改清单」⑤ 步数走完
@@ -27,5 +28,5 @@ archives: docs/split/<file>-{plan,refactor,verify}.md ｜ anchor: 2c9e3d9
 
 待决清单（需用户拍板）：（空）
 
-next_action: step 3-C 验证中（49 块切片判等 + 门面可达性 + 三桩三维对拍 + **被执行/未被执行函数两张清单** + 变异反证）→ 通过后提交并刷新 arch 基线至未分层 45 / GodFile 7 → 进 step 4（按方案：deepseek.js 或 client 侧 ProjectQuestionEdit.vue）
-★step3 风险：A 实测该文件 **22/27 函数零覆盖**，且 22 个 integration 套件虽传递加载它、**checker 端点全在 controller 守卫处短路、service 一行未执行** → 几乎无测试保护，唯一行为证据 = C 的桩式 A/B 对拍；未覆盖路径必须如
+next_action: step 4-A 分析中（deepseek.js 落层预判——**前两步的落层方案已被真实门禁否决过两次，本轮要求用门禁判定式逐条预判**）→ B 分批拆 → C 验证（三桩+禁网+四维对拍）
+★step4 提示：deepseek.js 直接 import prisma 读 systemConfig，本身即有分层违规；落 infrastructure/bootstrap 能否同时消除违规且不改行为，须 A 判定。另★step3 残留（已登记）：A 实测该文件 **22/27 函数零覆盖**，且 22 个 integration 套件虽传递加载它、**checker 端点全在 controller 守卫处短路、service 一行未执行** → 几乎无测试保护，唯一行为证据 = C 的桩式 A/B 对拍；未覆盖路径必须如
