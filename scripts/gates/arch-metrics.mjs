@@ -26,7 +26,9 @@ const ROOT = path.resolve(import.meta.dirname, '../..');
 //     （观察带 >500 含 >800；.vue 降到 348 后离开该集合，故 16->15 —— step5 方案原估「16→16」是错的）
 //   2026-10-11 step6（QuestionEdit.vue 抽 12 个 composable，.vue 983->466）后刷新为 44 / 4 / 14
 //     （466 < 500 ⇒ 同时离开两个集合，观察带实测 15->14，非预设）
-const BASELINE = { layerViolations: 0, unmigrated: 44, godfileOver800: 4, over500: 14 };
+//   2026-10-11 step7（ReviewDetail.vue 抽 7 个 composable，.vue 988->620）后刷新为 44 / 3 / 14
+//     ⚠️ 观察带**不降**（14->14）：template 236 + style 359 = 595 行不可触碰，该文件结构上无法低于 500
+const BASELINE = { layerViolations: 0, unmigrated: 44, godfileOver800: 3, over500: 14 };
 
 const SKIP = new Set(['node_modules', '.git', 'dist', 'coverage', 'uploads']);
 

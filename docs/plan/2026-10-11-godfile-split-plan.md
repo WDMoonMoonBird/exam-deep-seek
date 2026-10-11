@@ -152,7 +152,13 @@
    - ★**被验树必须留痕**：任何 client 验证都要记录**被测源码树的绝对路径 + HEAD + 产物指纹**（本仓存在第二个 worktree `Exam-DeepSeek-ui`，`tests/ui-redesign-verify/rig.sh:9` 的 `CLIENT_DIR` **默认指向它** —— 用它跑验证等于测错代码；必须显式指定主仓库 client）。
    - ★**门禁覆盖缺口（2026-10-11 step7 修正）**：`cycle-check` 默认只扫 `server/src`、`bind-check` 默认不含 `client` ⇒ 对 client 步这两条**默认空转**。
      **正确做法是给官方脚本传根目录**（`cycle-check --root client/src`、`bind-check client/src`；step7 实测均绿），**优先用官方脚本而不是自建替代判据** —— 只有官方脚本确实不支持时才自建（自建须带正控与干净树对照）。
-   - ★**ESLint 判据（2026-10-11 新增，第 6 条；server 步同样适用）**：`npx eslint client/src server/src` 必须 **error = 0** 且 **warn ≤ 59**（基线，随时间只降不升）。
+   - ★**两道 lint 判据（2026-10-11 新增，第 6 条；client/server 步都适用）—— 二者互补，缺一不可**：
+     **(a) ESLint**：`npx eslint client/src server/src` 必须 **error = 0** 且 **warn ≤ 59**（基线，只降不升）。
+     **(b) 离线门禁**：`node scripts/gates/lint-check.mjs` 必须 **exit 0**（基线 31 条，**只减不增**；`--update-baseline` **不是消红按钮**）。
+     **为什么两道都要**：ESLint 实测生效 63 条规则，但**没有任何 import 解析类规则**（`import/*` 缺席）；而 (b) 的
+     **`no-unresolved-import`** 正好覆盖「相对 import 指向已删除模块」——即本仓拆分后残留 3 处的那类缺陷，
+     且**在 client 侧是唯一覆盖**（`bind-check.mjs` 只覆盖 server）。反过来 ESLint 规则面更广、可接编辑器。
+     (b) 另胜在 **0.55s**（比 ESLint 快数倍）且自带 `--self-test`（8/8 正控）。
      它能**直接拦住本会话踩过的四类缺陷**：自由标识符（引用但未声明/未 import/未注入）、未绑定名进入 return 面、未使用的声明、拼写错的引用；且**在 `.vue` 的 `<script setup>` 内同样有效**（正控 4/4 实测：`no-undef` 在 `.js` 与 `.vue` 双命中、`no-dupe-keys`、`no-unused-vars` 各命中）。
      配置在仓库根 `eslint.config.mjs`（**只查缺陷、不查风格**，刻意不引入 stylistic/prettier 规则以免噪音淹没信号）；引擎 `eslint@9.39.5` + `eslint-plugin-vue@10.11.1` + `vue-eslint-parser@10.3.0`（装在**仓库根**，一份配置覆盖 client/src 与 server/src）。
      ⚠️ **它查不到**：模板内的引用、类型错误、以及「被调方声明了形参但调用方没传」这类**跨文件接线错配**（仍须靠判据⑤真运行时对拍兜住）。
