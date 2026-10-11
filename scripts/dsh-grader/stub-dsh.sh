@@ -12,6 +12,11 @@ fi
 MODE="${STUB_MODE:-ok}"
 CAND="$(printf '%s' "$*" | grep -oE '/[^ ]*/out/grading-result\.json' | head -1)"
 
+MODEL_CAND="$(printf '%s' "$*" | grep -oE '/[^ ]*/out/results/[^ ]*\.model\.json' | head -1)"
+WD="$(printf '%s' "$*" | grep -oE '/[^ ]*/out/checker/checker\.json' | head -1 | sed 's|/out/checker/checker.json||')"
+SLUG="$(printf '%s' "$MODEL_CAND" | sed -n 's|.*/out/results/\(\.*\)\.model\.json|\1|p')"
+[ -n "$SLUG" ] || SLUG=s01
+
 emit_profile() {
   cat <<'YML'
 # == @deepseek-ai/dsh-base, patched by @deepseek-ai/dsh-headless
@@ -62,6 +67,21 @@ esac
 if [ -n "${STUB_SLEEP:-}" ]; then sleep "$STUB_SLEEP"; fi
 echo "STUB_MODEL_TURN mode=$MODE cand=$CAND"
 case "$MODE" in
+  ok|field-max|t1|dangling|bad-id|exec|half|half-c8|unmeasurable|partial-unmeasurable)
+    if [ -n "$WD" ]; then
+      python3 "$(dirname "$0")/stub_build.py" --workdir "$WD" --slug "$SLUG" --mode "$MODE" \
+        --counter "${STUB_COUNTER:-}" > /dev/null 2>&1 || true
+    fi
+    # 忠于真实 CLI：在隔离 home 里留下自己的会话日志（供 run.sh 取 child_session 做 R4 归因）
+    if [ -n "${DSH_HOME:-}" ]; then
+      SESS_DIR="${DSH_HOME}/sessions/--stub-${SLUG}--/session-11111111-2222-3333-4444-555555555555"
+      mkdir -p "$SESS_DIR" 2> /dev/null || true
+      printf 'stub session journal' > "$SESS_DIR/session.v4.jsonl.zstd" 2> /dev/null || true
+      mkdir -p "${DSH_HOME}/storages/session_projcache/sessions" 2> /dev/null || true
+      printf '{}' > "${DSH_HOME}/storages/session_projcache/sessions/session-11111111-2222-3333-4444-555555555555.json" 2> /dev/null || true
+    fi
+    echo "GRADING_DONE=$SLUG"
+    exit 0 ;;
   ok)
     if [ -n "$CAND" ]; then mkdir -p "$(dirname "$CAND")"; valid_json > "$CAND"; fi
     valid_json
@@ -71,6 +91,7 @@ case "$MODE" in
   nofile)
     echo "STUB: 只回了文本，没有写文件"; echo "GRADING_DONE=stub"; exit 0 ;;
   nonzero_with_artifact)
+    if [ -n "$MODEL_CAND" ]; then mkdir -p "$(dirname "$MODEL_CAND")"; valid_json > "$MODEL_CAND"; fi
     if [ -n "$CAND" ]; then mkdir -p "$(dirname "$CAND")"; valid_json > "$CAND"; fi
     echo "STUB: 写完产物后会话崩溃" >&2; exit 3 ;;
   nonzero_noout)

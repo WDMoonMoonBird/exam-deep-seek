@@ -102,23 +102,24 @@ has "reason=session-nonzero-exit" "$SANDBOX/nz.log" && ok "F-C2 摘要给出原�
 has "RUN_CHILD_EXITS=s01:rc=3/child_exit=3" "$SANDBOX/nz.log" && ok "F-C2 摘要给出子会话退出码" || bad "F-C2 摘要缺子会话退出码"
 has "RUN_EXIT_CODE=1" "$SANDBOX/nz.log" && ok "F-C2 摘要给出退出码" || bad "F-C2 摘要缺退出码"
 [ -f "$W2/out/grading-result.json" ] && bad "F-C2 失败运行仍写出契约产物" || ok "F-C2 失败运行未写契约产物"
-[ -f "$W2/out/results/s01.json" ] && ok "F-C2 诊断产物保留（results/s01.json）" || bad "F-C2 诊断产物缺失"
+[ -f "$W2/out/results/s01.model.json" ] && ok "F-C2 诊断产物保留（results/s01.model.json，会话自述）" || bad "F-C2 诊断产物缺失"
 has "SESSION_FAIL" "$W2/out/run.log" && ok "F-C2 运行日志含 SESSION_FAIL" || bad "F-C2 运行日志缺 SESSION_FAIL"
 
 # ---------------- F-C5：stdout 回退 ----------------
-echo "-- F-C5 stdout 回退默认关闭 --"
+echo "-- F-C5 stdout 回退默认关闭（单元级 + run.sh 级）--"
+printf '{"schema_version":1,"items":[{"id":"P01","score":10,"max_score":10}],"total_score":10,"max_score":100,"submission_id":"s01"}' > "$SANDBOX/fc5-stdout.txt"
+python3 "$HERE/extract_result.py" --stdout "$SANDBOX/fc5-stdout.txt" --candidate "$SANDBOX/fc5-missing.json" --out "$SANDBOX/fc5-out.json" > "$SANDBOX/fc5-a.log" 2>&1
+RA=$?
+if [ "$RA" -ne 0 ] && has "EXTRACT_FALLBACK=refused" "$SANDBOX/fc5-a.log"; then ok "F-C5 默认拒绝 stdout 回退（rc=${RA}）"; else bad "F-C5 默认口径变化（rc=${RA}）"; fi
+python3 "$HERE/extract_result.py" --stdout "$SANDBOX/fc5-stdout.txt" --candidate "$SANDBOX/fc5-missing.json" --out "$SANDBOX/fc5-out.json" --allow-stdout-fallback > "$SANDBOX/fc5-b.log" 2>&1
+RB=$?
+if [ "$RB" -eq 0 ] && has "EXTRACT_FALLBACK=explicit" "$SANDBOX/fc5-b.log"; then ok "F-C5 显式开关才回退且有标记（rc=0）"; else bad "F-C5 显式回退失效（rc=${RB}）"; fi
 W3="$SANDBOX/w-stdout"
-STUB_MODE=stdout_only bash "$HERE/run.sh" --submissions 1 --workdir "$W3" --timeout 900 > "$SANDBOX/so.log" 2>&1
-expect_rc "F-C5 默认拒绝 stdout 回退" nonzero $?
-has "EXTRACT_FALLBACK=refused" "$W3/out/logs/extract-s01.txt" && ok "F-C5 extract 日志写明 refused" || bad "F-C5 extract 日志缺 refused"
-[ -f "$W3/out/grading-result.json" ] && bad "F-C5 无文件产物却写了契约产物" || ok "F-C5 无文件产物 => 无契约产物"
-W4="$SANDBOX/w-stdout-explicit"
-STUB_MODE=stdout_only bash "$HERE/run.sh" --submissions 1 --workdir "$W4" --timeout 900 --allow-stdout-fallback > "$SANDBOX/so2.log" 2>&1
-expect_rc "F-C5 显式开关后允许回退" zero $?
-has "RUN_RESULT_SOURCE=s01:stdout-fallback/explicit" "$SANDBOX/so2.log" && ok "F-C5 摘要显式标注回退来源" || bad "F-C5 摘要未标注回退来源"
-has "stdout_fallback_enabled=1" "$SANDBOX/so2.log" && ok "F-C5 摘要标注开关状态" || bad "F-C5 摘要缺开关状态"
+STUB_MODE=stdout_only bash "$HERE/run.sh" --submissions 1 --workdir "$W3" --timeout 900 --allow-score-only > "$SANDBOX/so.log" 2>&1
+RC=$?
+[ "$RC" -ne 0 ] && ok "F-C5 score-only 模式下会话没写文件 ⇒ 非 0（rc=${RC}）" || bad "F-C5 score-only 无产物仍判成功"
+[ -f "$W3/out/grading-result.json" ] && bad "F-C5 无文件仍写契约产物" || ok "F-C5 无文件产物 ⇒ 无契约产物"
 
-# ---------------- F-C1：隔离归因（阳性/阴性对照）----------------
 echo "-- F-C1 隔离归因阳性对照（模拟未隔离写入 => 必须 FAIL；--dry-run 零模型调用）--"
 for MODE in profile-dir workdir-slug content-fingerprint; do
   W="$SANDBOX/w-leak-$MODE"
@@ -238,10 +239,167 @@ W5="$SANDBOX/w-e2e"
 STUB_MODE=ok bash "$HERE/run.sh" --submissions 1 --workdir "$W5" --timeout 900 > "$SANDBOX/e2e.log" 2>&1
 expect_rc "端到端 stub 会话 => 0" zero $?
 has "RUN_RESULT=PASS" "$SANDBOX/e2e.log" && ok "端到端 RUN_RESULT=PASS" || bad "端到端未 PASS"
-has "RUN_RESULT_SOURCE=s01:file/none" "$SANDBOX/e2e.log" && ok "端到端结果来源=模型自写文件" || bad "端到端结果来源异常"
-python3 -c "import json; d=json.load(open('$W5/out/grading-result.json')); assert len(d['items'])==9; print('OK')" > /dev/null 2>&1 \
-  && ok "端到端契约产物可 JSON.parse 且 9 项" || bad "端到端契约产物缺失/不可解析"
+has "RUN_RESULT_SOURCE=s01:checker-result/1" "$SANDBOX/e2e.log" && ok "端到端结果来源=确定性执行器（checker-result/1）" || bad "端到端结果来源异常"
+python3 -c "import json,sys; d=json.load(open(sys.argv[1])); c=json.load(open(sys.argv[2])); assert len(d['items'])==len(c['predicates']); print('OK')" "$W5/out/grading-result.json" "$W5/out/checker/checker.json" > /dev/null 2>&1 \
+  && ok "端到端契约产物可 JSON.parse 且条目数与 checker 谓词数一致" || bad "端到端契约产物缺失/不可解析"
 has "verdict=PASS" "$W5/out/isolation-report.txt" && ok "端到端隔离 verdict=PASS" || bad "端到端隔离未 PASS"
+
+echo "-- R3-B2 C8 可量性探针 --"
+C8N="$SANDBOX/w-c8-neg"
+STUB_MODE=unmeasurable bash "$HERE/run.sh" --submissions 1 --workdir "$C8N" --timeout 900 > "$SANDBOX/c8-neg.log" 2>&1
+RC8=$?
+if [ "$RC8" -eq 5 ] && [ ! -f "$C8N/out/grading-result.json" ] && grep -qE "all_unmeasurable|not_measurable|INPUT_PROBLEM" "$C8N/out/diagnostics/shape-checks.json"; then
+  ok "C8 反例：project_root_glob=**/UserManagement* ⇒ 判不合格（exit 5 + 诊断 + 无契约产物）"
+else
+  bad "C8 反例未被拦住（rc=${RC8}）"
+fi
+C8R="$SANDBOX/w-c8-rebuild"
+STUB_COUNTER="$SANDBOX/c8-counter.txt" STUB_MODE=half-c8 bash "$HERE/run.sh" --submissions 1 --workdir "$C8R" --timeout 900 --max-rebuild 1 > "$SANDBOX/c8-rebuild.log" 2>&1
+RC8R=$?
+if [ "$RC8R" -eq 0 ] && has "REBUILDS=1" "$SANDBOX/c8-rebuild.log" && grep -qE "all_unmeasurable|not_measurable" "$C8R/out/logs/prompt-s01.txt"; then
+  ok "C8 触发重造：首版不可量 ⇒ 附 VIOLATION 重造 ⇒ 第二版通过（REBUILDS=1）"
+else
+  bad "C8 重造链路异常（rc=${RC8R}）"
+fi
+if [ -f "$C8R/out/grading-result.json" ]; then ok "C8 重造后契约产物产出"; else bad "C8 重造后无契约产物"; fi
+
+echo "-- R3-B 造尺侧：E-A..E-E + 闸反例 + 重造 --"
+if [ -f "$SANDBOX/r3/e2e/e-b-readdir.log" ]; then ok "R3 E-B readdir 扰动已执行"; fi
+REPO="$(cd "$HERE/../.." && pwd)"
+R3W="$SANDBOX/r3"
+mkdir -p "$R3W"
+bash "$HERE/e2e_shape.sh" --workdir "$R3W" --repo "$REPO" > "$SANDBOX/r3-e2e.log" 2>&1
+R3RC=$?
+grep -E '^E_' "$SANDBOX/r3-e2e.log" | head -10
+if [ "$R3RC" -eq 0 ] && has "E2E_RESULT=PASS" "$SANDBOX/r3-e2e.log"; then ok "R3 E-A..E-E 全绿（e2e_shape.sh exit 0）"; else bad "R3 E-A..E-E 有失败（rc=${R3RC}）"; fi
+for m in field-max t1 dangling bad-id exec; do
+  W="$SANDBOX/w-gate-$m"
+  STUB_MODE=$m bash "$HERE/run.sh" --submissions 1 --workdir "$W" --timeout 900 > "$SANDBOX/gate-$m.log" 2>&1
+  RC=$?
+  if [ "$RC" -eq 5 ] && [ ! -f "$W/out/grading-result.json" ] && [ -f "$W/out/diagnostics/shape-checks.json" ]; then
+    ok "R3 闸反例($m)：exit 5 + 不写契约产物 + 诊断归档"
+  else
+    bad "R3 闸反例($m)：rc=${RC}（期望 5）或缺诊断"
+  fi
+done
+R3B="$SANDBOX/r3-rebuild"
+STUB_COUNTER="$SANDBOX/r3-counter.txt" STUB_MODE=half bash "$HERE/run.sh" --submissions 1 --workdir "$R3B" --timeout 900 --max-rebuild 1 > "$SANDBOX/r3-rebuild.log" 2>&1
+RCB=$?
+if [ "$RCB" -eq 0 ] && has "REBUILDS=1" "$SANDBOX/r3-rebuild.log" && has "重造提示" "$R3B/out/logs/prompt-s01.txt"; then
+  ok "R3 重造：首次不合格 → 附 VIOLATION 原文重造 → 第二次通过（REBUILDS=1）"
+else
+  bad "R3 重造链路异常（rc=${RCB}）"
+fi
+if [ "$RCB" -eq 0 ] && has "RUN_MEASURE_CANONICAL=" "$SANDBOX/r3-rebuild.log" && [ -f "$R3B/out/grading-result.json" ]; then
+  ok "R3 量尺产物 canonical 与平台投影均已落盘"
+else
+  bad "R3 量尺产物缺失"
+fi
+
+echo "-- R3-B2 C8 多提交语义（gate 级；非 strict 部分不可量不判整作业失败）--"
+C8G="$SANDBOX/c8-gate"
+mkdir -p "$C8G"
+cp -R "$R3W/materials" "$C8G/materials" 2> /dev/null || true
+chmod -R u+w "$C8G/materials" 2> /dev/null || true
+mkdir -p "$C8G/materials/submissions/s02"
+python3 "$HERE/stub_build.py" --workdir "$C8G" --slug s01 --mode ok > /dev/null 2>&1
+bash "$HERE/shape_gate.sh" --workdir "$C8G" --slug s01 > "$SANDBOX/c8-gate.log" 2>&1
+G1=$?
+if [ "$G1" -eq 0 ] && has "MEASURABLE=1 UNMEASURABLE=1" "$SANDBOX/c8-gate.log" && has "SHAPE_C8=PASS" "$SANDBOX/c8-gate.log"; then
+  ok "C8 部分不可量：非 strict 判 PASS 且摘要计数可见（MEASURABLE=1 UNMEASURABLE=1）"
+else
+  bad "C8 部分不可量语义异常（gate rc=${G1}）"
+fi
+if has "UNMEASURABLE s02" "$SANDBOX/c8-gate.log" && [ -f "$C8G/out/diagnostics/measurable.json" ]; then
+  ok "C8 逐份标记 UNMEASURABLE（out/diagnostics/measurable.json）"
+else
+  bad "C8 未逐份标记"
+fi
+bash "$HERE/shape_gate.sh" --workdir "$C8G" --slug s01 --strict > "$SANDBOX/c8-strict.log" 2>&1
+G2=$?
+if [ "$G2" -eq 1 ] && has "STRICT_FAIL" "$SANDBOX/c8-strict.log" && has "C8_PARTIAL_STRICT" "$SANDBOX/c8-strict.log"; then
+  ok "C8 部分不可量 + --strict ⇒ 退出码 1（不判整作业不合格）"
+else
+  bad "C8 --strict 语义异常（gate rc=${G2}）"
+fi
+C8A="$SANDBOX/c8-all"
+mkdir -p "$C8A"
+cp -R "$C8G/materials" "$C8A/materials" 2> /dev/null || true
+chmod -R u+w "$C8A/materials" 2> /dev/null || true
+rm -rf "$C8A/materials/submissions/s01" "$C8A/materials/submissions/s02"
+mkdir -p "$C8A/materials/submissions/s01" "$C8A/materials/submissions/s02"
+python3 "$HERE/stub_build.py" --workdir "$C8A" --slug s01 --mode ok > /dev/null 2>&1
+bash "$HERE/shape_gate.sh" --workdir "$C8A" --slug s01 > "$SANDBOX/c8-all.log" 2>&1
+G3=$?
+if [ "$G3" -eq 5 ] && has "all_unmeasurable" "$SANDBOX/c8-all.log"; then
+  ok "C8 全员不可量 ⇒ 判不合格（exit 5，触发重造语义）"
+else
+  bad "C8 全员不可量未被判不合格（gate rc=${G3}）"
+fi
+
+
+echo "-- R3.5-B 作业级流程（build-and-measure / measure-only-reuse / E-F / 篡改 / E-G g3）--"
+R35="$SANDBOX/r35"
+mkdir -p "$R35"
+STUB_MODE=ok bash "$HERE/run.sh" --checker-mode build-and-measure --submissions 2 --workdir "$R35" --timeout 900 > "$SANDBOX/r35-p1.log" 2>&1
+R35A=$?
+if [ "$R35A" -eq 0 ] && has "ASSIGNMENT_RESULT=PASS N=2 MEASURED=2 FAILED=0 UNMEASURABLE=0" "$SANDBOX/r35-p1.log" && has "MODEL_CALLS=1 MEASURE_CALLS=0" "$SANDBOX/r35-p1.log"; then
+  ok "R3.5-B S1–S6：一次造尺 + 2 份量尺（MODEL_CALLS=1 MEASURE_CALLS=0）"
+else
+  bad "R3.5-B 作业级流程异常（rc=${R35A}）"
+fi
+if [ -f "$R35/out/assignment/assignment-manifest.json" ] && [ -f "$R35/out/assignment/comparability.json" ] && [ -f "$R35/out/assignment/reconciliation.json" ] && [ -f "$R35/out/grading-results.json" ]; then
+  ok "R3.5-B 作业级产物齐备（manifest / comparability / reconciliation / grading-results）"
+else
+  bad "R3.5-B 作业级产物缺失"
+fi
+PROMPT_N="$(grep -c 'model.json' "$R35/out/logs/prompt-build.txt" 2> /dev/null || true)"
+if [ "$PROMPT_N" = "0" ]; then
+  ok "R3.5-B S1：造尺 prompt 不含学生提交（无 model.json 自述要求）"
+else
+  bad "R3.5-B S1：造尺 prompt 仍含学生提交内容"
+fi
+python3 - "$R35/out/assignment/comparability.json" > "$SANDBOX/r35-d1.txt" <<'PY'
+import json, sys
+print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8"))["digests"], sort_keys=True))
+PY
+STUB_MODE=ok bash "$HERE/run.sh" --checker-mode measure-only-reuse --submissions 2 --workdir "$R35" --timeout 900 > "$SANDBOX/r35-p2.log" 2>&1
+R35B=$?
+python3 - "$R35/out/assignment/comparability.json" > "$SANDBOX/r35-d2.txt" <<'PY'
+import json, sys
+print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8"))["digests"], sort_keys=True))
+PY
+if [ "$R35B" -eq 0 ] && has "MODEL_CALLS=0" "$SANDBOX/r35-p2.log" && diff -q "$SANDBOX/r35-d1.txt" "$SANDBOX/r35-d2.txt" > /dev/null 2>&1; then
+  ok "R3.5-B E-F：第二遍零模型调用且逐份 canonical 与第一遍一致"
+else
+  bad "R3.5-B E-F 异常（rc=${R35B}）"
+fi
+R35T="$SANDBOX/r35-tamper"
+cp -R "$R35" "$R35T" 2> /dev/null || true
+chmod -R u+w "$R35T" 2> /dev/null || true
+printf ' ' >> "$R35T/out/assignment/checker.frozen.json"
+STUB_MODE=ok bash "$HERE/run.sh" --checker-mode measure-only-reuse --submissions 2 --workdir "$R35T" --timeout 900 > "$SANDBOX/r35-tamper.log" 2>&1
+if [ $? -eq 3 ] && has "frozen-tampered" "$SANDBOX/r35-tamper.log"; then
+  ok "R3.5-B S3：篡改 frozen ⇒ exit 3（拒绝量尺）"
+else
+  bad "R3.5-B S3：篡改未被拦（期望 exit 3）"
+fi
+R35G="$SANDBOX/r35-g3"
+mkdir -p "$R35G"
+STUB_MODE=partial-unmeasurable bash "$HERE/run.sh" --checker-mode build-and-measure --submissions 2 --workdir "$R35G" --timeout 900 > "$SANDBOX/r35-g3.log" 2>&1
+if [ $? -eq 0 ] && has "ASSIGNMENT_RESULT=PARTIAL N=2 MEASURED=1 FAILED=0 UNMEASURABLE=1" "$SANDBOX/r35-g3.log"; then
+  ok "R3.5-B E-G g3：部分不可量 ⇒ PARTIAL + UNMEASURABLE=1（rc=0）"
+else
+  bad "R3.5-B E-G g3 语义异常"
+fi
+R35S="$SANDBOX/r35-g3s"
+mkdir -p "$R35S"
+STUB_MODE=partial-unmeasurable bash "$HERE/run.sh" --checker-mode build-and-measure --submissions 2 --workdir "$R35S" --timeout 900 --strict > "$SANDBOX/r35-g3s.log" 2>&1
+if [ $? -eq 1 ] && has "SHAPE_GATE=STRICT_FAIL" "$SANDBOX/r35-g3s.log"; then
+  ok "R3.5-B E-G g3+--strict：部分不可量 ⇒ exit 1"
+else
+  bad "R3.5-B E-G g3+--strict 语义异常"
+fi
 
 echo "SELFTEST_MODEL_CALLS=0（全部走 stub；无网络、无模型调用）"
 echo "SELFTEST_STUB_CALLS=$(wc -l < "$STUB_CALL_LOG" | tr -d ' ')"

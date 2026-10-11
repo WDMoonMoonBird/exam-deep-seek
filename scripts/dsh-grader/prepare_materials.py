@@ -19,10 +19,15 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
 import sys
 import zipfile
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), chr(46) + chr(46), 'dsh-checker'))
+import validate as V  # noqa: E402  （R3-B：复用 validate.py 的哈希口径，禁止另写一套）
+
 
 STANDARD_NAME = '标准工程包.zip'
 RUBRIC_NAME = '评分标准.md'
@@ -134,6 +139,80 @@ def readonly(root):
         pass
 
 
+
+
+def split_rubric(text):
+    """裁定 3：按 ## 标题切分；无 ## 退化 ###；再退化到「第N项/编号行」；最后整篇为一段。
+    返回 (sections, rule)；sections = [{'sid', 'head', 'text'}...]（顺序即原文顺序）。"""
+    pre = 'none'
+    escaped = chr(92) + 'n'
+    if text.count(escaped) >= 3 and text.count(chr(10)) < text.count(escaped):
+        text = text.replace(escaped, chr(10))
+        pre = 'escaped_newlines_normalized'
+    lines = text.split(chr(10))
+
+    def by_heading(prefix):
+        out, cur = [], None
+        for i, ln in enumerate(lines):
+            if ln.startswith(prefix):
+                if cur is not None:
+                    out.append(cur)
+                cur = {'head': ln[len(prefix):].strip(), 'lines': [ln]}
+            elif cur is not None:
+                cur['lines'].append(ln)
+        if cur is not None:
+            out.append(cur)
+        return out
+
+    def by_item():
+        out, cur = [], None
+        pat = re.compile(r'^\s*(第[一二三四五六七八九十百]+项|[0-9]+[.、])\s*')
+        for ln in lines:
+            if pat.match(ln):
+                if cur is not None:
+                    out.append(cur)
+                cur = {'head': ln.strip()[:40], 'lines': [ln]}
+            elif cur is not None:
+                cur['lines'].append(ln)
+        if cur is not None:
+            out.append(cur)
+        return out
+
+    for rule, fn, minimum in (('##', by_heading, 2), ('###', by_heading, 2), ('item', by_item, 2)):
+        if rule == 'item':
+            secs = fn()
+        else:
+            secs = fn(rule)
+        if len(secs) >= minimum:
+            return secs, rule + ('' if pre == 'none' else '+' + pre)
+    return [{'head': 'WHOLE-DOC', 'lines': lines}], 'whole-doc' + ('' if pre == 'none' else '+' + pre)
+
+
+def write_rubric_sections(materials_dir, rubric_path):
+    """产出 materials/rubric-sections.json + materials/rubric-sections/<sid>.md（可被 validate.content_sha256 复算）。"""
+    text = open(rubric_path, encoding='utf-8').read()
+    secs, rule = split_rubric(text)
+    out_dir = os.path.join(materials_dir, 'rubric-sections')
+    os.makedirs(out_dir, exist_ok=True)
+    rows = []
+    for i, s in enumerate(secs, 1):
+        sid = 'S%03d' % i
+        body = chr(10).join(s['lines']).rstrip() + chr(10)
+        fp = os.path.join(out_dir, sid + '.md')
+        with open(fp, 'w', encoding='utf-8') as f:
+            f.write(body)
+        rows.append({'sid': sid, 'head': s['head'],
+                     'sha256': 'sha256:' + sha256_file(fp),
+                     'file': 'materials/rubric-sections/' + sid + '.md',
+                     'excerpt': re.sub(r'\s+', ' ', body)[:120]})
+    doc = {'schema_version': 'rubric-sections/1', 'split_rule': rule,
+           'rubric': 'materials/rubric.md', 'rubric_sha256': 'sha256:' + sha256_file(rubric_path),
+           'sections_total': len(rows), 'sections': rows}
+    with open(os.path.join(materials_dir, 'rubric-sections.json'), 'w', encoding='utf-8') as f:
+        json.dump(doc, f, ensure_ascii=False, indent=2)
+        f.write(chr(10))
+    return doc
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--repo', required=True)
@@ -209,18 +288,24 @@ def main():
             'differs_from_standard': digests != std_digests,
         })
 
+    sections_doc = write_rubric_sections(materials, os.path.join(materials, 'rubric.md'))
     manifest = {
         'schema_version': 1,
         'repo': args.repo,
         'source_dir': args.source_dir,
         'standard': {
             'zip': STANDARD_NAME,
+            'extract_digest': V.dir_sha256(os.path.join(materials, 'standard'),
+                                              ['node_modules/**', '.git/**', 'dist/**'])[0],
             'sha256': std_sha,
             'files': len(std_files),
             'extract_dir': os.path.relpath(std_dir, args.workdir),
             'project_root': os.path.join(os.path.relpath(std_dir, args.workdir), std_root),
         },
-        'rubric': {'src': RUBRIC_NAME, 'path': 'materials/rubric.md', 'sha256': sha256_file(rubric_md)},
+        'rubric': {'src': RUBRIC_NAME, 'path': 'materials/rubric.md', 'sha256': sha256_file(rubric_md),
+                   'sections_file': 'materials/rubric-sections.json',
+                   'sections_total': sections_doc['sections_total'],
+                   'split_rule': sections_doc['split_rule']},
         'assignment': {'src': ASSIGNMENT_NAME, 'path': 'materials/assignment.md', 'sha256': sha256_file(assignment_md)},
         'submissions': submissions,
         'skipped': skipped,

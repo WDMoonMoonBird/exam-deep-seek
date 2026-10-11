@@ -89,3 +89,42 @@ macOS 自带 `python3`、`bash 3.2`、`lsof`、`unzip`（`unzip` 仅用于人工
 护栏（5 条库级 + 2 条脚本级拒绝，且断言拒绝时 stub 未被调用）、并发锁（第二次立即失败 + 首次 in-flight 工件存活 +
 首次成功 + 退出后锁释放）、非 0 退出码（摘要/退出码/无契约产物/诊断保留）、stdout 回退（默认拒绝 + 显式允许 + 摘要可见）、
 隔离归因（3 阳性必须 FAIL + 2 阴性必须 PASS + classifier 单元四态 + 分段断言）。
+
+## R3/R3.5：造尺、闸与作业级流程（本文件此前未记录，补齐于此）
+
+### 开关
+| 开关 | 作用 |
+|---|---|
+| --checker-mode per-submission（默认） | 逐份会话造尺 + 量尺（R0/R3 行为，保持兼容） |
+| --checker-mode build-and-measure | 作业级：一次造尺（**不看学生提交**）→ C8 全量可量性预检 → 固化 → N 次零 LLM 量尺 → 作业级产物 |
+| --checker-mode measure-only-reuse | 复用上一步的 out/assignment/checker.frozen.json（零模型调用；manifest 是锚点，被篡改 ⇒ exit 3） |
+| --checker <checker.json> | 用既有尺子直接量尺（跳过造尺会话） |
+| --max-rebuild K | 造尺不合格时在新会话重造的次数（默认 1，硬上限 2；每次重造附上一轮 VIOLATION 原文） |
+| --strict | 部分提交不可量 / 单份失败 ⇒ 退出码 1（默认不判整作业失败，只标 UNATTRIBUTED/UNMEASURABLE 计数） |
+| --allow-score-only | 兼容旧「只产分数」模式（默认关闭；摘要 MODE=score-only，投影标 comparable_within_checker=false） |
+| --allow-stdout-fallback | **只作用于逐份提取层**（measure extract）；score-only 走投影（需 out/results/<slug>.model.json），不受该开关影响 |
+| --submissions N --workdir W --timeout 秒 | 作业级 N 份提交 / 工作目录 / 单份造尺会话硬超时 |
+
+### 合格判据 C1–C8（shape_gate.sh / shape_checks.py）
+| # | 判据 | 失败语义 |
+|---|---|---|
+| C1 | 会话产出的 out/checker/checker.json 通过 scripts/dsh-checker/validate.py | 不合格（exit 5，可重造） |
+| C2 | checker_id 由第二个进程独立复算一致 | 不合格 |
+| C3 | rubric_hash / standard_hash 锚定物料（复用 validate.py 的哈希口径；提示里直接给字面值） | 不合格 |
+| C4 | sum(predicates[].max_score) <= scoring.max_score，差额须由 deductions/_note 解释；rubric 写了满分则须相等 | 不合格 |
+| C5 | 无 T1 类型（rule_type 属于 T0 八种） | 不合格 |
+| C6 | 覆盖率可读、引用不悬空、uncovered 字段存在 | 不合格 |
+| C7 | out/checker/ 内无可执行文件（只允许 .json/.txt/.md） | 不合格 |
+| C8 | **可量性探针**：对该作业**每一份**提交零 LLM 试跑一次与量尺相同的 check.py 调用 | 全员不可量 ⇒ 不合格（exit 5，可重造）；部分不可量 ⇒ 逐份标 UNMEASURABLE + 计数（--strict ⇒ exit 1） |
+
+### 作业级产物（build-and-measure / measure-only-reuse）
+- out/assignment/checker.frozen.json（字节复制）+ assignment-manifest.json（checker_id / frozen_sha256 / materials digest / 每份 zip_sha256 / c8 摘要 / mode）
+- out/measure/<slug>.json（checker-result/1）+ out/grading-result/<slug>.json（平台兼容投影）+ out/grading-results.json（数组）
+- out/assignment/reconciliation.json（逐份矩阵 + 计数 + uncovered_sections）、comparability.json（**单一 checker_id** + comparable_group + policy）、out/checker/coverage.json
+- 汇总行：ASSIGNMENT_RESULT=PASS|PARTIAL|FAIL N=… MEASURED=… FAILED=… UNMEASURABLE=… CHECKER_ID=… MODEL_CALLS=… MEASURE_CALLS=0
+
+### 口径（不得被下游误用）
+- uncovered 段落按**未评估**处理：不计入满分基数、不得当 0 分也不得静默算满分（投影里给 assessment_base）。
+- canonical_sha256 **只用于同一份提交跨遍比对**；跨份比 canonical 无意义（各份 digest 与内容相关）。
+- 尺子版本对外可见形式：checker_id 短哈希（前 12 位）。
+- 退出码：0=PASS/PARTIAL；1=--strict 下的 PARTIAL/单份失败；3=frozen 被篡改；5=造尺不合格；124=造尺超时。

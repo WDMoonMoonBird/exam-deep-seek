@@ -75,16 +75,121 @@ def validate(obj, expect_id):
     return problems, warnings
 
 
+def build_projection(checker, result, submission_id, score_only=False, coverage_path=''):
+    """单向投影：checker-result/1 → 平台兼容 grading-result.json（R3-A 施工单 5 / 队长裁定 5）。
+    items[].id 必须 ∈ checker 的 predicate id；sum(items.score) 必须等于 totals.score。"""
+    pred_ids = set(p.get('id') for p in (checker.get('predicates') or []))
+    if score_only:
+        pred_ids = pred_ids or set()
+    matrix = {}
+    for row in ((result.get('reconciliation') or {}).get('matrix') or []):
+        matrix[row.get('item_id')] = row
+    items, unknown = [], []
+    for it in (result.get('items') or []):
+        pid = it.get('id')
+        if pid not in pred_ids:
+            unknown.append(str(pid))
+        row = matrix.get(pid, {})
+        reason = '%s(%s): %s / %s' % (pid, it.get('rule_type'), row.get('expected', '-'),
+                                      row.get('observed', '-'))
+        refs = row.get('evidence_refs') or []
+        if refs:
+            reason += ' | 证据: ' + ','.join(refs[:3])
+        items.append({'id': pid, 'title': it.get('item'), 'max_score': it.get('max_score'),
+                      'score': it.get('score'), 'status': it.get('status'), 'reason': reason})
+    total = round(sum(float(i['score'] or 0) for i in items), 1)
+    declared = (result.get('totals') or {}).get('score')
+    problems = []
+    if not items:
+        problems.append('items_empty')
+    if unknown and not score_only:
+        problems.append('items_id_not_in_checker:' + ','.join(unknown[:4]))
+    if declared is not None and abs(total - float(declared)) > 0.05:
+        problems.append('sum_mismatch:%s!=%s' % (total, declared))
+    if (declared is None) and not score_only:
+        problems.append('no_score_in_source')
+    doc = {
+        'schema_version': 1,
+        'submission_id': submission_id,
+        'items': items,
+        'total_score': total,
+        'max_score': (result.get('totals') or {}).get('max_score') or (sum(i['max_score'] or 0 for i in items) or None),
+        'verdict': '由确定性执行器按 checker %s 量得' % str(result.get('checker_id'))[:20],
+        'evidence': [],
+        'uncertain': [],
+        'projection': {
+            'source': 'checker-result/1',
+            'checker_id': result.get('checker_id'),
+            'canonical_sha256': result.get('canonical_sha256'),
+            'mode': 'score-only' if score_only else 'checker',
+            'comparable_within_checker': (not score_only),
+        },
+    }
+    # R3.5-B：uncovered 段落按「未评估」处理 —— 显式给出评估基数与未评估清单（禁止下游当 0 分或满分）
+    preds_all = checker.get('predicates') or []
+    assessed = sum(p.get('max_score') or 0 for p in preds_all)
+    uncovered = []
+    if coverage_path and os.path.isfile(coverage_path):
+        try:
+            cov = json.load(open(coverage_path, encoding='utf-8'))
+            uncovered = [u.get('sid') for u in (cov.get('uncovered') or [])]
+        except ValueError:
+            uncovered = []
+    doc['assessment_base'] = {'assessed_max_score': assessed,
+                              'declared_max_score': (result.get('totals') or {}).get('max_score'),
+                              'uncovered_sections': uncovered,
+                              'policy': 'uncovered=未评估：不计入满分基数（既不当 0 分也不当满分）'}
+    return doc, problems
+
+
+def project_main(args):
+    for req in ('result', 'checker'):
+        if not getattr(args, req):
+            print('PROJECTION_FAIL missing_--' + req)
+            return 2
+    if args.checker and os.path.isfile(args.checker):
+        checker = json.load(open(args.checker, encoding='utf-8'))
+    else:
+        checker = {} if args.score_only else (_ for _ in ()).throw(SystemExit('checker_missing'))
+    result = json.load(open(args.result, encoding='utf-8'))
+    doc, problems = build_projection(checker, result, args.expect_submission_id, args.score_only, args.coverage)
+    if args.out:
+        os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
+        with open(args.out, 'w', encoding='utf-8') as f:
+            json.dump(doc, f, ensure_ascii=False, indent=2)
+            f.write(chr(10))
+    for pr in problems:
+        print('PROJECTION_PROBLEM ' + pr)
+    if problems:
+        print('PROJECTION_FAIL items=%d' % len(doc['items']))
+        return 1
+    print('PROJECTION_OK items=%d sum=%s max=%s mode=%s checker_id=%s' % (
+        len(doc['items']), doc['total_score'], doc['max_score'],
+        doc['projection']['mode'], str(doc['projection']['checker_id'])[:20]))
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--stdout', required=True)
-    ap.add_argument('--candidate', required=True)
+    ap.add_argument('--stdout', default='')
+    ap.add_argument('--candidate', default='')
     ap.add_argument('--out', required=True)
     ap.add_argument('--expect-submission-id', default='')
     ap.add_argument('--artifact', default='')
     ap.add_argument('--allow-stdout-fallback', action='store_true')
+    ap.add_argument('--project', action='store_true')
+    ap.add_argument('--result', default='')
+    ap.add_argument('--checker', default='')
+    ap.add_argument('--score-only', action='store_true')
+    ap.add_argument('--coverage', default='')
     args = ap.parse_args()
 
+    if args.project:
+        return project_main(args)
+
+    if not args.stdout or not args.candidate:
+        print('EXTRACT_OK=0 reason=missing_--stdout_or_--candidate')
+        return 2
     obj = None
     source = 'none'
     fallback = 'none'
