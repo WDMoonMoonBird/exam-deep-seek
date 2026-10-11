@@ -1,3 +1,10 @@
+> ⚠️ **Captain 注记（2026-10-11，依据 C 的独立验证）—— 本报告 §3.3 的覆盖口径需更正**：
+> 本报告称「Z1 L680-703 **逐行 count>0**」**不准确**：该结论用的是**外层 range 计数**。
+> C 用两套机理独立的装置（V8 + 探针）逐行复核后确认：**`scoreItem:702`（兜底分支）实测 count = 0**，
+> 四臂的真实计数为 **7 / 7 / 7 / 7**（choice / multi / judge / fill），而非本报告所报的「36」。
+> **结论不受影响**（22 例确实真执行到了目标函数），但**自证口径应按上面更正**；
+> 另 C 实测**唯二未覆盖**为：`scoreItem:702` 兜底、以及 500 catch 三处。
+> 独立验证报告：`docs/split/reviewController-B0-verify.md`。
 # reviewController 拆分 · B0 补契约测试报告（step 8，B0 子步）
 
 - **step**: 8（server/src/controllers/reviewController.js，965 行）｜ **子步**: B0（先补契约测试，不做任何拆分）｜ **日期**: 2026-10-11

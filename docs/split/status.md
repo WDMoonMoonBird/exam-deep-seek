@@ -31,4 +31,8 @@ archives: docs/split/<file>-{plan,refactor,verify}.md ｜ anchor: e37d27c
 
 （11:21 曾暂停用餐，12:02 已恢复：驱动重建为 schedule-68966552…，step6 已由 C 验证 PASS 并提交 aa29505）
 next_action: 派 step 8-A（reviewController.js 965 接缝分析）｜ 注：Doc.vue 已剔除，其像素门禁区域扩展仍会交付（供将来「更新手册截图」时作辅助核对）
-剩余 GodFile：**reviewController 965 → teacherController 1338（风险最高，须先补契约测试）**；GodFile 目标 3→1（1 = 有意保留的 Doc.vue）
+剩余 GodFile：**reviewController 965（step 8 进行中）→ teacherController 1338（风险最高，须先补契约测试）**；GodFile 目标 3→1（1 = 有意保留的 Doc.vue）
+**待决清单（需用户拍板，只登记不修）**：
+① `reviewController.js:873` 分值钳制遇 `Number('abc')`→NaN 会把 NaN 交给 Prisma（UB）—— 已实测，独立立项
+② `reviewController.js:754` 的 headerCells 把 itemKey/sqId/type/answer/options 全剥掉 ⇒ 前端无法区分客观/主观列 —— 疑似产品缺陷，独立立项
+③ （早前登记）RULE_TYPES 不一致致评分虚高 / generateChecker 幂等分支不可达 / 极端归一化出负分 / validateRulePaths(null) 抛 TypeError
