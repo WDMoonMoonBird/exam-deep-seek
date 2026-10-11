@@ -5,7 +5,6 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import 'node:module';
 import Parser from 'tree-sitter';
 import JS from 'tree-sitter-javascript';
 import { getJavaParser } from '../../services/factExtractors/java.js';
