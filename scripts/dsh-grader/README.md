@@ -128,3 +128,11 @@ macOS 自带 `python3`、`bash 3.2`、`lsof`、`unzip`（`unzip` 仅用于人工
 - canonical_sha256 **只用于同一份提交跨遍比对**；跨份比 canonical 无意义（各份 digest 与内容相关）。
 - 尺子版本对外可见形式：checker_id 短哈希（前 12 位）。
 - 退出码：0=PASS/PARTIAL；1=--strict 下的 PARTIAL/单份失败；3=frozen 被篡改；5=造尺不合格；124=造尺超时。
+
+### E-H：同尺同内容的一致性口径与四项明确不保证（与 docs/dsh/R3.5-B-实施记录.md §5.3 同口径）
+- **保证**：同一 workdir + 同一 frozen checker + 同一提交 ⇒ 逐遍 canonical_sha256 相同（E-F 实测逐位一致）；跨 workdir 只要 materials digest 与 frozen 相同，结论同样成立（canonical 不依赖绝对路径）。
+- **不保证（四项）**：
+  1) **目录增删改名**（含权限/软链变化）会改变 submission.digest ⇒ canonical 随内容变；
+  2) **跨 OS / 跨 Python 版本**未验证（排序、locale、hash 随机化差异可能影响结果）；
+  3) **zip 内非 UTF-8 文件名**：解压名修复只在同一版本内确定；
+  4) **文件时间戳 / 属主**不参与 digest，但**不承诺**在任何文件系统上都不参与。

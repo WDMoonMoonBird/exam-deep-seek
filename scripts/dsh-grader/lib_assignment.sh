@@ -88,10 +88,10 @@ PY
 
 【布局与 glob 语义（钉死；写错会被 C8 可量性探针判不合格）】
 - 装置量尺时传给执行器的 --submission 是**提交目录** <workdir>/materials/submissions/<slug>；
-  含 package.json 的**项目根**在该目录的**下一层**（例如 <slug>/UserManagement_副本/）。
+  含 package.json 的**项目根**在该目录的**下一层**（例如 <slug>/<项目根目录>/）。
 - glob 为 fnmatch 语义（不做大括号展开）："**/package.json" 要求 package.json 之前至少有一层目录；"package.json" 只匹配提交目录顶层。
   ✅ 正确："project_root_glob": "**/package.json"（或 "*/package.json"）；required_paths 写**相对项目根**的路径，例如 "src/main.js"。
-  ❌ 反例："**/UserManagement*"、"UserManagement_副本/package.json"、"package.json"（无前缀）。
+  ❌ 反例："**/<项目根目录>*"（把具体目录名写进 glob）、"<项目根目录>/package.json"、"package.json"（无前缀）。
 
 【字段白名单与哈希（照抄，不要自己算）】
 - 顶层 9 字段：schema_version=checker/1、checker_id、assignment_ref{assignment_id,question_id,rubric_hash,standard_hash}、

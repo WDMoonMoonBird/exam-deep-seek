@@ -315,12 +315,12 @@ EOF
    d. $OUT/results/$SLUG.model.json           你按这把尺子对本次提交的逐项判分（自述，供装置对账）
 【布局与 glob 语义（钉死；写错会被 C8 可量性探针判不合格，本次造尺作废）】
 - 装置量尺时传给执行器的 --submission 是**提交目录**：$WORKDIR/materials/submissions/<slug>。
-  含 package.json 的**项目根**在该目录的下一层（例如 <slug>/UserManagement_副本/），装置会按 input_contract.project_root_glob 自动探测。
+  含 package.json 的**项目根**在该目录的下一层（例如 <slug>/<项目根目录>/），装置会按 input_contract.project_root_glob 自动探测。
 - glob 是 fnmatch 语义，**不做**大括号展开：`**/package.json` 要求 package.json 之前**至少有一层目录**；`package.json` 只匹配提交目录顶层。
   ✅ 正确写法（本布局唯一稳的）："project_root_glob": "**/package.json"（或 "*/package.json"）；required_paths 写**相对项目根**的路径，例如 "src/main.js"。
-  ❌ 反例（本次造尺会被判不合格）："**/UserManagement*"（把学生目录名写进 glob ⇒ 改名或换布局即失配）、"UserManagement_副本/package.json"、
+  ❌ 反例（本次造尺会被判不合格）："**/<项目根目录>*"（把**具体目录名**写进 glob ⇒ 改名或换布局即失配）、"<项目根目录>/package.json"、
      "package.json"（无前缀 ⇒ 只匹配提交目录顶层，而项目根在下一层 ⇒ 探不到）。
-- 自检方式（阅读式，本环境无执行工具）：把 glob 逐字套到 `materials/submissions/<slug>/UserManagement_副本/package.json` 上，问自己「这个模式能匹配它吗」。
+- 自检方式（阅读式，本环境无执行工具）：把 glob 逐字套到 `materials/submissions/<slug>/<项目根目录>/package.json` 上，问自己「这个模式能匹配它吗」。
 checker.json 字段白名单（自创字段/rule_type/大括号 glob/反向断言正则都会导致校验失败 ⇒ 本次批改作废）：
 - 顶层 9 个字段全部必填：schema_version=checker/1、checker_id、assignment_ref{assignment_id,question_id,rubric_hash,standard_hash}、
   generated{session_id,model,created_at,generator}、scoring{max_score,aggregate=sum_clamped,rounding=half_up_1,zero_credit_rule}、
