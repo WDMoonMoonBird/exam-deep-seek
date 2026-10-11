@@ -110,7 +110,13 @@ node scripts/gates/pixel-diff.mjs --before <commit> --after <commit|worktree|dir
 结论：PASS
 ```
 
-`POSITIVE_EXIT=0`。改前树另建一次（`builds.beforeSecond`）作为确定性对照，
+`POSITIVE_EXIT=0`。
+
+**收尾复核（用最终版脚本、在 HEAD 已前移到的 `06cb6dc` 上重跑）**：
+`node scripts/gates/pixel-diff.mjs --before HEAD --after worktree` → **exit 0**，6/6 区域全等，
+`fp=02a459dfc07c`（与 `c7dbd75` 时逐字节相同 → 再次印证 client 侧零变化），端口收尾干净。
+
+改前树另建一次（`builds.beforeSecond`）作为确定性对照，
 两次构建 `diff -rq` **0 行** → 像素判等可信。
 
 > 注：`dist-after` 比 `dist-before` 多 2 个文件（394 vs 392），差的是
