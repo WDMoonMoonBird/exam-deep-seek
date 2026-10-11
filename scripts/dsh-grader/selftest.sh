@@ -142,6 +142,50 @@ bash "$HERE/run.sh" --submissions 1 --workdir "$W" --timeout 900 --dry-run > "$S
 expect_rc "F-C1 干净 dry-run => 0" zero $?
 has "verdict=PASS" "$W/out/isolation-report.txt" && ok "F-C1 干净运行判 PASS" || bad "F-C1 干净运行被误判 FAIL"
 
+echo "-- F-C2C-1 宿主会话路径 + 空 child-session ⇒ HOST（不得假 FAIL）--"
+HSID_TEST="${DSH_SESSION_ID:-11111111-2222-3333-4444-555555555555}"
+export DSH_SESSION_ID="$HSID_TEST"
+mkdir -p "$DSH_GRADER_REAL_HOME/storages/session_projcache/sessions"
+HOSTFILE="$DSH_GRADER_REAL_HOME/storages/session_projcache/sessions/$HSID_TEST.json"
+printf 'seed' > "$HOSTFILE"
+printf '> 1791728000 100 %s
+' "$HOSTFILE" > "$SANDBOX/fc2c1-changed.txt"
+: > "$SANDBOX/fc2c1-control.txt"
+# (a) 宿主 id 命中 + child 空 ⇒ R4-HOST-SESSION
+python3 "$HERE/classify_changes.py" --changed "$SANDBOX/fc2c1-changed.txt" --control "$SANDBOX/fc2c1-control.txt" \
+  --host-session "$HSID_TEST" --child-session '' --dsh-home "$DSH_GRADER_REAL_HOME" > "$SANDBOX/fc2c1-a.txt" 2>&1
+has "R4-HOST-SESSION" "$SANDBOX/fc2c1-a.txt" && ok "F-C2C-1(a) 宿主会话 id + child 空 ⇒ R4-HOST-SESSION" || bad "F-C2C-1(a) 未判 HOST：$(grep RULE "$SANDBOX/fc2c1-a.txt" | head -1)"
+has "child=0 unattributed=0 other=0 host=1" "$SANDBOX/fc2c1-a.txt" && ok "F-C2C-1(a) 落在 __HOST__ 段（非 __UNATTRIBUTED__）" || bad "F-C2C-1(a) 段归属错误"
+# (b) 未知 id + child 空 ⇒ 仍 UNATTRIBUTED（fail-closed 不许放宽）
+python3 "$HERE/classify_changes.py" --changed "$SANDBOX/fc2c1-changed.txt" --control "$SANDBOX/fc2c1-control.txt" \
+  --host-session 00000000-0000-0000-0000-000000000000 --child-session '' --dsh-home "$DSH_GRADER_REAL_HOME" > "$SANDBOX/fc2c1-b.txt" 2>&1
+has "R7-UNATTRIBUTED" "$SANDBOX/fc2c1-b.txt" && ok "F-C2C-1(b) 未知会话 id + child 空 ⇒ 仍 UNATTRIBUTED（fail-closed）" || bad "F-C2C-1(b) fail-closed 被放宽"
+# (c) child 非空且 id != child ⇒ HOST（原行为不变）
+python3 "$HERE/classify_changes.py" --changed "$SANDBOX/fc2c1-changed.txt" --control "$SANDBOX/fc2c1-control.txt" \
+  --host-session '' --child-session 99999999-0000-0000-0000-000000000000 --dsh-home "$DSH_GRADER_REAL_HOME" > "$SANDBOX/fc2c1-c.txt" 2>&1
+has "R4-HOST-SESSION" "$SANDBOX/fc2c1-c.txt" && ok "F-C2C-1(c) child 已给出且 id≠child ⇒ HOST" || bad "F-C2C-1(c) 行为退化"
+# (d) 端到端：stub 运行窗口内宿主会话文件被改 ⇒ changed_unattributed 必须为 0 且不假 FAIL
+WH="$SANDBOX/w-host-session"
+STUB_MODE=ok STUB_SLEEP=3 bash "$HERE/run.sh" --submissions 1 --workdir "$WH" --timeout 900 > "$SANDBOX/hostsess.log" 2>&1 &
+HPID=$!
+i=0
+while [ "$i" -lt 80 ]; do
+  [ -f "$WH/out/logs/dsh-home-control.txt" ] && break
+  sleep 0.25
+  i=$((i + 1))
+done
+printf 'mutated-during-run' >> "$HOSTFILE"
+wait "$HPID"
+HRC=$?
+UN="$(grep -oE 'changed_unattributed=[0-9]+' "$WH/out/isolation-report.txt" | head -1)"
+HN="$(grep -oE 'changed_host=[0-9]+' "$WH/out/isolation-report.txt" | head -1)"
+TN="$(grep -oE 'changed_total=[0-9]+' "$WH/out/isolation-report.txt" | head -1)"
+if [ "$HRC" -eq 0 ] && has "RUN_RESULT=PASS" "$SANDBOX/hostsess.log" && [ "$UN" = "changed_unattributed=0" ] && [ "$HN" != "changed_host=0" ] && [ "$TN" != "changed_total=0" ]; then
+  ok "F-C2C-1(d) 端到端：窗口内宿主会话写入被归因（$TN $HN ${UN}；rc=0，无假 FAIL）"
+else
+  bad "F-C2C-1(d) 端到端仍假 FAIL（rc=$HRC $TN $HN ${UN}）"
+fi
+
 echo "-- F-C1 classify_changes.py 单元四态（含「不得无条件豁免」断言）--"
 FAKE="$SANDBOX/fake-real/.dsh"
 SID=11111111-1111-1111-1111-111111111111
