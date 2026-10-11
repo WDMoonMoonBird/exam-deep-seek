@@ -20,7 +20,7 @@ archives: docs/split/<file>-{plan,refactor,verify}.md ｜ anchor: e37d27c
 | 4 | deepseek.js（1051 → 10 文件：2 domain + 8 infra，最大 221 行） | ✅ | ✅ | ✅ PASS（41/41 切片全等·21 名同对象·I14 双向·94 夹具五维相同·23/23 函数覆盖·禁网 0） | e37d27c |
 | 5 | ProjectQuestionEdit.vue（868 → 348；9 个 composable） | ✅ | ✅ | ✅ PASS（L0 三块·L1 51 名·④扫描 0/正控 3/3·⑤运行时 + 变异 5/5·U1 双模式） | b94407f |
 | 6 | QuestionEdit.vue（983 行，104 声明/52 函数；抽出 12 个 composable，.vue →≈490–505） | ✅（纠：template 实为 **312** 行非 48；style **只有 1 块**→L0 切 2 段） | 进行中 | 待执行 | — |
-| 返工 | ★step2 缺陷修复（useQuestionNav 漏注入 subQuestions）+ 判据④回溯扫描 | — | 进行中 | 待执行 | — |
+| 返工 | ★step2 缺陷修复（useQuestionNav 漏注入 subQuestions）+ 判据④回溯扫描 160 文件 | — | ✅ 2 行修复 | ✅ PASS（真 Chromium 真 DOM 7/7 复现·正控 3/3·门禁 44/5/15·ROUND=12 0 failed） | 45947b5 |
 
 强制停止条件：① 需改对外契约或产品语义 ② 同一步两次回流仍不通过（跳下一步）③ 护栏不可用 ④ 触及「不改清单」⑤ 步数走完
 

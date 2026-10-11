@@ -82,3 +82,7 @@
 - 一轮 = A 增量审查 → B 定点修复 → C 回归验证；C 发现阻断 Bug → 回流 B 重修；无阻断 → 回 A 复审 → 满足 §5 全部判据则终止。
 - 每轮独立归档：`docs/pipeline/audit-round-NN.md` / `refactor-round-NN.md` / `test-round-NN.md`；**历史文件不再进入后续轮次上下文**。
 - 状态唯一入口：`pipeline-status.md`（仓库根，≤30 行）。
+18. **tree-sitter 同进程假红（2026-10-11 由 step2 返工验证的 Agent C 定根因）**：同一 jest 进程内先跑 `rule-executor` 等套件后再跑含 tree-sitter 的套件，会成批失败（本次形式为 11 或 13 条，**随 jest 调度漂移**），报 `syntax.js:49` 的 `TypeError`。
+    **根因**：同进程内 tree-sitter 的 **JS 包装层被重载**，而**原生 `.node` 仍命中缓存** ⇒ `parse()` 返回的树**没有 `rootNode`**（已用 jest 外 `require.cache` 实验复现同一签名）。
+    **处置**：这属**形态性假红，不是回归** —— 一旦遇到，**先隔离复跑**（单套件独立进程）确认；判据以隔离进程的结果为准。
+    ⚠️ 不要据此改实现或改断言。历史上它被误记为「rule-mutator 专属」，实测**漂移且并非规则固定的某个套件**。
