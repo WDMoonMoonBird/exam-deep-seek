@@ -22,7 +22,9 @@ const ROOT = path.resolve(import.meta.dirname, '../..');
 //   2026-10-11 step2（Submit.vue 抽 9 个 composable，全部 <500 行）后刷新为 46 / 8 / 18（观察带不变）
 //   2026-10-11 step3（checkerService 拆 10 文件并落层）后刷新为 45 / 7 / 17
 //   2026-10-11 step4（deepseek 拆 10 文件并落层）后刷新为 44 / 6 / 16
-const BASELINE = { layerViolations: 0, unmigrated: 44, godfileOver800: 6, over500: 16 };
+//   2026-10-11 step5（ProjectQuestionEdit.vue 抽 9 个 composable，.vue 868->348）后刷新为 44 / 5 / 15
+//     （观察带 >500 含 >800；.vue 降到 348 后离开该集合，故 16->15 —— step5 方案原估「16→16」是错的）
+const BASELINE = { layerViolations: 0, unmigrated: 44, godfileOver800: 5, over500: 15 };
 
 const SKIP = new Set(['node_modules', '.git', 'dist', 'coverage', 'uploads']);
 

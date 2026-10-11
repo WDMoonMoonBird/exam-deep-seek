@@ -139,6 +139,9 @@
      ① *L0 切片字节判等*：`<template>` 与 `<style>` 块逐字节 cmp（≈10 min）
      ② *L1 编译级对拍*：`@vue/compiler-sfc` 的 `compileScript().bindings` + `compileTemplate` 输出逐字节比（≈20–40 min，**模板里 38 个名字一个不漏**）
      ③ *L2 交互验证*：Playwright 覆盖本步**判为「需实测」的项**（见各步 plan）
+     ④ **自由标识符扫描**（2026-10-11 step5 新增，**必做**）：扫描每个新模块的「自由标识符」（被引用但未声明 / 未 import / 未注入的名字）必须为 0。
+     ⑤ **真运行时对拍**（2026-10-11 step5 新增，**必做**）：在仓库外用替身真跑接线根（.vue 的 setup 逻辑），对拍「调用序 / 挂载次数 / 守卫分支 / 清理顺序」等**静态判等看不见的**运行时事实。
+     > **为什么必须加这两条**：step5 实测中，**vite build 照过**，但生成脚本的补丁**误改了某个 composable 的 vue import**，导致运行期 ReferenceError —— L0/L1/build 三类判据对它**全盲**，只有真运行时对拍抓到（同一轮还抓到「方案漏列依赖导致注入缺失」）。⇒ **构建绿 ≠ 能跑**。
    - **B 档：触及 `<template>` 或 `<style>` 的步**（如 C5 `Doc.vue` 拆子组件）：**必须**过像素门禁，且**区域表须先扩展**覆盖该文件所在路由；真实 DOM 变更导致选择器消失时门禁给 exit 2，须先调区域表再比。
    - **axe 不可用时的替代判据**（本仓 axe-core 全盘缺失）：A 档下用 `page.accessibility.snapshot()` **逐节点对拍**——模板字节不动则 a11y 树必须相等，这比 axe 只查违规更严；B 档若需 axe，先解决依赖缺失（**不得联网安装**）。
    - ★**被验树必须留痕**：任何 client 验证都要记录**被测源码树的绝对路径 + HEAD + 产物指纹**（本仓存在第二个 worktree `Exam-DeepSeek-ui`，`tests/ui-redesign-verify/rig.sh:9` 的 `CLIENT_DIR` **默认指向它** —— 用它跑验证等于测错代码；必须显式指定主仓库 client）。
