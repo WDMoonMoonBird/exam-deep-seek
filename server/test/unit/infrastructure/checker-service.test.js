@@ -10,7 +10,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parseCheckerResult, parseCheckerRules, runCheckerScript, attachNegativeFeedback, findMisplacedSubjective } from '../../../src/services/checkerService.js';
+import { parseCheckerResult, parseCheckerRules, runCheckerScript, attachNegativeFeedback, findMisplacedSubjective } from '../../../src/infrastructure/ai/checker/index.js';
 
 /** 创建临时目录（测试后清理） */
 function tmpdir() {

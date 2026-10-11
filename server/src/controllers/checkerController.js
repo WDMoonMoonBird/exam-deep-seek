@@ -3,7 +3,7 @@
  */
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
-import { generateChecker, getCheckerState, confirmChecker, rollbackChecker } from '../services/checkerService.js';
+import { generateChecker, getCheckerState, confirmChecker, rollbackChecker } from '../infrastructure/ai/checker/index.js';
 
 /**
  * GET /api/teacher/questions/:id/checker — 查询脚本生成状态
