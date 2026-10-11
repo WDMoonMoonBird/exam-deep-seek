@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import auth from '../middleware/auth.js';
 import requireRole from '../middleware/role.js';
-import * as teacher from '../controllers/teacherController.js';
+import * as teacherHttp from '../interface/http/controllers/teacher/index.js';
+import * as teacherIo from '../infrastructure/teacher/index.js';
+const teacher = { ...teacherHttp, ...teacherIo };
 import * as reviewHttp from '../interface/http/controllers/review/index.js';
 import * as reviewIo from '../infrastructure/review/index.js';
 const review = { ...reviewHttp, ...reviewIo };

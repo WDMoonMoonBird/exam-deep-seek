@@ -38,7 +38,7 @@ jest.unstable_mockModule('../../src/utils/prisma.js', () => ({
 }));
 
 // 必须在 mock 注册之后动态导入被测控制器（ESM 原生加载器不做 hoist）
-const { createAssignment } = await import('../../src/controllers/teacherController.js');
+const { createAssignment } = await import('../../src/interface/http/controllers/teacher/assignments.js');
 
 /** 无标准包目录的题目 ID（先验目录不存在，确保被判为开放性题目） */
 const OPEN_QID = 987654321;

@@ -30,7 +30,9 @@ const ROOT = path.resolve(import.meta.dirname, '../..');
 //     ⚠️ 观察带**不降**（14->14）：template 236 + style 359 = 595 行不可触碰，该文件结构上无法低于 500
 //   2026-10-11 step8（reviewController 拆 11 文件：9 搬移 + 2 barrel，源已删）后刷新为 43 / 2 / 13
 //     （观察带 14->13：被删的 reviewController.js 965 行原本在 >500 集合内）
-const BASELINE = { layerViolations: 0, unmigrated: 43, godfileOver800: 2, over500: 13 };
+//   2026-10-11 step9（teacherController 拆 12 文件：10 搬移 + 2 barrel，源已删）后刷新为 42 / 1 / 12
+//     ★GodFile 1 = 仅剩 client/src/views/Doc.vue(1106)，系**用户裁定有意保留**（纯静态教师手册、不连后端、体量在内容非逻辑）
+const BASELINE = { layerViolations: 0, unmigrated: 42, godfileOver800: 1, over500: 12 };
 
 const SKIP = new Set(['node_modules', '.git', 'dist', 'coverage', 'uploads']);
 
