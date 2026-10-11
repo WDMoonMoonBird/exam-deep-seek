@@ -132,8 +132,16 @@
 2. `node scripts/gates/cycle-check.mjs` → **SCC 仍为 0**（拆分不得引入新的循环依赖；边数会变，属预期）
 3. `node scripts/gates/hard-metrics.mjs` → PASS（0/0/0）
 4. **全量后端测试**：`ROUND=NN bash docs/pipeline/scripts/unblock-g2.sh` → 4 处摘要、**0 failed**、套件/用例数按本步变化如实记录（新增测试则数增，属预期）
-5. **client 改动**（Phase 3 每步）：
-   - `scripts/gates/pixel-diff.mjs` → **逐区域像素 sha1 全等**（可执行形态 = 每主题各自改前/改后全等；「4 组」字面不可执行，本仓无全局密度开关）
+5. **client 改动**（Phase 3 每步）——**按步的类型分档，不搞一刀切**：
+   - **A 档：只抽 script 的步**（模板与样式逐字节不动，如 step 2 `Submit.vue`）：
+     **不需要像素门禁** —— 模板+样式**逐字节相等**在逻辑上**严格强于**像素相等（字节相同 ⇒ DOM/CSS 相同 ⇒ 渲染相同）；
+     此时像素相等是"必然"而非"证据"（step 2-A 原话）。改用**更锋利且更便宜**的三件：
+     ① *L0 切片字节判等*：`<template>` 与 `<style>` 块逐字节 cmp（≈10 min）
+     ② *L1 编译级对拍*：`@vue/compiler-sfc` 的 `compileScript().bindings` + `compileTemplate` 输出逐字节比（≈20–40 min，**模板里 38 个名字一个不漏**）
+     ③ *L2 交互验证*：Playwright 覆盖本步**判为「需实测」的项**（见各步 plan）
+   - **B 档：触及 `<template>` 或 `<style>` 的步**（如 C5 `Doc.vue` 拆子组件）：**必须**过像素门禁，且**区域表须先扩展**覆盖该文件所在路由；真实 DOM 变更导致选择器消失时门禁给 exit 2，须先调区域表再比。
+   - **axe 不可用时的替代判据**（本仓 axe-core 全盘缺失）：A 档下用 `page.accessibility.snapshot()` **逐节点对拍**——模板字节不动则 a11y 树必须相等，这比 axe 只查违规更严；B 档若需 axe，先解决依赖缺失（**不得联网安装**）。
+   - ★**被验树必须留痕**：任何 client 验证都要记录**被测源码树的绝对路径 + HEAD + 产物指纹**（本仓存在第二个 worktree `Exam-DeepSeek-ui`，`tests/ui-redesign-verify/rig.sh:9` 的 `CLIENT_DIR` **默认指向它** —— 用它跑验证等于测错代码；必须显式指定主仓库 client）。
    - ★**区域表必须覆盖本步目标文件所在路由**（用 `--regions`）：默认 6 区域只走 `/exam/teacher/classes`，对 `Submit.vue`/`QuestionEdit.vue`/`ReviewDetail.vue`/`Doc.vue` 等**近乎盲区**（报告 §7 有现成模板与需补的 FIXTURES）
    - ★**像素全等 ≠ 功能无回归**：像素门禁抓不到交互时序、焦点顺序、ARIA、请求行为、控制台报错 → client 步**必须另做交互行为验证**（配方由 step 2-A 产出后固化进本 DoD）+ axe 不引入新违规
    - ⚠️ 真实 DOM 变更（如 C5 `Doc.vue` 拆子组件）会让区域选择器消失 → 门禁给 **exit 2（硬失败，不静默跳过）**，此类步**须先调区域表**再做对比
