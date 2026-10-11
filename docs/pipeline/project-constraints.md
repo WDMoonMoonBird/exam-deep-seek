@@ -50,8 +50,9 @@
 
 - 命令：`cd server && DATABASE_URL="<测试库>" npm test`，其中测试库 URL 由 `server/.env` 的 `DATABASE_URL` **只替换库名**为 `exam_system_test` 得到（一键脚本：`bash docs/pipeline/scripts/unblock-g2.sh`）。
 - ⚠️ 未指向 `exam_system_test` 时，`server/test/setup.js:35,52` 的白名单护栏会**立即退出码 1 且不打印任何 jest 摘要** —— 那不是崩溃。
-- **全量口径 = 1011 例 / 67 套件 / 四段**（round 1 起）：
-  段1 = **912**（除三个 tree-sitter 套件外的全部）· 段2 = `fact-extractor` **17** · 段3 = `rule-executor` **61** · 段4 = `rule-mutator` **21**。
+- **全量口径 = 四段 `&&` 串联，但用例数不是固定值**（与 §3 第 17 条一致，2026-10-11 由 Agent A 指出此处曾与 §3-17 自相矛盾）：
+  段1 = 除三个 tree-sitter 套件外的全部 · 段2 = `fact-extractor` · 段3 = `rule-executor` · 段4 = `rule-mutator`。
+  **判据只有两条：`failed = 0` + 日志里出现 4 处 `Test Suites:` 摘要。****不得拿旧数字当判据**（参考值会随新增用例增长：round 1 = 912+17+61+21 = 1011 → round 6 = 960+17+61+21 = 1059 → round 7 = 974+17+61+21 = 1073；拆分步还会继续变）。
 - ⚠️ 四段用 `&&` 串联，**任一段失败即短路，后续段静默不跑** → 判定"全绿"前必须确认日志里有 **4 处** `Test Suites:` 摘要。
 - **当前基线（round 1 起）= `0 failed / 1011 passed`**。历史：round 0 = `13 failed / 920 passed`（全在 `rule-mutator.test.js`，已反证为同进程污染并修复）。
 - **任何一轮 failed > 0 即为回归**，必须回流 Agent B。

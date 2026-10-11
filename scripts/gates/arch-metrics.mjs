@@ -16,7 +16,10 @@ import path from 'node:path';
 import cp from 'node:child_process';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
-const BASELINE = { layerViolations: 0, unmigrated: 47, godfileOver800: 10, over500: 19 };
+// 基线刷新记录：
+//   2026-10-10 建（unmigrated 47 / GodFile 10 / 观察带 19）
+//   2026-10-11 step1（ruleExecutor 拆 8 文件并落层）后刷新为 46 / 9 / 18
+const BASELINE = { layerViolations: 0, unmigrated: 46, godfileOver800: 9, over500: 18 };
 
 const SKIP = new Set(['node_modules', '.git', 'dist', 'coverage', 'uploads']);
 

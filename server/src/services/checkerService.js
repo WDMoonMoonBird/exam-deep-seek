@@ -32,7 +32,7 @@ import logger from '../utils/logger.js';
 import { getBaseUrl, getApiKey, getModel, summarizeRubricItems } from './deepseek.js';
 import { buildFileTree, filterProjectFiles, buildFileTreeText } from './projectContextBuilder.js';
 import { standardDir } from '../utils/projectPaths.js';
-import { validateRules, runRules, resolveProjectRoot } from './ruleExecutor.js';
+import { validateRules, runRules, resolveProjectRoot } from '../infrastructure/rule/index.js';
 import { validateNegativeTests } from './ruleMutator.js';
 import { extractFacts } from './factExtractor.js';
 

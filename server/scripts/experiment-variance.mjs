@@ -193,7 +193,7 @@ async function gradeDeterministic(project) {
   let rules;
   try { rules = JSON.parse(script); } catch { return null; }
   if (!rules || !Array.isArray(rules.objective_items)) return null;
-  const { runRules } = await import('../src/services/ruleExecutor.js');
+  const { runRules } = await import('../src/infrastructure/rule/index.js');
   const res = await runRules(rules, project.stuDir);
   return Math.min(project.maxScore, Math.max(0, Number(res && res.totalScore) || 0));
 }

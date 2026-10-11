@@ -6,7 +6,8 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$REPO_ROOT" || exit 1
-LOG_DIR="docs/pipeline"
+# 日志目录可用 LOG_DIR 覆盖（拆分专项走 docs/split，避免污染 pipeline 轮次归档）
+LOG_DIR="${LOG_DIR:-docs/pipeline}"
 # 日志按轮次命名（O-4：原先硬编码 test-round-00.log，第二轮会覆盖第一轮归档）
 ROUND="${ROUND:-00}"
 LOG="${LOG_DIR}/test-round-${ROUND}.log"

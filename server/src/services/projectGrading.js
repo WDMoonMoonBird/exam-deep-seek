@@ -27,7 +27,7 @@ import {
   summarizeRubricItems,
   getConcurrency,
 } from './deepseek.js';
-import { runRules } from './ruleExecutor.js';
+import { runRules } from '../infrastructure/rule/index.js';
 import { gradeProjectTrustJudge } from './trustJudgeGrader.js';
 import {
   buildFileTree,

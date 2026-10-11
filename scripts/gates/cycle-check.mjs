@@ -14,7 +14,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const ROOT_DIR = path.resolve(import.meta.dirname, '../..');
-const BASELINE = { cycles: 1, members: ['server/src/services/factExtractor.js', 'server/src/services/ruleExecutor.js'] };
+// 基线刷新记录：2026-10-10 建时 1 个 SCC（factExtractor ↔ ruleExecutor）；
+//   2026-10-10 round2 消除该环后为 0；2026-10-11 step1 已删除 ruleExecutor.js（拆分并落层）。
+// 收紧为 0：此后**任何**新循环依赖都判 FAIL（SCC 0 是硬不变量）。
+const BASELINE = { cycles: 0, members: [] };
 
 function parseArgs(argv) {
   const out = { root: 'server/src', json: false };

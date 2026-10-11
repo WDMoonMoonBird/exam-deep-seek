@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { mutateVariant, validateNegativeTests } from '../../../src/services/ruleMutator.js';
-import { runRules } from '../../../src/services/ruleExecutor.js';
+import { runRules } from '../../../src/infrastructure/rule/index.js';
 
 /** 创建临时目录（测试后清理） */
 function tmpdir() {

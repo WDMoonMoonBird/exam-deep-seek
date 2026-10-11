@@ -13,7 +13,7 @@ import {
   resolveProjectRoot,
   runRules,
   RULE_TYPES,
-} from '../../../src/services/ruleExecutor.js';
+} from '../../../src/infrastructure/rule/index.js';
 
 /** 创建临时目录（测试后清理） */
 function tmpdir() {

@@ -39,7 +39,7 @@ describe('summarizeVariance — 样本统计（样本标准差）', () => {
 });
 
 // 冻结版本 hash：mock 掉 tree-sitter 依赖链（ruleExecutor），再动态 import projectGrading
-jest.unstable_mockModule('../../../src/services/ruleExecutor.js', () => ({
+jest.unstable_mockModule('../../../src/infrastructure/rule/index.js', () => ({
   runRules: jest.fn(),
 }));
 

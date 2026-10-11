@@ -36,7 +36,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { collectFiles, extOf, globToRegExp, readFileUtf8, resolveWithinRoot, runRules, resolveProjectRoot } from './ruleExecutor.js';
+import { collectFiles, extOf, globToRegExp, readFileUtf8, resolveWithinRoot, runRules, resolveProjectRoot } from '../infrastructure/rule/index.js';
 import { extractFacts } from './factExtractor.js';
 import logger from '../utils/logger.js';
 
