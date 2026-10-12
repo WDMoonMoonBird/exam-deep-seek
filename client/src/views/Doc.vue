@@ -206,9 +206,28 @@
                 wrap-class-name="doc-zoom-modal"
                 :body-style="{ maxHeight: '78vh', overflow: 'auto' }"
             >
-                <ZoomHost>
-                    <component :is="zoomSec.demo" v-if="zoomSec.demo" />
-                </ZoomHost>
+                <p class="zoom-tip">
+                    这是<strong>真弹窗</strong>：遮罩铺满整个页面，<kbd>ESC</kbd> 或点遮罩可关闭。
+                    下面每个演示都能<strong>点步骤条跳步</strong>；手机端默认 <strong>2×</strong>，可左右滑动看细节。
+                </p>
+                <div class="zoom-tools">
+                    <span class="zt-label">缩放</span>
+                    <button
+                        v-for="s in zoomPresets"
+                        :key="s"
+                        type="button"
+                        class="zt-btn"
+                        :class="{ 'is-on': zoomScale === s }"
+                        @click="zoomScale = s"
+                    >{{ s === 1 ? '适应屏宽' : s + '×' }}</button>
+                </div>
+                <div class="zoom-stage" :class="{ 'is-scaled': zoomScale > 1 }">
+                    <div class="zoom-inner" :style="{ width: (zoomScale * 100) + '%' }">
+                        <ZoomHost>
+                            <component :is="zoomSec.demo" v-if="zoomSec.demo" />
+                        </ZoomHost>
+                    </div>
+                </div>
             </a-modal>
         </div>
 
@@ -569,9 +588,14 @@ const sections9to10 = [
 const zoomOpen = ref(false);
 const zoomSec = ref({ id: '', title: '', demo: null });
 const zoomWidth = ref(1120);
+// 缩放档位：1 = 适应屏宽；>1 = 把演示按倍率加宽（复刻件按容器宽等比缩放，所以加宽 = 整体变大）→ 手机端看细节用
+const zoomPresets = [1, 1.5, 2, 3];
+const zoomScale = ref(1);
+const isNarrow = () => typeof window !== 'undefined' && window.innerWidth < 768;
 function syncZoomWidth () { zoomWidth.value = window.innerWidth < 768 ? '94vw' : Math.min(1120, window.innerWidth - 96); }
 function openZoom (sec) {
     zoomSec.value = { id: sec.id || '', title: sec.title || '演示', demo: sec.demo || null };
+    zoomScale.value = isNarrow() ? 2 : 1;   // 手机端默认 2×（否则弹窗再宽也只有 94vw，比内联还小）
     syncZoomWidth();
     zoomOpen.value = true;
 }
@@ -1177,4 +1201,20 @@ const anchors = allSections.map(s => ({
     transition: var(--transition-control);
 }
 .doc-zoom:hover { border-color: var(--brand-600); color: var(--text-brand); }
+/* 放大演示弹窗：缩放档位 + 可横向滑动的舞台 */
+.zoom-tip { margin: 0 0 var(--space-3); color: var(--text-secondary); font-size: var(--fs-body-sm); line-height: 1.7; }
+.zoom-tip strong { color: var(--text-strong); }
+.zoom-tip kbd { padding: 1px 5px; border: 1px solid var(--border-default); border-bottom-width: 2px; border-radius: var(--radius-sm); background: var(--bg-surface-2); font-family: var(--ui-monospace, ui-monospace); font-size: var(--fs-caption); }
+.zoom-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 6px; margin-bottom: var(--space-3); }
+.zt-label { flex: none; color: var(--text-tertiary); font-size: var(--fs-caption); white-space: nowrap; }
+.zt-btn {
+    padding: 3px 10px; cursor: pointer; border: 1px solid var(--border-default); border-radius: 999px;
+    background: var(--card-bg); color: var(--text-secondary); font-size: var(--fs-caption); transition: var(--transition-control);
+}
+.zt-btn:hover { border-color: var(--brand-600); color: var(--text-brand); }
+.zt-btn.is-on { border-color: var(--brand-600); background: var(--bg-selected); color: var(--text-brand); font-weight: 600; }
+.zt-hint { color: var(--text-tertiary); font-size: var(--fs-caption); white-space: nowrap; }
+.zoom-stage { overflow-x: auto; overscroll-behavior-x: contain; }
+.zoom-stage.is-scaled { padding-bottom: 6px; }
+.zoom-inner { min-width: 100%; }
 </style>
