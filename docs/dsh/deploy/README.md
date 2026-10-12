@@ -118,6 +118,20 @@ ExecStart=/usr/bin/node scripts/r2b5-worker.mjs \
 3. **尺子按作业冻结**：可比组 = `(assignment_id, checker_id)`；跨尺子分数不可比。作业的评分标准/标准包变更后需**重新造尺**（旧分数成为「旧尺子历史值」）。
 4. **锚点漂移策略**未定（rubric/提交集合变化时锚点与当前材料不一致的处理）。
 5. 装置隔离检查会因**宿主 DSH 会话在运行期写入** `~/.dsh` 而误报 `ASSIGNMENT_ISOLATION=FAIL`（无人值守服务器上无此问题）。
+6. ★**模型端点必须是 Messages API 根（R2-B22，造尺必踩）**：装置（DSH harness）走 **Anthropic 风格 Messages API**，请求路径 = `<profile.baseURL>` + `/v1/messages`。
+   - DeepSeek 公有云的正确根是 **`https://api.deepseek.com/anthropic`**（实测该端点 `200`）；若写成 `https://api.deepseek.com`（平台 `system_configs.deepseek_base_url` 的口径）就会拼出 `/v1/messages` ⇒ **HTTP 404** ⇒ 造尺会话 1 秒即失败（`ASSIGNMENT_FAIL_REASON=build-session-nonzero`）。
+   - 平台 `deepseek_base_url` 是给**OpenAI 风格**客户端用的（`/chat/completions`），**不可直接喂给装置**。装置侧现在按优先级派生：`DSH_GRADER_BASE_URL`（显式覆盖）> 由 `DEEPSEEK_BASE_URL` 派生（含 `/anthropic` ⇒ 原样；host=`api.deepseek.com` ⇒ 归一为 `<scheme>://<host>[:port]/anthropic`；其他 host ⇒ 原样不动）> 既有默认。
+   - **验活**（用平台 key，任一 200 即可确认根正确）：
+     ```bash
+     KEY=<平台 system_configs.deepseek_api_key>
+     curl -s -o /dev/null -w '%{http_code}\n' https://api.deepseek.com/chat/completions \
+       -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+       -d '{"model":"deepseek-chat","messages":[{"role":"user","content":"ping"}]}'      # ⇒ 200（OpenAI 风格，平台客户端用）
+     curl -s -o /dev/null -w '%{http_code}\n' https://api.deepseek.com/anthropic/v1/messages \
+       -H "x-api-key: $KEY" -H 'anthropic-version: 2023-06-01' -H 'Content-Type: application/json' \
+       -d '{"model":"deepseek-chat","max_tokens":8,"messages":[{"role":"user","content":"ping"}]}'   # ⇒ 200 ★装置要的根
+     ```
+   - **观测**：装置在准备 profile 时打印 `MODEL_ENDPOINT=<scheme://host/path> model=<模型>`（只打 scheme+host+path，**不含 key**；无配置时打 `MODEL_ENDPOINT=(device-default)`）。
 
 ## 8. 排障：先看这两处
 
