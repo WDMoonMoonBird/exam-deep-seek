@@ -46,6 +46,13 @@ export class SystemConfigRepository {
   async getBaseUrl()   { return this.get('deepseek_base_url', process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com'); }
   async getModel()     { return this.get('deepseek_model', process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash'); }
   async getConcurrency() { const v = await this.get('ai_concurrency', '16'); return +v || 16; }
+  /** W4（R2-B1）：DSH 作业级并发闸（单位=会话数）；默认 1，env DSH_GRADING_CONCURRENCY 可覆盖，与 ai_concurrency 独立。 */
+  async getDshGradingConcurrency() {
+    const v = await this.get('dsh_grading_concurrency', process.env.DSH_GRADING_CONCURRENCY || '1');
+    const n = Math.floor(+v);
+    if (!Number.isFinite(n) || n < 1) return 1;
+    return n > 64 ? 64 : n;
+  }
 
   /** 写入配置（契约 set），并失效缓存 */
   async set(key, value) {

@@ -228,6 +228,13 @@ model AssignmentQuestion {
   questionId   Int @map("question_id") @db.UnsignedInt
   sortOrder    Int @default(0) @map("sort_order")
 
+  // W8（R2-B1）：发布时冻结的 rubric/物料快照 + 标准包哈希 + 来源标记。
+  // 全部可空 ⇒ 与旧代码兼容；读取方必须用 snapshot ?? live 语义（批 2 W2/W3 落地）。
+  rubricSnapshot   Json?   @map("rubric_snapshot")
+  materialSnapshot String? @map("material_snapshot") @db.Text
+  standardHash     String? @map("standard_hash") @db.VarChar(80)
+  snapshotOrigin   String? @map("snapshot_origin") @db.VarChar(16)
+
   assignment Assignment @relation(fields: [assignmentId], references: [id])
   question   Question   @relation(fields: [questionId], references: [id])
 

@@ -397,7 +397,7 @@ import { clearConfigCache } from '../infrastructure/ai/deepseek/index.js';
 export const getSettings = async (_req, res) => {
   try {
     const rows = await prisma.systemConfig.findMany({
-      where: { key: { in: ['deepseek_api_key', 'deepseek_model', 'deepseek_base_url', 'ai_concurrency'] } },
+      where: { key: { in: ['deepseek_api_key', 'deepseek_model', 'deepseek_base_url', 'ai_concurrency', 'dsh_grading_concurrency'] } },
     });
     const map = Object.fromEntries(rows.map(r => [r.key, r.value]));
 
@@ -422,6 +422,7 @@ export const getSettings = async (_req, res) => {
         deepseek_model: map.deepseek_model || process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash',
         deepseek_base_url: map.deepseek_base_url || process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
         ai_concurrency: +map.ai_concurrency || 16,
+        dsh_grading_concurrency: +map.dsh_grading_concurrency || 1,   // W4：DSH 作业级并发（单位=会话数，默认 1）
         has_key: !!rawKey,
         cpus,
         totalMemGB,
@@ -436,7 +437,7 @@ export const getSettings = async (_req, res) => {
 
 export const updateSettings = async (req, res) => {
   try {
-    const { deepseek_api_key, deepseek_model, deepseek_base_url, ai_concurrency } = req.body;
+    const { deepseek_api_key, deepseek_model, deepseek_base_url, ai_concurrency, dsh_grading_concurrency } = req.body;
 
     const items = [];
     if (deepseek_api_key !== undefined && deepseek_api_key !== '') {
@@ -455,6 +456,14 @@ export const updateSettings = async (req, res) => {
       const c = +ai_concurrency;
       if ([1,8,16,32,64,128].includes(c)) {
         items.push({ key: 'ai_concurrency', value: String(c) });
+      }
+    }
+
+    // W4（R2-B1）：DSH 作业级并发键（单位=会话数，默认 1；与 ai_concurrency 不是同一个闸）
+    if (dsh_grading_concurrency !== undefined) {
+      const c = +dsh_grading_concurrency;
+      if ([1,2,3,4,8].includes(c)) {
+        items.push({ key: 'dsh_grading_concurrency', value: String(c) });
       }
     }
 
@@ -481,7 +490,7 @@ export const testConnection = async (_req, res) => {
   const start = Date.now();
   try {
     const rows = await prisma.systemConfig.findMany({
-      where: { key: { in: ['deepseek_api_key', 'deepseek_model', 'deepseek_base_url', 'ai_concurrency'] } },
+      where: { key: { in: ['deepseek_api_key', 'deepseek_model', 'deepseek_base_url', 'ai_concurrency', 'dsh_grading_concurrency'] } },
     });
     const map = Object.fromEntries(rows.map(r => [r.key, r.value]));
     const apiKey = map.deepseek_api_key || process.env.DEEPSEEK_API_KEY;
