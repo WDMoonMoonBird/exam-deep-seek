@@ -12,6 +12,7 @@ import { parseProjectAnswer, toTeacherView } from '../../utils/projectView.js';
 import { submissionDir, standardDir, ROOT } from '../../utils/projectPaths.js';
 import { readProjectTree } from '../../utils/projectFiles.js';
 import { isStudentVisibleToTeacher } from './scope.js';
+import { loadAssignmentSnapshot, resolveSnapshot } from '../../services/assignmentSnapshot.js';
 
 // ===================== 实训题（体系C）教师审核 =====================
 
@@ -51,6 +52,9 @@ export const getProjectReview = async (req, res) => {
     });
     if (!sub) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
     if (sub.question.type !== 'project') return res.status(400).json({ code: 1001, message: '非实训题提交', data: null });
+
+    // W2（R2-B2）：教师复核视图与评分同源（snapshot ?? live）
+    const std = resolveSnapshot(await loadAssignmentSnapshot(prisma, sub.assignmentId, sub.questionId), sub.question);
     // R6：仅作业所属教师可查看实训提交（作业/班级/学校归属校验）
     if (sub.assignment.teacherId !== req.user.id) return res.status(403).json({ code: 1003, message: '无权操作', data: null });
     // t4：再收敛到该教师的可见班级范围（与其它按 id 直取的入口一致）

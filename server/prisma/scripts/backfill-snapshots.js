@@ -63,8 +63,18 @@ export function buildTargetSql({ hasSnapshotColumns }) {
 
 export function buildRowUpdateSql() {
   // 内容在 DB 侧从 questions 复制（绝不把 rubric 正文经 JS/日志中转），WHERE 带 IS NULL 保证幂等。
+  // ★rubric_snapshot 是 JSON 列：必须用 JSON_OBJECT 构造与「发布时快照」同形状的对象
+  //   （{rubric, rubricItems, rubricSha256, capturedAt, backfilled}）；直接拷 TEXT 会报
+  //   Invalid JSON text (MySQL 3140)。
+  // ★rubricSha256 与平台口径（utils/snapshotHash.textSha256）一致：sha256(utf8(rubric)) 的 hex。
   return 'UPDATE assignment_questions aq JOIN questions q ON q.id = aq.question_id ' +
-    "SET aq.rubric_snapshot = q.scoring_rubric, aq.material_snapshot = q.material, " +
+    "SET aq.rubric_snapshot = JSON_OBJECT(" +
+    "'rubric', q.scoring_rubric, " +
+    "'rubricItems', q.rubric_items, " +
+    "'rubricSha256', CONCAT('sha256:', SHA2(COALESCE(q.scoring_rubric, ''), 256)), " +
+    "'capturedAt', DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%sZ'), " +
+    "'backfilled', TRUE), " +
+    "aq.material_snapshot = q.material, " +
     "aq.standard_hash = ?, aq.snapshot_origin = 'backfill' " +
     'WHERE aq.assignment_id = ? AND aq.question_id = ? AND aq.rubric_snapshot IS NULL';
 }

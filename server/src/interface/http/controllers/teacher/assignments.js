@@ -10,6 +10,7 @@ import { ABNORMAL_FEEDBACK } from '../../../../constants.js';
 import { getVisibleClassIds } from '../../../../controllers/teamController.js';
 import { hasStandardPackage } from '../../../../utils/projectPaths.js';
 import { getSchoolId, canTeacherManageClasses } from './guards.js';
+import { buildPublishSnapshot } from '../../../../services/assignmentSnapshot.js';
 
 // ===================== 作业管理 =====================
 
@@ -371,7 +372,23 @@ export const createAssignment = async (req, res) => {
         },
       },
     });
-    logger.info({ assignmentId: assignment.id }, '作业已创建');
+    // W2（R2-B2 · 评分标准冻结）：发布即快照 —— 创建后把 rubric/material/rubricItems 与标准包哈希
+    // 写入 assignment_questions 的 4 个快照列（不改动 create 的既有入参形状）。
+    // 快照写入失败（例如库上迁移未落地）只告警不阻断：评分读路径会回落 live，行为与批 2 之前一致。
+    let snapshotWritten = 0;
+    for (const q of questions) {
+      if (q.type !== 'project') continue;
+      try {
+        await prisma.assignmentQuestion.update({
+          where: { assignmentId_questionId: { assignmentId: assignment.id, questionId: q.id } },
+          data: buildPublishSnapshot(q),
+        });
+        snapshotWritten += 1;
+      } catch (err) {
+        logger.warn({ err, assignmentId: assignment.id, questionId: q.id }, '发布时快照写入失败（已按 live 语义继续）');
+      }
+    }
+    logger.info({ assignmentId: assignment.id, snapshotWritten }, '作业已创建（含发布时快照）');
     res.json({ code: 0, message: '创建成功', data: assignment });
   } catch (err) {
     logger.error({ err }, '创建作业失败');

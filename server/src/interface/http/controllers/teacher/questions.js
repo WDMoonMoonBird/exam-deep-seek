@@ -11,6 +11,8 @@ import { DomainError } from '../../../../domain/errors.js';
 import logger from '../../../../utils/logger.js';
 import { resolveSubQuestionScores } from '../../../../utils/scoring.js';
 import { UPLOADS_ROOT, PROJECTS_ROOT, STANDARDS_ROOT } from '../../../../utils/projectPaths.js';
+import crypto from 'node:crypto';
+import { classifyRubricFreeze } from '../../../../services/rubricFreeze.js';
 
 // ===================== 题库管理 =====================
 
@@ -175,6 +177,56 @@ export const updateQuestion = async (req, res) => {
       if (attachmentUrl != null && !/^project-questions\/\d+\/standard$/.test(attachmentUrl)) {
         return res.status(400).json({ code: 1001, message: 'attachmentUrl 格式非法', data: null });
       }
+      // W1（R2-B2 · 评分标准冻结）：改 rubric 前拦截「已被已截止作业引用」的题。
+      // 语义：已截止引用 ⇒ 409 可判定错误（code 1009 + data.code=RUBRIC_FROZEN_BY_ENDED_ASSIGNMENT），
+      //       加 ?force=1 显式放行并留痕（审计日志含 teacherId / questionId / 新 rubric 的 sha256）；
+      //       进行中引用 ⇒ 放行但告警（logger.warn）。仅影响 rubric 变更请求，其它字段编辑零影响。
+      const nextRubric = scoringRubric ?? existing.scoringRubric;
+      const rubricChanged = String(nextRubric ?? '') !== String(existing.scoringRubric ?? '');
+      if (rubricChanged) {
+        const refs = await prisma.assignmentQuestion.findMany({
+          where: { questionId: id, assignment: { deletedAt: null } },
+          select: { assignmentId: true, assignment: { select: { id: true, title: true, endTime: true } } },
+        });
+        const force = String(req.query?.force ?? '') === '1';
+        const decision = classifyRubricFreeze({ rubricChanged, refs, force });
+        const ended = decision.ended;
+        const running = decision.running;
+        if (decision.action === 'block') {
+          logger.warn(
+            { questionId: id, endedAssignmentIds: ended.map((r) => r.assignmentId) },
+            '改题被拦截：题目被已截止作业引用（评分标准冻结）',
+          );
+          return res.status(409).json({
+            code: 1009,
+            message: '题目「' + existing.title + '」已被 ' + ended.length + ' 个已截止作业引用，修改评分标准会使历史成绩与标准不一致。确认修改请加 ?force=1（将记录审计日志）。',
+            data: {
+              requiresConfirmation: true,
+              code: 'RUBRIC_FROZEN_BY_ENDED_ASSIGNMENT',
+              endedAssignments: ended.map((r) => ({ id: r.assignmentId, title: r.assignment?.title, endTime: r.assignment?.endTime })),
+              runningAssignments: running.map((r) => ({ id: r.assignmentId, title: r.assignment?.title, endTime: r.assignment?.endTime })),
+            },
+          });
+        }
+        if (decision.force) {
+          logger.warn(
+            {
+              questionId: id,
+              teacherId: req.user?.id,
+              force: true,
+              endedAssignmentIds: ended.map((r) => r.assignmentId),
+              newRubricSha256: 'sha256:' + crypto.createHash('sha256').update(String(nextRubric ?? ''), 'utf8').digest('hex'),
+            },
+            '改题放行（force=1）：评分标准变更留痕（已截止作业引用仍在）',
+          );
+        } else if (decision.warn) {
+          logger.warn(
+            { questionId: id, runningAssignmentIds: running.map((r) => r.assignmentId) },
+            '改题告警：题目被进行中作业引用（已放行；已发布作业读快照，不受影响）',
+          );
+        }
+      }
+
       await prisma.question.update({
         where: { id },
         data: {

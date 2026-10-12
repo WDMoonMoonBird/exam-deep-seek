@@ -19,6 +19,9 @@ import { isStudentVisibleToTeacher } from '../infrastructure/review/scope.js';
 import { MAX_TEXT_BYTES } from '../utils/projectArchive.js';
 import fs from 'fs';
 import path from 'path';
+import { loadAssignmentSnapshot, resolveSnapshot } from '../services/assignmentSnapshot.js';
+import { decideStale } from '../services/assignmentSnapshot.js';
+import { textSha256, standardPackSha256 } from '../utils/snapshotHash.js';
 
 // ===================== 文件收集（复用 fileTree 的忽略规则） =====================
 
@@ -102,6 +105,8 @@ export const getProjectReview = async (req, res) => {
       },
     });
     if (!sub) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
+    // W2（R2-B2）：本条提交所属作业-题目的评分标准快照（读不到则回落活值）
+    const std = resolveSnapshot(await loadAssignmentSnapshot(prisma, sub.assignmentId, sub.questionId), sub.question);
     if (sub.question?.type !== 'project') {
       return res.status(400).json({ code: 1001, message: '该提交不是实训题', data: null });
     }
@@ -137,8 +142,9 @@ export const getProjectReview = async (req, res) => {
         question: {
           id: sub.question.id,
           title: sub.question.title,
-          material: sub.question.material,
-          scoringRubric: sub.question.scoringRubric,
+          // W2：显示与评分同源（snapshot ?? live）
+          material: std.material,
+          scoringRubric: std.rubric,
           maxScore: sub.question.maxScore,
         },
         assignment: sub.assignment,
@@ -171,7 +177,7 @@ export const regradeProjectSubmission = async (req, res) => {
     const id = +req.params.id;
     const sub = await prisma.submission.findUnique({
       where: { id },
-      include: { question: { select: { type: true } } },
+      include: { question: { select: { id: true, type: true, scoringRubric: true, material: true, rubricItems: true } } },
     });
     if (!sub) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
     if (sub.question?.type !== 'project') {
@@ -186,6 +192,28 @@ export const regradeProjectSubmission = async (req, res) => {
     const curEnv = parseProjectAnswer(sub.answer);
     if (curEnv.grading?.state === 'pending' && curEnv.grading?.prevStatus) {
       return res.status(400).json({ code: 1001, message: '评分进行中，请稍候再试', data: null });
+    }
+
+    // W3（R2-B2）：重评前 stale 判定 —— 本次评分依据的标准（哈希）与当前活值不一致时，
+    // 返回可判定错误并要求教师显式确认（?confirm=1 放行并留痕）；历史成绩不因此重算。
+    const snapRow = await loadAssignmentSnapshot(prisma, sub.assignmentId, sub.questionId);
+    const std = resolveSnapshot(snapRow, sub.question);
+    const stale = decideStale({
+      storedRubricHash: curEnv.grading?.rubricHash,
+      storedStandardHash: curEnv.grading?.standardHash,
+      currentRubricHash: textSha256(std.rubric),
+      currentStandardHash: std.standardHash || standardPackSha256(sub.questionId),
+    });
+    if (stale.stale && String(req.query?.confirm ?? '') !== '1') {
+      logger.warn({ submissionId: id, reasons: stale.reasons }, '重评被拦：评分标准已变化（stale）');
+      return res.status(409).json({
+        code: 1010,
+        message: '该题评分标准已在评分后发生变化，重新评分会使用新标准（历史成绩不可比）。确认重评请加 ?confirm=1（将记录审计日志）。',
+        data: { requiresConfirmation: true, code: 'RUBRIC_STALE_REQUIRES_CONFIRMATION', stale_reason: stale.reasons },
+      });
+    }
+    if (stale.stale) {
+      logger.warn({ submissionId: id, teacherId: req.user?.id, reasons: stale.reasons, confirm: true }, '重评放行（confirm=1）：标准已变，留痕');
     }
 
     // 重置版本信封的评分任务态，记录重评前状态（Worker 完成后恢复）

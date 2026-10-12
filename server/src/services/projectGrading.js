@@ -43,6 +43,8 @@ import { standardDir, submissionDir, hasStandardPackage } from '../utils/project
 import { parseProjectAnswer, serializeProjectAnswer } from '../utils/projectView.js';
 import { MAX_TEXT_BYTES } from '../utils/projectArchive.js';
 import { isIgnored } from '../utils/fileTree.js';
+import { loadAssignmentSnapshot, resolveSnapshot } from './assignmentSnapshot.js';
+import { textSha256, standardPackSha256 } from '../utils/snapshotHash.js';
 
 // ===================== 并发信号量（D6：并发数读管理端 ai_concurrency，默认 16，热更新） =====================
 let activeCount = 0;
@@ -503,8 +505,14 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
     }
     logger.info({ submissionId, gradeMode }, '实训题评分：评分模式确定');
 
-    // 评分标准固定分项（懒生成 + 缓存；失败降级为模型自由分项）
-    const fixedItems = await ensureRubricItems(sub.question);
+    // W2（R2-B2）：评分标准读路径 snapshot ?? live。
+    // 已发布作业读快照（rubric 冻结，rubricItems 一并冻结）；无快照的历史作业回落题目活值 —— 行为不变。
+    const snapRow = await loadAssignmentSnapshot(prisma, sub.assignmentId, questionId);
+    const std = resolveSnapshot(snapRow, sub.question);
+    logger.info({ submissionId, from_snapshot: std.fromSnapshot, snapshot_origin: std.origin }, '实训题评分：评分标准来源');
+
+    // 评分标准固定分项（快照有则直接用；否则懒生成 + 缓存；失败降级为模型自由分项）
+    const fixedItems = std.rubricItems ?? await ensureRubricItems(sub.question);
 
     // 2026-08-17 检查器方案：脚本就绪时走确定性链路（硬性分项零波动），失败降级原链路
     const checkerReady = sub.question.checkerStatus === 'ready' && !!sub.question.checkerScript;
@@ -516,8 +524,8 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
     //   mode/fixedItems 由规则驱动评分链路引入（open 模式语义 + 固定分项对齐）。
     const gradeArgs = {
       title: sub.question.title || '未命名项目',
-      description: sub.question.material || '',
-      scoringRubric: sub.question.scoringRubric || '',
+      description: std.material || '',
+      scoringRubric: std.rubric || '',
       standardFiles,
       studentFiles,
       // open：无标准包 → 评价式评分（prompt 不含「标准答案源码」段，system 用评审专家角色）
@@ -619,6 +627,11 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
         finishedAt: new Date().toISOString(),
         error: null,
         ruleVersionHash: computeRuleVersionHash(sub.question),
+        // W3（R2-B2）：本次评分依据的评分标准/标准包哈希（口径 = scripts/dsh-checker/validate.py），
+        // 重评时与当前值比对 → stale（标准已变）并需教师确认；历史成绩不因比对而重算。
+        rubricHash: textSha256(std.rubric),
+        standardHash: std.standardHash || standardPackSha256(sub.question.id),
+        snapshotOrigin: std.origin || (std.fromSnapshot ? 'publish' : null),
       };
       return env;
     });

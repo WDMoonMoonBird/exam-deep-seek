@@ -12,6 +12,7 @@ import { submissionDir } from '../utils/projectPaths.js';
 import { toStudentView, parseProjectAnswer, serializeProjectAnswer } from '../utils/projectView.js';
 import { extractZipSafely, decodeUploadName, MAX_TEXT_BYTES } from '../utils/projectArchive.js';
 import { enqueueProjectGrade } from '../services/projectGrading.js';
+import { resolveSnapshot } from '../services/assignmentSnapshot.js';
 
 // ===================== 实训题提交并发串行化 =====================
 
@@ -522,12 +523,13 @@ async function findProjectQuestionInAssignment(assignmentId, questionId) {
 
   const link = await prisma.assignmentQuestion.findFirst({
     where: { assignmentId, questionId },
-    select: { assignmentId: true },
+    // W2（R2-B2）：一并取快照列 —— 学生看到的评分标准必须与评分链路一致（snapshot ?? live）
+    select: { assignmentId: true, rubricSnapshot: true, materialSnapshot: true, standardHash: true, snapshotOrigin: true },
   });
   if (!link) return null;
 
   // 只取展示所需字段。绝不 include subQuestions（内含 referenceAnswer 标准答案）
-  return prisma.question.findFirst({
+  const q = await prisma.question.findFirst({
     where: { id: questionId, type: 'project', deletedAt: null },
     select: {
       id: true,
@@ -539,6 +541,9 @@ async function findProjectQuestionInAssignment(assignmentId, questionId) {
       type: true,
     },
   });
+  if (!q) return null;
+  const std = resolveSnapshot(link, q);
+  return { ...q, material: std.material, scoringRubric: std.rubric };
 }
 
 /**
