@@ -44,17 +44,32 @@ export function createGate(limit = 1) {
 }
 
 /** 原子领取：先选候选，再用单条条件 UPDATE 抢（affectedRows=1 才算领到） */
-export async function claimJobAtomic({ prisma, jobId = null }) {
+export function buildClaimSql({ hasDbGate }) {
+  const base = 'UPDATE grading_jobs SET status = \'running\', attempts = attempts + 1, last_error = NULL, '
+    + 'updated_at = CURRENT_TIMESTAMP(3) WHERE id = ? AND status = \'pending\'';
+  if (!hasDbGate) return base;
+  // ★R2-B5 DB 级闸：同一语句内要求「当前 running 行数 < limit」⇒ 多进程下也不超发。
+  //   MySQL 不允许 UPDATE 的子查询直接引用目标表 ⇒ 用派生表包一层（经典合法写法）。
+  return base + ' AND (SELECT COUNT(*) FROM (SELECT id FROM grading_jobs WHERE status = \'running\') AS r) < ?';
+}
+
+/**
+ * 原子领取（+ 可选 DB 级闸）。
+ * @param {{prisma:object, jobId?:number|null, dbLimit?:number|null}} args
+ */
+export async function claimJobAtomic({ prisma, jobId = null, dbLimit = null }) {
   let candidateId = jobId ? Number(jobId) : null;
   if (!candidateId) {
     const cand = await prisma.gradingJob.findFirst({ where: { status: JOB_STATUS.pending }, orderBy: { id: 'asc' }, select: { id: true } });
     if (!cand) return null;
     candidateId = cand.id;
   }
-  const affected = await prisma.$executeRawUnsafe(
-    'UPDATE grading_jobs SET status = \'running\', attempts = attempts + 1, last_error = NULL, '
-    + 'updated_at = CURRENT_TIMESTAMP(3) WHERE id = ? AND status = \'pending\'', candidateId);
-  if (Number(affected) !== 1) return null; // 已被别的 worker 领走 ⇒ 不双消费
+  const useGate = Number.isFinite(Number(dbLimit)) && Number(dbLimit) > 0;
+  const sql = buildClaimSql({ hasDbGate: useGate });
+  const affected = useGate
+    ? await prisma.$executeRawUnsafe(sql, candidateId, Number(dbLimit))
+    : await prisma.$executeRawUnsafe(sql, candidateId);
+  if (Number(affected) !== 1) return null; // 已被别的 worker 领走 / DB 级闸已满 ⇒ 不消费
   return prisma.gradingJob.findUnique({ where: { id: candidateId } });
 }
 
@@ -70,16 +85,18 @@ export async function finishJob({ prisma, jobId, status, written = 0, skipped = 
  * @returns {{consumed:boolean, reason?:string, jobId?:number, status?:string, written?:number, skipped?:number, runRoot?:string, exitCode?:number, timedOut?:boolean}}
  */
 export async function runOnce({
-  prisma, jobId = null, gate = null, deviceCommand, deviceArgs = [], stubEnv = {},
+  prisma, jobId = null, gate = null, dbLimit = undefined, deviceCommand, deviceArgs = [], stubEnv = {},
   runRootBase = '/tmp', timeoutMs = 600000, maxAttempts = DEFAULT_MAX_ATTEMPTS,
   repoRoot = path.resolve(process.cwd(), '..'), deps = {},
 } = {}) {
-  const g = gate || createGate(await getDshGradingConcurrency());
+  const limit = await getDshGradingConcurrency();
+  const g = gate || createGate(limit);
   if (!g.tryAcquire()) {
     return { consumed: false, reason: 'gate_full', active: g.active, limit: g.limit };
   }
   try {
-    const job = await claimJobAtomic({ prisma, jobId });
+    // 进程内闸（第一层）+ DB 级闸（第二层，多进程也生效）：默认都用 dsh_grading_concurrency
+    const job = await claimJobAtomic({ prisma, jobId, dbLimit: dbLimit === undefined ? limit : dbLimit });
     if (!job) return { consumed: false, reason: 'no_pending_job' };
 
     const runRoot = path.join(runRootBase, 'r2b4-job-' + job.id + '-' + Date.now());
