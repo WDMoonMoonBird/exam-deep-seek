@@ -65,6 +65,7 @@ mysql exam_system -e "SELECT id,status,written_count,skipped_count,LEFT(last_err
 | 2 | **`DSH_WORKER_STALE_RUNNING_MS` > 单次运行时间** | 否则「还在跑却被回收」；缺省 900s > 装置 `--timeout-ms` 600s ⇒ 安全 |
 | 3 | **单实例** | 闸是 DB 级（`dsh_grading_concurrency`）；提吞吐请调闸，不要并行起多进程 |
 | 4 | **窗口形态必须启用回收** | 中断/断电会留下 `running` 行 ⇒ 占住闸 ⇒ **后续所有窗口静默领不到 job**（worker 启动即回收，打印 `STALE_RECLAIMED`） |
+  - ✅ **已验证（2026-10-12）**：回收器判据与领取语句使用**同一时钟（UTC）**，独立复核在生产口径下实测「僵尸占闸 ⇒ 回收 ⇒ 领取并消费」；口径漂移有守卫（w43：把任一侧改回本地时钟即变红）。**约定**：`grading_jobs.updated_at` 的唯一口径是 UTC；任何涉及该列的新代码/脚本都必须用 `UTC_TIMESTAMP(3)`。
 | 5 | **run-root 清理** | 成功现场可清、失败现场留证：`find /tmp -maxdepth 1 -name 'r2b4-job-*' -mtime +3 -exec rm -rf {} +` |
 | 6 | 优雅停机 | `systemctl stop` 发 SIGTERM ⇒ worker「跑完当前 job 再退」（配 `TimeoutStopSec=1800`） |
 | 7 | 首次批改要造尺 | 每个作业**首次**需 `build-and-measure`（1 次模型调用）；之后全部复用 ⇒ **零 LLM** |

@@ -50,6 +50,15 @@ if [ -z "$DB_URL" ]; then warn '未提供 --db-url 且 server/.env 无 DATABASE_
   if grep -q DB_OK /tmp/prereq-db.log; then ok "可连通，库=${DBN}"; [ "$DBN" = "/exam_system" ] && warn '指向生产库：worker 需 --allow-db exam_system --allow-prod 双开关（本自检不会写库）' || true; else bad "连接失败：$(tail -1 /tmp/prereq-db.log)"; fi
 fi
 
+echo '⑦ 时钟一致性（★回收器按 UTC 判据：跨机漂移会让僵尸回收失效）'
+if [ -z "$DB_URL" ]; then warn '无 DB 连接信息 ⇒ 跳过时钟对拍'; else
+  ( cd "$REPO/server" && DATABASE_URL="$DB_URL" node -e 'const{PrismaClient}=require("@prisma/client");const p=new PrismaClient();p.$queryRawUnsafe("SELECT UNIX_TIMESTAMP() AS ts").then(r=>{const db=Number(r[0].ts);const host=Math.floor(Date.now()/1000);console.log("CLOCK_DRIFT="+Math.floor(Math.abs(db-host)));return p.$disconnect()}).catch(e=>{console.log("CLOCK_FAIL "+e.message.split("\n")[0]);process.exit(1)})' ) >/tmp/prereq-clock.log 2>&1
+  if grep -q CLOCK_DRIFT /tmp/prereq-clock.log; then
+    D=$(grep CLOCK_DRIFT /tmp/prereq-clock.log | cut -d= -f2)
+    if [ "${D:-9999}" -le 60 ]; then ok "DB(UTC) 与宿主机时钟差 ${D}s（<=60s）"; else bad "时钟差 ${D}s（>60s）⇒ 回收器判据会失真；先校准 NTP"; fi
+    warn '部署前另请对拍：mysql -e "SELECT UTC_TIMESTAMP(3)" 与 date -u（跨机场景）'
+  else bad "时钟对拍失败：$(tail -1 /tmp/prereq-clock.log)"; fi
+fi
 echo '⑥ 磁盘（run-root 每次 24MB 级；成功现场可清、失败现场留证）'
 FREE_MB=$(df -Pm /tmp | awk 'NR==2{print $4}')
 if [ "${FREE_MB:-0}" -ge 5120 ]; then ok "/tmp 可用 ${FREE_MB}MB"; else warn "/tmp 可用仅 ${FREE_MB}MB（建议 >= 5GB 并配清理策略）"; fi
