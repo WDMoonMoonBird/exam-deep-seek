@@ -71,7 +71,9 @@ defineProps({
 .dm-table-row.is-on { background: var(--bg-selected); }
 /* 「点这里」高亮：给当前步骤的目标加一圈品牌描边 + 柔光（比截图上的红框更自然） */
 .dm-target { position: relative; transition: box-shadow var(--duration-base) var(--ease-out), border-color var(--duration-base) var(--ease-out); }
-.dm-target.is-hot { box-shadow: 0 0 0 calc(var(--u) * 3) var(--ring-focus, rgba(0, 102, 204, 0.18)); border-color: var(--brand-600) !important; }
+/* 注意：--ring-focus 的值是**整条 box-shadow**（0 0 0 3px rgba(...)），不是颜色；
+   这里要按 --u 缩放环宽，所以直接写颜色值（与 --ring-focus 里的 rgba 一致）。 */
+.dm-target.is-hot { box-shadow: 0 0 0 calc(var(--u) * 3) rgba(31, 122, 224, 0.28); border-color: var(--brand-600) !important; }
 /* 光标：在目标位置上画一个"点击"指示（纯装饰，动画层本来就 aria-hidden） */
 .dm-cursor { position: absolute; right: calc(var(--u) * -5); bottom: calc(var(--u) * -5); width: calc(var(--u) * 13); height: calc(var(--u) * 13); border-radius: 50%; border: calc(var(--u) * 2) solid var(--brand-600); background: rgba(0, 102, 204, 0.14); opacity: 0; pointer-events: none; }
 .dm-cursor.is-on { animation: dm-click-pulse 900ms var(--ease-out) infinite; }

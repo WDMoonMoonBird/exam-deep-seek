@@ -15,6 +15,11 @@ let sel = anchor ? '#demo-' + anchor + ' .ms' : '.ms';
 // anchor 不存在时回退到第一个演示（并提示），避免因为写错 id 白等 20 秒
 try { await page.waitForSelector(sel + '[data-ready="true"]', { timeout: 8000 }); }
 catch { console.warn('[warn] 未找到 ' + sel + '，回退到第一个演示'); sel = '.ms'; await page.waitForSelector(sel + '[data-ready="true"]', { timeout: 15000 }); }
+// 关键：播放器是「进入视口才自动播放」（IntersectionObserver threshold 0.4）。
+// 手册页很高，非首个演示一开始不在视口内 —— 必须先把它滚到视口中间（这也正是真实用户看到演示的方式），
+// 否则 running 恒为 false、step 恒为 0，会出现 advanced/pausedHeld/resumed 三项假失败。
+await page.locator(sel).evaluate((el) => el.scrollIntoView({ block: 'center' }));
+await page.waitForFunction((s) => document.querySelector(s)?.dataset.running === 'true', sel, { timeout: 4000 }).catch(() => {});
 await page.waitForTimeout(300);
 const read = () => page.evaluate((s) => {
   const ms = document.querySelector(s);
@@ -28,7 +33,9 @@ await page.waitForTimeout(2500); const t1 = await read();
 await page.locator(sel + ' .ms-play').click(); await page.waitForTimeout(800); const t2 = await read();
 await page.waitForTimeout(1500); const t3 = await read();
 await page.locator(sel + ' .ms-play').click(); await page.waitForTimeout(300); const t4 = await read();
-await page.waitForTimeout(9000); const t5 = await read();
+// 等它真正播到终态（长 dwell 场景 9 秒可能还没走完），最多 20 秒
+await page.waitForFunction((sel) => { const ms = document.querySelector(sel); return ms && ms.dataset.running === 'false' && +ms.dataset.step >= (+(ms.querySelector('.ms-count')?.textContent || '1/1').split('/')[1].trim() - 1); }, sel, { timeout: 20000 }).catch(() => {});
+await page.waitForTimeout(200); const t5 = await read();
 await page.locator(sel + ' .ms-replay').click(); await page.waitForTimeout(300); const t6 = await read();
 const box = await page.locator(sel).boundingBox();
 await page.screenshot({ path: '/tmp/manual/check-' + (anchor || 'all') + '.png', clip: { x: box.x - 8, y: box.y - 8, width: Math.min(box.width + 16, width), height: Math.min(box.height + 16, 900) } });
