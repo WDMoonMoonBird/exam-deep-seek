@@ -89,7 +89,7 @@ if (!global[KEY]) {
   await seedTestData();
 }
 
-async function seedTestData() {
+export async function seedTestData() {
   // 二次校验：seed 前置清理为破坏性操作，防止调用方绕过入口直接调用
   assertSafeToWipe();
 
@@ -102,7 +102,25 @@ async function seedTestData() {
     await prisma.teamClass.deleteMany({ where: { team: { school: { name: 'test_university' } } } });
     await prisma.team.deleteMany({ where: { school: { name: 'test_university' } } });
 
-    // 删除该教师的所有作业的提交
+    // ==== R2-B15：按 FK 依赖序彻底清理该教师名下的数据 ====
+    // 依据：information_schema.KEY_COLUMN_USAGE（测试库实测）；顺序 = 子表先于父表，否则 user.delete 会 FK 失败
+    // （t56 亲历：遗留行让下一轮 seed 整批 0 例失败）。
+    // ① 项目域：project_submissions/submission_files/project_files/project_classes → projects（projects.teacher_id → users.id）
+    const projects = await prisma.project.findMany({ where: { teacherId: testTeacher.id }, select: { id: true } });
+    const projectIds = projects.map(p => p.id);
+    if (projectIds.length) {
+      const projSubs = await prisma.projectSubmission.findMany({ where: { projectId: { in: projectIds } }, select: { id: true } });
+      const projSubIds = projSubs.map(s => s.id);
+      if (projSubIds.length) await prisma.submissionFile.deleteMany({ where: { submissionId: { in: projSubIds } } });
+      await prisma.projectSubmission.deleteMany({ where: { projectId: { in: projectIds } } });
+      await prisma.projectFile.deleteMany({ where: { projectId: { in: projectIds } } });
+      await prisma.projectClass.deleteMany({ where: { projectId: { in: projectIds } } });
+      await prisma.project.deleteMany({ where: { id: { in: projectIds } } });
+    }
+    // ② 该教师创建的团队（teams.created_by → users.id；先前只按学校名删，可能漏）
+    await prisma.team.deleteMany({ where: { createdBy: testTeacher.id } });
+
+    // ③ 作业域：submission → assignment_classes/assignment_questions → assignments（assignments.teacher_id → users.id）
     const assignments = await prisma.assignment.findMany({ where: { teacherId: testTeacher.id }, select: { id: true } });
     const assignmentIds = assignments.map(a => a.id);
     if (assignmentIds.length) {
@@ -111,7 +129,11 @@ async function seedTestData() {
       await prisma.assignmentQuestion.deleteMany({ where: { assignmentId: { in: assignmentIds } } });
     }
     await prisma.assignment.deleteMany({ where: { teacherId: testTeacher.id } });
+
+    // ④ 题域：sub_questions → assignment_questions/submissions（按 questionId）→ questions（questions.teacher_id → users.id）
     await prisma.subQuestion.deleteMany({ where: { question: { teacherId: testTeacher.id } } });
+    await prisma.assignmentQuestion.deleteMany({ where: { question: { teacherId: testTeacher.id } } });
+    await prisma.submission.deleteMany({ where: { question: { teacherId: testTeacher.id } } });
     await prisma.question.deleteMany({ where: { teacherId: testTeacher.id } });
   }
 
@@ -129,6 +151,12 @@ async function seedTestData() {
     select: { id: true },
   });
   for (const s of testStudents) {
+    // R2-B15：同一 FK 缺口也存在于学生侧 —— 先清 project_submissions（含其 submission_files）再删用户，
+    // 否则 project_submissions.student_id → users.id 会挡住 user.delete。
+    const psubs = await prisma.projectSubmission.findMany({ where: { studentId: s.id }, select: { id: true } });
+    const psubIds = psubs.map(p => p.id);
+    if (psubIds.length) await prisma.submissionFile.deleteMany({ where: { submissionId: { in: psubIds } } });
+    await prisma.projectSubmission.deleteMany({ where: { studentId: s.id } });
     await prisma.submission.deleteMany({ where: { studentId: s.id } });
     await prisma.studentClass.deleteMany({ where: { studentId: s.id } });
     await prisma.user.delete({ where: { id: s.id } });
