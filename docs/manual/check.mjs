@@ -28,17 +28,24 @@ const read = () => page.evaluate((s) => {
     dfW: ms.querySelector('.df') ? Math.round(ms.querySelector('.df').getBoundingClientRect().width) : null,
     overflow: document.documentElement.scrollWidth - window.innerWidth };
 }, sel);
+const pin = () => page.locator(sel).evaluate((el) => el.scrollIntoView({ block: 'center' }));
+await pin();
 const t0 = await read();
 await page.waitForTimeout(2500); const t1 = await read();
-await page.locator(sel + ' .ms-play').click(); await page.waitForTimeout(800); const t2 = await read();
+await pin(); await page.locator(sel + ' .ms-play').click(); await page.waitForTimeout(800); const t2 = await read();
 await page.waitForTimeout(1500); const t3 = await read();
-await page.locator(sel + ' .ms-play').click(); await page.waitForTimeout(300); const t4 = await read();
+await pin(); await page.locator(sel + ' .ms-play').click(); await page.waitForTimeout(300); const t4 = await read();
 // 等它真正播到终态（长 dwell 场景 9 秒可能还没走完），最多 20 秒
+await pin();
 await page.waitForFunction((sel) => { const ms = document.querySelector(sel); return ms && ms.dataset.running === 'false' && +ms.dataset.step >= (+(ms.querySelector('.ms-count')?.textContent || '1/1').split('/')[1].trim() - 1); }, sel, { timeout: 20000 }).catch(() => {});
 await page.waitForTimeout(200); const t5 = await read();
-await page.locator(sel + ' .ms-replay').click(); await page.waitForTimeout(300); const t6 = await read();
-const box = await page.locator(sel).boundingBox();
-await page.screenshot({ path: '/tmp/manual/check-' + (anchor || 'all') + '.png', clip: { x: box.x - 8, y: box.y - 8, width: Math.min(box.width + 16, width), height: Math.min(box.height + 16, 900) } });
+await page.locator(sel).screenshot({ path: '/tmp/manual/check-' + (anchor || 'all') + '-end.png' }).catch(() => {});
+await pin(); await page.locator(sel + ' .ms-replay').click(); await page.waitForTimeout(300); const t6 = await read();
+// 截图用元素级 API（自带滚动与边界计算），避免视口坐标在小视口/滚动后裁错
+await page.locator(sel).screenshot({ path: '/tmp/manual/check-' + (anchor || 'all') + '.png' }).catch(async (e) => {
+  console.warn('[warn] 元素截图失败，改用视口截图：' + String(e.message).slice(0, 80));
+  await page.screenshot({ path: '/tmp/manual/check-' + (anchor || 'all') + '.png' });
+});
 await ctx.close(); await b.close();
 const ok = { ready: t0.ready === 'true', advanced: t1.step > t0.step, pausedHeld: t3.step === t2.step,
   resumed: t4.running === 'true', finished: t5.step > 0, replayed: t6.step <= 1, noOverflow: t0.overflow === 0, noErrors: errs.length === 0 };
