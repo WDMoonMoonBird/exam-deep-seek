@@ -153,7 +153,7 @@ export function createGate(limit = 1) {
 /** 原子领取：先选候选，再用单条条件 UPDATE 抢（affectedRows=1 才算领到） */
 export function buildClaimSql({ hasDbGate }) {
   const base = 'UPDATE grading_jobs SET status = \'running\', attempts = attempts + 1, last_error = NULL, '
-    + 'updated_at = CURRENT_TIMESTAMP(3) WHERE id = ? AND status = \'pending\'';
+    + 'updated_at = UTC_TIMESTAMP(3) WHERE id = ? AND status = \'pending\''; // ★R2-B18：与 Prisma(@updatedAt 写 UTC) 统一时钟，避免同列两种时区
   if (!hasDbGate) return base;
   // ★R2-B5 DB 级闸：同一语句内要求「当前 running 行数 < limit」⇒ 多进程下也不超发。
   //   MySQL 不允许 UPDATE 的子查询直接引用目标表 ⇒ 用派生表包一层（经典合法写法）。

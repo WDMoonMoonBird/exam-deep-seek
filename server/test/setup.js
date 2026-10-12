@@ -89,9 +89,25 @@ if (!global[KEY]) {
   await seedTestData();
 }
 
+/**
+ * ★R2-B19：清理**孤儿判分行**（`assignment_id` 指向的作业已不存在）。
+ * 为什么：孤儿 running 行会占满 DB 级闸（limit=1）⇒ 所有 worker 系套件集体 `consumed=false` 假失败（t66 实测 12 个套件）。
+ * 边界（不删成品数据）：只删除「外键目标已不存在」的行；**任何 assignment 仍存在的 job/checker/锚点一行都不动**。
+ */
+export async function cleanupOrphanGradingRows(prisma, log = console) {
+  const del = async (sql) => { try { return Number(await prisma.$executeRawUnsafe(sql)); } catch { return 0; } };
+  const jobs = await del('DELETE FROM grading_jobs WHERE assignment_id NOT IN (SELECT id FROM assignments)');
+  const checkers = await del('DELETE FROM grading_checkers WHERE assignment_id NOT IN (SELECT id FROM assignments)');
+  const anchors = await del('DELETE FROM grading_assignment_anchors WHERE assignment_id NOT IN (SELECT id FROM assignments)');
+  if (jobs || checkers || anchors) log.log('ORPHAN_GRADING_CLEANUP jobs=' + jobs + ' checkers=' + checkers + ' anchors=' + anchors);
+  return { jobs, checkers, anchors };
+}
+
 export async function seedTestData() {
   // 二次校验：seed 前置清理为破坏性操作，防止调用方绕过入口直接调用
   assertSafeToWipe();
+  // ★R2-B19：先清孤儿判分行（避免下一轮 worker 系套件集体假失败）
+  await cleanupOrphanGradingRows(prisma);
 
   // ===== 1. 彻底清理所有测试数据 =====
   const testTeacher = await prisma.user.findFirst({ where: { username: 'test_teacher' } });

@@ -19,8 +19,9 @@ let questionId = null;
 const future = new Date('2099-01-01');
 
 async function backdate(jobId, minutes) {
-  const when = new Date(Date.now() - minutes * 60 * 1000).toISOString().slice(0, 23).replace('T', ' ');
-  await prisma.$executeRawUnsafe('UPDATE grading_jobs SET updated_at = ? WHERE id = ?', when, jobId);
+  // ★R2-B18：夹具必须用**生产口径**的时钟（SQL 侧会话时钟 NOW(3)），不得用与判据共享的客户端 UTC 转换——
+  //   否则夹具与判据同错相消 ⇒ 假绿（t65 即由该缺陷漏检）。
+  await prisma.$executeRawUnsafe('UPDATE grading_jobs SET updated_at = (UTC_TIMESTAMP(3) - INTERVAL ? MINUTE) WHERE id = ?', minutes, jobId);
 }
 async function mkJob(checkerIdSuffix, status, attempts = 0) {
   return prisma.gradingJob.create({ data: { assignmentId, checkerId: tag + '-' + checkerIdSuffix, status, attempts } });
@@ -71,7 +72,8 @@ describe('W42 僵尸 running 回收', () => {
     const b = await prisma.gradingJob.findUnique({ where: { id: exhausted.id }, select: { status: true, lastError: true } });
     expect(b.status).toBe('failed');
     expect(b.lastError).toBe(RECLAIM_REASON_FAILED);
-    expect(formatReclaimSummary(r)).toMatch(/^STALE_RECLAIMED n=\d+ to_pending=\d+ to_failed=\d+ conflicts=\d+ stale_ms=\d+$/);
+    // ★R2-B19：摘要行新增 clock_ahead / clock_tolerance_ms（形状断言同步扩展，未放松）
+    expect(formatReclaimSummary(r)).toMatch(/^STALE_RECLAIMED n=\d+ to_pending=\d+ to_failed=\d+ conflicts=\d+ clock_ahead=\d+ stale_ms=\d+ clock_tolerance_ms=\d+$/);
   }, 60000);
 
   it('★W42-2 未超阈值的 running 不被误伤（更新的 updated_at 保持 running）', async () => {
@@ -100,7 +102,9 @@ describe('W42 僵尸 running 回收', () => {
     const calls = [];
     const fakePrisma = {
       $queryRawUnsafe: async (sql, ...args) => {
-        if (sql.includes("status = ?") && sql.includes('updated_at < ?')) return [staleRow];   // 候选僵尸行
+        // ★R2-B19：两相位 SQL 都含 INTERVAL ? SECOND ⇒ 必须按相位特征区分（否则同一行被两个相位各处置一次）
+        if (sql.includes('updated_at >')) return [];                                          // 相位 2（时钟异常）：本用例不涉及
+        if (sql.includes('updated_at <')) return [staleRow];                                 // 相位 1（正常过期）：候选僵尸行
         if (sql.includes('AND status = ? LIMIT 1')) return [{ id: 777 }];                      // 已存在 pending ⇒ 冲突
         return [];
       },
@@ -121,7 +125,7 @@ describe('W42 僵尸 running 回收', () => {
     const reclaimed = await prisma.gradingJob.findUnique({ where: { id: stale.id }, select: { status: true } });
     expect(reclaimed.status).toBe('pending');
     const res = await runOnce({
-      prisma, jobId: stale.id, deviceCommand: process.execPath, deviceArgs: [STUB],
+      prisma, jobId: stale.id, dbLimit: 5, deviceCommand: process.execPath, deviceArgs: [STUB],
       stubEnv: { STUB_MODE: 'ok', STUB_SLUG: '1', STUB_SUBMISSIONS: 's01', STUB_MANIFEST_IDS: tag + '-real1', STUB_SCORE: '77' },
       repoRoot: SERVER + '/..', runRootBase: '/tmp', timeoutMs: 60000,
     });

@@ -19,7 +19,7 @@ import { PrismaClient } from '@prisma/client';
 import { runOnce } from '../src/services/dshGradingJobWorker.js';
 import { EXIT, parseWorkerConfig, runWorkerLoop } from '../src/services/dshGradingWorkerRuntime.js';
 import { describeLlmConfig, llmEnv, readPlatformLlmConfig } from '../src/services/dshPlatformLlmConfig.js';
-import { formatReclaimSummary, reclaimStaleRunning, resolveStaleMs } from '../src/services/dshStaleJobReclaimer.js';
+import { checkTimeoutVsStale, formatReclaimSummary, reclaimStaleRunning, resolveClockToleranceMs, resolveStaleMs } from '../src/services/dshStaleJobReclaimer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '..');
@@ -123,17 +123,22 @@ console.log('PLATFORM_MODEL=' + llmDesc.platformModel + ' PLATFORM_BASE_URL=' + 
 
 // R2-B17：僵尸回收阈值（env DSH_WORKER_STALE_RUNNING_MS ⇒ config；缺省 15 分钟）
 const staleMs = config.staleRunningMs === undefined ? resolveStaleMs(process.env) : config.staleRunningMs;
+// ★R2-B18/O-2：单 job 超时上限 ≥ 回收阈值 ⇒ 显式告警（避免「仍在跑却被回收」）
+// ★R2-B19：时钟异常容差（env DSH_WORKER_CLOCK_TOLERANCE_MS ⇒ config；缺省 60 秒）
+const clockToleranceMs = config.clockToleranceMs === undefined ? resolveClockToleranceMs(process.env) : config.clockToleranceMs;
+const staleWarn = checkTimeoutVsStale({ timeoutMs: opts.timeoutMs, staleMs });
+if (staleWarn) console.log(staleWarn.message);
 
 const device = opts.device || 'node';
 const deviceArgs = opts.deviceArgs.length ? opts.deviceArgs : [path.join(SERVER, 'scripts', 'stub-device.mjs')];
 console.log('WORKER_START db=/' + dbName + ' idle_backoff_ms=' + config.idleBackoffMs + ' max_backoff_ms=' + config.maxBackoffMs
   + ' failure_backoff_ms=' + config.failureBackoffMs + ' max_consecutive_failures=' + config.maxConsecutiveFailures
-  + ' db_limit=' + (config.dbLimit === undefined ? 'auto' : config.dbLimit) + ' stale_running_ms=' + staleMs + ' device=' + device);
+  + ' db_limit=' + (config.dbLimit === undefined ? 'auto' : config.dbLimit) + ' stale_running_ms=' + staleMs + ' clock_tolerance_ms=' + clockToleranceMs + ' device=' + device);
 
 // ★R2-B17：领取第一个 job **之前**回收僵尸 running 行（否则 DB 级闸会被永久占住且静默停摆）
 let reclaim;
 try {
-  reclaim = await reclaimStaleRunning({ prisma, staleMs, maxAttempts: opts.maxAttempts || 3, log: console });
+  reclaim = await reclaimStaleRunning({ prisma, staleMs, clockToleranceMs, maxAttempts: opts.maxAttempts || 3, log: console });
   console.log(formatReclaimSummary(reclaim));
 } catch (err) {
   // 回收失败不应拦住窗口：明确记录后继续（连不上库时循环自己会报错，行为与既有版本一致）

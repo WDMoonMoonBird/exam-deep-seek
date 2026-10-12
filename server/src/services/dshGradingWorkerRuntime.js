@@ -19,6 +19,8 @@ export function parseWorkerConfig(env = process.env) {
     dbLimit: env.DSH_WORKER_DB_LIMIT ? num(env.DSH_WORKER_DB_LIMIT, null) : undefined,
     // R2-B17：僵尸 running 行回收阈值（默认 15 分钟；见 dshStaleJobReclaimer）
     staleRunningMs: env.DSH_WORKER_STALE_RUNNING_MS ? num(env.DSH_WORKER_STALE_RUNNING_MS, 15 * 60 * 1000) : undefined,
+    // ★R2-B19：时钟异常容差（updated_at 超出「现在+容差」才视为异常行；缺省 60s）
+    clockToleranceMs: env.DSH_WORKER_CLOCK_TOLERANCE_MS ? num(env.DSH_WORKER_CLOCK_TOLERANCE_MS, 60 * 1000) : undefined,
   };
 }
 
