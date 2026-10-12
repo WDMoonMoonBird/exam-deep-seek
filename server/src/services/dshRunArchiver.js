@@ -97,6 +97,18 @@ export function buildEvidenceSummary(runRoot) {
       }
     }
   } catch { /* ignore */ }
+  // ★R2-B33：out/measure/ 在真机里是 coverage/matrix 干扰产物 ⇒ **始终扫描但只计数**（不产 parseError、绝不进 submissions）
+  try {
+    const noiseDir = path.join(outDir, 'measure');
+    if (fs.existsSync(noiseDir)) {
+      for (const f of fs.readdirSync(noiseDir).sort()) {
+        if (!f.endsWith('.json')) { skippedArtifacts += 1; continue; }
+        let isResult = false;
+        try { isResult = looksLikeResult(JSON.parse(fs.readFileSync(path.join(noiseDir, f), 'utf8'))); } catch { isResult = false; }
+        if (!isResult) skippedArtifacts += 1;
+      }
+    }
+  } catch { /* ignore */ }
   // ③ 旧布局兜底（仅当前两源都没收到条目时）：out/results/*.json，且只收「看起来是结果」的文件。
   //    注：out/measure/*.json 在云上真例里是 coverage/matrix 干扰产物 ⇒ 本实现刻意不把它当结果源（由主源 grading-result 负责）。
   try {
@@ -113,13 +125,57 @@ export function buildEvidenceSummary(runRoot) {
       }
     }
   } catch { /* ignore */ }
+  // ④ ★R2-B33：份数口径补全 —— 装置自报行是**权威份数**（N/MEASURED/FAILED/UNMEASURABLE）。
+  //    不可量/失败/未量尺的提交可能没有 grading-result 文件，也必须进 submissions[]（measurable:false + reason），
+  //    否则 summary 的 n/failed 会小于 RUN_COUNTS（云上 job 6：summary n=3/failed=0 vs 真机 total=4/failed=1）。
+  let deviceN = null; let deviceFailed = null; let deviceUnmeasurable = null;
+  try {
+    const devFile = path.join(outDir, 'device.stdout.log');
+    const devText = fs.existsSync(devFile) ? fs.readFileSync(devFile, 'utf8') : '';
+    const devLine = devText.split(String.fromCharCode(10)).reverse().find((l) => l.includes('ASSIGNMENT_RESULT=')) || '';
+    const pick = (k) => { const rr = new RegExp('(?:^|[^A-Z_])' + k + '=(-?\\d+)').exec(devLine); return rr ? Number(rr[1]) : null; };
+    if (devLine) { deviceN = pick('N'); deviceFailed = pick('FAILED'); deviceUnmeasurable = pick('UNMEASURABLE'); }
+    const slugsMatch = /ASSIGNMENT_UNMEASURABLE_SLUGS=([^\s]*)/.exec(devText);
+    if (slugsMatch && slugsMatch[1] && /^[A-Za-z0-9_,-]+$/.test(slugsMatch[1])) {
+      for (const s of slugsMatch[1].split(/[,\s]+/).filter(Boolean)) {
+        if (!slugs.has(s)) put(s, { measurable: false, failed: false, reason: 'unmeasurable' });
+      }
+    }
+  } catch { /* ignore */ }
+  // comparability.json 的逐份条目（真实产物之一；只补缺失的 slug）
+  try {
+    const cj = path.join(outDir, 'assignment', 'comparability.json');
+    if (fs.existsSync(cj)) {
+      const doc = JSON.parse(fs.readFileSync(cj, 'utf8'));
+      const arr = Array.isArray(doc) ? doc : (doc.submissions || doc.items || doc.entries || []);
+      for (const it of arr) {
+        const slug = it.slug || it.id || it.name;
+        if (!slug || slugs.has(String(slug))) continue;
+        const un = it.unmeasurable === true || (it.ok === false && it.failed !== true);
+        put(String(slug), { measurable: un !== true, failed: it.failed === true, reason: it.reason || (it.failed === true ? 'failed' : null) });
+      }
+    }
+  } catch { /* ignore */ }
+  // 仍缺的份数（自报 N 与实际条目数之差）⇒ 用明确 reason 的占位条目补齐（不发明成功/分数）
+  if (deviceN !== null && Number.isFinite(deviceN) && deviceN > slugs.size) {
+    let missing = deviceN - slugs.size;
+    let failLeft = deviceFailed === null ? 0 : deviceFailed - [...slugs.values()].filter((x) => x.failed === true).length;
+    let unLeft = deviceUnmeasurable === null ? 0 : deviceUnmeasurable - [...slugs.values()].filter((x) => x.measurable === false).length;
+    for (let i = 0; i < missing; i += 1) {
+      const isFailed = failLeft > 0;
+      const isUn = !isFailed && unLeft > 0;
+      if (isFailed) failLeft -= 1;
+      if (isUn) unLeft -= 1;
+      put('unknown-' + String(i + 1).padStart(2, '0'), { measurable: false, failed: isFailed, reason: isFailed ? 'failed' : (isUn ? 'unmeasurable' : 'no_result_artifact') });
+    }
+  }
   const list = [...slugs.values()].sort((a, b) => (a.slug < b.slug ? -1 : 1));
   return {
     schema_version: 'evidence-summary/2',   // ★R2-B32：改为「逐份结果」口径（附 failed 与 skipped_artifacts）
     run_root: runRoot,
     n: list.length,
     measurable: list.filter((x) => x.measurable !== false && x.failed !== true).length,
-    unmeasurable: list.filter((x) => x.measurable === false).length,
+    unmeasurable: list.filter((x) => x.measurable === false && x.failed !== true).length,   // ★R2-B33：失败份数不重复计入不可量
     failed: list.filter((x) => x.failed === true).length,
     skipped_artifacts: skippedArtifacts,
     submissions: list,
