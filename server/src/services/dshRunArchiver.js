@@ -101,11 +101,12 @@ export function buildEvidenceSummary(runRoot) {
   try {
     const noiseDir = path.join(outDir, 'measure');
     if (fs.existsSync(noiseDir)) {
-      for (const f of fs.readdirSync(noiseDir).sort()) {
-        if (!f.endsWith('.json')) { skippedArtifacts += 1; continue; }
-        let isResult = false;
-        try { isResult = looksLikeResult(JSON.parse(fs.readFileSync(path.join(noiseDir, f), 'utf8'))); } catch { isResult = false; }
-        if (!isResult) skippedArtifacts += 1;
+      // ★R2-B34（F-T78-2 口径裁定）：out/measure 是**非结果产物目录**（云上实证 = coverage/matrix）
+      //   ⇒ 该目录顶层**每个文件**都计 1（口径=文件数、范围=out/measure 顶层），不再用 looksLikeResult 判定
+      //   （此前把含 checker_id 的文件当结果 ⇒ 计数恒 0，与记录里「可恢复 >=2」不符）。
+      for (const f of fs.readdirSync(noiseDir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+        if (!f.isFile()) { skippedArtifacts += 1; continue; }   // 子目录也计 1（按「条目数」口径）
+        skippedArtifacts += 1;
       }
     }
   } catch { /* ignore */ }
@@ -411,6 +412,27 @@ export function purgeRunRootSessions({ runRoot, exitCode = 0, purge = true, keep
   return { evidence, sessionsPurged, keepScene, purged };
 }
 
+/**
+ * ★R2-B34：递归补写位（非 root 删除只读目录树的前置步骤）。
+ * 只对传入目录内部生效；任何错误都吞掉（删除阶段仍会给出明确 prune_skipped 原因）。
+ */
+export function makeTreeWritable(dir) {
+  const fix = (p, isDir) => {
+    try { fs.chmodSync(p, isDir ? 0o700 : 0o600); } catch { /* 无权限改位则跳过，交由 rm 决定 */ }
+  };
+  const walk = (p) => {
+    let entries = [];
+    try { entries = fs.readdirSync(p, { withFileTypes: true }); } catch { fix(p, true); return; }
+    for (const it of entries) {
+      const abs = path.join(p, it.name);
+      if (it.isDirectory()) { walk(abs); fix(abs, true); }
+      else { fix(abs, false); }
+    }
+    fix(p, true);
+  };
+  try { walk(dir); } catch { /* ignore */ }
+}
+
 /** 安全护栏：只允许删 `/tmp/r2b4-job-<jobId>-*` 形态的 run-root */
 export function isPrunableRunRoot(runRoot, jobId) {
   const resolved = path.resolve(runRoot);
@@ -469,10 +491,13 @@ export async function archiveRun({ runRoot, jobId, success, runsRoot = DEFAULT_R
     result.prune_reason = 'shape_guard(jobId=' + String(jobId) + ')';
   } else {
     try {
-      fs.rmSync(runRoot, { recursive: true, force: true });
+      // ★R2-B34（F-T78-1）：装置把 materials/ 置只读（dr-xr-xr-x）⇒ 非 root 下 rmSync 会 ENOTEMPTY。
+      //   先递归补写位再删（仅针对本次要删的 run-root 内部，不碰其它路径）。
+      makeTreeWritable(runRoot);
+      fs.rmSync(runRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
       result.pruned = !fs.existsSync(runRoot);
       if (!result.pruned) result.prune_reason = 'rm_residual';
-    } catch (err) { result.pruned = false; result.prune_reason = 'rm_failed:' + String(err && err.message).slice(0, 80); }
+    } catch (err) { result.pruned = false; result.prune_reason = 'rm_failed:' + String(err && err.message).slice(0, 120); }
   }
   logger.info({ jobId, dir, bytes: result.bytes, pruned: result.pruned, prune_reason: result.prune_reason || null }, 'R2-B23：运行证据已归档');
   log.log('RUN_ARCHIVED dir=' + dir + ' bytes=' + result.bytes + ' jobId=' + (jobId === null || jobId === undefined ? 'null' : String(jobId))

@@ -148,3 +148,22 @@ describe('W56 管理员批改记录（只读接口语义）', () => {
     expect(/router\.(post|put|patch|delete)\(/.test(routes)).toBe(false);
   });
 });
+
+describe('W56b 不存在的运行 ⇒ 404（R2-B34 / O-1）', () => {
+  it('★W56b-1 归档与数据库行都不存在的 id ⇒ 404（不再是 200 占位）', async () => {
+    const res = fakeRes();
+    await getGradingRun({ params: { id: 'job-999999' }, query: {} }, res);
+    expect(res.statusCode).toBe(404);
+    expect(res.body.code).toBe(1002);
+    const res2 = fakeRes();
+    await getGradingRun({ params: { id: 'archive-build-9-20990101T000000Z' }, query: {} }, res2);
+    expect(res2.statusCode).toBe(404);
+  });
+
+  it('★W56b-2 存在的归档 ⇒ 仍 200（反向对照，避免 404 过宽）', async () => {
+    const res = fakeRes();
+    await getGradingRun({ params: { id: 'job-4' }, query: {} }, res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.run.archive).toBe('4');
+  });
+});

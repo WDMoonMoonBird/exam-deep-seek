@@ -168,3 +168,55 @@ describe('W52 运行归档 + 落库 + 审计', () => {
     expect(tailText('/tmp/nonexistent-w52-x')).toBe(null);
   });
 });
+
+describe('W52b 剪枝健壮化 + 口径一致（R2-B34）', () => {
+  const ROOT_ENV = 'DSH_GRADER_RUNS_ROOT';
+  let runsRootB = null;
+  beforeAll(() => { runsRootB = fs.mkdtempSync(path.join(os.tmpdir(), 'w52b-runs-')); });
+  afterAll(() => { if (runsRootB) fs.rmSync(runsRootB, { recursive: true, force: true }); });
+
+  it('★★W52b-1 非 root：只读物料树（dr-xr-xr-x / -r--r--r--）也必须在成功运行后剪掉 run-root（F-T78-1）', async () => {
+    const job = 90001;
+    const root = fs.mkdtempSync(path.join('/tmp', 'r2b4-job-' + job + '-'));
+    fs.mkdirSync(path.join(root, 'materials', 'std'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'materials', 'std', 'pkg.zip'), 'x');
+    fs.mkdirSync(path.join(root, 'out'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'out', 'device.stdout.log'), 'ASSIGNMENT_RESULT=PARTIAL N=1 MEASURED=1 FAILED=0 UNMEASURABLE=0' + String.fromCharCode(10));
+    fs.chmodSync(path.join(root, 'materials', 'std', 'pkg.zip'), 0o400);
+    fs.chmodSync(path.join(root, 'materials', 'std'), 0o500);
+    fs.chmodSync(path.join(root, 'materials'), 0o500);
+    const logs = [];
+    const res = await archiveRun({ runRoot: root, jobId: job, success: true, runsRoot: runsRootB, log: { log: (m) => logs.push(m) } });
+    expect(res.pruned).toBe(true);
+    expect(res.prune_reason || null).toBe(null);
+    expect(fs.existsSync(root)).toBe(false);                      // ★成功 ⇒ run-root 不存在
+    expect(logs.join(String.fromCharCode(10))).toMatch(/RUN_ARCHIVED dir=.* jobId=90001 pruned_run_root=yes/);
+  }, 90000);
+
+  it('★W52b-2 口径一致：out/measure 顶层每个条目计 1 ⇒ skipped_artifacts===2（F-T78-2）', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'w52b-count-'));
+    fs.mkdirSync(path.join(root, 'out', 'measure'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'out', 'grading-result'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'out', 'diagnostics'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'out', 'measure', 'coverage-s01.json'), JSON.stringify({ checker_id: 'c', coverage: {} }));
+    fs.writeFileSync(path.join(root, 'out', 'measure', 'matrix-s01.json'), JSON.stringify({ matrix: [] }));
+    fs.writeFileSync(path.join(root, 'out', 'grading-result', 's01.json'), JSON.stringify({ totals: { score: 88 }, items: [1] }));
+    fs.writeFileSync(path.join(root, 'out', 'diagnostics', 'measurable.json'), JSON.stringify({ submissions: [{ slug: 's01' }] }));
+    const s = buildEvidenceSummary(root);
+    expect(s.skipped_artifacts).toBe(2);                            // 口径：文件数、范围：out/measure 顶层
+    expect(s.n).toBe(1);
+    expect(s.submissions.filter((x) => x.parseError).length).toBe(0);
+    expect(s.submissions.some((x) => /coverage|matrix/.test(String(x.slug)))).toBe(false);
+    fs.rmSync(root, { recursive: true, force: true });
+  }, 60000);
+
+  it('★W52b-3 剪枝确实失败时必须显式给原因（保留 rm_failed 细节）', async () => {
+    const job = 90002;
+    const notJobShaped = fs.mkdtempSync(path.join(os.tmpdir(), 'w52b-shape-'));
+    fs.mkdirSync(path.join(notJobShaped, 'out'), { recursive: true });
+    const res = await archiveRun({ runRoot: notJobShaped, jobId: job, success: true, runsRoot: runsRootB, log: { log: () => {} } });
+    expect(res.pruned).toBe(false);
+    expect(String(res.prune_reason)).toMatch(/shape_guard\(jobId=90002\)/);
+    fs.rmSync(notJobShaped, { recursive: true, force: true });
+  }, 60000);
+});

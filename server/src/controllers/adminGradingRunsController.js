@@ -180,14 +180,21 @@ export const getGradingRun = async (req, res) => {
     else if (/^\d+$/.test(id)) { type = 'worker'; jobId = Number(id); archive = String(jobId); }
     else return res.status(400).json({ code: 1001, message: 'id 形式非法（应为 job-<n> 或 archive-build-…）', data: null });
     if (!safeArchiveDir(archive)) return res.status(400).json({ code: 1001, message: '归档目录名非法', data: null });
-    let row = null;
+    let row = null; let rowFromDb = false;   // ★R2-B34（O-1）：区分「库里有行」与「仅为渲染用的占位」
     if (type === 'worker') {
       try {
         const rs = await prisma.$queryRawUnsafe('SELECT job_id, assignment_id, checker_id, started_at, finished_at, device_exit, measured, unmeasurable, skipped, written, failed, created_at, updated_at FROM grading_job_runs WHERE job_id = ? LIMIT 1', jobId);
-        row = (rs && rs[0]) || { job_id: jobId };
+        if (rs && rs[0]) { row = rs[0]; rowFromDb = true; } else { row = { job_id: jobId }; }   // ★R2-B34（O-1）
       } catch (err) { row = { job_id: jobId }; }
     } else {
       row = { job_id: null, assignment_id: Number(archive.split('-')[1]) };
+    }
+    // ★R2-B34（O-1）：不存在的运行 ⇒ 404（此前返回 200 占位，误导页面）
+    const dirAbs = safeArchiveDir(archive);
+    const dirExists = !!(dirAbs && fs.existsSync(dirAbs));
+    const hasRow = rowFromDb;   // 仅当库中确有该行才算「存在」；占位行不算（否则不存在 id 会返 200）
+    if (!dirExists && !hasRow) {
+      return res.status(404).json({ code: 1002, message: '运行记录不存在：归档目录与数据库行都不存在', data: null });
     }
     const teardown = parseTeardown(archive);
     const summary = readJsonSafe(archive, 'evidence-summary.json');
