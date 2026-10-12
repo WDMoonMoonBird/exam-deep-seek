@@ -36,6 +36,8 @@ if (mode === 'slow' && sleepMs > 0) {
 
 if (mode === 'no-artifacts') { writeSpan(); process.exit(0); }
 
+// STUB_SLUG=1：按装置真实命名写产物（submission.id = slug = s01/s02…）并写 assignment-manifest
+const slugMode = process.env.STUB_SLUG === '1';
 const outDir = path.join(runRoot, 'out');
 fs.mkdirSync(path.join(outDir, 'checker'), { recursive: true });
 fs.mkdirSync(path.join(outDir, 'measure'), { recursive: true });
@@ -43,6 +45,15 @@ fs.copyFileSync(FIXTURE, path.join(outDir, 'checker', 'checker.json'));
 
 const checker = JSON.parse(fs.readFileSync(FIXTURE, 'utf8'));
 const staleMode = mode === 'exit6';
+if (slugMode) {
+  fs.mkdirSync(path.join(outDir, 'assignment'), { recursive: true });
+  const manifestIds = String(process.env.STUB_MANIFEST_IDS || '').split(',').map((s) => s.trim());
+  fs.writeFileSync(path.join(outDir, 'assignment', 'assignment-manifest.json'), JSON.stringify({
+    schema_version: 'assignment-manifest/1',
+    assignment_id: String(process.env.STUB_ASSIGNMENT_ID || '0'),
+    submissions: subs.map((s, i) => ({ slug: s, id: manifestIds[i] || '' })),
+  }));
+}
 for (const sid of subs) {
   const isNull = staleMode && sid === subs[subs.length - 1]; // exit6：最后一份记 null（unsupported 语义）
   const result = {

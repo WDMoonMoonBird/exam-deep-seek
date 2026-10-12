@@ -34,7 +34,7 @@ const prisma = new PrismaClient({ datasources: { db: { url } } });
 const tag = 'r2b4-smoke-' + Date.now();
 const results = [];
 let exitCode = 0;
-const probe = { submissionIds: [], questionId: null, assignmentId: null, checkerIds: [], jobIds: [] };
+const probe = { submissionIds: [], questionId: null, assignmentId: null, checkerIds: [], jobIds: [], studentId: null };
 
 try {
   // 0) 自建探针数据（测试库）
@@ -48,6 +48,11 @@ try {
     const s = await prisma.submission.create({ data: { assignmentId: a.id, questionId: q.id, studentId: teacher.id, status: 'submitted' } });
     probe.submissionIds.push(s.id);
   }
+  // slug 场景需要「源 id ↔ 平台提交」的真实映射载体：建一个学生（realName 即 manifest 里的源 id）
+  const stu = await prisma.user.create({ data: { username: tag + '-stu', password: 'x', role: 'student', realName: tag + '-real' } });
+  probe.studentId = stu.id;
+  const s3 = await prisma.submission.create({ data: { assignmentId: a.id, questionId: q.id, studentId: stu.id, status: 'submitted' } });
+  probe.submissionIds.push(s3.id);
   console.log('probe assignment=' + a.id + ' question=' + q.id + ' submissions=' + probe.submissionIds.join(','));
 
   const device = path.join(SERVER, 'scripts', 'stub-device.mjs');
@@ -124,6 +129,38 @@ try {
   results.push(['no_double_consume', r6.consumed === false && r6.reason === 'no_pending_job']);
   console.log('DOUBLE_CONSUME consumed=' + r6.consumed + ' reason=' + r6.reason);
 
+  // 7) ★F-R2C4-1：装置真实命名（slug s01）+ manifest 源 id=学生姓名 ⇒ 经 worker 真写分
+  const job6 = await prisma.gradingJob.create({ data: { assignmentId: a.id, checkerId: 'sha256:' + '9'.repeat(64), status: 'pending' } });
+  probe.jobIds.push(job6.id);
+  const r7 = await runOnce({
+    prisma, jobId: job6.id, gate,
+    deviceCommand: process.execPath, deviceArgs: baseArgs,
+    stubEnv: {
+      STUB_MODE: 'ok', STUB_SLUG: '1', STUB_SUBMISSIONS: 's01',
+      STUB_MANIFEST_IDS: tag + '-real', STUB_ASSIGNMENT_ID: String(a.id), STUB_SCORE: '59',
+    },
+    repoRoot: REPO, runRootBase: '/tmp', timeoutMs: 60000,
+  });
+  const sub3 = await prisma.submission.findUnique({ where: { id: probe.submissionIds[2] } });
+  results.push(['slug_mapped_real_write', r7.status === 'done' && r7.written === 1 && sub3.aiScore === 59 && !!sub3.checkerId]);
+  console.log('JOB6(slug) status=' + r7.status + ' written=' + r7.written + ' aiScore=' + sub3.aiScore + ' checker_id=' + (sub3.checkerId || 'null'));
+
+  // 8) ★F-R2C4-1 反向：slug 无法映射（manifest 源 id 无人匹配）⇒ needs_rerun，绝不报 done/零写入
+  const job7 = await prisma.gradingJob.create({ data: { assignmentId: a.id, checkerId: 'sha256:' + '8'.repeat(64), status: 'pending' } });
+  probe.jobIds.push(job7.id);
+  const r8 = await runOnce({
+    prisma, jobId: job7.id, gate,
+    deviceCommand: process.execPath, deviceArgs: baseArgs,
+    stubEnv: {
+      STUB_MODE: 'ok', STUB_SLUG: '1', STUB_SUBMISSIONS: 's02',
+      STUB_MANIFEST_IDS: '无此人-' + Date.now(), STUB_ASSIGNMENT_ID: String(a.id), STUB_SCORE: '59',
+    },
+    repoRoot: REPO, runRootBase: '/tmp', timeoutMs: 60000,
+  });
+  const job7After = await prisma.gradingJob.findUnique({ where: { id: job7.id } });
+  results.push(['slug_unmapped_needs_rerun', r8.status === 'needs_rerun' && r8.written === 0 && job7After.status === 'needs_rerun' && (job7After.lastError || '').includes('unmapped_submission_id')]);
+  console.log('JOB7(slug-unmapped) status=' + r8.status + ' written=' + r8.written + ' reason=' + job7After.lastError);
+
   const failed = results.filter(([, ok]) => !ok);
   for (const [name, ok] of results) console.log('CHECK ' + name + '=' + (ok ? 'PASS' : 'FAIL'));
   console.log('R2B4_SMOKE=' + (failed.length ? 'FAIL' : 'PASS') + ' checks=' + results.length + ' failed=' + failed.length);
@@ -138,6 +175,7 @@ try {
   await prisma.assignment.deleteMany({ where: { id: probe.assignmentId || -1 } }).catch(() => {});
   await prisma.question.deleteMany({ where: { id: probe.questionId || -1 } }).catch(() => {});
   await prisma.gradingChecker.deleteMany({ where: { assignmentId: probe.assignmentId || -1 } }).catch(() => {});
+  if (probe.studentId) await prisma.user.deleteMany({ where: { id: probe.studentId } }).catch(() => {});
   await prisma.$disconnect();
 }
 process.exit(exitCode);
