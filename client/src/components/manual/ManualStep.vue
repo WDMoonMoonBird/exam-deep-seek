@@ -24,6 +24,21 @@
       <button class="ms-replay" type="button" @click="replay">重播</button>
     </div>
     <div class="ms-progress" aria-hidden="true"><i :style="{ width: ((step + 1) / total) * 100 + '%' }" /></div>
+
+    <!-- 步骤条：只在「放大演示」里出现（由 ZoomHost 注入 manualNav），点任意一步即可跳过去看 —— 这就是演示的"交互" -->
+    <div v-if="navOn" class="ms-nav">
+      <button
+        v-for="(s, i) in steps"
+        :key="i"
+        type="button"
+        class="ms-nav-item"
+        :class="{ 'is-on': i === step }"
+        :aria-current="i === step ? 'step' : undefined"
+        @click="goTo(i)"
+      >
+        <b>{{ i + 1 }}</b><span>{{ s.label || ('第 ' + (i + 1) + ' 步') }}</span>
+      </button>
+    </div>
   </figure>
 </template>
 
@@ -51,7 +66,7 @@
  *   · 重播：回到第 1 步重新播放
  *   · prefers-reduced-motion: reduce → 不自动播放，直接显示**终态**，只保留「重播」
  */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref } from 'vue';
 
 const props = defineProps({
   steps: { type: Array, required: true },
@@ -68,6 +83,8 @@ const running = ref(false);
 const ready = ref(false);
 const fallbackOk = ref(true);   // 兜底图缺失/加载失败时自动隐藏，不影响复刻界面显示
 const figureEl = ref(null);
+// 放大演示时由 ZoomHost 注入 true：显示可点步骤条（各 section 无需改一行）
+const navOn = inject('manualNav', false);
 
 let timer = null;
 let observer = null;
@@ -105,6 +122,12 @@ function pause() {
 function toggle() {
   if (running.value) pause();
   else { if (step.value >= total.value - 1) step.value = 0; play(); }
+}
+/** 跳到某一步：先停表，避免刚跳过去又被下一个 timer 推走 */
+function goTo(i) {
+  clearTimer();
+  running.value = false;
+  step.value = Math.max(0, Math.min(i, total.value - 1));
 }
 function replay() {
   clearTimer();
@@ -154,4 +177,17 @@ onBeforeUnmount(() => { clearTimer(); if (observer) observer.disconnect(); });
 @media (prefers-reduced-motion: reduce) {
   .ms-canvas :deep(*) { animation: none !important; transition: none !important; }
 }
+
+/* 步骤条（仅放大演示时显示） */
+.ms-nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px 10px; border-top: 1px dashed var(--border-subtle); background: var(--bg-surface-2); }
+.ms-nav-item {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; cursor: pointer;
+  border: 1px solid var(--border-default); border-radius: 999px; background: var(--card-bg);
+  color: var(--text-secondary); font-size: var(--fs-caption); line-height: 1.5;
+  transition: var(--transition-control);
+}
+.ms-nav-item b { display: grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: var(--bg-hover); color: var(--text-tertiary); font-size: 10px; font-weight: 600; }
+.ms-nav-item:hover { border-color: var(--brand-600); color: var(--text-brand); }
+.ms-nav-item.is-on { border-color: var(--brand-600); background: var(--bg-selected); color: var(--text-brand); }
+.ms-nav-item.is-on b { background: var(--brand-600); color: #fff; }
 </style>

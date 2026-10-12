@@ -44,6 +44,7 @@
                 <section v-for="sec in sections2to5" :key="sec.id" :id="sec.id" class="doc-section">
                     <h2 class="section-title">{{ sec.title }}</h2>
                     <div v-if="sec.demo" class="doc-demo-inline">
+                        <button class="doc-zoom" type="button" @click="openZoom(sec)">⤢ 放大演示</button>
                         <component :is="sec.demo" :fallback="'/exam/doc-img/demo-' + sec.id + '-light.png'" />
                     </div>
                     <div class="section-body" v-html="sec.content" />
@@ -52,7 +53,7 @@
                 <!-- 6. 题库管理（交互式步骤条） -->
                 <section id="questions" class="doc-section">
                     <h2 class="section-title">6. 题库管理</h2>
-                        <div class="doc-demo-inline"><QuestionsSection :fallback="'/exam/doc-img/demo-questions-light.png'" /></div>
+                        <div class="doc-demo-inline"><button class="doc-zoom" type="button" @click="openZoom({ id: 'questions', title: '6. 题库管理 · 新建题目', demo: QuestionsSection })">⤢ 放大演示</button><QuestionsSection :fallback="'/exam/doc-img/demo-questions-light.png'" /></div>
                     <div class="section-body">
                         <h3>6.1 题目结构</h3>
                         <p>每道题目为「<b>大题 + N 道小题</b>」的结构。大题包含标题、难度、总分（= 各小题分值之和）；每道小题可独立设置语言、分值和参考答案。</p>
@@ -93,7 +94,7 @@
 
                 <section id="project" class="doc-section">
                     <h2 class="section-title">7. 实训题管理 <a-tag class="tag-warning" size="small" style="margin-left:4px;vertical-align:middle;">BETA</a-tag></h2>
-                        <div class="doc-demo-inline"><ProjectSection :fallback="'/exam/doc-img/demo-project-light.png'" /></div>
+                        <div class="doc-demo-inline"><button class="doc-zoom" type="button" @click="openZoom({ id: 'project', title: '7. 实训题 · 新建与 AI 评审', demo: ProjectSection })">⤢ 放大演示</button><ProjectSection :fallback="'/exam/doc-img/demo-project-light.png'" /></div>
                     <div class="section-body">
                         <p>实训题 = 完整工程项目实践任务（如「用户管理系统（前端）」）。学生上传项目压缩包，系统自动进行 AI 评分：<b>上传了标准工程包</b> → 与标准包<b>对比评分</b>；<b>未上传标准工程包</b>（开放性题目）→ 只依据评分标准做<b>评价式评分</b>，不与参考答案对比。</p>
 
@@ -139,6 +140,7 @@
                 <section v-for="sec in sections7" :key="sec.id" :id="sec.id" class="doc-section">
                     <h2 class="section-title">{{ sec.title }}</h2>
                     <div v-if="sec.demo" class="doc-demo-inline">
+                        <button class="doc-zoom" type="button" @click="openZoom(sec)">⤢ 放大演示</button>
                         <component :is="sec.demo" :fallback="'/exam/doc-img/demo-' + sec.id + '-light.png'" />
                     </div>
                     <div class="section-body" v-html="sec.content" />
@@ -186,11 +188,28 @@
                 <section v-for="sec in sections9to10" :key="sec.id" :id="sec.id" class="doc-section">
                     <h2 class="section-title">{{ sec.title }}</h2>
                     <div v-if="sec.demo" class="doc-demo-inline">
+                        <button class="doc-zoom" type="button" @click="openZoom(sec)">⤢ 放大演示</button>
                         <component :is="sec.demo" :fallback="'/exam/doc-img/demo-' + sec.id + '-light.png'" />
                     </div>
                     <div class="section-body" v-html="sec.content" />
                 </section>
             </main>
+
+            <!-- 放大演示：真 a-modal 承载同一个演示组件（遮罩铺满整页、ESC 与点遮罩可关），
+                 内层 ZoomHost 注入 manualNav → 播放器显示可点步骤条 -->
+            <a-modal
+                v-model:open="zoomOpen"
+                :title="zoomSec.title"
+                :width="zoomWidth"
+                :footer="null"
+                centered
+                wrap-class-name="doc-zoom-modal"
+                :body-style="{ maxHeight: '78vh', overflow: 'auto' }"
+            >
+                <ZoomHost>
+                    <component :is="zoomSec.demo" v-if="zoomSec.demo" />
+                </ZoomHost>
+            </a-modal>
         </div>
 
         <!-- 移动端浮动目录按钮 -->
@@ -219,6 +238,7 @@
 import { ref, computed, h, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import { BarsOutlined } from '@ant-design/icons-vue';
 import { Tag } from 'ant-design-vue';
+import ZoomHost from '../components/manual/ZoomHost.vue';
 
 // 手册各章节的可播放演示（真实界面元素复刻；每个演示 = components/manual/sections/*.vue）
 import QuickstartSection from '../components/manual/sections/QuickstartSection.vue';
@@ -317,6 +337,7 @@ const sections7 = computed(() => [sections2to7[5]]);
 
 function checkMobile () {
     showMobileToc.value = window.innerWidth < 992;
+    if (zoomOpen.value) syncZoomWidth();
 }
 onMounted(() => { checkMobile(); window.addEventListener('resize', checkMobile); window.addEventListener('keydown', onLightboxKeydown); });
 onUnmounted(() => { window.removeEventListener('resize', checkMobile); window.removeEventListener('keydown', onLightboxKeydown); });
@@ -544,6 +565,17 @@ const sections9to10 = [
 /* ===== 交互演示：自动发现 components/manual/sections/*.vue ===== 
    每个演示文件在 script 块里导出 meta = { order, title, anchor }；新增演示 = 新增文件，不需要改本文件。
    兜底截图按约定路径 /exam/doc-img/demo-<anchor>-light.png 传入；文件不存在时播放器会自动隐藏破图。 */
+/* ===== 放大演示（真弹窗）===== */
+const zoomOpen = ref(false);
+const zoomSec = ref({ id: '', title: '', demo: null });
+const zoomWidth = ref(1120);
+function syncZoomWidth () { zoomWidth.value = window.innerWidth < 768 ? '94vw' : Math.min(1120, window.innerWidth - 96); }
+function openZoom (sec) {
+    zoomSec.value = { id: sec.id || '', title: sec.title || '演示', demo: sec.demo || null };
+    syncZoomWidth();
+    zoomOpen.value = true;
+}
+
 const manualModules = import.meta.glob('../components/manual/sections/*.vue', { eager: true });
 const manualDemos = Object.entries(manualModules)
     .map(([key, mod]) => ({ key, comp: mod.default, meta: mod.meta || {} }))
@@ -1136,4 +1168,13 @@ const anchors = allSections.map(s => ({
 .doc-demo-tip a { color: inherit; font-weight: 600; text-decoration: underline; }
 /* 内联演示：跟着章节走（原来集中在正文上方，观感很乱） */
 .doc-demo-inline { margin: var(--space-4) 0 var(--space-5); }
+/* 放大演示按钮：贴在内联演示的右上角 */
+.doc-demo-inline { position: relative; }
+.doc-zoom {
+    position: absolute; top: -10px; right: 0; z-index: 5; padding: 4px 10px; cursor: pointer;
+    border: 1px solid var(--border-default); border-radius: 999px; background: var(--card-bg);
+    color: var(--text-secondary); font-size: var(--fs-caption); box-shadow: var(--shadow-sm);
+    transition: var(--transition-control);
+}
+.doc-zoom:hover { border-color: var(--brand-600); color: var(--text-brand); }
 </style>
