@@ -28,6 +28,15 @@ export const EXPORT_MANIFEST_NAME = 'export-manifest.json';
 
 const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 
+/** ★R2-B21（低）：库不可达等连接类错误归一为专用 reason，便于排障（其余仍 `unhandled:<msg>`） */
+export function normalizeExportError(err) {
+  const msg = String((err && err.message) || err || '');
+  const code = String((err && err.code) || '');
+  if (code === 'P1001' || code === 'P1002' || code === 'P1000' || code === 'P1017') return 'db_unreachable';
+  if (/Can't reach database server|Connection refused|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EHOSTUNREACH|connect ETIMEDOUT/i.test(msg)) return 'db_unreachable';
+  return 'unhandled:' + msg;
+}
+
 /** ★护栏：连接前先判库名（沿用既有 REFUSE_* 口径） */
 export function assertExportAuthorized({ dbUrl, allowDb = null, allowProd = false } = {}) {
   let dbName = '';
@@ -97,6 +106,14 @@ export function buildAssignmentMd({ title, material }) {
  * @returns {{ok:true, out:string, n:number, questionId:number, standardSha256:string, rubricLen:number, manifest:object} | {ok:false, reason:string}}
  */
 export async function exportMaterials({ prisma, assignmentId, outDir, uploadsRoot = null, now = new Date().toISOString() }) {
+  try {
+    return await exportMaterialsInner({ prisma, assignmentId, outDir, uploadsRoot, now });
+  } catch (err) {
+    return { ok: false, reason: normalizeExportError(err) };
+  }
+}
+
+async function exportMaterialsInner({ prisma, assignmentId, outDir, uploadsRoot = null, now = new Date().toISOString() }) {
   const assignment = await prisma.assignment.findUnique({ where: { id: Number(assignmentId) } });
   if (!assignment) return { ok: false, reason: 'assignment_not_found:' + assignmentId };
   const links = await prisma.assignmentQuestion.findMany({ where: { assignmentId: Number(assignmentId) }, select: { questionId: true } });
@@ -211,5 +228,5 @@ async function main() {
 
 const invokedDirectly = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(__filename);
 if (invokedDirectly) {
-  main().catch((err) => { console.log('EXPORT_FAIL reason=unhandled:' + (err && err.message)); process.exit(4); });
+  main().catch((err) => { console.log('EXPORT_FAIL reason=' + normalizeExportError(err)); process.exit(4); });
 }

@@ -15,6 +15,7 @@ import path from 'path';
 import { runDshGrader } from './dshGraderRunner.js';
 import { consumeChecker, consumeMeasureResults, resolveCheckerPath } from './dshCheckerConsumer.js';
 import { materializeAnchor, persistAnchor } from './dshGradingAnchor.js';
+import { formatMaterialsMissing, formatMaterialsResolved, resolveMaterialsForAssignment, withMaterialsArgs } from './dshMaterialsResolver.js';
 import { fileURLToPath } from 'url';
 import { getDshGradingConcurrency } from '../infrastructure/ai/deepseek/config.js';
 
@@ -208,6 +209,7 @@ export async function finishJob({ prisma, jobId, status, written = 0, skipped = 
 export async function runOnce({
   prisma, jobId = null, gate = null, dbLimit = undefined, deviceCommand, deviceArgs = [], stubEnv = {}, extraEnv = {}, reuseChecker = false,
   runRootBase = '/tmp', timeoutMs = 600000, maxAttempts = DEFAULT_MAX_ATTEMPTS,
+  materialsRoot = null,
   repoRoot = path.resolve(process.cwd(), '..'), deps = {},
 } = {}) {
   const limit = await getDshGradingConcurrency();
@@ -260,6 +262,20 @@ export async function runOnce({
     console.log(anchor.materialized
       ? 'ANCHOR_MATERIALIZED=yes target=' + anchor.target + ' frozen_sha256=' + (anchor.frozenSha256 || 'na') + ' bytes=' + anchor.bytes + ' written_sha256=' + anchor.sha256 + ' sha_matches_anchor=' + (anchor.shaMatchesAnchor ? 'yes' : 'no') + ' n_submissions=' + anchor.nSubmissions
       : 'ANCHOR_MATERIALIZED=no reason=' + anchor.reason + '（历史数据：明确记录并继续，不静默装成功）');
+
+    // ★R2-B21：按 **job 的 assignmentId** 解析该作业自己的物料目录与份数（多作业场景必需）
+    //   设定 DSH_GRADER_MATERIALS_ROOT ⇒ 覆盖启动时写死的 --source-dir/--submissions；目录缺失/为空 ⇒ fail-closed（不回落实验/、不写分）
+    if (materialsRoot) {
+      const m = resolveMaterialsForAssignment({ materialsRoot, assignmentId: job.assignmentId });
+      if (!m.ok) {
+        console.log(formatMaterialsMissing({ assignmentId: job.assignmentId, dir: m.dir }));
+        logger.warn({ jobId: job.id, assignmentId: job.assignmentId, dir: m.dir }, 'R2-B21：该作业物料缺失 ⇒ fail-closed（不回落装置默认源目录、不写分）');
+        await finishJob({ prisma, jobId: job.id, status: JOB_STATUS.needsRerun, error: m.reason });
+        return { consumed: true, jobId: job.id, runRoot, status: JOB_STATUS.needsRerun, reason: m.reason, materials: { dir: m.dir, ok: false } };
+      }
+      console.log(formatMaterialsResolved({ assignmentId: job.assignmentId, dir: m.dir, submissions: m.submissions, source: m.source }));
+      runArgs = withMaterialsArgs(runArgs, m);
+    }
 
     // ★R2-B11：装置必须在**仓库根**下运行（相对装置路径才解析得对）；参数里的相对路径同时绝对化（双保险）
     const repoRootAbs = path.resolve(repoRoot);

@@ -20,6 +20,7 @@ import { runOnce } from '../src/services/dshGradingJobWorker.js';
 import { EXIT, parseWorkerConfig, runWorkerLoop } from '../src/services/dshGradingWorkerRuntime.js';
 import { describeLlmConfig, llmEnv, readPlatformLlmConfig } from '../src/services/dshPlatformLlmConfig.js';
 import { checkTimeoutVsStale, formatReclaimSummary, reclaimStaleRunning, resolveClockToleranceMs, resolveStaleMs } from '../src/services/dshStaleJobReclaimer.js';
+import { MATERIALS_ROOT_ENV, formatMaterialsRoot } from '../src/services/dshMaterialsResolver.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '..');
@@ -129,11 +130,14 @@ const clockToleranceMs = config.clockToleranceMs === undefined ? resolveClockTol
 const staleWarn = checkTimeoutVsStale({ timeoutMs: opts.timeoutMs, staleMs });
 if (staleWarn) console.log(staleWarn.message);
 
+// ★R2-B21：按 job 解析该作业物料目录（env DSH_GRADER_MATERIALS_ROOT；空 ⇒ 沿用装置默认源目录）
+const materialsRoot = String(process.env[MATERIALS_ROOT_ENV] || '').trim() || null;
+
 const device = opts.device || 'node';
 const deviceArgs = opts.deviceArgs.length ? opts.deviceArgs : [path.join(SERVER, 'scripts', 'stub-device.mjs')];
 console.log('WORKER_START db=/' + dbName + ' idle_backoff_ms=' + config.idleBackoffMs + ' max_backoff_ms=' + config.maxBackoffMs
   + ' failure_backoff_ms=' + config.failureBackoffMs + ' max_consecutive_failures=' + config.maxConsecutiveFailures
-  + ' db_limit=' + (config.dbLimit === undefined ? 'auto' : config.dbLimit) + ' stale_running_ms=' + staleMs + ' clock_tolerance_ms=' + clockToleranceMs + ' device=' + device);
+  + ' db_limit=' + (config.dbLimit === undefined ? 'auto' : config.dbLimit) + ' stale_running_ms=' + staleMs + ' clock_tolerance_ms=' + clockToleranceMs + ' ' + formatMaterialsRoot(materialsRoot) + ' device=' + device);
 
 // ★R2-B17：领取第一个 job **之前**回收僵尸 running 行（否则 DB 级闸会被永久占住且静默停摆）
 let reclaim;
@@ -149,7 +153,7 @@ const res = await runWorkerLoop({
   prisma,
   runOnceImpl: ({ dbLimit }) => runOnce({
     prisma, dbLimit, deviceCommand: device, deviceArgs, stubEnv: opts.stubEnv, extraEnv: llmEnv(platform), reuseChecker: opts.reuseChecker,
-    timeoutMs: opts.timeoutMs, repoRoot: path.resolve(SERVER, '..'),
+    timeoutMs: opts.timeoutMs, materialsRoot, repoRoot: path.resolve(SERVER, '..'),
   }),
   config,
   stopSignal,
