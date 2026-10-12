@@ -40,35 +40,23 @@
                     </div>
                 </section>
 
-                <!-- 交互演示（自动发现 components/manual/sections/*.vue，按 meta.order 排序；
-                     新增演示只需新增文件，不必改本文件 —— 见 components/manual/README.md） -->
-                <section id="demos" class="doc-section">
-                    <h2 class="section-title">交互演示（可播放）</h2>
-                    <div class="section-body">
-                        <p>下面的演示<b>不是视频、也不是截图</b>，而是真实界面元素的复刻：点 ▶ 播放，可暂停、可重播。每段演示对应一个章节，建议与该章节对照着看。</p>
-                        <article v-for="d in manualDemos" :id="'demo-' + d.anchor" :key="d.key" class="demo-item">
-                            <h3 class="demo-title">{{ d.title }}</h3>
-                            <component :is="d.comp" :fallback="d.fallback" />
-                        </article>
-                        <p v-if="!manualDemos.length" class="demo-empty">演示正在补充中。</p>
-                    </div>
-                </section>
-
                 <!-- 2~5 静态章节 -->
                 <section v-for="sec in sections2to5" :key="sec.id" :id="sec.id" class="doc-section">
                     <h2 class="section-title">{{ sec.title }}</h2>
+                    <div v-if="sec.demo" class="doc-demo-inline">
+                        <component :is="sec.demo" :fallback="'/exam/doc-img/demo-' + sec.id + '-light.png'" />
+                    </div>
                     <div class="section-body" v-html="sec.content" />
                 </section>
 
                 <!-- 6. 题库管理（交互式步骤条） -->
                 <section id="questions" class="doc-section">
                     <h2 class="section-title">6. 题库管理</h2>
+                        <div class="doc-demo-inline"><QuestionsSection :fallback="'/exam/doc-img/demo-questions-light.png'" /></div>
                     <div class="section-body">
                         <h3>6.1 题目结构</h3>
                         <p>每道题目为「<b>大题 + N 道小题</b>」的结构。大题包含标题、难度、总分（= 各小题分值之和）；每道小题可独立设置语言、分值和参考答案。</p>
-                        <img class="doc-img doc-img--focus" tabindex="0" :src="'/exam/doc-img/demo-questions-focus-light.png'" alt="6. 题库管理 · 要点定位图" />
-
-                        <h3>6.2 新建题目流程</h3>
+<h3>6.2 新建题目流程</h3>
                         <p>点击「新增题目」进入编辑页，通过 <b>AI 解析试卷文档</b> 快速创建题目：</p>
                         <a-steps :current="qStep" :items="qStepItems" size="small" style="margin:20px 0;"
                             @change="qStep = $event" />
@@ -101,18 +89,17 @@
                         <h3>6.6 编辑 / 删除</h3>
                         <p>在题库列表中可「编辑」或「删除」已有题目。删除前请确认该题目未被作业引用。</p>
                     </div>
-                        <p class="doc-demo-tip">▶ 本节有 <b>可播放演示</b>：<a href="#demo-questions">6. 题库管理 · 交互演示</a>（在正文上方的「交互演示」区；也可 <a href="/exam/doc/demos" target="_blank" rel="noopener">单独打开全部演示</a>。演示是真实界面元素的复刻，可暂停、可重播）</p>
-                    </section>
+</section>
 
                 <section id="project" class="doc-section">
                     <h2 class="section-title">7. 实训题管理 <a-tag class="tag-warning" size="small" style="margin-left:4px;vertical-align:middle;">BETA</a-tag></h2>
+                        <div class="doc-demo-inline"><ProjectSection :fallback="'/exam/doc-img/demo-project-light.png'" /></div>
                     <div class="section-body">
                         <p>实训题 = 完整工程项目实践任务（如「用户管理系统（前端）」）。学生上传项目压缩包，系统自动进行 AI 评分：<b>上传了标准工程包</b> → 与标准包<b>对比评分</b>；<b>未上传标准工程包</b>（开放性题目）→ 只依据评分标准做<b>评价式评分</b>，不与参考答案对比。</p>
 
                         <h3>① 新增实训题</h3>
                         <p>进入<b>题库管理</b>，点击右上角「新增题目」→ 下拉选择<b>实训题</b> <a-tag class="tag-warning" size="small">BETA</a-tag>：</p>
-                        <img class="doc-img doc-img--focus" tabindex="0" :src="'/exam/doc-img/demo-project-focus-light.png'" alt="7. 实训题管理 · 要点定位图" />
-                        <ul>
+<ul>
                             <li>填写<b>题目名称 / 难度 / 满分</b>；</li>
                             <li>「题目描述」「评分标准」通过模态框编辑，<b>确定才生效，取消即还原</b>；不填评分标准则使用默认标准（功能完整性 50% + 代码规范 25% + 健壮性 25%）；</li>
                             <li><b>上传标准工程包</b>（zip，<b>可选</b>）：上传则系统以此为学生提交的参照进行 AI 对比评分；<b>不上传即为开放性题目</b>——AI 不臆造标准答案，只依据评分标准逐条评价（建议在评分标准中写明必须完成的功能及对应分值）；</li>
@@ -146,12 +133,14 @@
                             <li>「查看 AI 提示词」所见即所用：开放性题目的角色为<b>项目评审专家</b>，提示词中<b>没有「标准答案源码」段</b>，与真实评分调用逐字节一致。</li>
                         </ul>
                     </div>
-                        <p class="doc-demo-tip">▶ 本节有 <b>可播放演示</b>：<a href="#demo-project">7. 实训题管理 · 交互演示</a>（在正文上方的「交互演示」区；也可 <a href="/exam/doc/demos" target="_blank" rel="noopener">单独打开全部演示</a>。演示是真实界面元素的复刻，可暂停、可重播）</p>
-                    </section>
+</section>
 
                 <!-- 7. 静态章节 -->
                 <section v-for="sec in sections7" :key="sec.id" :id="sec.id" class="doc-section">
                     <h2 class="section-title">{{ sec.title }}</h2>
+                    <div v-if="sec.demo" class="doc-demo-inline">
+                        <component :is="sec.demo" :fallback="'/exam/doc-img/demo-' + sec.id + '-light.png'" />
+                    </div>
                     <div class="section-body" v-html="sec.content" />
                 </section>
 
@@ -196,6 +185,9 @@
                 <!-- 10~11 静态章节 -->
                 <section v-for="sec in sections9to10" :key="sec.id" :id="sec.id" class="doc-section">
                     <h2 class="section-title">{{ sec.title }}</h2>
+                    <div v-if="sec.demo" class="doc-demo-inline">
+                        <component :is="sec.demo" :fallback="'/exam/doc-img/demo-' + sec.id + '-light.png'" />
+                    </div>
                     <div class="section-body" v-html="sec.content" />
                 </section>
             </main>
@@ -227,6 +219,16 @@
 import { ref, computed, h, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import { BarsOutlined } from '@ant-design/icons-vue';
 import { Tag } from 'ant-design-vue';
+
+// 手册各章节的可播放演示（真实界面元素复刻；每个演示 = components/manual/sections/*.vue）
+import QuickstartSection from '../components/manual/sections/QuickstartSection.vue';
+import ClassesSection from '../components/manual/sections/ClassesSection.vue';
+import StudentsSection from '../components/manual/sections/StudentsSection.vue';
+import TeamsSection from '../components/manual/sections/TeamsSection.vue';
+import QuestionsSection from '../components/manual/sections/QuestionsSection.vue';
+import AssignHomeworkSection from '../components/manual/sections/AssignHomeworkSection.vue';
+import ReviewSection from '../components/manual/sections/ReviewSection.vue';
+import ProjectSection from '../components/manual/sections/ProjectSection.vue';
 
 const showMobileToc = ref(false);
 const mobileTocOpen = ref(false);
@@ -321,12 +323,10 @@ onUnmounted(() => { window.removeEventListener('resize', checkMobile); window.re
 
 const sections2to7 = [
     {
-        id: 'quickstart', title: '2. 快速入门', content: `
+        id: 'quickstart', title: '2. 快速入门', demo: QuickstartSection, content: `
     <h3>2.1 登录系统</h3>
     <p>使用学校分配的<b>工号</b>和<b>密码</b>登录。打开系统地址后，在登录页输入工号和密码，点击「登录」按钮进入系统。</p>
-    <img class="doc-img doc-img--focus" tabindex="0" src="/exam/doc-img/demo-quickstart-focus-light.png" alt="2. 快速入门 · 要点定位图" />
-
-    <h3>2.2 界面概览</h3>
+<h3>2.2 界面概览</h3>
     <p>登录后进入教师工作台，左侧为<b>导航菜单</b>，顶部为<b>操作栏</b>。</p>
     
 
@@ -342,26 +342,22 @@ const sections2to7 = [
 
     <h3>2.3 个人信息与密码</h3>
     <p>点击右上角头像 →「我的信息」，可查看个人信息和修改密码。展开「修改密码」面板，输入原密码和新密码后确认即可。</p>
-    <p class="doc-demo-tip">▶ 本节有 <b>可播放演示</b>：<a href="#demo-quickstart">2. 快速入门 · 交互演示</a>（在正文上方的「交互演示」区；也可 <a href="/exam/doc/demos" target="_blank" rel="noopener">单独打开全部演示</a>。演示是真实界面元素的复刻，可暂停、可重播）</p>
-  `},
+`},
 
     {
-        id: 'classes', title: '3. 班级管理', content: `
+        id: 'classes', title: '3. 班级管理', demo: ClassesSection, content: `
     <h3>3.1 创建班级</h3>
     <p>点击「新增班级」按钮，在弹出的模态框中填写<b>班级名称</b>，可选择性地将班级加入已有的<b>教学团队</b>（留空则不加入任何团队）。点击「确定」完成创建。</p>
-    <img class="doc-img doc-img--focus" tabindex="0" src="/exam/doc-img/demo-classes-focus-light.png" alt="3. 班级管理 · 要点定位图" />
-
-    <h3>3.2 指定教学团队</h3>
+<h3>3.2 指定教学团队</h3>
     <p>创建或编辑班级时，可通过「指定教学团队」下拉框选择一个或多个团队。班级加入团队后，团队内所有教师均可查看和管理该班级的学生、作业和审核。</p>
     <div class="a-alert a-alert-info">💡 <b>提示：</b>班级的创建者自动成为该班级的授课教师。通过团队共享的班级，非创建者教师对班级仅有只读权限。</div>
 
     <h3>3.3 团队共享班级标识</h3>
     <p>在班级列表中，来自团队共享的班级会显示<span class="doc-tag doc-tag-purple">团队共享 · 教师姓名</span>。这类班级的「编辑」和「删除」按钮会被禁用。</p>
-    <p class="doc-demo-tip">▶ 本节有 <b>可播放演示</b>：<a href="#demo-classes">3. 班级管理 · 交互演示</a>（在正文上方的「交互演示」区；也可 <a href="/exam/doc/demos" target="_blank" rel="noopener">单独打开全部演示</a>。演示是真实界面元素的复刻，可暂停、可重播）</p>
-  `},
+`},
 
     {
-        id: 'students', title: '4. 学生管理', content: `
+        id: 'students', title: '4. 学生管理', demo: StudentsSection, content: `
     <h3>4.1 选择班级</h3>
     <p>进入学生管理页后，须先在顶部下拉框中选择一个班级。选择后页面显示该班学生列表。团队共享的班级选项旁会显示<span class="doc-tag doc-tag-purple">团队</span> 标签。</p>
 
@@ -382,9 +378,7 @@ const sections2to7 = [
       <tr><td>teststudent1</td><td>测试学生1</td></tr>
       <tr><td>teststudent2</td><td>测试学生2</td></tr>
     </table>
-    <img class="doc-img doc-img--focus" tabindex="0" src="/exam/doc-img/demo-students-focus-light.png" alt="4. 学生管理 · 要点定位图" />
-
-    <h3>4.4 团队班级只读限制</h3>
+<h3>4.4 团队班级只读限制</h3>
     <p>当选择了团队共享的班级时：</p>
     <ul>
       <li>页面顶部出现 <span class="doc-tag doc-tag-purple">团队共享班级 · 只读</span> 提示</li>
@@ -392,16 +386,13 @@ const sections2to7 = [
       <li>表格中的「编辑」「删除」按钮被禁用</li>
       <li>学生名单仍可正常查看</li>
     </ul>
-    <p class="doc-demo-tip">▶ 本节有 <b>可播放演示</b>：<a href="#demo-students">4. 学生管理 · 交互演示</a>（在正文上方的「交互演示」区；也可 <a href="/exam/doc/demos" target="_blank" rel="noopener">单独打开全部演示</a>。演示是真实界面元素的复刻，可暂停、可重播）</p>
-  `},
+`},
 
     {
-        id: 'teams', title: '5. 教学团队', content: `
+        id: 'teams', title: '5. 教学团队', demo: TeamsSection, content: `
     <h3>5.1 创建团队</h3>
     <p>进入「教学团队」页面，点击「创建团队」按钮，输入团队名称即可创建。创建者自动成为团队成员，角色标注为「创建者」。</p>
-    <img class="doc-img doc-img--focus" tabindex="0" src="/exam/doc-img/demo-teams-focus-light.png" alt="5. 教学团队 · 要点定位图" />
-
-    <h3>5.2 管理团队成员</h3>
+<h3>5.2 管理团队成员</h3>
     <p>点击团队的「管理」按钮进入详情页，默认显示「教师管理」标签：</p>
     <ul>
       <li><b>添加教师：</b>在搜索框中搜索同校教师，选中即可添加（300ms 防抖自动保存）</li>
@@ -433,16 +424,13 @@ const sections2to7 = [
       <li>此后 A 和 B 都能看到两个班级的学生名单、布置作业、审核评分</li>
       <li>但对非自己创建的班级，操作按钮为只读状态</li>
     </ul>
-    <p class="doc-demo-tip">▶ 本节有 <b>可播放演示</b>：<a href="#demo-teams">5. 教学团队 · 交互演示</a>（在正文上方的「交互演示」区；也可 <a href="/exam/doc/demos" target="_blank" rel="noopener">单独打开全部演示</a>。演示是真实界面元素的复刻，可暂停、可重播）</p>
-  `},
+`},
 
     {
-        id: 'questions', title: '6. 题库管理', content: `
+        id: 'questions', title: '6. 题库管理', demo: QuestionsSection, content: `
     <h3>6.1 题目结构</h3>
     <p>每道题目为「<b>大题 + N 道小题</b>」的结构。大题包含标题、难度、满分、题目材料；每道小题包含内容描述、分值、参考答案、评分标准、编程语言。</p>
-    <img class="doc-img doc-img--focus" tabindex="0" src="/exam/doc-img/demo-questions-focus-light.png" alt="6. 题库管理 · 要点定位图" />
-
-    <h3>6.2 创建题目</h3>
+<h3>6.2 创建题目</h3>
     <p>点击「新增题目」进入编辑页：</p>
     <ol>
       <li><b>基本信息：</b>填写大题标题、选择难度（简单/中等/困难）、设定满分</li>
@@ -457,18 +445,16 @@ const sections2to7 = [
 
     <h3>6.4 编辑 / 删除</h3>
     <p>在题库列表中可「编辑」或「删除」已有题目。删除前请确认该题目未被作业引用。</p>
-    <p class="doc-demo-tip">▶ 本节有 <b>可播放演示</b>：<a href="#demo-questions">6. 题库管理 · 交互演示</a>（在正文上方的「交互演示」区；也可 <a href="/exam/doc/demos" target="_blank" rel="noopener">单独打开全部演示</a>。演示是真实界面元素的复刻，可暂停、可重播）</p>
-  `},
+`},
 
     {
-        id: 'assignments', title: '8. 作业管理', content: `
+        id: 'assignments', title: '8. 作业管理', demo: AssignHomeworkSection, content: `
     <h3>7.1 布置作业</h3>
     <p>点击「布置作业」进入三步向导：</p>
     <div class="a-alert a-alert-info">💡 本系统每份作业只包含<b>一道题目</b>（可含多道小题）。如需布置多道题目，请分别创建多份作业。</div>
     <p><b>第一步 · 选题：</b>搜索并选择一道题目（单选）。</p>
     <p><b>第二步 · 选班：</b>左侧为可选班级列表，点击选中；右侧为已选班级。团队共享班级会显示 <span class="doc-tag doc-tag-purple">团队</span> 标签，选中后显示归属教师名。</p>
-    <img class="doc-img doc-img--focus" tabindex="0" src="/exam/doc-img/demo-assignments-focus-light.png" alt="8. 作业管理 · 要点定位图" />
-    <p><b>第三步 · 设置时间：</b>填写作业标题、说明，选择起止时间（精确到分钟），设置是否允许补交。</p>
+<p><b>第三步 · 设置时间：</b>填写作业标题、说明，选择起止时间（精确到分钟），设置是否允许补交。</p>
     
 
     <h3>7.2 补交控制</h3>
@@ -480,13 +466,12 @@ const sections2to7 = [
 
     <h3>7.3 作业列表</h3>
     <p>作业管理页显示所有已布置的作业，包括标题、题目数、提交数、起止时间。点击表格行可查看详情。</p>
-    <p class="doc-demo-tip">▶ 本节有 <b>可播放演示</b>：<a href="#demo-assignments">8. 作业管理 · 交互演示</a>（在正文上方的「交互演示」区；也可 <a href="/exam/doc/demos" target="_blank" rel="noopener">单独打开全部演示</a>。演示是真实界面元素的复刻，可暂停、可重播）</p>
-  `},
+`},
 ];
 
 const sections9to10 = [
     {
-        id: 'review', title: '11. 评分审核', content: `
+        id: 'review', title: '11. 评分审核', demo: ReviewSection, content: `
     <h3>9.1 审核列表</h3>
     <p>进入「评分审核」页面，选择班级后查看所有作业的审核状态。</p>
     <table class="doc-table">
@@ -495,9 +480,7 @@ const sections9to10 = [
       <tr><td>审核状态</td><td><span class="doc-tag doc-tag-orange">待审核</span> <span class="doc-tag doc-tag-green">已审核</span></td></tr>
       <tr><td>已交/未交</td><td>该班学生提交情况统计</td></tr>
     </table>
-    <img class="doc-img doc-img--focus" tabindex="0" src="/exam/doc-img/demo-review-focus-light.png" alt="11. 评分审核 · 要点定位图" />
-
-    <div class="a-alert a-alert-info">💡 <b>审核 vs 发布：</b>「审核」仅保存教师的最终分数和评语，学生此时<b>看不到成绩</b>。教师需要点击「发布」按钮，学生端才会显示分数和评语。发布后如需修改分数，修改后重新点击「发布」即可覆盖更新。</div>
+<div class="a-alert a-alert-info">💡 <b>审核 vs 发布：</b>「审核」仅保存教师的最终分数和评语，学生此时<b>看不到成绩</b>。教师需要点击「发布」按钮，学生端才会显示分数和评语。发布后如需修改分数，修改后重新点击「发布」即可覆盖更新。</div>
 
     <h3>9.2 班级审核</h3>
     <p>在审核列表点击「审核」进入班级审核页，查看全班学生的评分状态和成绩：</p>
@@ -520,8 +503,7 @@ const sections9to10 = [
 
     <h3>9.6 导出 Excel</h3>
     <p>在审核列表和班级审核页均可使用「导出」功能，导出包含每道小题分数的 Excel 报表。Excel 中动态生成各小题得分列，方便成绩统计。</p>
-    <p class="doc-demo-tip">▶ 本节有 <b>可播放演示</b>：<a href="#demo-review">11. 评分审核 · 交互演示</a>（在正文上方的「交互演示」区；也可 <a href="/exam/doc/demos" target="_blank" rel="noopener">单独打开全部演示</a>。演示是真实界面元素的复刻，可暂停、可重播）</p>
-  `},
+`},
 
     {
         id: 'faq', title: '12. 常见问题', content: `
@@ -578,7 +560,6 @@ const manualDemos = Object.entries(manualModules)
 
 const allSections = [
     { id: 'intro', title: '1. 系统简介' },
-    { id: 'demos', title: '交互演示 ▶' },
     ...sections2to5.value,
     { id: 'questions', title: '6. 题库管理' },
     { id: 'project', title: '7. 实训题' },
@@ -1153,4 +1134,6 @@ const anchors = allSections.map(s => ({
     background: var(--status-info-bg); border: 1px solid var(--status-info-bd); color: var(--status-info-fg);
     font-size: var(--fs-body-sm); line-height: 1.7; }
 .doc-demo-tip a { color: inherit; font-weight: 600; text-decoration: underline; }
+/* 内联演示：跟着章节走（原来集中在正文上方，观感很乱） */
+.doc-demo-inline { margin: var(--space-4) 0 var(--space-5); }
 </style>
