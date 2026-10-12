@@ -311,7 +311,7 @@ function handleMenu ({ key }) {
     if (key === 'theme-dark') { setMode('dark'); return; }
     if (key === 'theme-system') { setMode('system'); return; }
     if (key === 'flow') { showFlowModal.value = true; return; }
-    if (key === 'doc') { window.open('/exam/doc', '_blank'); return; }
+    if (key === 'doc') { window.open((import.meta.env.BASE_URL || '/').replace(/\/$/, '') + '/doc', '_blank'); return; }
     if (key === 'profile') {
         showProfile.value = true;
     } else if (key === 'logout') {

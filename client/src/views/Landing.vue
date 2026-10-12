@@ -27,6 +27,13 @@ const consolePath = computed(() => {
   return '/' + (role === 'super_admin' ? 'admin' : role);
 });
 
+/** 站点基路径：应用部署在子路径（生产为 /exam/）时，根绝对链接会 404 ⇒ 统一走 base 前缀 */
+const BASE = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+const withBase = (p) => BASE + (p.startsWith('/') ? p : '/' + p);
+const loginHref = computed(() => withBase('/login'));
+const consoleHref = computed(() => withBase(consolePath.value));
+const docHref = computed(() => withBase('/doc'));
+
 /* ===== ① 控制台窗口：由**侧栏**切换视图（原来那行「题库管理/评分审核/作业管理 可点击切换」已按用户要求取消） ===== */
 const activeView = ref('questions');
 /** 「新增题目」下拉：演示用 —— 只弹出菜单，不进新建页；点外部/Esc 关闭 */
@@ -161,11 +168,11 @@ const rubricPublished = ref(false);
         <nav class="nav-links" aria-label="首页导航">
           <a class="nav-link" href="#capability">系统能力</a>
           <a class="nav-link" href="#flow">评分流程</a>
-          <a class="nav-link" href="/exam/doc" target="_blank" rel="noopener">
+          <a class="nav-link" :href="docHref" target="_blank" rel="noopener">
             <svg class="icon" aria-hidden="true"><use href="#lg-book" /></svg>使用文档
           </a>
           <ThemeToggle />
-          <a class="btn btn-primary btn-sm" :href="loggedIn ? consolePath : '/login'">
+          <a class="btn btn-primary btn-sm" :href="loggedIn ? consoleHref : loginHref">
             {{ loggedIn ? '进入控制台' : '教师登录' }}
           </a>
         </nav>
@@ -186,11 +193,11 @@ const rubricPublished = ref(false);
               客观题自动判分；主观题与实训工程包由 AI 按你的评分标准给出分数与评语，教师只做终审。
             </p>
             <div class="cta-row">
-              <a class="btn btn-primary btn-lg" :href="loggedIn ? consolePath : '/login'">
+              <a class="btn btn-primary btn-lg" :href="loggedIn ? consoleHref : loginHref">
                 {{ loggedIn ? '进入控制台' : '教师登录' }}
                 <svg class="icon" aria-hidden="true"><use href="#lg-arrow" /></svg>
               </a>
-              <a class="btn btn-ghost btn-lg" href="/exam/doc" target="_blank" rel="noopener">
+              <a class="btn btn-ghost btn-lg" :href="docHref" target="_blank" rel="noopener">
                 <svg class="icon" aria-hidden="true"><use href="#lg-book" /></svg>查看使用文档
               </a>
             </div>
@@ -512,7 +519,7 @@ const rubricPublished = ref(false);
               <h2>已经在校园网里部署好了？</h2>
               <p>{{ loggedIn ? '已登录，直接进入控制台继续建题与审核。' : '用教师账号登录，从「题库管理」开始建第一道题。' }}</p>
             </div>
-            <a class="btn btn-white btn-lg" :href="loggedIn ? consolePath : '/login'">
+            <a class="btn btn-white btn-lg" :href="loggedIn ? consoleHref : loginHref">
               {{ loggedIn ? '进入控制台' : '教师登录' }}<svg class="icon" aria-hidden="true"><use href="#lg-arrow" /></svg>
             </a>
           </div>
@@ -528,8 +535,8 @@ const rubricPublished = ref(false);
         <span class="sep" aria-hidden="true"></span>
         <span>面向高校编程课的 AI 评分平台 · 校内网部署</span>
         <span class="foot-links">
-          <a href="/exam/doc" target="_blank" rel="noopener">使用文档</a>
-          <a :href="loggedIn ? consolePath : '/login'">{{ loggedIn ? '进入控制台' : '教师登录' }}</a>
+          <a :href="docHref" target="_blank" rel="noopener">使用文档</a>
+          <a :href="loggedIn ? consoleHref : loginHref">{{ loggedIn ? '进入控制台' : '教师登录' }}</a>
           <a href="#capability">系统能力</a>
         </span>
       </div>
