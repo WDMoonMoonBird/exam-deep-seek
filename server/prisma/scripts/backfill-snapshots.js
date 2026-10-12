@@ -25,7 +25,7 @@ export const NEED_MIGRATION = 'PRECONDITION_MIGRATION_NOT_APPLIED'; // exit 3
 export const USAGE = 'USAGE_ERROR';              // exit 4
 
 export function parseArgs(argv) {
-  const opts = { mode: 'dry-run', limit: 200, dbUrl: '', allowDb: '', standardHash: '', json: false };
+  const opts = { mode: 'dry-run', limit: 200, dbUrl: '', allowDb: '', allowProd: false, standardHash: '', json: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dry-run') opts.mode = 'dry-run';
@@ -34,6 +34,7 @@ export function parseArgs(argv) {
     else if (a === '--limit') { const v = parseInt(argv[++i], 10); opts.limit = Number.isFinite(v) && v > 0 ? v : 200; }
     else if (a === '--db-url') opts.dbUrl = argv[++i] || '';
     else if (a === '--allow-db') opts.allowDb = argv[++i] || '';
+    else if (a === '--allow-prod') opts.allowProd = true; // R2-B6：显式生产授权开关（每调用显式给出，不写死）
     else if (a === '--standard-hash') opts.standardHash = argv[++i] || '';
     else return { error: 'unknown_arg:' + a };
   }
@@ -44,12 +45,24 @@ export function dbNameOf(url) {
   try { return new URL(url).pathname.replace(/^\//, ''); } catch { return ''; }
 }
 
-export function assertApplyAllowed({ mode, dbName, allowDb }) {
-  if (mode !== 'apply') return { ok: true };
+/**
+ * R2-B6：--apply 的库授权（**连库之前**判定）。
+ *  - 白名单内的库（默认只有测试库）：--allow-db <同名> 即可（与批 1/2 行为一致）；
+ *  - 白名单外的库（生产）：**双重显式 opt-in** —— 必须同时给 --allow-db <同名> 与 --allow-prod，
+ *    只给其一仍拒绝（退出码 2，且不发生任何连接）。
+ *  - 授权永远来自本次调用的命令行，不写死进常量（ALLOWED_APPLY_DBS 仍只含测试库）。
+ */
+export function assertApplyAllowed({ mode, dbName, allowDb, allowProd = false }) {
+  if (mode !== 'apply') return { ok: true, authorizedProd: false };
   if (!dbName) return { ok: false, exitCode: 4, code: USAGE, reason: 'no_db_url' };
-  if (!ALLOWED_APPLY_DBS.includes(dbName)) return { ok: false, exitCode: 2, code: REFUSE_PROD, reason: 'db_not_allowed:' + dbName };
+  const inWhitelist = ALLOWED_APPLY_DBS.includes(dbName);
+  if (!inWhitelist) {
+    if (allowDb !== dbName) return { ok: false, exitCode: 2, code: REFUSE_PROD, reason: 'allow_db_required:' + dbName };
+    if (allowProd !== true) return { ok: false, exitCode: 2, code: REFUSE_PROD, reason: 'allow_prod_required:' + dbName };
+    return { ok: true, authorizedProd: true, authorization: '--allow-db+--allow-prod' };
+  }
   if (allowDb !== dbName) return { ok: false, exitCode: 2, code: REFUSE_PROD, reason: 'allow_db_mismatch:' + (allowDb || '(empty)') };
-  return { ok: true };
+  return { ok: true, authorizedProd: false, authorization: 'whitelist+--allow-db' };
 }
 
 /** 目标集：project 型题 + 该链接尚无快照（有快照列时附加 IS NULL 保证幂等） */
@@ -105,8 +118,10 @@ async function main() {
 
   // ★守卫前置：--apply 的目标库检查在建连接/任何查询之前完成（生产库连都不连）
   if (opts.mode === 'apply') {
-    const pre = assertApplyAllowed({ mode: opts.mode, dbName, allowDb: opts.allowDb });
+    const pre = assertApplyAllowed({ mode: opts.mode, dbName, allowDb: opts.allowDb, allowProd: opts.allowProd });
     if (!pre.ok) { console.log('RESULT=' + pre.code + ' reason=' + pre.reason); return pre.exitCode; }
+    // R2-B6 可审计：放行时打印授权来源与目标库名
+    console.log('AUDIT target_db=' + dbName + ' allow_db=' + (opts.allowDb || '(empty)') + ' allow_prod=' + (opts.allowProd ? 'yes' : 'no') + ' authorization=' + pre.authorization + ' authorized_prod=' + (pre.authorizedProd ? 'yes' : 'no'));
   }
 
   const prisma = new PrismaClient({ datasources: { db: { url } } });

@@ -23,13 +23,14 @@ export const NEED_MIGRATION = 'PRECONDITION_MIGRATION_NOT_APPLIED';
 export const USAGE = 'USAGE_ERROR';
 
 export function parseArgs(argv) {
-  const opts = { mode: 'dry-run', dbUrl: '', allowDb: '' };
+  const opts = { mode: 'dry-run', dbUrl: '', allowDb: '', allowProd: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dry-run') opts.mode = 'dry-run';
     else if (a === '--apply') opts.mode = 'apply';
     else if (a === '--db-url') opts.dbUrl = argv[++i] || '';
     else if (a === '--allow-db') opts.allowDb = argv[++i] || '';
+    else if (a === '--allow-prod') opts.allowProd = true; // R2-B6：显式生产授权开关（与 backfill 对称）
     else return { error: 'unknown_arg:' + a };
   }
   return opts;
@@ -43,14 +44,26 @@ export function dbNameOf(url) {
  * 库守卫（必须在建连接之前调用）：导出以便单测直接覆盖。
  * 返回 { ok, exitCode, code, reason }；ok=false 时调用方不得建立任何数据库连接。
  */
-export function assertDbAllowed({ dbName, allowDb, mode = 'dry-run' }) {
+/**
+ * R2-B6：库授权（**连库之前**判定，dry-run 与 --apply 都过闸）。
+ *  - 白名单内的库（默认只有测试库）：--allow-db <同名> 即可；
+ *  - 白名单外的库（生产）：**双重显式 opt-in** —— 必须同时给 --allow-db <同名> 与 --allow-prod；
+ *    只给其一仍拒绝（退出码 2，且不发生任何连接）。
+ */
+export function assertDbAllowed({ dbName, allowDb, allowProd = false, mode = 'dry-run' }) {
   if (!dbName) return { ok: false, exitCode: 4, code: USAGE, reason: 'no_db_url' };
   if (!allowDb) return { ok: false, exitCode: 2, code: REFUSE_PROD, reason: 'allow_db_required:' + dbName };
   if (allowDb !== dbName) return { ok: false, exitCode: 2, code: REFUSE_PROD, reason: 'allow_db_mismatch:' + allowDb + '!=' + dbName };
-  if (mode === 'apply' && !ALLOWED_APPLY_DBS.includes(dbName)) {
-    return { ok: false, exitCode: 2, code: REFUSE_PROD, reason: 'db_not_allowed_for_apply:' + dbName };
+  const inWhitelist = ALLOWED_APPLY_DBS.includes(dbName);
+  if (!inWhitelist) {
+    // R2-B6 兼容口径：
+    //  - dry-run（只读）：--allow-db <同名> 即可（与批 1b/2 一致；仍在连库前判定）；
+    //  - --apply（写）：必须再给 --allow-prod（双重显式 opt-in），否则以既有
+    //    db_not_allowed_for_apply 语义拒绝（退出码 2，不发生连接）。
+    if (mode === 'apply' && allowProd !== true) return { ok: false, exitCode: 2, code: REFUSE_PROD, reason: 'db_not_allowed_for_apply:' + dbName };
+    return { ok: true, authorizedProd: mode === 'apply', authorization: allowProd === true ? '--allow-db+--allow-prod' : '--allow-db(dry-run)' };
   }
-  return { ok: true };
+  return { ok: true, authorizedProd: false, authorization: 'whitelist+--allow-db' };
 }
 
 export function buildRollbackSelectSql() {
@@ -79,7 +92,9 @@ async function main() {
   const dbName = dbNameOf(url);
 
   // 守卫前置：任何库校验不通过 => 直接返回，绝不建立连接
-  const guard = assertDbAllowed({ dbName, allowDb: opts.allowDb, mode: opts.mode });
+  const guard = assertDbAllowed({ dbName, allowDb: opts.allowDb, allowProd: opts.allowProd, mode: opts.mode });
+  if (!guard.ok) { console.log('RESULT=' + guard.code + ' reason=' + guard.reason); return guard.exitCode; }
+  console.log('AUDIT target_db=' + dbName + ' allow_db=' + (opts.allowDb || '(empty)') + ' allow_prod=' + (opts.allowProd ? 'yes' : 'no') + ' authorization=' + guard.authorization + ' authorized_prod=' + (guard.authorizedProd ? 'yes' : 'no'));
   if (!guard.ok) { console.log('RESULT=' + guard.code + ' reason=' + guard.reason); return guard.exitCode; }
 
   const prisma = new PrismaClient({ datasources: { db: { url } } });
