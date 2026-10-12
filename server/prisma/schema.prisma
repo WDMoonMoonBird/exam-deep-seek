@@ -278,6 +278,11 @@ model Submission {
   attemptCount    Int              @default(0) @map("attempt_count")
   bestScore       Int?             @map("best_score")
 
+  // R2-B3（W6）：装置消费回写 —— checker 版本 / 规范化结果哈希 / 陈旧标记（审计与零 LLM 复用依据）
+  checkerId        String?          @map("checker_id") @db.VarChar(80)
+  canonicalSha256  String?          @map("canonical_sha256") @db.VarChar(80)
+  gradingStale     Boolean?         @map("grading_stale")
+
   assignment  Assignment   @relation(fields: [assignmentId], references: [id])
   student     User         @relation("StudentSubmissions", fields: [studentId], references: [id])
   question    Question     @relation(fields: [questionId], references: [id])
@@ -292,6 +297,9 @@ model Submission {
   @@index([subQuestionId])
   @@map("submissions")
 }
+
+// ============================
+// 11. teams — 教学团队表
 
 // ============================
 // 11. teams — 教学团队表
@@ -485,4 +493,41 @@ model SubmissionFile {
   @@index([submissionId])
   @@index([submissionId, parentPath])
   @@map("submission_files")
+}
+
+// ============================
+// R2-B3（W6/W7）：作业级批改的 checker 持久化与幂等队列
+// ============================
+model GradingChecker {
+  id                 Int      @id @default(autoincrement())
+  checkerId          String   @unique @map("checker_id") @db.VarChar(80)
+  assignmentId       Int      @map("assignment_id") @db.UnsignedInt
+  questionId         Int?     @map("question_id") @db.UnsignedInt
+  versionHash        String   @map("version_hash") @db.VarChar(80)
+  rubricHash         String   @map("rubric_hash") @db.VarChar(80)
+  standardHash       String   @map("standard_hash") @db.VarChar(80)
+  status             String   @default("ready") @db.VarChar(16)
+  checkerJson        Json     @map("checker_json")
+  generatedSessionId String?  @map("generated_session_id") @db.VarChar(160)
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([assignmentId, status])
+  @@map("grading_checkers")
+}
+
+model GradingJob {
+  id           Int      @id @default(autoincrement())
+  assignmentId Int      @map("assignment_id") @db.UnsignedInt
+  checkerId    String   @map("checker_id") @db.VarChar(80)
+  status       String   @default("pending") @db.VarChar(16)
+  attempts     Int      @default(0)
+  writtenCount Int      @default(0) @map("written_count")
+  skippedCount Int      @default(0) @map("skipped_count")
+  lastError    String?  @map("last_error") @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([assignmentId, checkerId, status])
+  @@index([assignmentId])
+  @@map("grading_jobs")
 }

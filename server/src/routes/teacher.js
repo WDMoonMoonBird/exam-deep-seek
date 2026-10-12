@@ -10,6 +10,7 @@ const review = { ...reviewHttp, ...reviewIo };
 import * as projectReview from '../controllers/projectReviewController.js';
 import * as checker from '../controllers/checkerController.js';
 import * as team from '../controllers/teamController.js';
+import * as assignmentGrading from '../controllers/assignmentGradingController.js';
 
 const router = Router();
 router.use(auth, requireRole('teacher'));
@@ -72,6 +73,7 @@ router.get('/export-review', review.exportReviewData);
 router.get('/submissions/:id/project', review.getProjectReview);
 router.put('/submissions/:id/project/review', review.reviewProjectSubmission);
 router.post('/submissions/:id/project/regrade', projectReview.regradeProjectSubmission);
+router.post('/assignments/:id/grade', assignmentGrading.triggerAssignmentGrading); // W7：作业级批改触发（幂等）
 
 // 教学团队
 router.get('/teams', team.getTeams);
