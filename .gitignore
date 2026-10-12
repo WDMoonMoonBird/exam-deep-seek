@@ -42,3 +42,6 @@ tests/
 server/tmp-probe-ref-answer.mjs
 # 由 .md 生成的 PDF（可随时重新生成，避免入库后过期）
 docs/**/*.pdf
+
+# 探针/假装置若被以裸 flag 当路径调用，会在仓库根留下 --xxx/ 目录（已发生两次）
+--*/
