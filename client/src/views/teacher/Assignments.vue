@@ -131,74 +131,171 @@
       </template>
     </ListPage>
 
-    <a-modal title="布置作业" :open="visible" @cancel="visible = false" :width="820" :footer="null" :destroyOnClose="true" wrap-class-name="assign-modal">
-      <a-steps :current="step" class="steps">
-        <a-step title="选题" /><a-step title="选班" /><a-step title="设置时间" />
-      </a-steps>
-
-      <div v-if="step === 0">
-        <a-input-search v-model:value="qKeyword" placeholder="搜索题目" class="mb20" @search="searchQuestions" />
-        <!-- B3-1 ⑥：rowSelection.columnTitle 给 antd 自动生成的选择列一个「只读屏」列标题 →
-             消除 axe empty-table-header（<th class="ant-table-selection-column"> 改前为空）。视觉零变化。 -->
-        <a-table :columns="qCols" :dataSource="questions" rowKey="id" size="small" :scroll="{ x: 'max-content' }" :rowSelection="{ selectedRowKeys: selectedQIds, onChange: onQSelect, type: 'radio', columnTitle: qSelectColumnTitle }" :pagination="false">
-          <template #bodyCell="{ column, record }">
-            <template v-if="column.dataIndex === 'difficulty'">{{ difficultyText(record.difficulty) }}</template>
-          </template>
-        </a-table>
+    <!-- 布置作业（一页式两栏 —— 左分区表单 / 右实时摘要）
+         约束：只改 UI（数据全部取自现有接口：班级人数 _count.studentClasses、题目 type/maxScore、
+         上次作业 assignmentClasses[].classId + startTime/endTime）· 题目单选 · 考试/练习模式 UI 暂不显示
+         （提交口径不变：mode='exam'、maxAttempts=null）。 -->
+    <a-modal
+      :open="visible"
+      title="布置作业"
+      :width="modalWidth"
+      :footer="null"
+      :destroyOnClose="true"
+      wrap-class-name="assign-modal"
+      @cancel="onCancel"
+    >
+      <div v-if="draftRestored" class="draft-bar">
+        <span>已恢复上次未提交的草稿</span>
+        <button type="button" class="linkbtn" @click="clearDraft">清除草稿</button>
       </div>
 
-      <div v-if="step === 1" class="class-pick">
-        <div class="pick-panel">
-          <div class="pick-panel-title">可选班级</div>
-          <a-input-search v-model:value="classSearch" placeholder="搜索班级" size="small" />
-          <div class="pick-list">
-            <div v-for="c in filteredClasses" :key="c.id"
-              :class="['pick-item', { on: selectedCIds.includes(c.id) }]"
-              @click="toggleClass(c.id)">
-              <span>{{ c.name }}<StatusTag v-if="c.isTeamClass" tone="accent" text="团队" /></span>
-              <CheckOutlined v-if="selectedCIds.includes(c.id)" class="pick-check" />
+      <div class="assign-body">
+        <div class="assign-main">
+          <!-- ① 基本信息 -->
+          <section class="ablk">
+            <div class="ablk-h"><b>① 基本信息</b><span class="ablk-n">学生端显示这个标题</span></div>
+            <div class="ablk-b">
+              <div class="afld">
+                <label for="assign-title">作业标题</label>
+                <a-input
+                  id="assign-title"
+                  v-model:value="timeForm.title"
+                  placeholder="例如：第三章 循环与数组"
+                  :status="titleError ? 'error' : undefined"
+                  @blur="titleTouched = true"
+                />
+                <div v-if="titleError" class="afld-err" role="alert">⚠ 请填写作业标题</div>
+              </div>
+              <div class="afld">
+                <label for="assign-desc">作业说明（可选）</label>
+                <a-textarea id="assign-desc" v-model:value="timeForm.description" :rows="2" placeholder="要提醒学生注意什么？可留空" />
+              </div>
             </div>
-            <a-empty v-if="!filteredClasses.length" :image="false" description="无匹配班级" />
-          </div>
-        </div>
-        <div class="pick-panel">
-          <div class="pick-panel-title">已选 {{ selectedCIds.length }} 个班</div>
-          <div class="pick-list">
-            <!-- T4-F2 类别收口：团队班走 purple 预置色（暗 3.39:1）→ 团队班加 .tag-accent；普通班 blue 亮 5.50 / 暗 4.91 达标保持预置色 -->
-            <a-tag v-for="cid in selectedCIds" :key="cid" closable @close="toggleClass(cid)" :color="classTeamMap[cid] ? 'purple' : 'blue'" :class="classTeamMap[cid] ? 'tag-accent' : null">
-              {{ classNameMap[cid] }}
-              <span v-if="classTeamMap[cid]" class="pick-team"> · {{ classTeamMap[cid] }}</span>
-            </a-tag>
-            <a-empty v-if="!selectedCIds.length" :image="false" description="请从左侧选择" />
-          </div>
-        </div>
-      </div>
+          </section>
 
-      <div v-if="step === 2">
-        <a-form :model="timeForm" layout="vertical">
-          <a-form-item label="作业标题"><a-input v-model:value="timeForm.title" /></a-form-item>
-          <a-form-item label="作业说明"><a-textarea v-model:value="timeForm.description" :rows="3" /></a-form-item>
-          <a-form-item label="起止时间"><a-range-picker v-model:value="timeForm.timeRange" show-time :locale="dateLocale" /></a-form-item>
-          <a-form-item label="练习模式"><a-switch :checked="timeForm.isPractice" @change="onPracticeToggle" /></a-form-item>
-          <a-form-item v-if="timeForm.isPractice" label="允许提交次数">
-            <a-input-number v-model:value="timeForm.maxAttempts" :min="1" placeholder="不限" class="w-120" />
-            <span class="hint-inline">留空为不限次数</span>
-          </a-form-item>
-          <a-form-item v-if="!timeForm.isPractice" label="允许补交"><a-switch v-model:checked="timeForm.allowResubmit" /></a-form-item>
-        </a-form>
-      </div>
+          <!-- ② 题目（单选；整行可点） -->
+          <section class="ablk">
+            <div class="ablk-h"><b>② 题目</b><span class="ablk-n">单选 · 点整行即可选中</span></div>
+            <div v-if="selectedQ" class="picked">
+              <StatusTag :tone="selectedQ.type === 'project' ? 'accent' : 'brand'" :text="selectedQ.type === 'project' ? '实训题' : '编程题'" />
+              <b>{{ selectedQ.title }}</b>
+              <span class="picked-meta">{{ difficultyText(selectedQ.difficulty) }} · {{ selectedQ.maxScore }} 分</span>
+              <a-button type="link" size="small" @click="changeQuestion">换一题</a-button>
+            </div>
+            <template v-else>
+              <div class="ablk-b ablk-b--tight">
+                <a-input-search v-model:value="qKeyword" placeholder="搜索题目标题" allow-clear @search="searchQuestions" />
+              </div>
+              <!-- B3-1 ⑥：rowSelection.columnTitle 给 antd 自动生成的选择列一个「只读屏」列标题 →
+                   消除 axe empty-table-header。customRow 让整行可点（原实现必须精确点中圆点）。 -->
+              <a-table
+                :columns="qCols"
+                :dataSource="questions"
+                rowKey="id"
+                size="small"
+                :scroll="{ x: 'max-content' }"
+                :pagination="false"
+                :rowSelection="{ selectedRowKeys: selectedQIds, onChange: onQSelect, type: 'radio', columnTitle: qSelectColumnTitle }"
+                :customRow="questionRow"
+              >
+                <template #bodyCell="{ column, record }">
+                  <template v-if="column.dataIndex === 'type'">
+                    <StatusTag :tone="record.type === 'project' ? 'accent' : 'brand'" :text="record.type === 'project' ? '实训题' : '编程题'" />
+                  </template>
+                  <template v-else-if="column.dataIndex === 'difficulty'">{{ difficultyText(record.difficulty) }}</template>
+                  <template v-else-if="column.dataIndex === 'maxScore'">
+                    <span class="lp-num">{{ record.maxScore }}<u>分</u></span>
+                  </template>
+                </template>
+              </a-table>
+            </template>
+            <div v-if="pickError" class="afld-err afld-err--block" role="alert">⚠ 请选择一道题目</div>
+          </section>
 
-      <div class="step-actions">
-        <a-button v-if="step > 0" @click="step--">上一步</a-button>
-        <a-button v-if="step < 2" type="primary" @click="nextStep">下一步</a-button>
-        <a-button v-if="step === 2" type="primary" :loading="submitting" @click="submit">提交</a-button>
+          <!-- ③ 班级（点选 + 人数，数据来自班级列表的 _count.studentClasses） -->
+          <section class="ablk">
+            <div class="ablk-h">
+              <b>③ 班级</b><span class="ablk-n">可多选</span>
+              <button v-if="lastClasses.length" type="button" class="linkbtn linkbtn--right" @click="applyLastClasses">套用上次班级</button>
+            </div>
+            <div class="ablk-b">
+              <a-input-search v-if="avalClasses.length > 8" v-model:value="classSearch" size="small" placeholder="搜索班级" class="mb12" />
+              <div class="classlist">
+                <button
+                  v-for="c in filteredClasses"
+                  :key="c.id"
+                  type="button"
+                  class="cbtn"
+                  :class="{ 'is-on': selectedCIds.includes(c.id) }"
+                  :aria-pressed="selectedCIds.includes(c.id) ? 'true' : 'false'"
+                  @click="toggleClass(c.id)"
+                >
+                  <CheckOutlined v-if="selectedCIds.includes(c.id)" />
+                  <span class="cbtn-name">{{ c.name }}</span>
+                  <span v-if="c.isTeamClass" class="cbtn-team">团队</span>
+                  <span class="cbtn-cnt">{{ classCount(c) }} 人</span>
+                </button>
+              </div>
+              <div class="ahint">已选 {{ selectedCIds.length }} 个班 · 合计 {{ totalStudents }} 人</div>
+            </div>
+            <div v-if="classError" class="afld-err afld-err--block" role="alert">⚠ 请至少选择一个班级</div>
+          </section>
+
+          <!-- ④ 起止时间（默认已填 + 快捷预设；「允许补交」保留为考试态下的独立选项） -->
+          <section class="ablk">
+            <div class="ablk-h">
+              <b>④ 起止时间</b><span class="ablk-n">已默认填好，可修改</span>
+              <button v-if="lastTime" type="button" class="linkbtn linkbtn--right" @click="applyLastTime">套用上次时间</button>
+            </div>
+            <div class="ablk-b">
+              <div class="afld" role="group" aria-labelledby="assign-range-label">
+                <label id="assign-range-label" for="assign-range">起止时间</label>
+                <a-range-picker
+                  id="assign-range"
+                  v-model:value="timeForm.timeRange"
+                  show-time
+                  :locale="dateLocale"
+                  class="w-full"
+                  @change="timeTouched = true"
+                />
+                <div class="ahint">
+                  快捷：
+                  <button type="button" class="qbtn" @click="applyPreset(0)">今天 18:00 ~ 一周后 23:59</button>
+                  <button type="button" class="qbtn" @click="applyPreset(1)">明天 08:00 ~ 三天后 23:59</button>
+                </div>
+                <div v-if="timeError" class="afld-err" role="alert">⚠ 请选择起止时间</div>
+              </div>
+              <div class="afld">
+                <label>允许补交</label>
+                <div class="switch-row"><span>截止后仍可提交（记为补交）</span><a-switch v-model:checked="timeForm.allowResubmit" /></div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <aside class="assign-side">
+          <div class="asum">
+            <h4>将布置</h4>
+            <dl class="asum-dl">
+              <div class="kv"><dt>题目</dt><dd>{{ selectedQIds.length }} 题</dd></div>
+              <div class="kv"><dt>班级</dt><dd>{{ selectedCIds.length }} 个 · {{ totalStudents }} 人</dd></div>
+              <div class="kv"><dt>截止</dt><dd>{{ deadlineText }}</dd></div>
+            </dl>
+          </div>
+          <div class="aready" :class="missing.length ? 'is-warn' : 'is-ok'" role="status">
+            {{ missing.length ? '⚠ 还差：' + missing.join('、') : '✓ 信息齐了，可以布置' }}
+          </div>
+          <a-button type="primary" block :disabled="missing.length > 0" :loading="submitting" @click="submit">立即布置</a-button>
+          <a-button block @click="onCancel">取消</a-button>
+          <button type="button" class="linkbtn linkbtn--full" @click="saveDraftAndClose">存为草稿并关闭</button>
+        </aside>
       </div>
     </a-modal>
   </PageShell>
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted, onUpdated, nextTick, h } from 'vue';
+import { ref, reactive, computed, watch, onMounted, onUpdated, onBeforeUnmount, nextTick, h } from 'vue';
 import { message } from 'ant-design-vue';
 import { CheckOutlined, LockOutlined } from '@ant-design/icons-vue';
 import dayjs from 'dayjs';
@@ -325,7 +422,56 @@ function onEmptyAction() {
 
 // ===================== 布置作业向导（逻辑未改动） =====================
 const visible = ref(false);
-const step = ref(0);
+
+/* ===== 布置作业 v2：一页式表单 + 右侧实时摘要（约束：只改 UI · 题目单选 · 模式 UI 暂不显示） ===== */
+/** ≤768 时弹窗改为全屏 sheet（宽度走 prop，避免用 !important 盖 antd 的行内宽度；高度/圆角见文件末尾非 scoped 段） */
+const narrowMq = window.matchMedia('(max-width: 768px)');
+const isNarrow = ref(narrowMq.matches);
+const onNarrowChange = (e) => { isNarrow.value = e.matches; };
+narrowMq.addEventListener('change', onNarrowChange);
+onBeforeUnmount(() => narrowMq.removeEventListener('change', onNarrowChange));
+const modalWidth = computed(() => (isNarrow.value ? '100%' : 1040));
+const titleTouched = ref(false);
+const timeTouched = ref(false);
+const pickTouched = ref(false);
+const classTouched = ref(false);
+/** 已选题目记录：选中后题目区收成一张卡（可「换一题」），避免表格滚出视野后看不到选了什么 */
+const selectedQ = ref(null);
+const draftRestored = ref(false);
+const DRAFT_KEY = 'assign-draft-v1';
+
+const titleError = computed(() => titleTouched.value && !timeForm.title.trim());
+const timeError = computed(() => timeTouched.value && !(timeForm.timeRange && timeForm.timeRange.length));
+const pickError = computed(() => pickTouched.value && !selectedQIds.value.length);
+const classError = computed(() => classTouched.value && !selectedCIds.value.length);
+/** 未就绪项：主按钮据此禁用，摘要卡据此显示「还差：…」（替代点提交才 toast「请填写完整」） */
+const missing = computed(() => {
+  const m = [];
+  if (!selectedQIds.value.length) m.push('题目');
+  if (!selectedCIds.value.length) m.push('班级');
+  if (!timeForm.title.trim()) m.push('作业标题');
+  if (!(timeForm.timeRange && timeForm.timeRange.length)) m.push('起止时间');
+  return m;
+});
+const deadlineText = computed(() => {
+  const r = timeForm.timeRange;
+  return r && r.length >= 2 ? r[1].format('MM-DD HH:mm') : '—';
+});
+/** 班级人数：来自 GET /teacher/classes 每行的 _count.studentClasses（现有接口已返回，无需后端改动） */
+function classCount(c) { return c && c._count ? (c._count.studentClasses || 0) : 0; }
+const totalStudents = computed(() => selectedCIds.value.reduce((sum, id) => {
+  const c = avalClasses.value.find((x) => x.id === id);
+  return sum + classCount(c);
+}, 0));
+/** 「套用上次」：取自列表页已加载的最近一条作业（assignmentClasses[].classId / startTime / endTime） */
+const lastAssignment = computed(() => list.value[0] || null);
+const lastClasses = computed(() => ((lastAssignment.value && lastAssignment.value.assignmentClasses) || [])
+  .map((ac) => ac.classId)
+  .filter((id) => avalClasses.value.some((c) => c.id === id)));
+const lastTime = computed(() => {
+  const a = lastAssignment.value;
+  return a && a.startTime && a.endTime ? [dayjs(a.startTime), dayjs(a.endTime)] : null;
+});
 const submitting = ref(false);
 const questions = ref([]);
 const qKeyword = ref('');
@@ -363,16 +509,6 @@ const filteredClasses = computed(() => {
   const kw = classSearch.value.toLowerCase();
   return avalClasses.value.filter(c => c.name.toLowerCase().includes(kw));
 });
-const classNameMap = computed(() => {
-  const m = {};
-  avalClasses.value.forEach(c => { m[c.id] = c.name; });
-  return m;
-});
-const classTeamMap = computed(() => {
-  const m = {};
-  avalClasses.value.forEach(c => { if (c.isTeamClass) m[c.id] = c.ownerTeacherName; });
-  return m;
-});
 /** 班级筛选下拉：复用向导已加载的班级列表，避免重复请求 */
 const classOptions = computed(() => avalClasses.value.map(c => ({
   value: c.id,
@@ -384,20 +520,31 @@ function toggleClass(id) {
   if (idx >= 0) selectedCIds.value.splice(idx, 1);
   else selectedCIds.value.push(id);
 }
-const timeForm = reactive({ title: '', description: '', timeRange: [], allowResubmit: false, isPractice: false, maxAttempts: null });
+/* 模式 UI 暂不显示 → 去掉了 isPractice / maxAttempts；提交口径仍是 mode='exam'、maxAttempts=null */
+const timeForm = reactive({ title: '', description: '', timeRange: [], allowResubmit: false });
 
+/* 补「类型 / 满分」两列：字段来自弹窗已在取的 GET /teacher/questions（type / maxScore） */
 const qCols = [
-  { title: '标题', dataIndex: 'title', width: 250, ellipsis: true },
-  { title: '难度', dataIndex: 'difficulty', width: 80 },
+  { title: '标题', dataIndex: 'title', width: 260, ellipsis: true },
+  { title: '类型', dataIndex: 'type', width: 96 },
+  { title: '难度', dataIndex: 'difficulty', width: 88 },
+  { title: '满分', dataIndex: 'maxScore', width: 88, align: 'right' },
 ];
 
 async function openAdd() {
-  step.value = 0;
   submitting.value = false;
   selectedQIds.value = [];
   selectedCIds.value = [];
-  Object.assign(timeForm, { title: '', description: '', timeRange: [], allowResubmit: false, isPractice: false, maxAttempts: null });
+  selectedQ.value = null;
+  Object.assign(timeForm, { title: '', description: '', timeRange: [], allowResubmit: false });
+  titleTouched.value = false;
+  timeTouched.value = false;
+  pickTouched.value = false;
+  classTouched.value = false;
+  draftRestored.value = false;
+  // 先取题目与班级，草稿恢复需要两份列表做校验（只认仍然存在的题目/班级）
   await Promise.all([searchQuestions(), loadClasses()]);
+  if (!restoreDraft()) applyPreset(0);   // 没有草稿 → 默认「今天 18:00 ~ 一周后 23:59」
   visible.value = true;
 }
 
@@ -406,28 +553,113 @@ async function searchQuestions() {
   questions.value = r.data.list;
 }
 
-function onQSelect(keys) { selectedQIds.value = keys; }
-async function loadClasses() { const r = await request.get('/teacher/classes'); avalClasses.value = r.data; }
-
-function nextStep() {
-  if (step.value === 0 && !selectedQIds.value.length) return message.warn('请选题');
-  if (step.value === 1 && !selectedCIds.value.length) return message.warn('请选班');
-  step.value++;
+/** 单选：radio 点选与整行点击共用（原来点行不选中，必须精确点中圆点） */
+function onQSelect(keys, rows) {
+  selectedQIds.value = keys;
+  selectedQ.value = (rows && rows[0]) || questions.value.find((q) => q.id === keys[0]) || null;
+  pickTouched.value = true;
 }
+/** 整行可点：把行点击接到同一个选择函数上 */
+function questionRow(record) {
+  return {
+    onClick: () => onQSelect([record.id], [record]),
+    style: { cursor: 'pointer' },
+  };
+}
+function changeQuestion() {
+  selectedQIds.value = [];
+  selectedQ.value = null;
+  pickTouched.value = false;
+}
+/** 时间快捷预设（纯前端计算） */
+function applyPreset(i) {
+  const now = dayjs();
+  timeForm.timeRange = i === 0
+    ? [now.hour(18).minute(0).second(0), now.add(7, 'day').hour(23).minute(59).second(0)]
+    : [now.add(1, 'day').hour(8).minute(0).second(0), now.add(3, 'day').hour(23).minute(59).second(0)];
+  timeTouched.value = true;
+}
+function applyLastClasses() {
+  const ids = lastClasses.value;
+  if (!ids.length) return;
+  selectedCIds.value = ids.slice();
+  classTouched.value = true;
+}
+function applyLastTime() {
+  if (!lastTime.value) return;
+  timeForm.timeRange = lastTime.value;
+  timeTouched.value = true;
+}
+/* ===== 草稿（纯 localStorage，不涉及后端）===== */
+function saveDraft() {
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      title: timeForm.title,
+      description: timeForm.description,
+      allowResubmit: timeForm.allowResubmit,
+      timeRange: (timeForm.timeRange || []).map((d) => d.toISOString()),
+      classIds: selectedCIds.value.slice(),
+      questionIds: selectedQIds.value.slice(),
+      savedAt: Date.now(),
+    }));
+  } catch { /* 隐私模式等写不进去：静默忽略，不影响主流程 */ }
+}
+function saveDraftAndClose() {
+  saveDraft();
+  message.success('已存为草稿');
+  visible.value = false;
+}
+function restoreDraft() {
+  let raw = null;
+  try { raw = localStorage.getItem(DRAFT_KEY); } catch { return false; }
+  if (!raw) return false;
+  try {
+    const d = JSON.parse(raw);
+    timeForm.title = d.title || '';
+    timeForm.description = d.description || '';
+    timeForm.allowResubmit = !!d.allowResubmit;
+    timeForm.timeRange = (d.timeRange || []).map((s) => dayjs(s));
+    selectedCIds.value = (d.classIds || []).filter((id) => avalClasses.value.some((c) => c.id === id));
+    selectedQIds.value = (d.questionIds || []).filter((id) => questions.value.some((q) => q.id === id));
+    selectedQ.value = questions.value.find((q) => q.id === selectedQIds.value[0]) || null;
+    draftRestored.value = true;
+    return true;
+  } catch { return false; }
+}
+function clearDraft() {
+  try { localStorage.removeItem(DRAFT_KEY); } catch { /* 同上 */ }
+  draftRestored.value = false;
+}
+/** 关闭弹窗：有未保存内容先确认一次（原实现 destroyOnClose 直接丢弃） */
+function onCancel() {
+  const dirty = !!(timeForm.title.trim() || timeForm.description.trim() || selectedQIds.value.length || selectedCIds.value.length);
+  if (!dirty) { visible.value = false; return; }
+  confirm({
+    title: '放弃这次布置？',
+    content: '已填写的内容不会保存（也可以选「存为草稿」下次继续）。',
+    okText: '放弃',
+    okType: 'danger',
+    cancelText: '继续编辑',
+    onOk: () => { visible.value = false; },
+  });
+}
+async function loadClasses() { const r = await request.get('/teacher/classes'); avalClasses.value = r.data; }
 
 /** 提交布置作业请求；confirmWithoutStandardPackage=true 表示教师已在确认框点「确认布置」（开放性题目） */
 async function createAssignment(confirmWithoutStandardPackage) {
   const payload = {
     title: timeForm.title, description: timeForm.description,
     startTime: timeForm.timeRange[0].toISOString(), endTime: timeForm.timeRange[1].toISOString(),
-    allowResubmit: timeForm.isPractice ? true : timeForm.allowResubmit,
-    mode: timeForm.isPractice ? 'practice' : 'exam',
-    maxAttempts: timeForm.isPractice ? (timeForm.maxAttempts || null) : null,
-    questionIds: selectedQIds.value, classIds: selectedCIds.value,
+    // 模式 UI 暂不显示：口径与改前「非练习态」完全一致（mode='exam'、maxAttempts=null）
+    allowResubmit: timeForm.allowResubmit,
+    mode: 'exam',
+    maxAttempts: null,
+    questionIds: selectedQIds.value.slice(), classIds: selectedCIds.value.slice(),
   };
   if (confirmWithoutStandardPackage) payload.confirmWithoutStandardPackage = true;
   await request.post('/teacher/assignments', payload);
   message.success('布置成功');
+  clearDraft();          // 布置成功即清掉草稿，避免下次误恢复
   visible.value = false;
   fetch();
 }
@@ -440,7 +672,12 @@ async function createAssignment(confirmWithoutStandardPackage) {
  * 有标准包的题目后端直接创建，不会走到确认框。
  */
 async function submit() {
-  if (!timeForm.title || !timeForm.timeRange.length) return message.warn('请填写完整');
+  // 主按钮在未就绪时是禁用的；这里再兜一层，并把未就绪项说清楚（原来的提示只有「请填写完整」）
+  titleTouched.value = true;
+  timeTouched.value = true;
+  pickTouched.value = true;
+  classTouched.value = true;
+  if (missing.value.length) return message.warn('还差：' + missing.value.join('、'));
   if (submitting.value) return;
   submitting.value = true;
   try {
@@ -479,42 +716,6 @@ async function toggleLock(record) {
   } catch { message.error('操作失败'); }
 }
 
-function onPracticeToggle(checked) {
-  if (!checked) { timeForm.isPractice = false; return; }
-
-  const items = [
-    { title: '学生可重复提交', desc: '在设定的次数范围内，学生可多次提交答案' },
-    { title: '自动出分，跳过审核', desc: '学生提交后，系统自动评分并直接显示分数和评语，无需教师审核和发布' },
-    { title: '保留最高分', desc: '多次提交中，系统自动保留最高的一次成绩' },
-    { title: '教师仍可查看', desc: '练习模式下教师仍可查看学生答题情况和系统评分' },
-  ];
-
-  const content = h('div', { style: 'padding:4px 0' }, [
-    h('p', { style: 'margin:0 0 16px;color:var(--text-secondary);font-size:var(--fs-body)' }, '开启后，该作业将变为练习模式：'),
-    ...items.map((item, i) =>
-      h('div', { style: 'display:flex;align-items:flex-start;gap:12px;margin-bottom:' + (i < items.length - 1 ? '12px' : '0') }, [
-        h('span', { style: 'display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--status-success-fg);color:var(--text-inverse);font-size:var(--fs-caption);font-weight:700;flex-shrink:0' }, i + 1),
-        h('div', { style: 'line-height:1.5' }, [
-          h('div', { style: 'font-weight:600;font-size:var(--fs-body-sm);color:var(--text-primary)' }, item.title),
-          h('div', { style: 'font-size:var(--fs-caption);color:var(--text-tertiary)' }, item.desc),
-        ]),
-      ])
-    ),
-    h('div', { style: 'margin-top:16px;padding:10px 12px;background:var(--status-warning-bg);border-radius:var(--radius-sm);border:1px solid var(--status-warning-bd);font-size:var(--fs-body-sm);color:var(--status-warning-fg)' },
-      '开启后将无法切换回考试模式。确定开启练习模式吗？'
-    ),
-  ]);
-
-  confirm({
-    title: '开启练习模式',
-    content,
-    okText: '开启练习模式',
-    cancelText: '取消',
-    danger: true,   // 开启后无法切回考试模式（不可逆）
-    onOk: () => { timeForm.isPractice = true; },
-  });
-}
-
 /** 首屏同时拉列表与班级下拉（班级复用向导接口，无新增请求） */
 onMounted(async () => {
   await Promise.all([fetch(), loadClasses()]);
@@ -534,8 +735,8 @@ onMounted(async () => {
 .w-260 { width: 260px; }
 .w-200 { width: 200px; }
 .w-160 { width: 160px; }
-.w-120 { width: 120px; }
-.hint-inline { margin-left: var(--space-2); color: var(--text-tertiary); font-size: var(--fs-body-sm); }
+.w-full { width: 100%; }
+.mb12 { margin-bottom: var(--space-3); }
 .muted { color: var(--text-tertiary); font-size: var(--fs-caption); }
 .tnum { font-variant-numeric: tabular-nums; }
 .lock-icon { color: var(--status-danger-fg); font-size: var(--fs-caption); }
@@ -550,18 +751,79 @@ onMounted(async () => {
 }
 
 /* ===== 向导弹窗内部（scoped 可覆盖，因为内容渲染在组件自身 DOM 内） ===== */
-.steps { margin-bottom: 32px; }
-.mb20 { margin-bottom: 20px; }
-.step-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 32px; }
-.class-pick { display: flex; gap: 12px; }
-.pick-panel { flex: 1; min-width: 0; }
-.pick-panel-title { font-weight: 600; margin-bottom: 8px; font-size: var(--fs-body); }
-.pick-list { margin-top: 8px; max-height: 260px; overflow-y: auto; }
-.pick-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; cursor: pointer; border-radius: var(--radius-xs); font-size: var(--fs-body-sm); }
-.pick-item:hover { background: var(--bg-selected); }
-.pick-item.on { background: var(--bg-selected); color: var(--text-brand); }
-.pick-check { font-size: var(--fs-caption); }
-.pick-team { font-size: var(--fs-caption); }
+/* ===== 布置作业 v2：一页式两栏（左分区表单 / 右实时摘要） ===== */
+.assign-body { display: grid; grid-template-columns: minmax(0, 1fr) 268px; gap: var(--space-4); align-items: start; }
+.assign-main { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.assign-side { display: flex; flex-direction: column; gap: var(--space-2); position: sticky; top: 0; }
+
+.ablk { border: 1px solid var(--border-default); border-radius: var(--radius-lg); overflow: hidden; background: var(--card-bg); }
+.ablk-h { display: flex; align-items: center; gap: var(--space-2); padding: 10px var(--space-3); background: var(--bg-surface-2); border-bottom: 1px solid var(--border-subtle); }
+.ablk-h b { font-size: var(--fs-body-sm); color: var(--text-primary); }
+.ablk-n { font-size: var(--fs-caption); color: var(--text-tertiary); }
+.ablk-b { padding: var(--space-3); }
+.ablk-b--tight { padding: var(--space-3) var(--space-3) var(--space-2); }
+
+.afld { margin-bottom: var(--space-3); }
+.afld:last-child { margin-bottom: 0; }
+.afld label { display: block; margin-bottom: 5px; font-size: var(--fs-caption); font-weight: 500; color: var(--text-secondary); }
+.afld-err { margin-top: 5px; font-size: var(--fs-caption); color: var(--status-danger-fg); }
+.afld-err--block { padding: 0 var(--space-3) var(--space-3); }
+.ahint { margin-top: 5px; font-size: var(--fs-caption); color: var(--text-tertiary); }
+.qbtn { border: 0; background: transparent; padding: 0 2px; color: var(--text-brand); font-size: var(--fs-caption); cursor: pointer; }
+.qbtn:hover { text-decoration: underline; }
+.switch-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); font-size: var(--fs-body-sm); color: var(--text-secondary); }
+
+/* 已选题卡（单选：选中后收起表格，避免选项滚出视野） */
+.picked { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3); }
+.picked b { flex: 1; min-width: 0; font-size: var(--fs-body-sm); color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picked-meta { flex: none; font-size: var(--fs-caption); color: var(--text-tertiary); }
+
+/* 班级点选按钮：带人数（_count.studentClasses） */
+.classlist { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.cbtn { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 10px; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--card-bg); color: var(--text-secondary); font-size: var(--fs-body-sm); cursor: pointer; transition: var(--transition-control); }
+.cbtn:hover { border-color: var(--brand-600); color: var(--text-brand); }
+.cbtn.is-on { border-color: var(--brand-600); background: var(--bg-selected); color: var(--text-brand); }
+.cbtn-name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cbtn-team { font-size: var(--fs-caption); color: var(--text-tertiary); }
+.cbtn-cnt { font-size: var(--fs-caption); color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.cbtn.is-on .cbtn-cnt { color: var(--text-brand); }
+
+.linkbtn { border: 0; background: transparent; padding: 2px 4px; border-radius: var(--radius-sm); color: var(--text-brand); font-size: var(--fs-caption); cursor: pointer; }
+.linkbtn:hover { background: var(--bg-hover); }
+.linkbtn--right { margin-left: auto; }
+.linkbtn--full { width: 100%; padding: var(--space-2) 0; }
+
+/* 右栏：实时摘要 + 就绪提示 + 主/次操作 */
+.asum { padding: var(--space-3); border: 1px solid var(--border-default); border-radius: var(--radius-lg); background: var(--bg-surface-2); }
+.asum h4 { margin: 0 0 var(--space-2); font-size: var(--fs-body-sm); color: var(--text-primary); }
+.asum-dl { margin: 0; }
+.kv { display: flex; justify-content: space-between; gap: var(--space-2); padding: 5px 0; font-size: var(--fs-body-sm); border-bottom: 1px dashed var(--border-subtle); }
+.kv:last-child { border-bottom: 0; }
+.kv dt { color: var(--text-tertiary); }
+.kv dd { margin: 0; color: var(--text-primary); font-weight: 500; font-variant-numeric: tabular-nums; }
+.aready { padding: 9px 10px; border-radius: var(--radius-md); border: 1px solid; font-size: var(--fs-caption); line-height: 1.5; }
+.aready.is-ok { background: var(--status-success-bg); border-color: var(--status-success-bd); color: var(--status-success-fg); }
+.aready.is-warn { background: var(--status-warning-bg); border-color: var(--status-warning-bd); color: var(--status-warning-fg); }
+.draft-bar { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); padding: 8px 10px; border-radius: var(--radius-md); background: var(--status-info-bg); border: 1px solid var(--status-info-bd); color: var(--status-info-fg); font-size: var(--fs-caption); }
+
+/* 手机端：单列 + 摘要栏移到内容之后（弹窗外壳的全屏化见文件末尾非 scoped 段） */
+@media (max-width: 768px) {
+  .assign-body { grid-template-columns: minmax(0, 1fr); }
+  .assign-side { position: static; }
+  .cbtn { min-height: 44px; }
+  .cbtn-name { max-width: none; }
+}
 /* B2-10：本页原有一份 scoped .visually-hidden 副本已删除 —— 全局工具类（src/style.css）是唯一属主，
    值逐字相同；scoped 副本反而会遮蔽全局类（[data-v-*] 优先级更高）。 */
+</style>
+
+<!-- 弹窗外壳：antd Modal 会被 teleport 到 body，scoped 样式够不到；
+     选择器统一带 .assign-modal 前缀，避免规则外溢到其它页面的弹窗。 -->
+<style>
+@media (max-width: 768px) {
+  .assign-modal .ant-modal { top: 0; margin: 0; padding-bottom: 0; }
+  .assign-modal .ant-modal-content { min-height: 100vh; border-radius: 0; }
+  .assign-modal .ant-modal-header { border-radius: 0; }
+  .assign-modal .ant-modal-body { max-height: calc(100vh - 64px); overflow: auto; padding: var(--space-3); }
+}
 </style>
