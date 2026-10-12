@@ -119,11 +119,12 @@ async function main() {
   // ★守卫前置：--apply 的目标库检查在建连接/任何查询之前完成（生产库连都不连）
   if (opts.mode === 'apply') {
     const pre = assertApplyAllowed({ mode: opts.mode, dbName, allowDb: opts.allowDb, allowProd: opts.allowProd });
-    if (!pre.ok) { console.log('RESULT=' + pre.code + ' reason=' + pre.reason); return pre.exitCode; }
+    if (!pre.ok) { console.log('RESULT=' + pre.code + ' reason=' + pre.reason); console.log('REFUSED_BEFORE_CONNECT=yes target_db=' + dbName); return pre.exitCode; }
     // R2-B6 可审计：放行时打印授权来源与目标库名
     console.log('AUDIT target_db=' + dbName + ' allow_db=' + (opts.allowDb || '(empty)') + ' allow_prod=' + (opts.allowProd ? 'yes' : 'no') + ' authorization=' + pre.authorization + ' authorized_prod=' + (pre.authorizedProd ? 'yes' : 'no'));
   }
 
+  console.log('STAGE=connect target_db=' + dbName + ' mode=' + opts.mode); // 机制标记：只有越过守卫才会打印
   const prisma = new PrismaClient({ datasources: { db: { url } } });
   try {
     const cols = await detectSnapshotColumns(prisma);
@@ -138,8 +139,9 @@ async function main() {
       console.log('DRY_RUN_OK would_update=' + sum.matched + ' snapshot_origin=backfill (未写库)');
       return 0;
     }
-    const guard = assertApplyAllowed({ mode: opts.mode, dbName, allowDb: opts.allowDb });
-    if (!guard.ok) { console.log('RESULT=' + guard.code + ' reason=' + guard.reason); return guard.code; }
+    // F-R2B6-1 修复：apply 阶段必须**转发 allowProd**（此前漏传 ⇒ 取默认 false ⇒ 被自己的守卫拒绝）
+    const guard = assertApplyAllowed({ mode: opts.mode, dbName, allowDb: opts.allowDb, allowProd: opts.allowProd });
+    if (!guard.ok) { console.log('RESULT=' + guard.code + ' reason=' + guard.reason); console.log('REFUSED_BEFORE_CONNECT=yes target_db=' + dbName); return guard.exitCode; } // F-R2B6-2：返回**数字**退出码
     if (!cols.applied) { console.log('RESULT=' + NEED_MIGRATION + ' reason=snapshot_columns_missing'); return 3; }
 
     let updated = 0;
@@ -158,5 +160,7 @@ async function main() {
 
 const invokedDirectly = process.argv[1] && process.argv[1].endsWith('backfill-snapshots.js');
 if (invokedDirectly) {
-  main().then((c) => process.exit(c)).catch((e) => { console.error('BACKFILL_ERROR ' + (e && e.message)); process.exit(1); });
+  // F-R2B6-2：退出码强制为数字（字符串 code 曾被 process.exit 拒绝 ⇒ TypeError ⇒ 退出码变 1，掩盖守卫语义）
+  const exitWith = (c) => process.exit(Number.isFinite(Number(c)) ? Number(c) : 1);
+  main().then(exitWith).catch((e) => { console.error('BACKFILL_ERROR ' + (e && e.message)); exitWith(1); });
 }

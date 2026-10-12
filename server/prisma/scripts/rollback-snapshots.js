@@ -93,10 +93,10 @@ async function main() {
 
   // 守卫前置：任何库校验不通过 => 直接返回，绝不建立连接
   const guard = assertDbAllowed({ dbName, allowDb: opts.allowDb, allowProd: opts.allowProd, mode: opts.mode });
-  if (!guard.ok) { console.log('RESULT=' + guard.code + ' reason=' + guard.reason); return guard.exitCode; }
+  if (!guard.ok) { console.log('RESULT=' + guard.code + ' reason=' + guard.reason); console.log('REFUSED_BEFORE_CONNECT=yes target_db=' + dbName); return guard.exitCode; }
   console.log('AUDIT target_db=' + dbName + ' allow_db=' + (opts.allowDb || '(empty)') + ' allow_prod=' + (opts.allowProd ? 'yes' : 'no') + ' authorization=' + guard.authorization + ' authorized_prod=' + (guard.authorizedProd ? 'yes' : 'no'));
-  if (!guard.ok) { console.log('RESULT=' + guard.code + ' reason=' + guard.reason); return guard.exitCode; }
 
+  console.log('STAGE=connect target_db=' + dbName + ' mode=' + opts.mode); // 机制标记：只有越过守卫才会打印
   const prisma = new PrismaClient({ datasources: { db: { url } } });
   try {
     const cols = await detectSnapshotColumns(prisma);
@@ -118,5 +118,6 @@ async function main() {
 }
 
 if (process.argv[1] && process.argv[1].endsWith('rollback-snapshots.js')) {
-  main().then((c) => process.exit(c)).catch((e) => { console.error('ROLLBACK_ERROR ' + (e && e.message)); process.exit(1); });
+  const exitWith = (c) => process.exit(Number.isFinite(Number(c)) ? Number(c) : 1); // F-R2B6-2：退出码强制数字
+  main().then(exitWith).catch((e) => { console.error('ROLLBACK_ERROR ' + (e && e.message)); exitWith(1); });
 }
