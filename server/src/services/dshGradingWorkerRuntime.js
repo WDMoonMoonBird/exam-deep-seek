@@ -17,6 +17,8 @@ export function parseWorkerConfig(env = process.env) {
     failureBackoffMs: num(env.DSH_WORKER_FAILURE_BACKOFF_MS, 2000),
     maxConsecutiveFailures: num(env.DSH_WORKER_MAX_CONSECUTIVE_FAILURES, 5),
     dbLimit: env.DSH_WORKER_DB_LIMIT ? num(env.DSH_WORKER_DB_LIMIT, null) : undefined,
+    // R2-B17：僵尸 running 行回收阈值（默认 15 分钟；见 dshStaleJobReclaimer）
+    staleRunningMs: env.DSH_WORKER_STALE_RUNNING_MS ? num(env.DSH_WORKER_STALE_RUNNING_MS, 15 * 60 * 1000) : undefined,
   };
 }
 

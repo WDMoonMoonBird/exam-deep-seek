@@ -267,6 +267,9 @@ PY
       return 5
     fi
     if [ -f "$OUT/checker/checker.json" ]; then :; else mkdir -p "$OUT/checker"; cp -f "$CHECKER_FROZEN" "$OUT/checker/checker.json"; fi
+    # R2-B13①：复用路径不经过 shape_gate（build 路径在那里建了 out/diagnostics）⇒ 这里必须自建目录，
+    #   否则 set -e 下重定向失败 ⇒ 静默 exit 1（生产表现为 needs_rerun/device_exit_1）。
+    mkdir -p "$OUT/diagnostics"
     [ -f "$OUT/diagnostics/measurable.json" ] || printf '%s' '{"schema_version":"measurable-probe/1","results":[]}' > "$OUT/diagnostics/measurable.json"
   fi
 

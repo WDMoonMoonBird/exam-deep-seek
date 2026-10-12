@@ -19,6 +19,7 @@ import { PrismaClient } from '@prisma/client';
 import { runOnce } from '../src/services/dshGradingJobWorker.js';
 import { EXIT, parseWorkerConfig, runWorkerLoop } from '../src/services/dshGradingWorkerRuntime.js';
 import { describeLlmConfig, llmEnv, readPlatformLlmConfig } from '../src/services/dshPlatformLlmConfig.js';
+import { formatReclaimSummary, reclaimStaleRunning, resolveStaleMs } from '../src/services/dshStaleJobReclaimer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '..');
@@ -120,11 +121,24 @@ const platform = await readPlatformLlmConfig(prisma);
 const llmDesc = describeLlmConfig(platform);
 console.log('PLATFORM_MODEL=' + llmDesc.platformModel + ' PLATFORM_BASE_URL=' + llmDesc.platformBaseUrl);
 
+// R2-B17：僵尸回收阈值（env DSH_WORKER_STALE_RUNNING_MS ⇒ config；缺省 15 分钟）
+const staleMs = config.staleRunningMs === undefined ? resolveStaleMs(process.env) : config.staleRunningMs;
+
 const device = opts.device || 'node';
 const deviceArgs = opts.deviceArgs.length ? opts.deviceArgs : [path.join(SERVER, 'scripts', 'stub-device.mjs')];
 console.log('WORKER_START db=/' + dbName + ' idle_backoff_ms=' + config.idleBackoffMs + ' max_backoff_ms=' + config.maxBackoffMs
   + ' failure_backoff_ms=' + config.failureBackoffMs + ' max_consecutive_failures=' + config.maxConsecutiveFailures
-  + ' db_limit=' + (config.dbLimit === undefined ? 'auto' : config.dbLimit) + ' device=' + device);
+  + ' db_limit=' + (config.dbLimit === undefined ? 'auto' : config.dbLimit) + ' stale_running_ms=' + staleMs + ' device=' + device);
+
+// ★R2-B17：领取第一个 job **之前**回收僵尸 running 行（否则 DB 级闸会被永久占住且静默停摆）
+let reclaim;
+try {
+  reclaim = await reclaimStaleRunning({ prisma, staleMs, maxAttempts: opts.maxAttempts || 3, log: console });
+  console.log(formatReclaimSummary(reclaim));
+} catch (err) {
+  // 回收失败不应拦住窗口：明确记录后继续（连不上库时循环自己会报错，行为与既有版本一致）
+  console.log('STALE_RECLAIMED n=0 to_pending=0 to_failed=0 conflicts=0 stale_ms=' + staleMs + ' skipped=reclaim_failed:' + (err && err.message));
+}
 
 const res = await runWorkerLoop({
   prisma,

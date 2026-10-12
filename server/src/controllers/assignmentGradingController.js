@@ -7,6 +7,11 @@
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
 
+/** 活动态（占用「活动键」的状态）：每 (assignment, checker) 至多一行 */
+export const ACTIVE_JOB_STATUSES = ['pending', 'running'];
+/** 新建 job 的初始状态 */
+export const JOB_STATUS_INITIAL = 'pending';
+
 export const triggerAssignmentGrading = async (req, res) => {
   try {
     const assignmentId = +req.params.id;
@@ -27,8 +32,11 @@ export const triggerAssignmentGrading = async (req, res) => {
       });
     }
 
-    const key = { assignmentId, checkerId: checker.checkerId, status: 'pending' };
-    const existing = await prisma.gradingJob.findFirst({ where: key, select: { id: true, createdAt: true } });
+    // ★R2-B12②：活动键方案 —— 活动态（pending/running）每 (assignment, checker) 至多一行；
+    // 终态（done/failed/needs_rerun）可多行共存 ⇒ 幂等查询按**活动态**判定（不再按 status='pending'）。
+    const activeWhere = { assignmentId, checkerId: checker.checkerId, status: { in: ACTIVE_JOB_STATUSES } };
+    const key = { assignmentId, checkerId: checker.checkerId, status: JOB_STATUS_INITIAL };
+    const existing = await prisma.gradingJob.findFirst({ where: activeWhere, orderBy: { id: 'desc' }, select: { id: true, createdAt: true, status: true } });
     if (existing) {
       logger.info({ assignmentId, checkerId: checker.checkerId, jobId: existing.id }, 'W7：重复触发命中既有 pending job（幂等）');
       return res.json({ code: 0, message: '已存在进行中的作业级批改任务', data: { jobId: existing.id, checkerId: checker.checkerId, reused: true } });
@@ -38,7 +46,7 @@ export const triggerAssignmentGrading = async (req, res) => {
       job = await prisma.gradingJob.create({ data: key, select: { id: true } });
     } catch (err) {
       if (err?.code === 'P2002') { // 竞态：唯一键兜底
-        const again = await prisma.gradingJob.findFirst({ where: key, select: { id: true } });
+        const again = await prisma.gradingJob.findFirst({ where: activeWhere, orderBy: { id: 'desc' }, select: { id: true } });
         return res.json({ code: 0, message: '已存在进行中的作业级批改任务', data: { jobId: again?.id ?? null, checkerId: checker.checkerId, reused: true } });
       }
       throw err;

@@ -249,16 +249,28 @@ export function matchSlugToSubmissions({ manifestSubmissions = [], platformSubmi
 /** 读 run-root manifest + 平台提交，返回 { map, unmatched, reason } */
 export async function deriveSlugMapFromRunRoot({ prisma, runRoot, assignmentId }) {
   try {
+    // ★R2-B14③：锚点缺失时回退读装置**两种模式都会写**的 materials/materials-manifest.json
+    //   （其 submissions[].id 同样是「源目录名/学生名」⇒ 可沿用 matchSlugToSubmissions 对齐）；
+    //   两者皆缺 ⇒ 仍 manifest_missing（fail-closed，不猜）。
     const manifestPath = path.join(runRoot, "out", "assignment", "assignment-manifest.json");
-    if (!fs.existsSync(manifestPath)) return { map: {}, unmatched: [], reason: "manifest_missing" };
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    const materialsPath = path.join(runRoot, "materials", "materials-manifest.json");
+    let manifest = null;
+    let reason = "manifest";
+    if (fs.existsSync(manifestPath)) {
+      manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    } else if (fs.existsSync(materialsPath)) {
+      manifest = JSON.parse(fs.readFileSync(materialsPath, "utf8"));
+      reason = "materials_manifest";
+    } else {
+      return { map: {}, unmatched: [], reason: "manifest_missing" };
+    }
     const subs = await prisma.submission.findMany({
       where: { assignmentId: +assignmentId },
       select: { id: true, student: { select: { username: true, realName: true } } },
       orderBy: { id: "asc" },
     });
     const platform = subs.map((s) => ({ id: s.id, username: (s.student && s.student.username) || "", realName: (s.student && s.student.realName) || "" }));
-    return Object.assign(matchSlugToSubmissions({ manifestSubmissions: manifest.submissions || [], platformSubmissions: platform }), { reason: "manifest" });
+    return Object.assign(matchSlugToSubmissions({ manifestSubmissions: manifest.submissions || [], platformSubmissions: platform }), { reason });
   } catch (err) {
     return { map: {}, unmatched: [], reason: "manifest_error:" + (err && err.message) };
   }

@@ -30,6 +30,7 @@ import { fileURLToPath } from 'node:url';
 import { PrismaClient } from '@prisma/client';
 import { runDshGrader } from '../src/services/dshGraderRunner.js';
 import { consumeChecker, consumeMeasureResults } from '../src/services/dshCheckerConsumer.js';
+import { persistAnchor } from '../src/services/dshGradingAnchor.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '..');
@@ -145,6 +146,10 @@ async function consumeAndSummarize({ prisma, runRoot, assignmentId, questionId, 
     console.log('SUMMARY_END');
     return 1;
   }
+  // ★R2-B14①：入库时持久化作业锚点（供后续复用回填）
+  const anchorSaved = await persistAnchor({ prisma, assignmentId, checkerId: stored.checkerId, runRoot });
+  console.log('ANCHOR_PERSISTED=' + (anchorSaved.persisted ? 'yes' : 'no') + (anchorSaved.persisted ? ' frozen_sha256=' + (anchorSaved.frozenSha256 || 'na') + ' ANCHOR_RAW_PERSISTED=' + (anchorSaved.rawBytes > 0 ? 'yes bytes=' + anchorSaved.rawBytes + ' sha256=' + anchorSaved.rawSha256 : 'no') : ' reason=' + anchorSaved.reason));
+
   const consumed = await consumeMeasureResults({ prisma, runRoot, assignmentId });
   const needsRerun = consumed.skipped.filter((r) => r.status === 'needs_rerun').length;
   console.log('SUMMARY_BEGIN');
@@ -171,7 +176,9 @@ async function main() {
 
   const url = opts.dbUrl || testDbUrl();
   const dbName = dbNameOf(url);
-  const workdir = opts.workdir || path.join('/tmp', 'r2b7-checker-' + opts.assignmentId + '-' + Date.now());
+  // ★R2-B12 补充（t55 复核）：--workdir 的相对值同样要绝对化（与 --run-root 口径一致），
+  //   否则 cd server 后用相对路径 ⇒ 装置 cwd=仓库根 ⇒ 目录错位（RUN_ROOT 原样透传、孤儿目录落在 server/ 下）。
+  const workdir = opts.workdir ? path.resolve(opts.workdir) : path.join('/tmp', 'r2b7-checker-' + opts.assignmentId + '-' + Date.now());
   const home = path.join(workdir, 'home');
 
   // ★守卫：连库/起进程之前

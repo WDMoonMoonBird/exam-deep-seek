@@ -527,7 +527,31 @@ model GradingJob {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  @@unique([assignmentId, checkerId, status])
+  // R2-B12②：原「状态入键」唯一约束已由活动键方案替代：
+  //   活动态（pending/running）每 (assignment, checker) 至多一行、终态可多行共存。
+  //   实现见迁移 20261012030000_r2b12_grading_jobs_active_key（生成列 active_key + UNIQUE）。
+  //   注意：生成列未写进本 schema（Prisma 无法表达 GENERATED ALWAYS AS）⇒ 该列由原始 SQL 迁移管理。
   @@index([assignmentId])
   @@map("grading_jobs")
+}
+
+/// R2-B14①：作业锚点（assignment-manifest 的平台侧持久化副本）。
+/// 用途：复用（measure-only-reuse）时把它回填到 run-root，供装置 frozen_intact 预检与消费侧 slug 映射使用。
+/// BCNF：唯一非平凡函数依赖是 (assignment_id, checker_id) → 其余属性（候选键即该对）⇒ 满足 BCNF。
+model GradingAssignmentAnchor {
+  id                      Int      @id @default(autoincrement())
+  assignmentId            Int      @map("assignment_id") @db.UnsignedInt
+  checkerId               String   @map("checker_id") @db.VarChar(80)
+  frozenSha256            String?  @map("frozen_sha256") @db.VarChar(96)
+  materialsManifestDigest String?  @map("materials_manifest_digest") @db.VarChar(96)
+  nSubmissions            Int      @default(0) @map("n_submissions")
+  /// R2-B16①：ingest 时 out/checker/checker.json 的**原始字节**（回填必须字节一致；历史行为 NULL ⇒ 不回填）
+  checkerRaw              Bytes?   @map("checker_raw")
+  submissionsJson         Json     @map("submissions_json")
+  anchorJson              Json     @map("anchor_json")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  @@unique([assignmentId, checkerId])
+  @@map("grading_assignment_anchors")
 }
