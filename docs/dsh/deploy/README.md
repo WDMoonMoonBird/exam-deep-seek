@@ -91,6 +91,15 @@ ExecStart=/usr/bin/node scripts/r2b5-worker.mjs \
 ## 7. 已知缺口 / 边界（部署前必读）
 
 1. ★**物料来源：已实现（R2-B20）** —— `server/scripts/r2b20-export-materials.mjs`。
+   - **★多作业顺序（R2-B21）**：**先导出该作业物料，再拉起 worker**。worker 支持 env `DSH_GRADER_MATERIALS_ROOT=<根目录>`（写在 `/etc/dsh-grader/worker.env`，见 `worker.env.example` ②b）：设了它之后，worker 会**按 job 的 assignmentId** 解析
+     `--source-dir <ROOT>/<assignmentId>`（绝对路径）并把 `--submissions` 取自该目录 `export-manifest.json` 的 `n_submissions`（清单缺失 ⇒ 回退「目录内 `*.zip` 数 − 1」并打 `source=zipcount`）⇒ 一份 worker 配置即可服务**多个作业**，无需按作业重启。
+     ```bash
+     # 每作业两步：①导出 ②由 timer/worker 领取该作业的 job 时自动解析
+     node scripts/r2b20-export-materials.mjs --assignment 311 --out /var/lib/dsh-grader/materials/311 --allow-db exam_system --allow-prod
+     echo 'DSH_GRADER_MATERIALS_ROOT=/var/lib/dsh-grader/materials' >> /etc/dsh-grader/worker.env   # 一次性配置
+     ```
+   - **★fail-closed（不回落默认源目录）**：`<ROOT>/<assignmentId>` 不存在或为空 ⇒ 打印 `MATERIALS_MISSING assignment=<id> path=<dir>`，该 job 记 `needs_rerun` + `last_error=materials_missing_for_assignment:<id>`，**不写分**、**不回落**装置的默认 `实验/`；解析成功则打 `MATERIALS_RESOLVED assignment=<id> dir=<dir> submissions=<n> source=manifest|zipcount`，`WORKER_START` 也会打印 `materials_root=<值或(unset:device-default)>`。
+   - **向后兼容**：未设 `DSH_GRADER_MATERIALS_ROOT` ⇒ 行为与既有完全一致（装置默认源目录 + 启动时的 `--submissions`）。
    - **用法**：`node scripts/r2b20-export-materials.mjs --assignment <作业id> --out <目录> [--db-url <url>] [--allow-db <库名>] [--allow-prod]`；测试/演练可加 `--uploads-root <夹具目录>` 重定位 uploads 根（不改真实 uploads）。
    - **产出（装置契约）**：`标准工程包.zip`、`评分标准.md`（`questions.scoring_rubric`）、`题目描述.md`（标题 + `questions.material`，**文件名必须这个**）、每个提交一个 `<real_name>.zip`（重名追加 `-<username>`）、`export-manifest.json`（submissionId → zip 名 / 来源路径 / 各自 sha256 / 份数 / questionId / 生成时刻）。
    - **确定性**：同一输入两次导出，各 zip 与各 md 的 sha256 **逐一相同**（zip 条目按字节序排序、DOS 时间戳固定 1980-01-01、无随机/时间字段）⇒ 可复算、可比对；`export-manifest.json` 除 `generated_at` 外逐字段相同。
