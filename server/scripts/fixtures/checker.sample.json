@@ -1,0 +1,609 @@
+{
+  "schema_version": "checker/1",
+  "checker_id": "sha256:1cd807658d255fa3d8dc4ea6a15352b6ba90b4032f22e292ba0e18a0dfe2d618",
+  "assignment_ref": {
+    "assignment_id": "353",
+    "question_id": "353",
+    "rubric_hash": "sha256:4fdbd6a12796cae745f2af8ff4f6c81c039ccf3ea39c5be6c31c3845f3144691",
+    "standard_hash": "sha256:3cb83205a68fd2daea1610d2554cf2e428125a9c41a48252a5f56d8ffe4db47f"
+  },
+  "generated": {
+    "session_id": "session-f37bbed4-9c3f-42cd-a6df-f8fb6da222c1",
+    "model": "deepseek-flash",
+    "created_at": "2026-10-12T00:49:47Z",
+    "generator": "dsh-headless/checker-builder"
+  },
+  "scoring": {
+    "max_score": 100,
+    "aggregate": "sum_clamped",
+    "rounding": "half_up_1",
+    "zero_credit_rule": "谓词按条独立判定，不满足即该条 0 分；未覆盖的运行期/定性项不计分，不以满分或 0 分蒙混。"
+  },
+  "input_contract": {
+    "project_root_glob": "**/package.json",
+    "required_paths": [
+      "package.json",
+      "index.html",
+      "vite.config.js",
+      "src/main.js",
+      "src/App.vue",
+      "src/router/index.js",
+      "src/stores/user.js",
+      "src/views/Login.vue",
+      "src/views/Register.vue",
+      "src/views/User.vue",
+      "src/components/UserList.vue"
+    ],
+    "ignore": [
+      "node_modules/**",
+      "dist/**",
+      ".git/**",
+      "*.log"
+    ],
+    "encoding": "utf-8"
+  },
+  "predicates": [
+    {
+      "id": "P01",
+      "group": "第一项，项目初始化与可运行，10 分。能正常安装启动、依赖引入正确、无控制台报错",
+      "item": "提交项目根存在 package.json（含 dev 脚本与依赖声明）",
+      "max_score": 2,
+      "rule_type": "file_exists",
+      "params": {
+        "path": "package.json"
+      }
+    },
+    {
+      "id": "P02",
+      "group": "第一项，项目初始化与可运行，10 分。能正常安装启动、依赖引入正确、无控制台报错",
+      "item": "src/main.js 引入 vue 核心依赖（Pinia/Router/Antd 注册见 P03）",
+      "max_score": 2,
+      "rule_type": "count_imports",
+      "params": {
+        "path_glob": "src/main.js",
+        "module": "vue"
+      }
+    },
+    {
+      "id": "P03",
+      "group": "第一项，项目初始化与可运行，10 分。能正常安装启动、依赖引入正确、无控制台报错",
+      "item": "src/main.js 全局注册 Pinia、Vue Router 与 Ant Design Vue",
+      "max_score": 2,
+      "rule_type": "count_regex",
+      "params": {
+        "path_glob": "src/main.js",
+        "pattern": "app\\.use\\((createPinia\\(\\)|router|Antd)\\)",
+        "min": 3,
+        "max": 100
+      }
+    },
+    {
+      "id": "P04",
+      "group": "第二项，路由与页面跳转，10 分。三条路由齐全且跳转正确得 6 分；登录页与注册",
+      "item": "router 中配置 /login、/register、/user 三条路由",
+      "max_score": 4,
+      "rule_type": "count_regex",
+      "params": {
+        "path_glob": "src/router/index.js",
+        "pattern": "path:\\s*'/(login|register|user)'",
+        "min": 3,
+        "max": 100
+      }
+    },
+    {
+      "id": "P05",
+      "group": "第二项，路由与页面跳转，10 分。三条路由齐全且跳转正确得 6 分；登录页与注册",
+      "item": "router 使用 vue-router 的 createRouter/createWebHistory",
+      "max_score": 1,
+      "rule_type": "count_imports",
+      "params": {
+        "path_glob": "src/router/index.js",
+        "module": "vue-router"
+      }
+    },
+    {
+      "id": "P06",
+      "group": "第二项，路由与页面跳转，10 分。三条路由齐全且跳转正确得 6 分；登录页与注册",
+      "item": "登录页存在指向 /register 的 router-link",
+      "max_score": 1,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/Login.vue",
+        "pattern": "<router-link[^>]*to=\"/register\"",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P07",
+      "group": "第二项，路由与页面跳转，10 分。三条路由齐全且跳转正确得 6 分；登录页与注册",
+      "item": "注册页存在指向 /login 的 router-link",
+      "max_score": 1,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/Register.vue",
+        "pattern": "<router-link[^>]*to=\"/login\"",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P08",
+      "group": "第二项，路由与页面跳转，10 分。三条路由齐全且跳转正确得 6 分；登录页与注册",
+      "item": "登录成功后 router.push 跳转到用户主页",
+      "max_score": 2,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/Login.vue",
+        "pattern": "router\\.push\\(\\s*(\\{\\s*name:\\s*'User'|'/user'|\"/user\")",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P09",
+      "group": "第二项，路由与页面跳转，10 分。三条路由齐全且跳转正确得 6 分；登录页与注册",
+      "item": "src/views 下存在登录/注册/用户三个视图文件",
+      "max_score": 1,
+      "rule_type": "glob_covers",
+      "params": {
+        "patterns": [
+          "src/views/Login.vue",
+          "src/views/Register.vue",
+          "src/views/User.vue"
+        ]
+      }
+    },
+    {
+      "id": "P10",
+      "group": "第三项，登录功能，20 分。用户名、密码的必填与格式校验正确得 8 分；成功调用",
+      "item": "登录页用户名、密码均配置 required 必填校验",
+      "max_score": 2,
+      "rule_type": "count_regex",
+      "params": {
+        "path_glob": "src/views/Login.vue",
+        "pattern": "required:\\s*true",
+        "min": 2,
+        "max": 100
+      }
+    },
+    {
+      "id": "P11",
+      "group": "第三项，登录功能，20 分。用户名、密码的必填与格式校验正确得 8 分；成功调用",
+      "item": "登录页用户名正则 ^[a-zA-Z0-9_]{3,20}$",
+      "max_score": 3,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/Login.vue",
+        "pattern": "\\^\\[a-zA-Z0-9_\\]\\{3,20\\}\\$",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P12",
+      "group": "第三项，登录功能，20 分。用户名、密码的必填与格式校验正确得 8 分；成功调用",
+      "item": "登录页密码正则含字母与数字双前瞻 (?=.*[A-Za-z])(?=.*\\d)",
+      "max_score": 3,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/Login.vue",
+        "pattern": "\\(\\?=\\.\\*\\[A-Za-z\\]\\)\\(\\?=\\.\\*\\\\d\\)",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P13",
+      "group": "第三项，登录功能，20 分。用户名、密码的必填与格式校验正确得 8 分；成功调用",
+      "item": "调用 POST /login 登录接口",
+      "max_score": 2,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/Login.vue",
+        "pattern": "axios\\.post\\(\\s*[^,)]*?/login",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P14",
+      "group": "第三项，登录功能，20 分。用户名、密码的必填与格式校验正确得 8 分；成功调用",
+      "item": "登录成功后把返回用户写入 Pinia user store",
+      "max_score": 2,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/Login.vue",
+        "pattern": "userStore\\.(\\$patch|setUser|login|\\$state)",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P15",
+      "group": "第三项，登录功能，20 分。用户名、密码的必填与格式校验正确得 8 分；成功调用",
+      "item": "登录失败时用 notification.error 展示后端错误信息",
+      "max_score": 2,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/Login.vue",
+        "pattern": "notification\\.error",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P16",
+      "group": "第三项，登录功能，20 分。用户名、密码的必填与格式校验正确得 8 分；成功调用",
+      "item": "登录请求期间按钮绑定 loading",
+      "max_score": 2,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/Login.vue",
+        "pattern": ":loading=\"loading\"",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P17",
+      "group": "第四项，注册功能，20 分。用户名、邮箱、密码、确认密码四项校验正确得 10 分",
+      "item": "注册页含 username、email、password、confirmPassword 四个表单项",
+      "max_score": 4,
+      "rule_type": "count_regex",
+      "params": {
+        "path_glob": "src/views/Register.vue",
+        "pattern": "name=\"(username|email|password|confirmPassword)\"",
+        "min": 4,
+        "max": 100
+      }
+    },
+    {
+      "id": "P18",
+      "group": "第四项，注册功能，20 分。用户名、邮箱、密码、确认密码四项校验正确得 10 分",
+      "item": "邮箱使用 type: 'email' 格式校验",
+      "max_score": 2,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/Register.vue",
+        "pattern": "type:\\s*'email'",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P19",
+      "group": "第四项，注册功能，20 分。用户名、邮箱、密码、确认密码四项校验正确得 10 分",
+      "item": "确认密码用自定义 validator 实现（非简单比较）",
+      "max_score": 3,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/Register.vue",
+        "pattern": "validator:\\s*\\(?\\s*(rule|_)",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P20",
+      "group": "第四项，注册功能，20 分。用户名、邮箱、密码、确认密码四项校验正确得 10 分",
+      "item": "调用 POST /register 注册接口",
+      "max_score": 2,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/Register.vue",
+        "pattern": "axios\\.post\\(\\s*[^,)]*?/register",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P21",
+      "group": "第四项，注册功能，20 分。用户名、邮箱、密码、确认密码四项校验正确得 10 分",
+      "item": "注册成功后跳转登录页",
+      "max_score": 2,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/Register.vue",
+        "pattern": "router\\.push\\([^)]*Login",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P22",
+      "group": "第四项，注册功能，20 分。用户名、邮箱、密码、确认密码四项校验正确得 10 分",
+      "item": "注册失败时提示后端错误信息",
+      "max_score": 1,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/Register.vue",
+        "pattern": "notification\\.error",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P23",
+      "group": "第四项，注册功能，20 分。用户名、邮箱、密码、确认密码四项校验正确得 10 分",
+      "item": "注册请求期间按钮绑定 loading",
+      "max_score": 1,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/Register.vue",
+        "pattern": ":loading=\"loading\"",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P24",
+      "group": "第四项，注册功能，20 分。用户名、邮箱、密码、确认密码四项校验正确得 10 分",
+      "item": "注册页用户名沿用 3~20 位字母/数字/下划线正则",
+      "max_score": 1,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/Register.vue",
+        "pattern": "\\^\\[a-zA-Z0-9_\\]\\{3,20\\}\\$",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P25",
+      "group": "第四项，注册功能，20 分。用户名、邮箱、密码、确认密码四项校验正确得 10 分",
+      "item": "注册页密码沿用含字母与数字双前瞻正则",
+      "max_score": 1,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/Register.vue",
+        "pattern": "\\(\\?=\\.\\*\\[A-Za-z\\]\\)\\(\\?=\\.\\*\\\\d\\)",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P26",
+      "group": "第五项，Pinia 状态管理，10 分。正确定义 user store 并存储五",
+      "item": "存在 src/stores/user.js",
+      "max_score": 1,
+      "rule_type": "file_exists",
+      "params": {
+        "path": "src/stores/user.js"
+      }
+    },
+    {
+      "id": "P27",
+      "group": "第五项，Pinia 状态管理，10 分。正确定义 user store 并存储五",
+      "item": "用 defineStore 定义 user store",
+      "max_score": 2,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/stores/user.js",
+        "pattern": "defineStore\\(",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P28",
+      "group": "第五项，Pinia 状态管理，10 分。正确定义 user store 并存储五",
+      "item": "store 存储 id、username、password、email、role 五个字段",
+      "max_score": 3,
+      "rule_type": "count_regex",
+      "params": {
+        "path_glob": "src/stores/user.js",
+        "pattern": "\\b(id|username|password|email|role)\\s*:",
+        "min": 5,
+        "max": 100
+      }
+    },
+    {
+      "id": "P29",
+      "group": "第五项，Pinia 状态管理，10 分。正确定义 user store 并存储五",
+      "item": "提供清空用户数据的 action（clearUser/clear/reset）",
+      "max_score": 2,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/stores/user.js",
+        "pattern": "(clearUser|clear|reset)\\s*\\(",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P30",
+      "group": "第五项，Pinia 状态管理，10 分。正确定义 user store 并存储五",
+      "item": "退出登录时调用清空 action",
+      "max_score": 2,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/User.vue",
+        "pattern": "clearUser\\s*\\(",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P31",
+      "group": "第六项，用户主页布局与权限，15 分。Layout 布局（侧边栏、头部、内容区）",
+      "item": "用户主页使用 a-layout / a-layout-sider / header / content 布局",
+      "max_score": 4,
+      "rule_type": "count_regex",
+      "params": {
+        "path_glob": "src/views/User.vue",
+        "pattern": "<a-layout(-sider|-header|-content|-footer)?[\\s>]",
+        "min": 4,
+        "max": 100
+      }
+    },
+    {
+      "id": "P32",
+      "group": "第六项，用户主页布局与权限，15 分。Layout 布局（侧边栏、头部、内容区）",
+      "item": "头部展示当前用户名",
+      "max_score": 2,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/User.vue",
+        "pattern": "userStore\\.username",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P33",
+      "group": "第六项，用户主页布局与权限，15 分。Layout 布局（侧边栏、头部、内容区）",
+      "item": "管理员标识（管理员）文案展示",
+      "max_score": 2,
+      "rule_type": "contains_text",
+      "params": {
+        "path": "src/views/User.vue",
+        "text": "管理员",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P34",
+      "group": "第六项，用户主页布局与权限，15 分。Layout 布局（侧边栏、头部、内容区）",
+      "item": "用户列表菜单项用 v-if 限定 role === 'admin' 才可见",
+      "max_score": 3,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/User.vue",
+        "pattern": "v-if=\"userStore\\.role === 'admin'\"",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P35",
+      "group": "第六项，用户主页布局与权限，15 分。Layout 布局（侧边栏、头部、内容区）",
+      "item": "存在「用户列表管理」菜单项",
+      "max_score": 1,
+      "rule_type": "contains_text",
+      "params": {
+        "path": "src/views/User.vue",
+        "text": "用户列表管理",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P36",
+      "group": "第六项，用户主页布局与权限，15 分。Layout 布局（侧边栏、头部、内容区）",
+      "item": "退出登录后跳转登录页",
+      "max_score": 3,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/User.vue",
+        "pattern": "router\\.push\\([^)]*Login",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P37",
+      "group": "第七项，个人信息展示，5 分。点击「个人信息维护」正确展示用户信息、字段数据来自",
+      "item": "存在「个人信息维护」菜单项",
+      "max_score": 1,
+      "rule_type": "contains_text",
+      "params": {
+        "path": "src/views/User.vue",
+        "text": "个人信息维护",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P38",
+      "group": "第七项，个人信息展示，5 分。点击「个人信息维护」正确展示用户信息、字段数据来自",
+      "item": "个人信息字段取自 Pinia user store（userStore.<field>）",
+      "max_score": 2,
+      "rule_type": "count_regex",
+      "params": {
+        "path_glob": "src/views/User.vue",
+        "pattern": "userStore\\.(id|username|email|password|role)",
+        "min": 3,
+        "max": 100
+      }
+    },
+    {
+      "id": "P39",
+      "group": "第八项，管理员用户列表，10 分。正确调用列表接口得 3 分；a-table 展",
+      "item": "调用 GET /users 列表接口",
+      "max_score": 3,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/components/UserList.vue",
+        "pattern": "axios\\.get\\(\\s*[^,)]*?/users",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P40",
+      "group": "第八项，管理员用户列表，10 分。正确调用列表接口得 3 分；a-table 展",
+      "item": "a-table 展示 id、username、email、password、role、createdAt 六列",
+      "max_score": 4,
+      "rule_type": "count_regex",
+      "params": {
+        "path_glob": "src/components/UserList.vue",
+        "pattern": "dataIndex:\\s*'(id|username|email|password|role|createdAt)'",
+        "min": 6,
+        "max": 100
+      }
+    },
+    {
+      "id": "P41",
+      "group": "第八项，管理员用户列表，10 分。正确调用列表接口得 3 分；a-table 展",
+      "item": "分页每页 10 条（pageSize: 10）",
+      "max_score": 2,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/components/UserList.vue",
+        "pattern": "pageSize:\\s*10",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P42",
+      "group": "第八项，管理员用户列表，10 分。正确调用列表接口得 3 分；a-table 展",
+      "item": "列表接口失败有兜底处理（.catch）",
+      "max_score": 1,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/components/UserList.vue",
+        "pattern": "\\.catch\\(",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P43",
+      "group": "第九项，代码规范与健壮性，10 分。组件拆分合理（用户列表独立成组件）得 4 分",
+      "item": "用户列表独立成组件 src/components/UserList.vue",
+      "max_score": 2,
+      "rule_type": "file_exists",
+      "params": {
+        "path": "src/components/UserList.vue"
+      }
+    },
+    {
+      "id": "P44",
+      "group": "第九项，代码规范与健壮性，10 分。组件拆分合理（用户列表独立成组件）得 4 分",
+      "item": "用户主页引入并使用 UserList 组件",
+      "max_score": 2,
+      "rule_type": "contains_regex",
+      "params": {
+        "path": "src/views/User.vue",
+        "pattern": "import\\s+UserList\\s+from",
+        "min_count": 1
+      }
+    },
+    {
+      "id": "P45",
+      "group": "第九项，代码规范与健壮性，10 分。组件拆分合理（用户列表独立成组件）得 4 分",
+      "item": "Axios 统一基础地址（axios.create 或 baseURL）",
+      "max_score": 3,
+      "rule_type": "count_regex",
+      "params": {
+        "path_glob": "src/**",
+        "pattern": "axios\\.create\\(|baseURL",
+        "min": 1,
+        "max": 100
+      }
+    },
+    {
+      "id": "P46",
+      "group": "第九项，代码规范与健壮性，10 分。组件拆分合理（用户列表独立成组件）得 4 分",
+      "item": "请求具备失败兜底、无未捕获异常（至少两处 .catch）",
+      "max_score": 1,
+      "rule_type": "count_regex",
+      "params": {
+        "path_glob": "src/**/*.vue",
+        "pattern": "\\.catch\\(",
+        "min": 2,
+        "max": 100
+      }
+    }
+  ],
+  "deductions": [],
+  "evidence_policy": {
+    "require_line": true,
+    "quote_max_chars": 200
+  },
+  "_note": "predicates 合计 95 分，低于 scoring.max_score=100，差额 5 分不计入静态评分：第一项「npm 安装/启动成功、控制台无报错」（约 4 分）与第九项「命名清晰、有必要的注释」（约 2 分）等运行期/定性内容无法用阅读式谓词判定；另注 rubric 九段小计相加为 110 分而作业满分按 100 分计，故谓词总分刻意留出余量。rubric 中「路由缺项每处扣 3 分」「校验规则不完整按条扣分」等差额扣分口径属人工程序性判断，未写成 deductions，deductions 保持空数组以避免自创罚分字段导致校验失败，差额在此显式说明。"
+}

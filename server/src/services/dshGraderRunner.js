@@ -19,10 +19,14 @@ export const CRED_ENV_KEY = 'DEEPSEEK_API_KEY';
 export const RUN_ROOT_ENV_KEY = 'GRADER_RUN_ROOT';
 
 /** 构造子进程 env：凭据 + run-root；不改动父进程 env（返回副本）。 */
-export function buildGraderEnv({ apiKey, runRoot, baseEnv = process.env } = {}) {
+export function buildGraderEnv({ apiKey, runRoot, baseEnv = process.env, extraEnv = {} } = {}) {
   const env = { ...baseEnv };
   if (apiKey) env[CRED_ENV_KEY] = String(apiKey);
   if (runRoot) env[RUN_ROOT_ENV_KEY] = String(runRoot);
+  // R2-B4：额外环境（如隔离的 DSH_HOME）——只加不改，既有调用行为不变
+  for (const [k, v] of Object.entries(extraEnv || {})) {
+    if (v !== undefined && v !== null) env[k] = String(v);
+  }
   return env;
 }
 
@@ -52,12 +56,13 @@ export async function runDshGrader({
   apiKey,
   cwd,
   timeoutMs = 600000,
+  extraEnv = {},
   spawnImpl = spawn,
   logImpl = logger,
 } = {}) {
   const key = apiKey !== undefined ? apiKey : await getApiKey();
   const concurrency = await describeConcurrencyKeys();
-  const env = buildGraderEnv({ apiKey: key, runRoot });
+  const env = buildGraderEnv({ apiKey: key, runRoot, extraEnv });
 
   safeLog(logImpl, {
     evt: 'dsh_grader_start',
