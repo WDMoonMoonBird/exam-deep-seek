@@ -97,24 +97,26 @@
         </a-layout>
     </a-layout>
 
-    <a-modal v-model:open="showProfile" :width="480" :footer="null" :destroyOnClose="true" @cancel="resetPwdForm">
-      <div class="profile-card">
-        <a-avatar :size="56" class="profile-avatar">{{ user?.realName?.charAt(0) }}</a-avatar>
-        <div class="profile-row"><span class="profile-label">姓名</span><span>{{ user?.realName }}</span></div>
-        <div class="profile-row"><span class="profile-label">工号</span><span>{{ user?.username }}</span></div>
-        <div class="profile-row"><span class="profile-label">当前单位</span><span>{{ userStore.currentSchool?.name || '未绑定' }}</span></div>
-        <a-divider />
-        <a-collapse v-model:activeKey="pwdActiveKey" :bordered="false" style="background:transparent;">
-          <a-collapse-panel key="pwd" header="修改密码">
-            <a-form layout="vertical" :model="pwdForm" size="small">
-              <a-form-item label="原密码"><a-input-password v-model:value="pwdForm.oldPassword" /></a-form-item>
-              <a-form-item label="新密码"><a-input-password v-model:value="pwdForm.newPassword" /></a-form-item>
-              <a-form-item label="确认新密码"><a-input-password v-model:value="pwdForm.confirmPassword" /></a-form-item>
-              <a-button type="primary" :loading="changingPwd" block @click="changePassword">确认修改</a-button>
-            </a-form>
-          </a-collapse-panel>
-        </a-collapse>
-      </div>
+    <!-- 我的信息（列表样式 v2 同期改造）：520 宽 + 标题（补上 a11y 缺失的可访问名）；
+         内容交给 ProfileCard：名片区只放姓名 + 角色徽标，单位等一律在资料区。 -->
+    <a-modal v-model:open="showProfile" :width="520" :footer="null" :destroyOnClose="true" title="我的信息" @cancel="resetPwdForm">
+      <ProfileCard
+        v-model:open="pwdOpen"
+        :name="user?.realName || user?.username || ''"
+        role="teacher"
+        id-label="工号"
+        :id-value="user?.username || ''"
+        unit-label="当前单位"
+        :unit-value="userStore.currentSchool?.name || '未绑定'"
+        hint="建议定期更换"
+      >
+        <a-form layout="vertical" :model="pwdForm" size="small" class="pwd-form">
+          <a-form-item label="原密码"><a-input-password v-model:value="pwdForm.oldPassword" /></a-form-item>
+          <a-form-item label="新密码"><a-input-password v-model:value="pwdForm.newPassword" /></a-form-item>
+          <a-form-item label="确认新密码"><a-input-password v-model:value="pwdForm.confirmPassword" /></a-form-item>
+          <a-button type="primary" :loading="changingPwd" block @click="changePassword">确认修改</a-button>
+        </a-form>
+      </ProfileCard>
     </a-modal>
 
     <!-- 工作流/内容型弹窗：captain 2026-10-09 定案作为第四档 1040 保留。
@@ -144,6 +146,7 @@ import { message } from 'ant-design-vue';
 import { useConfirm } from '../../composables/useConfirm.js';
 import { useTheme } from '../../composables/useTheme.js';
 import ThemeToggle from '../../components/ThemeToggle.vue';
+import ProfileCard from '../../components/ProfileCard.vue';
 import { QuestionCircleOutlined, UserOutlined, NodeIndexOutlined, UserSwitchOutlined, PoweroffOutlined, AppstoreOutlined, IdcardOutlined, DatabaseOutlined, FileTextOutlined, SafetyCertificateOutlined, TeamOutlined, BookOutlined, BulbOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined, LineChartOutlined } from '@ant-design/icons-vue';
 
 const router = useRouter(); const route = useRoute(); const userStore = useUserStore();
@@ -194,7 +197,7 @@ window.addEventListener('resize', () => { sidebarCollapsedWidth.value = window.i
 const selectedKeys = ref([route.path]);
 const showFlowModal = ref(false);
 const showProfile = ref(false);
-const pwdActiveKey = ref([]);
+const pwdOpen = ref(false);   // 「修改密码」分区是否展开（原折叠面板 activeKey 的替代）
 const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' });
 const changingPwd = ref(false);
 
@@ -253,7 +256,7 @@ function onMenuKeydown(e) {
 }
 
 function resetPwdForm() {
-  pwdActiveKey.value = [];
+  pwdOpen.value = false;
   pwdForm.oldPassword = '';
   pwdForm.newPassword = '';
   pwdForm.confirmPassword = '';
@@ -495,11 +498,8 @@ function handleMenu ({ key }) {
 }
 .flow-actions { display: flex; gap: var(--space-2); margin-top: var(--space-4); }
 
-.profile-card { text-align: center; }
-.profile-avatar { background: var(--brand-600); font-size: var(--fs-display-2); margin-bottom: var(--space-4); }
-.profile-row { display: flex; justify-content: space-between; padding: var(--space-2) 0; font-size: var(--fs-body); }
-.profile-label { color: var(--text-tertiary); }
-.profile-card :deep(.ant-collapse-header) { text-align: left; color: var(--text-link); font-size: var(--fs-body); }
+/* 我的信息：排版全部在 components/ProfileCard.vue，这里只给安全区里的表单留一点上间距 */
+.pwd-form { padding-top: var(--space-3); }
 
 @media (max-width: 768px) {
   .topbar { padding: 0 var(--space-3); }

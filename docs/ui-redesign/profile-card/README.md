@@ -29,6 +29,15 @@
 - ≤480：弹窗改**底部 sheet**（顶部圆角 16 + 36×4 拖拽条、字段单列、复制常显、触控 ≥44）。
 - 自评：现状 62 → 提案 88（视觉层次 20% / 一致性 15% / 留白 15% / 无障碍 15% / 响应式 10% / 交互 10% / 字体 10% / 颜色 5%）。
 
+## 落地结果（已实现，2026-10-12）
+- 新增 `client/src/components/ProfileCard.vue`；`views/teacher/Layout.vue`、`views/student/Layout.vue` 的弹窗改为该组件，补 `title="我的信息"`、宽度 480 → 520。
+- 实测（教师/学生 × 浅深 + 390 手机端）：**role=dialog 的 aria-labelledby 指向「我的信息」**（改前为 null）· 弹窗宽 520 · 名片区 3 个子元素（头像 + 姓名 + 角色徽标，**无副行**）·
+  复制按钮 aria-label「复制学号/工号」且剪贴板实测拿到 `202600001` / `e2e_teacher`，aria-live 播报「已复制学号」· 安全区可展开（aria-expanded 切换、3 个密码输入框）·
+  空提交仍走页面既有校验（提示「请填写密码」，不发请求）· 手机端 390：字段单列（318px）、弹窗 366、无横向溢出、复制按钮常显 · 0 控制台报错。
+- 实拍：`after-teacher-light.png` `after-teacher-dark.png` `after-student-light.png` `after-student-dark.png` `after-student-mobile.png`
+- **偏差（有意）**：手机端仍用 antd 居中弹窗（≈全宽、单列），未做「底部 sheet + 拖拽条」——那是额外交互（下滑关闭），需单独排期；当前形态已解决"两列被挤断"的实际问题。
+- 未动：改密请求与校验、userStore、菜单、路由、下拉菜单；管理端仍无此弹窗。
+
 ## 交付方式
 新增 `client/src/components/ProfileCard.vue`（props：user / school / classes / role；安全区用插槽放现有密码表单），
 改两个文件：`views/teacher/Layout.vue`、`views/student/Layout.vue` 的弹窗内容 + `title`/`width`。

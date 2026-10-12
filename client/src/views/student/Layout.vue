@@ -53,29 +53,27 @@
       </a-layout-content>
     </a-layout>
 
-    <a-modal v-model:open="showProfile" :width="480" :footer="null" :destroyOnClose="true" @cancel="resetPwdForm">
-      <div class="profile-card">
-        <a-avatar :size="56" class="profile-avatar">{{ user?.realName?.charAt(0) }}</a-avatar>
-        <div class="profile-row"><span class="profile-label">姓名</span><span>{{ user?.realName }}</span></div>
-        <div class="profile-row"><span class="profile-label">学号</span><span>{{ user?.username }}</span></div>
-        <template v-if="profile.classes">
-          <div class="profile-row" v-for="(c, i) in profile.classes" :key="i">
-            <span class="profile-label">班级</span><span>{{ c.className }}</span>
-          </div>
-          <div class="profile-row"><span class="profile-label">学校</span><span>{{ profile.classes[0]?.schoolName }}</span></div>
-        </template>
-        <a-divider />
-        <a-collapse v-model:activeKey="pwdActiveKey" :bordered="false" style="background:transparent;">
-          <a-collapse-panel key="pwd" header="修改密码">
-            <a-form layout="vertical" :model="pwdForm" size="small">
-              <a-form-item label="原密码"><a-input-password v-model:value="pwdForm.oldPassword" /></a-form-item>
-              <a-form-item label="新密码"><a-input-password v-model:value="pwdForm.newPassword" /></a-form-item>
-              <a-form-item label="确认新密码"><a-input-password v-model:value="pwdForm.confirmPassword" /></a-form-item>
-              <a-button type="primary" :loading="changingPwd" block @click="changePassword">确认修改</a-button>
-            </a-form>
-          </a-collapse-panel>
-        </a-collapse>
-      </div>
+    <!-- 我的信息（列表样式 v2 同期改造）：520 宽 + 标题（补上 a11y 缺失的可访问名）；
+         名片区只放姓名 + 角色徽标（学校/班级在下方的资料区，长校名不再挤破名片）；
+         多班级用 chip 列表，不再重复 N 行「班级」标签。 -->
+    <a-modal v-model:open="showProfile" :width="520" :footer="null" :destroyOnClose="true" title="我的信息" @cancel="resetPwdForm">
+      <ProfileCard
+        v-model:open="pwdOpen"
+        :name="user?.realName || user?.username || ''"
+        role="student"
+        id-label="学号"
+        :id-value="user?.username || ''"
+        :classes="classNames"
+        :school="schoolName"
+        hint="建议每学期更换一次"
+      >
+        <a-form layout="vertical" :model="pwdForm" size="small" class="pwd-form">
+          <a-form-item label="原密码"><a-input-password v-model:value="pwdForm.oldPassword" /></a-form-item>
+          <a-form-item label="新密码"><a-input-password v-model:value="pwdForm.newPassword" /></a-form-item>
+          <a-form-item label="确认新密码"><a-input-password v-model:value="pwdForm.confirmPassword" /></a-form-item>
+          <a-button type="primary" :loading="changingPwd" block @click="changePassword">确认修改</a-button>
+        </a-form>
+      </ProfileCard>
     </a-modal>
   </a-layout>
 </template>
@@ -88,6 +86,7 @@ import { message } from 'ant-design-vue';
 import { useConfirm } from '../../composables/useConfirm.js';
 import { useTheme } from '../../composables/useTheme.js';
 import ThemeToggle from '../../components/ThemeToggle.vue';
+import ProfileCard from '../../components/ProfileCard.vue';
 import request from '../../api/request.js';
 import { ReadOutlined, TrophyOutlined, UserOutlined, BulbOutlined, PoweroffOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
 
@@ -159,12 +158,14 @@ async function loadSchoolName() {
 }
 
 onMounted(() => { loadSchoolName(); });
-const pwdActiveKey = ref([]);
+const pwdOpen = ref(false);   // 「修改密码」分区是否展开（原折叠面板 activeKey 的替代）
+/** 名片资料区用：多班级 → 名称数组（学校复用页面已有的 schoolName ref，来源同 /student/profile，未新增字段） */
+const classNames = computed(() => (profile.classes || []).map((c) => c.className));
 const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' });
 const changingPwd = ref(false);
 
 function resetPwdForm() {
-  pwdActiveKey.value = [];
+  pwdOpen.value = false;
   pwdForm.oldPassword = '';
   pwdForm.newPassword = '';
   pwdForm.confirmPassword = '';
@@ -233,11 +234,8 @@ function handleMenu({ key }) {
 .user-caret { font-size: var(--fs-caption); color: var(--text-tertiary); }
 .content { padding: calc(var(--layout-topbar-h) + var(--space-6)) var(--space-12) var(--space-10); background: var(--bg-canvas); overflow-y: auto; height: 100%; }
 
-.profile-card { text-align: center; }
-.profile-avatar { background: var(--brand-600); font-size: var(--fs-display-2); margin-bottom: var(--space-4); }
-.profile-row { display: flex; justify-content: space-between; padding: var(--space-2) 0; font-size: var(--fs-body); }
-.profile-label { color: var(--text-tertiary); }
-.profile-card :deep(.ant-collapse-header) { text-align: left; color: var(--text-link); font-size: var(--fs-body); }
+/* 我的信息：排版全部在 components/ProfileCard.vue，这里只给安全区里的表单留一点上间距 */
+.pwd-form { padding-top: var(--space-3); }
 
 @media (max-width: 768px) {
   .topbar { padding: 0 var(--space-3); }
