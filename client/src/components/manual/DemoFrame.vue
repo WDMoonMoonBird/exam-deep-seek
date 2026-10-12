@@ -93,5 +93,5 @@ defineProps({
 @keyframes dm-mask-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes dm-modal-in { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
 .dm-modal { width: calc(var(--u) * 460); max-width: 100%; box-shadow: 0 calc(var(--u) * 8) calc(var(--u) * 28) rgba(16, 24, 40, 0.22); }
-.dm-toast { display: inline-flex; align-items: center; gap: calc(var(--u) * 6); padding: calc(var(--u) * 6) calc(var(--u) * 10); border-radius: calc(var(--u) * 7); background: var(--card-bg); border: 1px solid var(--border-default); box-shadow: var(--shadow-md, 0 4px 12px rgba(16, 24, 40, 0.12)); font-size: calc(var(--u) * 12); color: var(--text-primary); }
+.dm-toast { position: relative; z-index: 5; /* 真 antd 的 message z-index(1010) 高于遮罩(1000)，故浮在遮罩之上 */ display: inline-flex; align-items: center; gap: calc(var(--u) * 6); padding: calc(var(--u) * 6) calc(var(--u) * 10); border-radius: calc(var(--u) * 7); background: var(--card-bg); border: 1px solid var(--border-default); box-shadow: var(--shadow-md, 0 4px 12px rgba(16, 24, 40, 0.12)); font-size: calc(var(--u) * 12); color: var(--text-primary); }
 </style>
