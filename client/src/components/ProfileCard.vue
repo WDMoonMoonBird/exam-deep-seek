@@ -44,6 +44,7 @@
 
     <section class="pc-sec">
       <button
+        ref="secHeadEl"
         type="button"
         class="pc-sec-head"
         :aria-expanded="open ? 'true' : 'false'"
@@ -53,9 +54,19 @@
         <span class="pc-sec-t">修改密码</span>
         <span class="pc-sec-d">{{ hint }}</span>
       </button>
-      <div v-show="open" class="pc-form">
-        <slot />
-      </div>
+      <!-- 折叠动效：高度 0 → 内容高 + 淡入（dur/ease 取自项目动效令牌）；
+           prefers-reduced-motion: reduce 时钩子直接返回 → 瞬间展开/收起 -->
+      <Transition
+        name="pc-fold"
+        @enter="foldEnter"
+        @after-enter="foldAfterEnter"
+        @leave="foldLeave"
+        @after-leave="foldAfterLeave"
+      >
+        <div v-if="open" ref="formEl" class="pc-form">
+          <slot />
+        </div>
+      </Transition>
     </section>
 
     <!-- 复制结果用 aria-live 播报，视觉上不占位 -->
@@ -100,6 +111,60 @@ const open = computed({
 const roleText = computed(() => (props.role === 'student' ? '学生' : '教师'));
 const roleTone = computed(() => (props.role === 'student' ? 'accent' : 'brand'));
 const initial = computed(() => (props.name || props.idValue || '?').charAt(0));
+
+/* ---------- 折叠动效（高度动画，内容多高都准） ---------- */
+const formEl = ref(null);
+const secHeadEl = ref(null);
+
+const prefersReducedMotion = () =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** 取项目动效令牌的真实值构造 transition（避免把 var() 塞进 transition 简写） */
+function foldTransition(el) {
+  const cs = getComputedStyle(el);
+  const dur = cs.getPropertyValue('--duration-base').trim() || '220ms';
+  const ease = cs.getPropertyValue('--ease-out').trim() || 'cubic-bezier(0.16, 1, 0.3, 1)';
+  return 'height ' + dur + ' ' + ease + ', opacity ' + dur + ' ' + ease;
+}
+
+function foldEnter(el) {
+  if (prefersReducedMotion()) return;
+  const target = el.scrollHeight;
+  el.style.transition = 'none';
+  el.style.height = '0px';
+  el.style.opacity = '0';
+  void el.offsetHeight; // 强制回流，让起始值成为动画起点
+  el.style.willChange = 'height';
+  el.style.transition = foldTransition(el);
+  el.style.height = target + 'px';
+  el.style.opacity = '1';
+}
+function foldAfterEnter(el) {
+  el.style.transition = '';
+  el.style.willChange = '';
+  el.style.height = 'auto'; // 收尾回 auto：内容变化（如校验提示）不会再被固定高度裁掉
+  el.style.opacity = '';
+}
+function foldLeave(el) {
+  if (prefersReducedMotion()) return;
+  // 焦点若在表单里，先挪回标题按钮（元素马上要被卸载）
+  if (el.contains(document.activeElement) && secHeadEl.value) secHeadEl.value.focus();
+  el.style.height = el.scrollHeight + 'px';
+  el.style.opacity = '1';
+  void el.offsetHeight;
+  el.style.willChange = 'height';
+  el.style.transition = foldTransition(el);
+  el.style.height = '0px';
+  el.style.opacity = '0';
+}
+function foldAfterLeave(el) {
+  el.style.transition = '';
+  el.style.willChange = '';
+  el.style.height = '';
+  el.style.opacity = '';
+}
 
 const copiedMsg = ref('');
 let timer = null;
@@ -258,12 +323,21 @@ async function copyId() {
   color: var(--text-tertiary);
   font-size: var(--fs-body);
   line-height: 1;
-  transition: transform var(--duration-fast) var(--ease-out);
+  transition: transform var(--duration-base) var(--ease-out);
 }
 .pc-chev.is-open { transform: rotate(90deg); }
 .pc-sec-t { flex: 1; font-size: var(--fs-body-sm); font-weight: var(--fw-medium); color: var(--text-primary); }
 .pc-sec-d { font-size: var(--fs-caption); color: var(--text-tertiary); }
-.pc-form { padding: 0 var(--space-3) var(--space-3); border-top: 1px solid var(--border-subtle); }
+.pc-form {
+  padding: 0 var(--space-3) var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  overflow: hidden;   /* 高度动画期间裁掉溢出内容（will-change 由 JS 仅动画期间挂） */
+}
+
+/* 动效开关：系统「减少动态效果」时不做高度/透明度动画（JS 钩子同时短路） */
+@media (prefers-reduced-motion: reduce) {
+  .pc-chev { transition: none; }
+}
 
 /* 手机端：两列会挤断长校名 → 单列；复制按钮常显（没有 hover） */
 @media (max-width: 480px) {
