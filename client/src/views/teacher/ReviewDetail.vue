@@ -326,7 +326,7 @@ onUnmounted(onPageUnmounted);
 .n-section-head:hover { color: var(--text-brand); }
 .n-section-arrow {
   font-size:var(--fs-body); width: 16px; flex-shrink: 0;
-  transition: transform var(--duration-base) ease;
+  transition: transform var(--duration-base) var(--ease-out);
   color: var(--text-tertiary); margin-right: 2px;
 }
 .n-section-head:hover .n-section-arrow { color: var(--text-brand); }
@@ -343,7 +343,7 @@ onUnmounted(onPageUnmounted);
 .n-grid-wrap {
   max-height: none;
   overflow: visible;
-  transition: max-height var(--duration-slow) ease, opacity var(--duration-base) ease;
+  transition: max-height var(--duration-slow) var(--ease-out), opacity var(--duration-base) var(--ease-out);
   opacity: 1;
 }
 .n-grid-wrap.collapsed {
@@ -409,11 +409,11 @@ onUnmounted(onPageUnmounted);
   background: var(--bg-surface); border-radius:var(--radius-md); border: 1px solid var(--border-subtle);
 }
 .rp-material-bar:hover { background: var(--bg-sunken); }
-.material-arrow { margin-left: auto; font-size: 10px; transition: transform var(--duration-base); }
+.material-arrow { margin-left: auto; font-size: 10px; transition: transform var(--duration-base) var(--ease-out); }
 .material-arrow.open { transform: rotate(180deg); }
 .rp-material-body { overflow: hidden; }
 .rp-material-inner { padding: 12px 16px; background: var(--bg-surface-2); border-radius: 0 0 8px 8px; }
-.collapse-enter-active, .collapse-leave-active { transition: all var(--duration-base) ease; }
+.collapse-enter-active, .collapse-leave-active { transition: max-height var(--duration-slow) var(--ease-out), opacity var(--duration-base) var(--ease-out); }
 .collapse-enter-from, .collapse-leave-to { opacity: 0; max-height: 0; }
 .collapse-enter-to, .collapse-leave-from { opacity: 1; max-height: 800px; }
 

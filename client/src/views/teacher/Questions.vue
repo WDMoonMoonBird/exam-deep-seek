@@ -203,7 +203,7 @@ function onNewQuestion({ key }) {
 <style scoped>
 /* 新增题目：展开时箭头旋转 180°（过渡与菜单同一时长） */
 .new-q-caret {
-  transition: transform var(--duration-fast) ease;
+  transition: transform var(--duration-fast) var(--ease-out);
 }
 .new-q-caret.up {
   transform: rotate(180deg);

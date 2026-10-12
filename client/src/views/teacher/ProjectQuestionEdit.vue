@@ -246,7 +246,7 @@ onBeforeUnmount(disposePage);
 /* 教师操作区：靠 margin-left:auto 推到行尾，与左侧题目输入框同一行（align-items 由父级统一居中） */
 .meta-actions { margin-left:auto; display:flex; align-items:center; gap:var(--space-2); flex-shrink:0; }
 
-.kind-pick-switch-enter-active,.kind-pick-switch-leave-active { transition: all var(--duration-base) ease; }
+.kind-pick-switch-enter-active,.kind-pick-switch-leave-active { transition: var(--transition-surface); }
 .kind-pick-switch-enter-from,.kind-pick-switch-leave-to { opacity:0; transform:scale(.9); }
 
 .kind-picker { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; }
@@ -358,7 +358,7 @@ onBeforeUnmount(disposePage);
 .desc-modal .ProseMirror { min-height:420px; }
 
 /* ===== 代码预览切换动效（0.15s 淡入上移） ===== */
-.pr-fade-in { animation: prFadeIn var(--duration-fast) ease; }
+.pr-fade-in { animation: prFadeIn var(--duration-fast) var(--ease-out); }
 @keyframes prFadeIn {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }

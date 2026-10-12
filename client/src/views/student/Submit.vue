@@ -479,7 +479,7 @@ onUnmounted(disposePage);
 .material-arrow.open { transform: rotate(180deg); }
 .sp-material-body { overflow: hidden; }
 .sp-material-inner { padding: var(--space-3) var(--space-4); background: var(--bg-surface-2); border-radius: 0 0 var(--radius-md) var(--radius-md); }
-.collapse-enter-active, .collapse-leave-active { transition: all var(--duration-base) var(--ease-out); }
+.collapse-enter-active, .collapse-leave-active { transition: max-height var(--duration-slow) var(--ease-out), opacity var(--duration-base) var(--ease-out); }
 .collapse-enter-from, .collapse-leave-to { opacity: 0; max-height: 0; }
 .collapse-enter-to, .collapse-leave-from { opacity: 1; max-height: 800px; }
 

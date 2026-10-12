@@ -169,7 +169,7 @@ onUnmounted(() => {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   overflow: hidden;
-  transition: border-color var(--duration-base);
+  transition: border-color var(--duration-base) var(--ease-out);
   background: var(--bg-surface);
 }
 .rich-editor.focused {
@@ -197,7 +197,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all var(--duration-fast);
+  transition: var(--transition-control);
   flex-shrink: 0;
 }
 .toolbar button:hover {

@@ -151,10 +151,10 @@ function onTreeExpand(keys) {
 
 /* 圆形选择按钮（还原封装前 kind-picker UI） */
 .kind-picker { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; min-height:120px; }
-.kind-add-btn { width:56px; height:56px; border-radius:50%; border:2px dashed var(--border-strong); background:var(--bg-surface-2); font-size:24px; color:var(--text-tertiary); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all var(--duration-base); }
+.kind-add-btn { width:56px; height:56px; border-radius:50%; border:2px dashed var(--border-strong); background:var(--bg-surface-2); font-size:24px; color:var(--text-tertiary); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:var(--transition-control); }
 .kind-add-btn:hover { border-color:var(--border-focus); color:var(--text-link); background:var(--bg-selected); }
-.kind-add-btn:disabled { cursor:not-allowed; opacity:.8; animation:upload-pulse var(--duration-loop-pulse) ease-in-out infinite; }
-.kind-hint { font-size:var(--fs-body-sm); color:var(--text-tertiary); transition:color var(--duration-base); }
+.kind-add-btn:disabled { cursor:not-allowed; opacity:.8; animation:upload-pulse var(--duration-loop-pulse) var(--ease-in-out) infinite; }
+.kind-hint { font-size:var(--fs-body-sm); color:var(--text-tertiary); transition:color var(--duration-base) var(--ease-out); }
 @keyframes upload-pulse { 0%,100% { opacity:.6; } 50% { opacity:1; } }
 .zu-tree { flex:1; overflow:auto; margin-top:10px; min-height:0; }
 .zu-tree-head { display:flex; align-items:baseline; gap:8px; margin-bottom:6px; }

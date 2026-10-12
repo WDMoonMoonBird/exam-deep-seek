@@ -674,14 +674,14 @@ onBeforeUnmount(() => {
 .pr-panel { flex-shrink:0; background:var(--bg-surface-2); border-top:1px solid var(--border-strong); display:flex; flex-direction:column; }
 .panel-header { display:flex; align-items:center; gap:8px; padding:7px 16px; cursor:pointer; user-select:none; font-size:var(--fs-body-sm); color:var(--text-secondary); border-bottom:1px solid var(--border-subtle); }
 .panel-header:hover { background:var(--bg-sunken); }
-.panel-arrow { font-size:10px; color:var(--text-tertiary); transition:transform var(--duration-base) ease; }
+.panel-arrow { font-size:10px; color:var(--text-tertiary); transition:transform var(--duration-base) var(--ease-out); }
 .panel-arrow.open { transform:rotate(90deg); }
 .panel-title { font-weight:600; color:var(--text-primary); }
 .panel-toggle { margin-left:auto; font-size:var(--fs-caption); color:var(--text-tertiary); }
 .panel-body { display:flex; height:250px; overflow:hidden; }
 
 /* 面板折叠/展开原生过渡（max-height 匹配 250px 面板高） */
-.panel-slide-enter-active, .panel-slide-leave-active { transition: max-height var(--duration-slow) ease, opacity var(--duration-slow) ease; }
+.panel-slide-enter-active, .panel-slide-leave-active { transition: max-height var(--duration-slow) var(--ease-out), opacity var(--duration-slow) var(--ease-out); }
 .panel-slide-enter-from, .panel-slide-leave-to { max-height:0; opacity:0; }
 .panel-slide-enter-to, .panel-slide-leave-from { max-height:250px; opacity:1; }
 .ai-section { flex:1; overflow:auto; padding:12px 16px; border-right:1px solid var(--border-subtle); }
@@ -721,11 +721,11 @@ onBeforeUnmount(() => {
 .t-hint { flex:1; font-size:var(--fs-caption); color:var(--text-tertiary); }
 
 /* ===== 数据源/内容切换动效（0.15s 淡入上移） ===== */
-.pr-fade-enter-active { transition: opacity var(--duration-fast) ease, transform var(--duration-fast) ease; }
-.pr-fade-leave-active { transition: opacity var(--duration-instant) ease; }
+.pr-fade-enter-active { transition: opacity var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out); }
+.pr-fade-leave-active { transition: opacity var(--duration-instant) var(--ease-out); }
 .pr-fade-enter-from { opacity: 0; transform: translateY(6px); }
 .pr-fade-leave-to { opacity: 0; }
-.pr-fade-in { animation: prFadeIn var(--duration-fast) ease; }
+.pr-fade-in { animation: prFadeIn var(--duration-fast) var(--ease-out); }
 @keyframes prFadeIn {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }
