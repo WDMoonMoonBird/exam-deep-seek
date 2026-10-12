@@ -89,6 +89,33 @@ dsh_bin() {
   echo "$bin"
 }
 
+# ★R2-B22：装置（DSH harness）走 **Anthropic 风格 Messages API**（请求 baseURL + `/v1/messages`），
+#   而平台的 `DEEPSEEK_BASE_URL` 是给 **OpenAI 风格**客户端用的（`https://api.deepseek.com`）⇒ 直接写入会拼出
+#   `/v1/messages` ⇒ HTTP 404 ⇒ 造尺（唯一用 LLM 的一步）必然失败。
+#   优先级：① DSH_GRADER_BASE_URL（显式覆盖）② 由 DEEPSEEK_BASE_URL 派生（含 /anthropic ⇒ 原样；
+#   host=api.deepseek.com ⇒ 归一到 <scheme>://<host>[:port]/anthropic；其他 host ⇒ 原样不动，不猜）③ 都没有 ⇒ 返回 1（保持既有默认）。
+messages_api_root() {
+  if [ -n "${DSH_GRADER_BASE_URL:-}" ]; then printf '%s\n' "${DSH_GRADER_BASE_URL%/}"; return 0; fi
+  local b="${DEEPSEEK_BASE_URL:-}"
+  [ -n "$b" ] || return 1
+  b="${b%/}"
+  case "$b" in
+    */anthropic) printf '%s\n' "$b"; return 0 ;;
+  esac
+  case "$b" in
+    https://api.deepseek.com|http://api.deepseek.com|https://api.deepseek.com/*|http://api.deepseek.com/*)
+      local scheme rest
+      scheme="${b%%://*}"; rest="${b#*://}"
+      printf '%s://%s/anthropic\n' "$scheme" "${rest%%/*}"; return 0 ;;
+  esac
+  printf '%s\n' "$b"; return 0
+}
+
+# 只打印 scheme+host+path（去掉 query/fragment/凭据），供日志观测（**绝不打印 key**）
+endpoint_label() {
+  printf '%s\n' "$1" | sed -E 's#^([a-zA-Z][a-zA-Z0-9+.-]*://)([^/@]*@)?([^/?#]+)([^?#]*)?.*$#\1\3\4#'
+}
+
 scaffold_home() {
   local home="$1"
   guard_isolated_home "$home" > /dev/null
@@ -116,12 +143,21 @@ PATCH
     model: ${DEEPSEEK_MODEL}
 PATCH_MODEL
   fi
-  if [ -n "${DEEPSEEK_BASE_URL:-}" ]; then
+  # ★R2-B22：写入 profile 的 baseURL 必须是 **Messages API 的根**（按优先级派生，见 messages_api_root）
+  local endpoint=""
+  endpoint="$(messages_api_root || true)"
+  if [ -n "$endpoint" ]; then
     cat >> "$home/profiles/$DSH_PROFILE_NAME/cordis.patch.yml" <<PATCH_BASEURL
 - id: llm-deepseek
   config:
-    baseURL: ${DEEPSEEK_BASE_URL}
+    baseURL: ${endpoint}
 PATCH_BASEURL
+  fi
+  # 可观测：生效端点（scheme+host+path，无 key）+ 模型名；无配置时明示 device-default
+  if [ -n "$endpoint" ]; then
+    printf 'MODEL_ENDPOINT=%s model=%s\n' "$(endpoint_label "$endpoint")" "${DEEPSEEK_MODEL:-na}"
+  else
+    printf 'MODEL_ENDPOINT=(device-default) model=%s\n' "${DEEPSEEK_MODEL:-na}"
   fi
 }
 
@@ -218,6 +254,48 @@ cleanup_credentials() {
     rm -f "$home/.credentials.yaml"
     log "凭据清理：已删除 $home/.credentials.yaml"
   fi
+}
+
+# ===== ★R2-B23：teardown（取证 → 策略 → 销毁 → 反证）=====
+
+# session_stats <home>：→ "<files> <bytes>"（会话文件 = sessions/** + storages/session_projcache/**）
+session_stats() {
+  local home="$1" files=0 bytes=0 d stat_out n s
+  if [ -z "$home" ] || [ ! -d "$home" ]; then printf '0 0\n'; return 0; fi
+  for d in "$home/sessions" "$home/storages/session_projcache"; do
+    [ -d "$d" ] || continue
+    stat_out="$(find "$d" -type f -exec stat -f '%z' {} + 2> /dev/null | awk '{s+=$1} END {printf "%d %d", NR, s+0}')"
+    n="${stat_out%% *}"; s="${stat_out##* }"
+    files=$((files + ${n:-0})); bytes=$((bytes + ${s:-0}))
+  done
+  printf '%s %s\n' "$files" "$bytes"
+}
+
+# home_file_count <dir>：文件数（目录不存在 ⇒ 0）
+home_file_count() {
+  local d="$1"
+  [ -n "$d" ] && [ -d "$d" ] || { printf '0\n'; return 0; }
+  find "$d" -type f 2> /dev/null | wc -l | tr -d ' '
+}
+
+# purge_home_dir <home>：删除隔离 home 并**反证**（仍存在 ⇒ 返回 1）
+purge_home_dir() {
+  local home="$1"
+  [ -n "$home" ] || return 1
+  if [ -e "$home" ]; then rm -rf "$home" 2> /dev/null || true; fi
+  [ ! -e "$home" ]
+}
+
+# write_keep_scene <home> <keep_days>：失败现场保留标记（不删任何东西）
+write_keep_scene() {
+  local home="$1" days="$2"
+  if [ -z "$home" ] || [ ! -d "$home" ]; then return 0; fi
+  {
+    printf 'keep_scene=yes\n'
+    printf 'keep_days=%s\n' "$days"
+    printf 'reason=non-zero-exit\n'
+    printf 'ts=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  } > "$home/.keep-scene" 2> /dev/null || true
 }
 
 # snapshot_dsh_home <out-file>：~/.dsh 文件指纹（mtime/size/path），排除 node_modules

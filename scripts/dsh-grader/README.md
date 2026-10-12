@@ -78,7 +78,7 @@ macOS 自带 `python3`、`bash 3.2`、`lsof`、`unzip`（`unzip` 仅用于人工
 2. **F-C2 退出码**：任何 `rc≠0`（含 124 超时）都不判 PASS；摘要新增 `RUN_EXIT_CODE`/`reason`/`RUN_CHILD_EXITS`/`RUN_RESULT_SOURCE`；
    失败运行**不写** `out/grading-result.json`（制品只留在 `out/results/` 供诊断）。
 3. **F-C3 DSH_HOME 硬护栏**：`guard_isolated_home()` 在任何 DSH 调用之前断言 DSH_HOME 非空、绝对路径、
-   ≠ 真实 home（`DSH_GRADER_REAL_HOME` 或 `~/.dsh`）、≠ $HOME、且位于临时目录下；
+   ≠ 真实 home（`DSH_GRADER_REAL_HOME` 或 `~/.dsh`）、≠ ${HOME}、且位于临时目录下；
    `dsh_bin`/`scaffold_home`/`install_credentials` 都前置调用；可用 `DSH_GRADER_ISOLATED_HOME` 覆盖隔离 home（同样要过护栏）。
 4. **F-C4 workdir 原子锁**：`mkdir "$WORKDIR/.dsh-grader.lock"` 原子获取；同 --workdir 的第二次运行立即失败并指出占用者 pid；
    锁内清理（materials/home/out）只发生在拿到锁之后；陈旧锁（owner pid 已死）自动接管并留痕。

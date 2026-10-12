@@ -26,7 +26,12 @@ function fakePrisma({ initialJobs = [], affectedByClaim = 1 } = {}) {
       update: async ({ where, data }) => { updates.push({ id: where.id, data }); jobs.set(where.id, { ...jobs.get(where.id), ...data }); return jobs.get(where.id); },
     },
     submission: { update: async ({ where, data }) => { updates.push({ sub: where.id, data }); return { id: where.id }; } },
-    $executeRawUnsafe: async (_sql, id) => {
+    // ★R2-B28b：worker 现在还会用原始 SQL 写 run 汇总（grading_job_runs INSERT）⇒ 假 prisma 必须**按语句判别**，
+    //   只对「领取语句」（UPDATE grading_jobs SET status='running'）做模拟；否则会把 needs_rerun 又写回 running（原缺陷）。
+    $executeRawUnsafe: async (sql, ...params) => {
+      const isClaim = /UPDATE\s+`?grading_jobs`?\s+SET\s+status\s*=\s*'running'/i.test(String(sql));
+      if (!isClaim) return 1;
+      const id = params[0];
       if (Number(affectedByClaim) === 1 && jobs.has(id)) {
         const cur = jobs.get(id);
         jobs.set(id, { ...cur, status: 'running', attempts: (cur.attempts || 0) + 1 });

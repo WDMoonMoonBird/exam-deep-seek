@@ -401,6 +401,19 @@ else
   bad "R3.5-B E-G g3+--strict 语义异常"
 fi
 
+echo "-- R2-B29：静态防线（$var 紧跟非 ASCII 的未定界写法 ⇒ bash 3.2 unbound ⇒ 覆盖退出码）--"
+SCAN_OUT="$(bash "$HERE/scan-unbraced-vars.sh" 2>&1)"; SCAN_RC=$?
+if [ "$SCAN_RC" -eq 0 ] && printf '%s' "$SCAN_OUT" | grep -q '^SCAN_OK files='; then
+  ok "R2-B29 定界静态扫描：$(printf '%s' "$SCAN_OUT" | tail -1)"
+else
+  bad "R2-B29 定界静态扫描发现未定界写法（rc=${SCAN_RC}）：$(printf '%s' "$SCAN_OUT" | tail -3 | tr '\n' ' ')"
+fi
+BAD_DIR="$SANDBOX/b29-bad"; mkdir -p "$BAD_DIR"
+# 反例夹具：拼装写出（源码里刻意不出现 $var 紧跟全角字符的形态，避免自伤）
+printf 'echo "boom=%s%s\n' '$zz' '）' > "$BAD_DIR/bad.sh"
+bash "$HERE/scan-unbraced-vars.sh" --path "$BAD_DIR" > /dev/null 2>&1; NEG_RC=$?
+if [ "$NEG_RC" -eq 1 ]; then ok "R2-B29 反例：注入未定界写法 ⇒ 扫描 rc=1（$BAD_DIR/bad.sh）"; else bad "R2-B29 反例：期望 rc=1，实测 rc=${NEG_RC}"; fi
+
 echo "SELFTEST_MODEL_CALLS=0（全部走 stub；无网络、无模型调用）"
 echo "SELFTEST_STUB_CALLS=$(wc -l < "$STUB_CALL_LOG" | tr -d ' ')"
 echo "SELFTEST_PASS=$PASS_N SELFTEST_FAIL=$FAIL_N"

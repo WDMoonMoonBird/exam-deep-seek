@@ -15,7 +15,53 @@ import path from 'path';
 import { runDshGrader } from './dshGraderRunner.js';
 import { consumeChecker, consumeMeasureResults, resolveCheckerPath } from './dshCheckerConsumer.js';
 import { materializeAnchor, persistAnchor } from './dshGradingAnchor.js';
+import { archiveRun, persistJobRun, purgeRunRootSessions, resolveRunsRoot, tailText } from './dshRunArchiver.js';
 import { formatMaterialsMissing, formatMaterialsResolved, resolveMaterialsForAssignment, withMaterialsArgs } from './dshMaterialsResolver.js';
+
+/**
+ * 读装置产出的 teardown 证据（<run-root>/out/run-teardown.json）
+ */
+export function readTeardownEvidence(runRoot) {
+  try {
+    const p = path.join(runRoot, 'out', 'run-teardown.json');
+    return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : null;
+  } catch { return null; }
+}
+
+/**
+ * ★R2-B23：消费一个 job 的**外包装** —— 运行结束后归档证据、落库摘要、按策略处理 run-root。
+ * 归档/落库失败都不改变 job 终态（只记日志与 RUN_ARCHIVED 行）。
+ */
+export async function runOnce(args = {}) {
+  const res = await runOnceInner(args);
+  if (!res || !res.consumed || !res.jobId || !res.runRoot) return res;
+  try {
+    const success = res.status === JOB_STATUS.done;
+    // ★R2-B27（路线 2）：**先 teardown**（销毁会话+凭据；失败保留现场）⇒ 再归档 ⇒ 成功时清理 run-root
+    const purgeWanted = String((args.extraEnv && args.extraEnv.DSH_GRADER_PURGE_HOME) ?? process.env.DSH_GRADER_PURGE_HOME ?? '1') !== '0';
+    const keepDays = Number((args.extraEnv && args.extraEnv.DSH_GRADER_SCENE_KEEP_DAYS) ?? process.env.DSH_GRADER_SCENE_KEEP_DAYS ?? 3) || 3;
+    purgeRunRootSessions({ runRoot: res.runRoot, exitCode: res.exitCode === undefined ? 0 : res.exitCode, purge: purgeWanted, keepDays, log: console });
+    const teardown = readTeardownEvidence(res.runRoot);
+    // 能力守卫（R2-B28b）：极简/老 fake prisma 没有 gradingJob.findUnique ⇒ 视为无作业元信息（不抛、不影响 job 终态）
+    const jobLookup = args.prisma && args.prisma.gradingJob && typeof args.prisma.gradingJob.findUnique === 'function' ? await args.prisma.gradingJob.findUnique({ where: { id: res.jobId }, select: { assignmentId: true, checkerId: true, createdAt: true } }).catch(() => null) : null;
+    const arch = await archiveRun({ runRoot: res.runRoot, jobId: res.jobId, success, runsRoot: resolveRunsRoot(), log: console });
+    const dir = arch.dir;
+    const persisted = await persistJobRun({
+      prisma: args.prisma, jobId: res.jobId,
+      assignmentId: jobLookup ? jobLookup.assignmentId : 0, checkerId: jobLookup ? jobLookup.checkerId : null,
+      startedAt: jobLookup ? jobLookup.createdAt : null, finishedAt: new Date(), deviceExit: res.exitCode === undefined ? null : res.exitCode,
+      measured: teardown && teardown.session_files_before !== undefined ? 0 : 0,
+      unmeasurable: 0, skipped: res.skipped || 0, written: res.written || 0,
+      teardown, runDir: dir,
+      logStdout: dir ? tailText(path.join(dir, 'device.stdout.log'), 8192) : null,
+      logStderr: dir ? tailText(path.join(dir, 'device.stderr.log'), 8192) : null,
+    });
+    if (!persisted.persisted) console.log('RUN_PERSIST=no reason=' + persisted.reason);
+  } catch (err) {
+    console.log('RUN_ARCHIVED dir=(none) bytes=0 pruned_run_root=no reason=' + String(err && err.message).slice(0, 160));
+  }
+  return res;
+}
 import { fileURLToPath } from 'url';
 import { getDshGradingConcurrency } from '../infrastructure/ai/deepseek/config.js';
 
@@ -206,7 +252,7 @@ export async function finishJob({ prisma, jobId, status, written = 0, skipped = 
  * 消费一个 job（默认取最早的 pending）。
  * @returns {{consumed:boolean, reason?:string, jobId?:number, status?:string, written?:number, skipped?:number, runRoot?:string, exitCode?:number, timedOut?:boolean}}
  */
-export async function runOnce({
+async function runOnceInner({
   prisma, jobId = null, gate = null, dbLimit = undefined, deviceCommand, deviceArgs = [], stubEnv = {}, extraEnv = {}, reuseChecker = false,
   runRootBase = '/tmp', timeoutMs = 600000, maxAttempts = DEFAULT_MAX_ATTEMPTS,
   materialsRoot = null,

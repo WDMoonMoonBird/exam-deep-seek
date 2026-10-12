@@ -555,3 +555,27 @@ model GradingAssignmentAnchor {
   @@unique([assignmentId, checkerId])
   @@map("grading_assignment_anchors")
 }
+
+/// R2-B23：每次运行的摘要（job_id 唯一）——归档目录、计数、会话销毁证据
+model GradingJobRun {
+  id              Int       @id @default(autoincrement())
+  jobId           Int       @unique @map("job_id") @db.UnsignedInt
+  assignmentId    Int       @map("assignment_id") @db.UnsignedInt
+  checkerId       String?   @map("checker_id") @db.VarChar(80)
+  startedAt       DateTime? @map("started_at")
+  finishedAt      DateTime? @map("finished_at")
+  deviceExit      Int?      @map("device_exit")
+  measured        Int       @default(0)
+  unmeasurable    Int       @default(0)
+  skipped         Int       @default(0)
+  written         Int       @default(0)
+  teardownJson    Json?     @map("teardown_json")
+  runDir          String?   @map("run_dir") @db.VarChar(500)
+  logStdout       String?   @map("log_stdout") @db.Text
+  logStderr       String?   @map("log_stderr") @db.Text
+  createdAt       DateTime  @map("created_at")
+  updatedAt       DateTime  @map("updated_at")
+
+  @@index([assignmentId])
+  @@map("grading_job_runs")
+}
