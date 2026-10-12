@@ -40,6 +40,20 @@
                     </div>
                 </section>
 
+                <!-- 交互演示（自动发现 components/manual/sections/*.vue，按 meta.order 排序；
+                     新增演示只需新增文件，不必改本文件 —— 见 components/manual/README.md） -->
+                <section id="demos" class="doc-section">
+                    <h2 class="section-title">交互演示（可播放）</h2>
+                    <div class="section-body">
+                        <p>下面的演示<b>不是视频、也不是截图</b>，而是真实界面元素的复刻：点 ▶ 播放，可暂停、可重播。每段演示对应一个章节，建议与该章节对照着看。</p>
+                        <article v-for="d in manualDemos" :id="'demo-' + d.anchor" :key="d.key" class="demo-item">
+                            <h3 class="demo-title">{{ d.title }}</h3>
+                            <component :is="d.comp" :fallback="d.fallback" />
+                        </article>
+                        <p v-if="!manualDemos.length" class="demo-empty">演示正在补充中。</p>
+                    </div>
+                </section>
+
                 <!-- 2~5 静态章节 -->
                 <section v-for="sec in sections2to5" :key="sec.id" :id="sec.id" class="doc-section">
                     <h2 class="section-title">{{ sec.title }}</h2>
@@ -538,8 +552,26 @@ const sections9to10 = [
   `},
 ];
 
+/* ===== 交互演示：自动发现 components/manual/sections/*.vue ===== 
+   每个演示文件在 script 块里导出 meta = { order, title, anchor }；新增演示 = 新增文件，不需要改本文件。
+   兜底截图按约定路径 /exam/doc-img/demo-<anchor>-light.png 传入；文件不存在时播放器会自动隐藏破图。 */
+const manualModules = import.meta.glob('../components/manual/sections/*.vue', { eager: true });
+const manualDemos = Object.entries(manualModules)
+    .map(([key, mod]) => ({ key, comp: mod.default, meta: mod.meta || {} }))
+    .filter((d) => d.comp)
+    .map((d) => ({
+        key: d.key,
+        comp: d.comp,
+        title: d.meta.title || d.key.split('/').pop().replace('.vue', ''),
+        anchor: d.meta.anchor || '',
+        order: d.meta.order == null ? 999 : d.meta.order,
+        fallback: d.meta.anchor ? '/exam/doc-img/demo-' + d.meta.anchor + '-light.png' : '',
+    }))
+    .sort((a, b) => a.order - b.order);
+
 const allSections = [
     { id: 'intro', title: '1. 系统简介' },
+    { id: 'demos', title: '交互演示 ▶' },
     ...sections2to5.value,
     { id: 'questions', title: '6. 题库管理' },
     { id: 'project', title: '7. 实训题' },
@@ -1103,4 +1135,8 @@ const anchors = allSections.map(s => ({
         border-radius: 0 0 var(--radius-md) var(--radius-md);
     }
 }
+/* ===== 交互演示区 ===== */
+.demo-item { margin-top: var(--space-6); }
+.demo-title { font-size: var(--fs-title-3); color: var(--text-strong); margin: 0 0 var(--space-3); }
+.demo-empty { color: var(--text-tertiary); }
 </style>

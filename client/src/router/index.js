@@ -58,6 +58,8 @@ const routes = [
     ],
   },
   { path: '/doc', component: () => import('../views/Doc.vue') },
+  // 手册交互演示预览（公开：把所有 manual/sections 列出来，便于逐个验收）
+  { path: '/doc/demos', component: () => import('../views/DocDemoPreview.vue') },
   { path: '/:pathMatch(.*)*', redirect: '/login' },
 ];
 
@@ -82,7 +84,7 @@ router.beforeEach((to) => {
   }
 
   // 公开页：欢迎页与使用文档不需要登录态（欢迎页自身按登录态切换主按钮文案/去向）
-  if (to.path === '/' || to.path === '/doc') {
+  if (to.path === '/' || to.path === '/doc' || to.path === '/doc/demos') {
     return true;
   }
 
