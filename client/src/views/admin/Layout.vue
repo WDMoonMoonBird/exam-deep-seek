@@ -19,6 +19,7 @@
           <a-menu-item key="/admin/students"><template #icon><IdcardOutlined /></template><span>学生管理</span></a-menu-item>
         <div key="g-system" role="presentation" class="ant-menu-item-group-title">系统</div>
           <a-menu-item key="/admin/monitor"><template #icon><DashboardOutlined /></template><span>系统监控</span></a-menu-item>
+          <a-menu-item key="/admin/grading-runs"><template #icon><HistoryOutlined /></template><span>批改记录</span></a-menu-item>
           <a-menu-item key="/admin/ai-config"><template #icon><RobotOutlined /></template><span>AI 配置</span></a-menu-item>
       </a-menu>
     </a-layout-sider>
@@ -67,7 +68,7 @@
 import { ref, computed, watch, onMounted, onUpdated, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useUserStore } from '../../stores/user.js';
-import { BankOutlined, AppstoreOutlined, TeamOutlined, IdcardOutlined, DashboardOutlined, RobotOutlined, BulbOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
+import { BankOutlined, AppstoreOutlined, TeamOutlined, IdcardOutlined, DashboardOutlined, RobotOutlined, BulbOutlined, HistoryOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
 import { useConfirm } from '../../composables/useConfirm.js';
 import { useTheme } from '../../composables/useTheme.js';
 import ThemeToggle from '../../components/ThemeToggle.vue';
