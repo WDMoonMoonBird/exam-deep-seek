@@ -54,7 +54,7 @@ export async function runOnce(args = {}) {
     // ★R2-B31：共享生命周期 helper（teardown → 归档 → 清理）；批改路径 source=worker、归档目录 <jobId>/
     const lifecycle = await finalizeRunRoot({
       runRoot: res.runRoot, success, exitCode: res.exitCode === undefined ? 0 : res.exitCode,
-      source: 'worker', dirName: String(res.jobId), runsRoot: resolveRunsRoot(), purge: purgeWanted, keepDays,
+      source: 'worker', jobId: res.jobId, dirName: String(res.jobId), runsRoot: resolveRunsRoot(), purge: purgeWanted, keepDays,
       failed: counts.failed, log: console,
     });
     const teardown = readTeardownEvidence(res.runRoot);

@@ -2,11 +2,16 @@ import { Router } from 'express';
 import auth from '../middleware/auth.js';
 import requireRole from '../middleware/role.js';
 import * as admin from '../controllers/adminController.js';
+// ★R2-B24b（t93 裁定）：管理员「批改记录」只读子路由（列表/详情/日志下载；挂在本文件既有鉴权链之下）
+import adminGradingRunsRoutes from '../interface/http/routes/admin.js';
 
 const router = Router();
 router.use(auth, requireRole('super_admin'));
 
 // 学校（只读，数据来自教育部）
+// ★R2-B24b（t93 裁定）：先挂子路由（继承上面 router.use(auth, requireRole('super_admin')) 的鉴权）
+router.use('/grading-runs', adminGradingRunsRoutes);
+
 router.get('/schools', admin.getSchools);
 
 // 班级

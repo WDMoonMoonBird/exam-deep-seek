@@ -42,6 +42,20 @@ export function buildEvidenceSummary(runRoot) {
   const outDir = path.join(runRoot, 'out');
   const slugs = new Map();
   const put = (slug, patch) => { const cur = slugs.get(slug) || { slug }; slugs.set(slug, { ...cur, ...patch }); };
+  let skippedArtifacts = 0;
+  const numOf = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+  // 只把「看起来是逐份结果」的 JSON 当 submission（避免 coverage/matrix 之类的干扰产物被计入）
+  const looksLikeResult = (doc) => !!doc && (doc.totals !== undefined || doc.score !== undefined || doc.total_score !== undefined
+    || doc.submission !== undefined || (Array.isArray(doc.items) && doc.items.length > 0) || doc.checker_id !== undefined);
+  const shapeItem = (slug, doc) => ({
+    slug,
+    student: doc.student_name || doc.student || (doc.submission && (doc.submission.student_name || doc.submission.studentName || doc.submission.name)) || null,
+    score: numOf(doc.score ?? doc.total_score ?? (doc.totals && doc.totals.score) ?? doc.total),
+    hits: Array.isArray(doc.items) ? doc.items.length : numOf(doc.hits ?? doc.hit_count),
+    measurable: doc.unmeasurable !== true && doc.measurable !== false,
+    failed: doc.failed === true || doc.status === 'failed',
+    reason: doc.reason || doc.unmeasurable_reason || doc.error_reason || null,
+  });
   try {
     const mf = path.join(outDir, 'diagnostics', 'measurable.json');
     if (fs.existsSync(mf)) {
@@ -54,28 +68,60 @@ export function buildEvidenceSummary(runRoot) {
       }
     }
   } catch { /* 证据缺失 ⇒ 不阻断 */ }
+  // ① ★R2-B32（云上 job 5 实测修正）：逐份结果在 out/grading-result/<slug>.json；
+  //    早前读的 out/measure/*.json 是 coverage/matrix **干扰产物**（不是逐份结果）⇒ 不再当 submission、不再产 parseError 占位。
   try {
-    // ★R2-B31（云上实测修正）：量尺产物实际在 out/measure/*.json（消费侧同口径），out/results 仅兼容
-    const resDir = fs.existsSync(path.join(outDir, 'measure')) ? path.join(outDir, 'measure') : path.join(outDir, 'results');
-    if (fs.existsSync(resDir)) {
+    const perDir = path.join(outDir, 'grading-result');
+    if (fs.existsSync(perDir)) {
+      for (const f of fs.readdirSync(perDir).sort()) {
+        if (!f.endsWith('.json')) { skippedArtifacts += 1; continue; }
+        const slug = f.replace(/\.json$/, '');
+        try {
+          const doc = JSON.parse(fs.readFileSync(path.join(perDir, f), 'utf8'));
+          if (!looksLikeResult(doc)) { skippedArtifacts += 1; continue; }
+          put(slug, shapeItem(slug, doc));
+        } catch { skippedArtifacts += 1; }
+      }
+    }
+  } catch { /* ignore */ }
+  // ② 索引 out/grading-results.json（数组或 {results|submissions|items:[…]}）
+  try {
+    const idxFile = path.join(outDir, 'grading-results.json');
+    if (fs.existsSync(idxFile)) {
+      const doc = JSON.parse(fs.readFileSync(idxFile, 'utf8'));
+      const arr = Array.isArray(doc) ? doc : (doc.results || doc.submissions || doc.items || []);
+      for (const it of arr) {
+        const slug = it.slug || (it.submission && (it.submission.slug || it.submission.id)) || it.id || it.name;
+        if (!slug) { skippedArtifacts += 1; continue; }
+        put(String(slug), shapeItem(String(slug), it));
+      }
+    }
+  } catch { /* ignore */ }
+  // ③ 旧布局兜底（仅当前两源都没收到条目时）：out/results/*.json，且只收「看起来是结果」的文件。
+  //    注：out/measure/*.json 在云上真例里是 coverage/matrix 干扰产物 ⇒ 本实现刻意不把它当结果源（由主源 grading-result 负责）。
+  try {
+    const resDir = path.join(outDir, 'results');
+    if (items.size === 0 && fs.existsSync(resDir)) {
       for (const f of fs.readdirSync(resDir).sort()) {
-        if (!f.endsWith('.json')) continue;   // ★R2-B31：measure/*.json 与 results/*.model.json 都收
-        const slug = f.replace(/\.[a-z0-9_]*\.?model\.json$/, '').replace(/\.json$/, '');   // ★R2-B31：measure/*.json 与 results/*.model.json 都能得 slug
+        if (!f.endsWith('.json')) { skippedArtifacts += 1; continue; }
+        const slug = f.replace(/\.[a-z0-9_]*\.?model\.json$/, '').replace(/\.json$/, '');
         try {
           const doc = JSON.parse(fs.readFileSync(path.join(resDir, f), 'utf8'));
-          const score = doc.score ?? doc.total_score ?? doc.total ?? null;
-          put(slug, { score, measurable: it.unmeasurable !== true && it.measurable !== false, reason: it.reason || null });
-        } catch { put(slug, { parseError: true }); }
+          if (!looksLikeResult(doc)) { skippedArtifacts += 1; continue; }
+          put(slug, shapeItem(slug, doc));
+        } catch { skippedArtifacts += 1; }
       }
     }
   } catch { /* ignore */ }
   const list = [...slugs.values()].sort((a, b) => (a.slug < b.slug ? -1 : 1));
   return {
-    schema_version: 'evidence-summary/1',
+    schema_version: 'evidence-summary/2',   // ★R2-B32：改为「逐份结果」口径（附 failed 与 skipped_artifacts）
     run_root: runRoot,
     n: list.length,
-    measurable: list.filter((x) => x.measurable !== false && x.score !== undefined).length,
+    measurable: list.filter((x) => x.measurable !== false && x.failed !== true).length,
     unmeasurable: list.filter((x) => x.measurable === false).length,
+    failed: list.filter((x) => x.failed === true).length,
+    skipped_artifacts: skippedArtifacts,
     submissions: list,
   };
 }
@@ -87,7 +133,7 @@ export function buildEvidenceSummary(runRoot) {
 //   → 归档（<runsRoot>/<dirName>：teardown/日志/证据）→ 成功时清理 run-root（由 archiveRun 完成）。
 //   ★本函数**永不抛**、**永不改调用方退出码**（fail-soft）；source：批改 'worker'／造尺 'build'。
 export async function finalizeRunRoot({
-  runRoot, success = false, exitCode = null, source = 'worker', dirName = null,
+  runRoot, success = false, exitCode = null, source = 'worker', jobId = null, dirName = null,
   runsRoot = DEFAULT_RUNS_ROOT, purge = true, keepDays = DEFAULT_SCENE_KEEP_DAYS, archive = true, failed = null, log = console,
 } = {}) {
   const out = { teardown: null, archive: null, error: null };
@@ -96,7 +142,8 @@ export async function finalizeRunRoot({
     out.teardown = purgeRunRootSessions({ runRoot, exitCode: exitCode === null ? (success ? 0 : 1) : exitCode, purge, keepDays, source, failed, log });
   } catch (err) { out.error = 'teardown:' + String(err && err.message).slice(0, 160); }
   try {
-    if (archive) out.archive = await archiveRun({ runRoot, jobId: null, success, runsRoot, log, dirName });
+    // ★R2-B32：jobId 必须透传（否则归档日志 jobId=null 且剪枝形状护栏失配 ⇒ 成功也不剪枝）
+    if (archive) out.archive = await archiveRun({ runRoot, jobId, success, runsRoot, log, dirName });
   } catch (err) { out.error = (out.error ? out.error + ';' : '') + 'archive:' + String(err && err.message).slice(0, 160); }
   return out;
 }
@@ -359,11 +406,21 @@ export async function archiveRun({ runRoot, jobId, success, runsRoot = DEFAULT_R
     result.bytes += fs.statSync(path.join(dir, EVIDENCE_SUMMARY_NAME)).size;
   } catch { /* ignore */ }
   result.dir = dir;
-  if (success && isPrunableRunRoot(runRoot, jobId)) {
-    try { fs.rmSync(runRoot, { recursive: true, force: true }); result.pruned = !fs.existsSync(runRoot); } catch { result.pruned = false; }
+  // ★R2-B32：剪枝失败/不剪枝必须给出**明确原因**（不得静默）
+  if (!success) {
+    result.prune_reason = 'not_success';
+  } else if (!isPrunableRunRoot(runRoot, jobId)) {
+    result.prune_reason = 'shape_guard(jobId=' + String(jobId) + ')';
+  } else {
+    try {
+      fs.rmSync(runRoot, { recursive: true, force: true });
+      result.pruned = !fs.existsSync(runRoot);
+      if (!result.pruned) result.prune_reason = 'rm_residual';
+    } catch (err) { result.pruned = false; result.prune_reason = 'rm_failed:' + String(err && err.message).slice(0, 80); }
   }
-  logger.info({ jobId, dir, bytes: result.bytes, pruned: result.pruned }, 'R2-B23：运行证据已归档');
-  log.log('RUN_ARCHIVED dir=' + dir + ' bytes=' + result.bytes + ' pruned_run_root=' + (result.pruned ? 'yes' : 'no') + ' files=' + result.files.length);
+  logger.info({ jobId, dir, bytes: result.bytes, pruned: result.pruned, prune_reason: result.prune_reason || null }, 'R2-B23：运行证据已归档');
+  log.log('RUN_ARCHIVED dir=' + dir + ' bytes=' + result.bytes + ' jobId=' + (jobId === null || jobId === undefined ? 'null' : String(jobId))
+    + ' pruned_run_root=' + (result.pruned ? 'yes' : 'no') + (result.pruned ? '' : ' prune_skipped=' + String(result.prune_reason || 'unknown')) + ' files=' + result.files.length);
   return result;
 }
 

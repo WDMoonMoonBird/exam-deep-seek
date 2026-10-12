@@ -27,8 +27,15 @@ function mkRunRoot(jobId, { teardown = null, sessions = false } = {}) {
   fs.writeFileSync(path.join(root, 'out', 'device.stdout.log'), 'device ok\n');
   fs.writeFileSync(path.join(root, 'out', 'device.stderr.log'), 'warn x\n');
   fs.writeFileSync(path.join(root, 'out', 'comparability.json'), JSON.stringify({ group: 'g1' }));
-  fs.writeFileSync(path.join(root, 'out', 'results', 's01.model.json'), JSON.stringify({ score: 77 }));
-  fs.writeFileSync(path.join(root, 'out', 'results', 's02.model.json'), JSON.stringify({ score: 64 }));
+  // ★R2-B24b（t93 裁定 A）：夹具改为**云上真机形状** —— 逐份结果在 out/grading-result/<slug>.json（+ 索引 grading-results.json），
+  //   而 out/measure/ 里是 coverage/matrix **干扰产物**（云上 job 5 实测）⇒ 干扰文件只能进 skipped_artifacts，不得被当 submission。
+  fs.mkdirSync(path.join(root, 'out', 'measure'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'out', 'measure', 'coverage-s01.json'), JSON.stringify({ checker_id: 'c1', coverage: { files: 3 } }));
+  fs.writeFileSync(path.join(root, 'out', 'measure', 'matrix-s01.json'), JSON.stringify({ matrix: [[1, 2]] }));
+  fs.mkdirSync(path.join(root, 'out', 'grading-result'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'out', 'grading-result', 's01.json'), JSON.stringify({ totals: { score: 77 }, items: [1, 2, 3] }));
+  fs.writeFileSync(path.join(root, 'out', 'grading-result', 's02.json'), JSON.stringify({ totals: { score: 64 }, items: [1, 2] }));
+  fs.writeFileSync(path.join(root, 'out', 'grading-results.json'), JSON.stringify({ results: [{ slug: 's01', totals: { score: 77 } }, { slug: 's02', totals: { score: 64 } }] }));
   fs.writeFileSync(path.join(root, 'out', 'diagnostics', 'measurable.json'), JSON.stringify({ submissions: [{ slug: 's01' }, { slug: 's02' }, { slug: 's03', measurable: false, reason: 'no-artifacts' }] }));
   if (teardown) fs.writeFileSync(path.join(root, 'out', 'run-teardown.json'), JSON.stringify(teardown));
   if (sessions) {
@@ -74,6 +81,10 @@ describe('W52 运行归档 + 落库 + 审计', () => {
     expect(summary.unmeasurable).toBe(1);
     expect(summary.submissions.find((s) => s.slug === 's01').score).toBe(77);
     expect(summary.submissions.find((s) => s.slug === 's03').reason).toBe('no-artifacts');
+    // ★R2-B24b（t93）：真机形状断言 —— 无 parseError 占位；干扰产物只计入 skipped_artifacts
+    expect(summary.submissions.filter((s) => s.parseError).length).toBe(0);
+    expect(summary.skipped_artifacts).toBeGreaterThanOrEqual(2);
+    expect(summary.submissions.map((s) => s.slug).sort()).toEqual(['s01', 's02', 's03']);
     expect(res.pruned).toBe(true);
     expect(fs.existsSync(root)).toBe(false);
     expect(logs.join('\n')).toMatch(/RUN_ARCHIVED dir=.* pruned_run_root=yes/);
