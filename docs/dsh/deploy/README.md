@@ -25,7 +25,7 @@ bash docs/dsh/deploy/check-prereqs.sh          # ★只读自检：不写库、�
 | 3 | ★**DSH CLI 安装在目标机** | 装置会调 `dsh --profile headless`；Linux 路径与 macOS 不同 ⇒ 设 `DSH_GRADER_BIN`（service 里已留位） |
 | 4 | MySQL 可达（生产库 `exam_system`） | worker 写库需 **`--allow-db exam_system --allow-prod` 双开关**（防止误连生产） |
 | 5 | 磁盘：`/tmp` ≥ 5 GB | 每次运行产生 24 MB 级 run-root（材料 + 产物） |
-| 6 | ★**物料来源（当前缺口）** | 装置目前读 `--source-dir 实验`（仓库内 63 个 zip）。云上真实使用必须先把「该作业的学生提交」导出到该目录 —— **该导出器尚未实现**，见 §7 |
+| 6 | ★**物料来源（已实现，R2-B20）** | 用 `node scripts/r2b20-export-materials.mjs --assignment <id> --out <dir>` 把平台作业导出成装置可直接吃的物料源目录（`标准工程包.zip` / `评分标准.md` / `题目描述.md` / `<real_name>.zip` ×N + `export-manifest.json`），再以该目录作为装置的 `--source-dir`；用法与云上示例见 §7-1 |
 
 ## 3. 安装
 
@@ -69,6 +69,7 @@ mysql exam_system -e "SELECT id,status,written_count,skipped_count,LEFT(last_err
 | 5 | **run-root 清理** | 成功现场可清、失败现场留证：`find /tmp -maxdepth 1 -name 'r2b4-job-*' -mtime +3 -exec rm -rf {} +` |
 | 6 | 优雅停机 | `systemctl stop` 发 SIGTERM ⇒ worker「跑完当前 job 再退」（配 `TimeoutStopSec=1800`） |
 | 7 | 首次批改要造尺 | 每个作业**首次**需 `build-and-measure`（1 次模型调用）；之后全部复用 ⇒ **零 LLM** |
+| 8 | ★**尺子与物料绑定** | 尺子内钉着造尺时的 `rubric_hash`/`standard_hash`；用**别的批次**的 rubric/标准包去量尺 ⇒ 装置判 `STALE=true reason=rubric_hash_mismatch,standard_hash_mismatch` 并**拒绝给分**（正确行为）。⇒ 生产流程必须是「**先导出物料 → 用同一份导出件造尺 → 再量尺**」，不得混搭。 |
 
 ## 6. 切换形态
 
@@ -89,7 +90,21 @@ ExecStart=/usr/bin/node scripts/r2b5-worker.mjs \
 
 ## 7. 已知缺口 / 边界（部署前必读）
 
-1. ★**物料来源尚未实现**：装置读 `--source-dir <目录>`（默认仓库内 `实验/`）。云上真实使用必须先把**该作业的学生提交**导出到该目录（含标准工程包与评分标准），**该导出器尚未实现** ⇒ 目前只能批改 `实验/` 里那批固定数据。
+1. ★**物料来源：已实现（R2-B20）** —— `server/scripts/r2b20-export-materials.mjs`。
+   - **用法**：`node scripts/r2b20-export-materials.mjs --assignment <作业id> --out <目录> [--db-url <url>] [--allow-db <库名>] [--allow-prod]`；测试/演练可加 `--uploads-root <夹具目录>` 重定位 uploads 根（不改真实 uploads）。
+   - **产出（装置契约）**：`标准工程包.zip`、`评分标准.md`（`questions.scoring_rubric`）、`题目描述.md`（标题 + `questions.material`，**文件名必须这个**）、每个提交一个 `<real_name>.zip`（重名追加 `-<username>`）、`export-manifest.json`（submissionId → zip 名 / 来源路径 / 各自 sha256 / 份数 / questionId / 生成时刻）。
+   - **确定性**：同一输入两次导出，各 zip 与各 md 的 sha256 **逐一相同**（zip 条目按字节序排序、DOS 时间戳固定 1980-01-01、无随机/时间字段）⇒ 可复算、可比对；`export-manifest.json` 除 `generated_at` 外逐字段相同。
+   - **只读 + 护栏**：不写平台 DB、不改 `server/uploads/**`（只写 `--out`）；生产库需 `--allow-db <库名>` + `--allow-prod` 且**连接前**校验（缺开关 ⇒ `EXPORT_FAIL reason=allow_db_required:<库名>`、rc=2、不连接）；作业没有**恰好一个** project 型题目 ⇒ `EXPORT_FAIL reason=project_question_not_unique:<n>`（不猜）。
+   - **云上调用示例**：
+     ```bash
+     cd /opt/exam/server
+     OUT=/var/lib/dsh-grader/materials/assignment-311
+     node scripts/r2b20-export-materials.mjs --assignment 311 --out "$OUT" \
+       --db-url "mysql://<user>:<pass>@127.0.0.1:3306/exam_system" --allow-db exam_system --allow-prod
+     # 期望：EXPORT_TARGET db=exam_system prod=yes ⇒ EXPORT_OK n=<份> question=<id> standard_sha256=… rubric_len=… out=…
+     # 之后按 §4 以 --source-dir "$OUT" 拉起装置（配 --reuse-checker 时为零 LLM）
+     ```
+   - 前置条件：题目已上传标准包（`attachment_url` 或 `uploads/project-questions/<qid>/standard/` 非空）、学生提交已落盘 `uploads/project-submissions/<qid>/<studentId>/<version>/`、该作业恰好绑定一个 project 型题目。
 2. **编程题不纳入**本装置（用户裁定）：编程题（`type=code`）继续走平台既有 `checker_script` 链路（`ai_concurrency`，与本 worker 的闸相互独立）。
 3. **尺子按作业冻结**：可比组 = `(assignment_id, checker_id)`；跨尺子分数不可比。作业的评分标准/标准包变更后需**重新造尺**（旧分数成为「旧尺子历史值」）。
 4. **锚点漂移策略**未定（rubric/提交集合变化时锚点与当前材料不一致的处理）。
