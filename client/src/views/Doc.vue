@@ -66,7 +66,7 @@
                     <div class="section-body">
                         <h3>6.1 题目结构</h3>
                         <p>每道题目为「<b>大题 + N 道小题</b>」的结构。大题包含标题、难度、总分（= 各小题分值之和）；每道小题可独立设置语言、分值和参考答案。</p>
-                        <img class="doc-img" tabindex="0" :src="'/exam/doc-img/08-questions.png'" alt="题库列表" />
+                        <img class="doc-img doc-img--focus" tabindex="0" :src="'/exam/doc-img/demo-questions-focus-light.png'" alt="6. 题库管理 · 要点定位图" />
 
                         <h3>6.2 新建题目流程</h3>
                         <p>点击「新增题目」进入编辑页，通过 <b>AI 解析试卷文档</b> 快速创建题目：</p>
@@ -80,13 +80,13 @@
                                 @click="qStep = 0">重新浏览</a-button>
                         </div>
 
-                        <img class="doc-img" tabindex="0" :src="'/exam/doc-img/09-parse-modal.png'" alt="AI解析试卷模态框" />
+                        
                         <p style="text-align:center;color:var(--text-tertiary);font-size:var(--fs-body-sm);margin-top:-12px;">▲ AI 解析试卷弹窗：上传 Word
                             文档，DeepSeek 自动识别题目</p>
 
                         <h3>6.3 编辑题目</h3>
                         <p>在题库列表中点击「编辑」可修改已有题目。编辑页展示完整题目结构：左侧导航列出所有小题（彩色方形色块），右侧为各小题的详细编辑区。</p>
-                        <img class="doc-img" tabindex="0" :src="'/exam/doc-img/09-question-edit.png'" alt="题目编辑页" />
+                        
 
                         <h3>6.4 分值系统</h3>
                         <ul>
@@ -101,7 +101,8 @@
                         <h3>6.6 编辑 / 删除</h3>
                         <p>在题库列表中可「编辑」或「删除」已有题目。删除前请确认该题目未被作业引用。</p>
                     </div>
-                </section>
+                        <p class="doc-demo-tip">▶ 本节有 <b>可播放演示</b>：<a href="#demo-questions">6. 题库管理 · 交互演示</a>（在正文上方的「交互演示」区；也可 <a href="/exam/doc/demos" target="_blank" rel="noopener">单独打开全部演示</a>。演示是真实界面元素的复刻，可暂停、可重播）</p>
+                    </section>
 
                 <section id="project" class="doc-section">
                     <h2 class="section-title">7. 实训题管理 <a-tag class="tag-warning" size="small" style="margin-left:4px;vertical-align:middle;">BETA</a-tag></h2>
@@ -110,7 +111,7 @@
 
                         <h3>① 新增实训题</h3>
                         <p>进入<b>题库管理</b>，点击右上角「新增题目」→ 下拉选择<b>实训题</b> <a-tag class="tag-warning" size="small">BETA</a-tag>：</p>
-                        <img class="doc-img" tabindex="0" :src="'/exam/doc-img/10-project-new.png'" alt="新增实训题" />
+                        <img class="doc-img doc-img--focus" tabindex="0" :src="'/exam/doc-img/demo-project-focus-light.png'" alt="7. 实训题管理 · 要点定位图" />
                         <ul>
                             <li>填写<b>题目名称 / 难度 / 满分</b>；</li>
                             <li>「题目描述」「评分标准」通过模态框编辑，<b>确定才生效，取消即还原</b>；不填评分标准则使用默认标准（功能完整性 50% + 代码规范 25% + 健壮性 25%）；</li>
@@ -120,7 +121,7 @@
 
                         <h3>② 编辑实训题</h3>
                         <p>在题库列表中找到实训题（紫色「实训题」标签），点击「编辑」：</p>
-                        <img class="doc-img" tabindex="0" :src="'/exam/doc-img/11-project-edit.png'" alt="编辑实训题" />
+                        
                         <ul>
                             <li>可修改<b>题目名称 / 难度 / 满分 / 题目描述 / 评分标准</b>；</li>
                             <li>左侧<b>资源管理器</b>可浏览、更新标准工程包文件（未上传时可在此补传；始终不上传即保持开放性题目）；</li>
@@ -132,7 +133,7 @@
                         <p>如果所选实训题<b>未上传标准工程包</b>，点击「布置」后会先弹出确认框：「以下题目未上传标准工程包，AI 将仅依据评分标准做评价式评分（不与参考答案对比）：〈题名〉。确认按开放性题目布置？」——点<b>确认布置</b>按开放性题目创建；点<b>取消</b>不创建作业。有标准工程包的题目不会弹此框。</p>
 
                         <h3>④ AI 评分与教师审核</h3>
-                        <img class="doc-img" tabindex="0" :src="'/exam/doc-img/12-project-review.png'" alt="AI 评分审核页" />
+                        
                         <p>学生提交后系统<b>自动触发 AI 评分</b>（异步，通常 1-2 分钟）。教师审核页提供：</p>
                         <ul>
                             <li><b>AI 评分面板</b>：分项明细（分项得分/满分/点评）、优点、问题、总体评语；</li>
@@ -145,7 +146,8 @@
                             <li>「查看 AI 提示词」所见即所用：开放性题目的角色为<b>项目评审专家</b>，提示词中<b>没有「标准答案源码」段</b>，与真实评分调用逐字节一致。</li>
                         </ul>
                     </div>
-                </section>
+                        <p class="doc-demo-tip">▶ 本节有 <b>可播放演示</b>：<a href="#demo-project">7. 实训题管理 · 交互演示</a>（在正文上方的「交互演示」区；也可 <a href="/exam/doc/demos" target="_blank" rel="noopener">单独打开全部演示</a>。演示是真实界面元素的复刻，可暂停、可重播）</p>
+                    </section>
 
                 <!-- 7. 静态章节 -->
                 <section v-for="sec in sections7" :key="sec.id" :id="sec.id" class="doc-section">
@@ -322,11 +324,11 @@ const sections2to7 = [
         id: 'quickstart', title: '2. 快速入门', content: `
     <h3>2.1 登录系统</h3>
     <p>使用学校分配的<b>工号</b>和<b>密码</b>登录。打开系统地址后，在登录页输入工号和密码，点击「登录」按钮进入系统。</p>
-    <img class="doc-img" tabindex="0" src="/exam/doc-img/01-login.png" alt="登录页面" />
+    <img class="doc-img doc-img--focus" tabindex="0" src="/exam/doc-img/demo-quickstart-focus-light.png" alt="2. 快速入门 · 要点定位图" />
 
     <h3>2.2 界面概览</h3>
     <p>登录后进入教师工作台，左侧为<b>导航菜单</b>，顶部为<b>操作栏</b>。</p>
-    <img class="doc-img" tabindex="0" src="/exam/doc-img/02-classes.png" alt="教师主界面" />
+    
 
     <table class="doc-table">
       <tr><th style="width:120px">菜单项</th><th>功能说明</th></tr>
@@ -340,14 +342,14 @@ const sections2to7 = [
 
     <h3>2.3 个人信息与密码</h3>
     <p>点击右上角头像 →「我的信息」，可查看个人信息和修改密码。展开「修改密码」面板，输入原密码和新密码后确认即可。</p>
-    <img class="doc-img" tabindex="0" src="/exam/doc-img/14-profile.png" alt="个人信息弹窗" />
+    <p class="doc-demo-tip">▶ 本节有 <b>可播放演示</b>：<a href="#demo-quickstart">2. 快速入门 · 交互演示</a>（在正文上方的「交互演示」区；也可 <a href="/exam/doc/demos" target="_blank" rel="noopener">单独打开全部演示</a>。演示是真实界面元素的复刻，可暂停、可重播）</p>
   `},
 
     {
         id: 'classes', title: '3. 班级管理', content: `
     <h3>3.1 创建班级</h3>
     <p>点击「新增班级」按钮，在弹出的模态框中填写<b>班级名称</b>，可选择性地将班级加入已有的<b>教学团队</b>（留空则不加入任何团队）。点击「确定」完成创建。</p>
-    <img class="doc-img" tabindex="0" src="/exam/doc-img/03-class-add.png" alt="新增班级模态框" />
+    <img class="doc-img doc-img--focus" tabindex="0" src="/exam/doc-img/demo-classes-focus-light.png" alt="3. 班级管理 · 要点定位图" />
 
     <h3>3.2 指定教学团队</h3>
     <p>创建或编辑班级时，可通过「指定教学团队」下拉框选择一个或多个团队。班级加入团队后，团队内所有教师均可查看和管理该班级的学生、作业和审核。</p>
@@ -355,7 +357,7 @@ const sections2to7 = [
 
     <h3>3.3 团队共享班级标识</h3>
     <p>在班级列表中，来自团队共享的班级会显示<span class="doc-tag doc-tag-purple">团队共享 · 教师姓名</span>。这类班级的「编辑」和「删除」按钮会被禁用。</p>
-    <img class="doc-img" tabindex="0" src="/exam/doc-img/02-classes.png" alt="团队共享班级标签" />
+    <p class="doc-demo-tip">▶ 本节有 <b>可播放演示</b>：<a href="#demo-classes">3. 班级管理 · 交互演示</a>（在正文上方的「交互演示」区；也可 <a href="/exam/doc/demos" target="_blank" rel="noopener">单独打开全部演示</a>。演示是真实界面元素的复刻，可暂停、可重播）</p>
   `},
 
     {
@@ -380,7 +382,7 @@ const sections2to7 = [
       <tr><td>teststudent1</td><td>测试学生1</td></tr>
       <tr><td>teststudent2</td><td>测试学生2</td></tr>
     </table>
-    <img class="doc-img" tabindex="0" src="/exam/doc-img/05-import-modal.png" alt="批量导入模态框" />
+    <img class="doc-img doc-img--focus" tabindex="0" src="/exam/doc-img/demo-students-focus-light.png" alt="4. 学生管理 · 要点定位图" />
 
     <h3>4.4 团队班级只读限制</h3>
     <p>当选择了团队共享的班级时：</p>
@@ -390,13 +392,14 @@ const sections2to7 = [
       <li>表格中的「编辑」「删除」按钮被禁用</li>
       <li>学生名单仍可正常查看</li>
     </ul>
+    <p class="doc-demo-tip">▶ 本节有 <b>可播放演示</b>：<a href="#demo-students">4. 学生管理 · 交互演示</a>（在正文上方的「交互演示」区；也可 <a href="/exam/doc/demos" target="_blank" rel="noopener">单独打开全部演示</a>。演示是真实界面元素的复刻，可暂停、可重播）</p>
   `},
 
     {
         id: 'teams', title: '5. 教学团队', content: `
     <h3>5.1 创建团队</h3>
     <p>进入「教学团队」页面，点击「创建团队」按钮，输入团队名称即可创建。创建者自动成为团队成员，角色标注为「创建者」。</p>
-    <img class="doc-img" tabindex="0" src="/exam/doc-img/06-teams.png" alt="团队列表页" />
+    <img class="doc-img doc-img--focus" tabindex="0" src="/exam/doc-img/demo-teams-focus-light.png" alt="5. 教学团队 · 要点定位图" />
 
     <h3>5.2 管理团队成员</h3>
     <p>点击团队的「管理」按钮进入详情页，默认显示「教师管理」标签：</p>
@@ -405,7 +408,7 @@ const sections2to7 = [
       <li><b>移除教师：</b>点击表格中的「移除」按钮，弹出确认框后移除</li>
       <li><b>创建者保护：</b>创建者不可被移除，其「移除」按钮为禁用状态</li>
     </ul>
-    <img class="doc-img" tabindex="0" src="/exam/doc-img/07-team-detail.png" alt="团队详情-教师管理" />
+    
 
     <h3>5.3 管理团队班级</h3>
     <p>切换到「班级管理」标签：</p>
@@ -414,7 +417,7 @@ const sections2to7 = [
       <li><b>移除班级：</b>点击「移除」按钮</li>
       <li><b>归属标注：</b>自己的班级显示「自己」，他人的班级显示 <span class="doc-tag doc-tag-purple">他人</span> 标签</li>
     </ul>
-    <img class="doc-img" tabindex="0" src="/exam/doc-img/07-team-classes.png" alt="团队详情-班级管理" />
+    
 
     <h3>5.4 退出 / 删除团队</h3>
     <ul>
@@ -430,13 +433,14 @@ const sections2to7 = [
       <li>此后 A 和 B 都能看到两个班级的学生名单、布置作业、审核评分</li>
       <li>但对非自己创建的班级，操作按钮为只读状态</li>
     </ul>
+    <p class="doc-demo-tip">▶ 本节有 <b>可播放演示</b>：<a href="#demo-teams">5. 教学团队 · 交互演示</a>（在正文上方的「交互演示」区；也可 <a href="/exam/doc/demos" target="_blank" rel="noopener">单独打开全部演示</a>。演示是真实界面元素的复刻，可暂停、可重播）</p>
   `},
 
     {
         id: 'questions', title: '6. 题库管理', content: `
     <h3>6.1 题目结构</h3>
     <p>每道题目为「<b>大题 + N 道小题</b>」的结构。大题包含标题、难度、满分、题目材料；每道小题包含内容描述、分值、参考答案、评分标准、编程语言。</p>
-    <img class="doc-img" tabindex="0" src="/exam/doc-img/08-questions.png" alt="题库列表页" />
+    <img class="doc-img doc-img--focus" tabindex="0" src="/exam/doc-img/demo-questions-focus-light.png" alt="6. 题库管理 · 要点定位图" />
 
     <h3>6.2 创建题目</h3>
     <p>点击「新增题目」进入编辑页：</p>
@@ -446,13 +450,14 @@ const sections2to7 = [
       <li><b>小题管理：</b>默认一道小题，点击「+」添加更多。每道小题独立设置标题、分值、题目描述、参考答案、编程语言和评分标准</li>
       <li>点击「保存」按钮</li>
     </ol>
-    <img class="doc-img" tabindex="0" src="/exam/doc-img/09-question-edit.png" alt="题目编辑页" />
+    
 
     <h3>6.3 评分标准</h3>
     <p>每道小题可自定义评分标准。若留空，系统使用默认标准：<b>代码正确性 60% + 代码效率 20% + 代码可读性 20%</b>。</p>
 
     <h3>6.4 编辑 / 删除</h3>
     <p>在题库列表中可「编辑」或「删除」已有题目。删除前请确认该题目未被作业引用。</p>
+    <p class="doc-demo-tip">▶ 本节有 <b>可播放演示</b>：<a href="#demo-questions">6. 题库管理 · 交互演示</a>（在正文上方的「交互演示」区；也可 <a href="/exam/doc/demos" target="_blank" rel="noopener">单独打开全部演示</a>。演示是真实界面元素的复刻，可暂停、可重播）</p>
   `},
 
     {
@@ -462,9 +467,9 @@ const sections2to7 = [
     <div class="a-alert a-alert-info">💡 本系统每份作业只包含<b>一道题目</b>（可含多道小题）。如需布置多道题目，请分别创建多份作业。</div>
     <p><b>第一步 · 选题：</b>搜索并选择一道题目（单选）。</p>
     <p><b>第二步 · 选班：</b>左侧为可选班级列表，点击选中；右侧为已选班级。团队共享班级会显示 <span class="doc-tag doc-tag-purple">团队</span> 标签，选中后显示归属教师名。</p>
-    <img class="doc-img" tabindex="0" src="/exam/doc-img/11-assign-classes.png" alt="布置作业-选班步骤" />
+    <img class="doc-img doc-img--focus" tabindex="0" src="/exam/doc-img/demo-assignments-focus-light.png" alt="8. 作业管理 · 要点定位图" />
     <p><b>第三步 · 设置时间：</b>填写作业标题、说明，选择起止时间（精确到分钟），设置是否允许补交。</p>
-    <img class="doc-img" tabindex="0" src="/exam/doc-img/12-assign-time.png" alt="布置作业-时间设置" />
+    
 
     <h3>7.2 补交控制</h3>
     <p>「允许补交」开关：</p>
@@ -475,6 +480,7 @@ const sections2to7 = [
 
     <h3>7.3 作业列表</h3>
     <p>作业管理页显示所有已布置的作业，包括标题、题目数、提交数、起止时间。点击表格行可查看详情。</p>
+    <p class="doc-demo-tip">▶ 本节有 <b>可播放演示</b>：<a href="#demo-assignments">8. 作业管理 · 交互演示</a>（在正文上方的「交互演示」区；也可 <a href="/exam/doc/demos" target="_blank" rel="noopener">单独打开全部演示</a>。演示是真实界面元素的复刻，可暂停、可重播）</p>
   `},
 ];
 
@@ -489,18 +495,18 @@ const sections9to10 = [
       <tr><td>审核状态</td><td><span class="doc-tag doc-tag-orange">待审核</span> <span class="doc-tag doc-tag-green">已审核</span></td></tr>
       <tr><td>已交/未交</td><td>该班学生提交情况统计</td></tr>
     </table>
-    <img class="doc-img" tabindex="0" src="/exam/doc-img/13-review.png" alt="评分审核列表页" />
+    <img class="doc-img doc-img--focus" tabindex="0" src="/exam/doc-img/demo-review-focus-light.png" alt="11. 评分审核 · 要点定位图" />
 
     <div class="a-alert a-alert-info">💡 <b>审核 vs 发布：</b>「审核」仅保存教师的最终分数和评语，学生此时<b>看不到成绩</b>。教师需要点击「发布」按钮，学生端才会显示分数和评语。发布后如需修改分数，修改后重新点击「发布」即可覆盖更新。</div>
 
     <h3>9.2 班级审核</h3>
     <p>在审核列表点击「审核」进入班级审核页，查看全班学生的评分状态和成绩：</p>
-    <img class="doc-img" tabindex="0" src="/exam/doc-img/13-review-class.png" alt="全班审核表格" />
+    
 
     <h3>9.3 逐人审核</h3>
     <p>在班级审核页点击某个学生的「审核」按钮，进入逐题审核详情页。左侧为题目标题导航，右侧展示学生代码与AI评分面板：</p>
-    <img class="doc-img" tabindex="0" src="/exam/doc-img/13-review-detail-1.png" alt="逐题审核-编程题详情" />
-    <img class="doc-img" tabindex="0" src="/exam/doc-img/13-review-detail-2.png" alt="逐题审核-客观题详情" />
+    
+    
 
     <h3>9.4 一键操作</h3>
     <p>在班级审核页面（审核列表点击「审核」后的列表页），可使用：</p>
@@ -514,6 +520,7 @@ const sections9to10 = [
 
     <h3>9.6 导出 Excel</h3>
     <p>在审核列表和班级审核页均可使用「导出」功能，导出包含每道小题分数的 Excel 报表。Excel 中动态生成各小题得分列，方便成绩统计。</p>
+    <p class="doc-demo-tip">▶ 本节有 <b>可播放演示</b>：<a href="#demo-review">11. 评分审核 · 交互演示</a>（在正文上方的「交互演示」区；也可 <a href="/exam/doc/demos" target="_blank" rel="noopener">单独打开全部演示</a>。演示是真实界面元素的复刻，可暂停、可重播）</p>
   `},
 
     {
@@ -1139,4 +1146,11 @@ const anchors = allSections.map(s => ({
 .demo-item { margin-top: var(--space-6); }
 .demo-title { font-size: var(--fs-title-3); color: var(--text-strong); margin: 0 0 var(--space-3); }
 .demo-empty { color: var(--text-tertiary); }
+/* ===== 要点定位图 + 演示指引（替代原来的整屏大截图） ===== */
+.doc-img--focus { display: block; width: 100%; max-width: 1000px; height: auto; margin: var(--space-3) 0;
+    border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--card-bg); }
+.doc-demo-tip { margin: var(--space-3) 0 var(--space-2); padding: 10px 12px; border-radius: var(--radius-md);
+    background: var(--status-info-bg); border: 1px solid var(--status-info-bd); color: var(--status-info-fg);
+    font-size: var(--fs-body-sm); line-height: 1.7; }
+.doc-demo-tip a { color: inherit; font-weight: 600; text-decoration: underline; }
 </style>

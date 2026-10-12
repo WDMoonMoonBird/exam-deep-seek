@@ -52,7 +52,7 @@
 
               <!-- 保存成功的提示：antd message 在窗口顶部居中 -->
               <Transition name="toast">
-                <div v-if="step === 4" class="toast-wrap"><span class="dm-toast">✓ 保存成功</span></div>
+                <div v-if="step === 4" class="toast-wrap"><span class="dm-toast">✓ 创建成功</span></div>
               </Transition>
             </div>
 
