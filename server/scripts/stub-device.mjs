@@ -12,6 +12,7 @@
  *  STUB_SCORE       正常份分数（默认 62）
  *  GRADER_RUN_ROOT  装置运行的 run-root（由平台 runner 注入）
  */
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,7 +27,13 @@ const score = Number(process.env.STUB_SCORE || 62);
 
 const spanLog = process.env.STUB_SPAN_LOG;
 // R2-B8：落盘关键 env（供平台侧断言「模型/端点确实经子进程 env 传进装置」）
-const envDump = { DEEPSEEK_MODEL: process.env.DEEPSEEK_MODEL || null, DEEPSEEK_BASE_URL: process.env.DEEPSEEK_BASE_URL || null, DSH_HOME: process.env.DSH_HOME || null, GRADER_RUN_ROOT: process.env.GRADER_RUN_ROOT || null };
+const envDump = { DEEPSEEK_MODEL: process.env.DEEPSEEK_MODEL || null, DEEPSEEK_BASE_URL: process.env.DEEPSEEK_BASE_URL || null, DSH_HOME: process.env.DSH_HOME || null, GRADER_RUN_ROOT: process.env.GRADER_RUN_ROOT || null,
+  // R2-B10：记录本次 argv 与「复用模式落位的尺子」是否存在（供 worker 复用模式断言）
+  argv: process.argv.slice(2),
+  checker_seen: fs.existsSync(path.join(runRoot, 'out', 'checker', 'checker.json')),
+  checker_frozen_seen: fs.existsSync(path.join(runRoot, 'out', 'assignment', 'checker.frozen.json')),
+  checker_sha256: (() => { try { return 'sha256:' + crypto.createHash('sha256').update(fs.readFileSync(path.join(runRoot, 'out', 'checker', 'checker.json'))).digest('hex'); } catch { return null; } })(),
+};
 try { fs.mkdirSync(path.join(runRoot, 'out'), { recursive: true }); fs.writeFileSync(path.join(runRoot, 'out', 'stub-env.json'), JSON.stringify(envDump, null, 1)); } catch { /* 忽略 */ }
 const startedAt = Date.now();
 const writeSpan = () => { if (spanLog) fs.appendFileSync(spanLog, 'start ' + startedAt + ' end ' + Date.now() + '\n'); };

@@ -8,7 +8,12 @@
  *
  * 用法（从 server/ 运行）：
  *   node scripts/r2b7-build-checker.mjs --assignment <id> [--workdir <dir>] [--limit N]
- *        [--device <cmd>] [--device-arg <a>]... [--stub-env k=v]... [--timeout-ms N]
+ *        [--device <cmd>] [--device-arg <a>]... [--device-extra-arg <a>]... [--stub-env k=v]... [--timeout-ms N]
+ *
+ * 装置参数语义（R2-B9③ 澄清）：
+ *   --device-arg <a>       **整体替换**默认参数（默认 = run.sh --checker-mode build-and-measure …）；传一个参数会丢掉默认集 ⇒ 慎用。
+ *   --device-extra-arg <a> **追加**到默认参数之后（推荐用它微调，例如加 --allow-identical / --source-dir）。
+ *   两者同时给出 ⇒ 用法错误 rc=4。
  *        [--dry-run] [--force-checker] [--db-url <url>] [--allow-db <name>] [--allow-prod]
  *
  * 退出码：0 成功；1 装置/消费失败；2 授权拒绝；3 已存在 ready 尺子（需 --force-checker）；4 用法错误。
@@ -32,7 +37,7 @@ const REPO = path.resolve(SERVER, '..');
 const TEST_DB = 'exam_system_test';
 
 export function parseArgs(argv) {
-  const o = { assignmentId: null, workdir: '', limit: 2, device: 'bash', deviceArgs: null, stubEnv: {}, timeoutMs: 1800000, dryRun: false, forceChecker: false, dbUrl: '', allowDb: '', allowProd: false, runRoot: '' };
+  const o = { assignmentId: null, workdir: '', limit: 2, device: 'bash', deviceArgs: null, deviceExtraArgs: [], stubEnv: {}, timeoutMs: 1800000, dryRun: false, forceChecker: false, dbUrl: '', allowDb: '', allowProd: false, runRoot: '' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--assignment') o.assignmentId = Number(argv[++i]);
@@ -40,6 +45,8 @@ export function parseArgs(argv) {
     else if (a === '--limit') o.limit = Number(argv[++i]);
     else if (a === '--device') o.device = String(argv[++i] || 'bash');
     else if (a === '--device-arg') { o.deviceArgs = o.deviceArgs || []; o.deviceArgs.push(String(argv[++i] || '')); }
+    // R2-B9③：**追加**到默认装置参数之后（不替换默认参数）；与 --device-arg 互斥
+    else if (a === '--device-extra-arg') { o.deviceExtraArgs.push(String(argv[++i] || '')); }
     else if (a === '--stub-env') { const kv = String(argv[++i] || ''); const p = kv.indexOf('='); if (p > 0) o.stubEnv[kv.slice(0, p)] = kv.slice(p + 1); }
     else if (a === '--timeout-ms') o.timeoutMs = Number(argv[++i]);
     else if (a === '--dry-run') o.dryRun = true;
@@ -65,6 +72,12 @@ export function assertAuthorized({ dbName, allowDb, allowProd }) {
   if (allowDb !== dbName) return { ok: false, exitCode: 2, code: 'REFUSE_PROD_DB', reason: 'allow_db_required:' + dbName };
   if (allowProd !== true) return { ok: false, exitCode: 2, code: 'REFUSE_PROD_DB', reason: 'allow_prod_required:' + dbName };
   return { ok: true, authorizedProd: true, authorization: '--allow-db+--allow-prod' };
+}
+
+/** R2-B9③：装置参数解析 —— 给了 --device-arg 则**整体替换**（既有语义不变）；否则 默认参数 + --device-extra-arg（追加） */
+export function resolveDeviceArgs({ deviceArgs, deviceExtraArgs = [] } = {}, { limit, workdir }) {
+  if (deviceArgs && deviceArgs.length) return deviceArgs.slice();
+  return [...defaultDeviceArgs({ limit, workdir }), ...deviceExtraArgs];
 }
 
 export function defaultDeviceArgs({ limit, workdir }) {
@@ -152,7 +165,9 @@ async function main() {
   if (opts.error) { console.log('RESULT=USAGE_ERROR reason=' + opts.error); return 4; }
   if (!Number.isFinite(opts.assignmentId) || opts.assignmentId < 1) { console.log('RESULT=USAGE_ERROR reason=assignment_required'); return 4; }
   // ★--run-root 与 --device-arg 互斥（前者跳过装置，后者是装置参数）
-  if (opts.runRoot && opts.deviceArgs && opts.deviceArgs.length) { console.log('RESULT=USAGE_ERROR reason=run_root_conflicts_with_device_arg'); return 4; }
+  if (opts.runRoot && ((opts.deviceArgs && opts.deviceArgs.length) || opts.deviceExtraArgs.length)) { console.log('RESULT=USAGE_ERROR reason=run_root_conflicts_with_device_arg'); return 4; }
+  // ★--device-arg（整体替换默认参数）与 --device-extra-arg（追加）互斥，避免语义歧义
+  if (opts.deviceArgs && opts.deviceArgs.length && opts.deviceExtraArgs.length) { console.log('RESULT=USAGE_ERROR reason=device_arg_conflicts_with_device_extra_arg'); return 4; }
 
   const url = opts.dbUrl || testDbUrl();
   const dbName = dbNameOf(url);
@@ -172,7 +187,7 @@ async function main() {
   if (opts.dryRun) {
     console.log('DRY_RUN=yes（不连库、不启动装置、不写库）');
     console.log('PLAN assignment=' + opts.assignmentId + ' db=' + dbName + ' workdir=' + workdir + ' limit=' + opts.limit
-      + ' device=' + opts.device + ' device_args=' + JSON.stringify(opts.deviceArgs || defaultDeviceArgs({ limit: opts.limit, workdir }))
+      + ' device=' + opts.device + ' device_args=' + JSON.stringify(resolveDeviceArgs(opts, { limit: opts.limit, workdir }))
       + ' force_checker=' + (opts.forceChecker ? 'yes' : 'no'));
     console.log('RUN_ROOT=' + workdir + ' (dry-run：尚未创建)');
     console.log('DSH_HOME=' + home + ' (dry-run：尚未创建)');
@@ -251,7 +266,7 @@ async function main() {
     console.log('RUN_ROOT=' + workdir);
     console.log('DSH_HOME=' + home);
 
-    const deviceArgs = opts.deviceArgs && opts.deviceArgs.length ? opts.deviceArgs : defaultDeviceArgs({ limit: opts.limit, workdir });
+    const deviceArgs = resolveDeviceArgs(opts, { limit: opts.limit, workdir });
     console.log('STAGE=device command=' + opts.device + ' args=' + JSON.stringify(deviceArgs));
     const res = await runDshGrader({
       command: opts.device,

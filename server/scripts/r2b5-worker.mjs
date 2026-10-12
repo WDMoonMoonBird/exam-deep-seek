@@ -18,12 +18,13 @@ import { fileURLToPath } from 'node:url';
 import { PrismaClient } from '@prisma/client';
 import { runOnce } from '../src/services/dshGradingJobWorker.js';
 import { EXIT, parseWorkerConfig, runWorkerLoop } from '../src/services/dshGradingWorkerRuntime.js';
+import { describeLlmConfig, llmEnv, readPlatformLlmConfig } from '../src/services/dshPlatformLlmConfig.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '..');
 
 function parseArgs(argv) {
-  const o = { once: false, maxIterations: Infinity, timeoutMs: 600000, device: null, deviceArgs: [], stubEnv: {}, allowDb: '' };
+  const o = { once: false, maxIterations: Infinity, timeoutMs: 600000, device: null, deviceArgs: [], stubEnv: {}, allowDb: '', allowProd: false, dbUrl: '', reuseChecker: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--once') o.once = true;
@@ -33,6 +34,10 @@ function parseArgs(argv) {
     else if (a === '--device-arg') o.deviceArgs.push(argv[++i]);
     else if (a === '--stub-env') { const kv = String(argv[++i] || ''); const i2 = kv.indexOf('='); if (i2 > 0) o.stubEnv[kv.slice(0, i2)] = kv.slice(i2 + 1); }
     else if (a === '--allow-db') o.allowDb = argv[++i];
+    else if (a === '--allow-prod') o.allowProd = true; // R2-B9①：生产显式授权开关（默认仍拒绝非测试库）
+    else if (a === '--db-url') o.dbUrl = String(argv[++i] || '');
+    // R2-B10②：复用已入库尺子（measure-only-reuse，零模型调用；无 ready 尺子 ⇒ fail-closed needs_rerun）
+    else if (a === '--reuse-checker') o.reuseChecker = true;
     else if (a === '--help') { console.log('usage: node scripts/r2b5-worker.mjs [--once] [--max-iterations N] [--device <cmd>] [--device-arg <a>] [--stub-env k=v]'); process.exit(0); }
     else { console.log('RESULT=USAGE_ERROR unknown_arg=' + a); process.exit(4); }
   }
@@ -47,10 +52,60 @@ function testDbUrl() {
 }
 
 const opts = parseArgs(process.argv.slice(2));
-const url = testDbUrl();
+/**
+ * R2-B9①：worker 的库授权门（**连库/起子进程之前**判定）。
+ *  - 测试库：默认放行（与批 5 行为一致）；
+ *  - 其它库（生产）：必须**同时**给 --allow-db <同名> 与 --allow-prod，只给其一仍拒绝（数字 rc=2）。
+ */
+export function assertWorkerAuthorized({ dbName, allowDb, allowProd }) {
+  if (!dbName) return { ok: false, exitCode: 4, code: 'NO_DB_URL', reason: 'no_db_url' };
+  if (dbName === 'exam_system_test') return { ok: true, authorizedProd: false, authorization: 'test-db' };
+  if (allowDb !== dbName) return { ok: false, exitCode: 2, code: 'REFUSE_PROD_DB', reason: 'allow_db_required:' + dbName };
+  if (allowProd !== true) return { ok: false, exitCode: 2, code: 'REFUSE_PROD_DB', reason: 'allow_prod_required:' + dbName };
+  return { ok: true, authorizedProd: true, authorization: '--allow-db+--allow-prod' };
+}
+
+/**
+ * R2-B10①：装置是否是**假装置**（stub）。
+ *  - 未给 --device-arg ⇒ 默认装置就是 scripts/stub-device.mjs（假装置）；
+ *  - 显式参数里出现 stub-device.mjs（命令或任一参数）⇒ 也算假装置。
+ */
+export function isStubDevice({ device, deviceArgs } = {}) {
+  const cmd = String(device || '');
+  const args = deviceArgs && deviceArgs.length ? deviceArgs.join(' ') : '';
+  if (/stub-device\.mjs/.test(cmd) || /stub-device\.mjs/.test(args)) return true;
+  return !(deviceArgs && deviceArgs.length); // 默认值即 stub
+}
+
+/** 生产防呆：授权到生产库时，假装置必须 fail-closed（绝不把假分写进生产） */
+export function assertDeviceAllowedOnProd({ dbName, device, deviceArgs, testDb = 'exam_system_test' } = {}) {
+  if (dbName === testDb) return { ok: true };
+  if (isStubDevice({ device, deviceArgs })) {
+    return { ok: false, exitCode: 2, code: 'REFUSE_STUB_DEVICE_ON_PROD', reason: 'device_is_stub:must_pass_real_device_args' };
+  }
+  return { ok: true };
+}
+
+const url = opts.dbUrl || testDbUrl();
 if (!url) { console.log('RESULT=NO_DB_URL'); process.exit(4); }
 const dbName = new URL(url).pathname.replace(/^\//, '');
-if (dbName !== 'exam_system_test') { console.log('REFUSE ' + dbName); process.exit(2); }
+const guard = assertWorkerAuthorized({ dbName, allowDb: opts.allowDb, allowProd: opts.allowProd });
+if (!guard.ok) {
+  console.log('RESULT=' + guard.code + ' reason=' + guard.reason);
+  console.log('REFUSED_BEFORE_CONNECT=yes target_db=' + dbName);
+  process.exit(Number.isFinite(Number(guard.exitCode)) ? Number(guard.exitCode) : 2); // 数字退出码
+}
+// ★R2-B10①：生产 + 假装置 ⇒ fail-closed（在任何连接/领取 job/写库之前）
+const deviceGuard = assertDeviceAllowedOnProd({ dbName, device: opts.device, deviceArgs: opts.deviceArgs });
+if (!deviceGuard.ok) {
+  console.log('RESULT=' + deviceGuard.code + ' reason=' + deviceGuard.reason + ' target_db=' + dbName);
+  console.log('REFUSED_BEFORE_CONNECT=yes target_db=' + dbName);
+  console.log('HINT=生产请显式给真实装置：--device bash --device-arg scripts/dsh-grader/run.sh --device-arg --checker-mode --device-arg build-and-measure（或 --reuse-checker 复用已入库尺子）');
+  process.exit(Number.isFinite(Number(deviceGuard.exitCode)) ? Number(deviceGuard.exitCode) : 2); // 数字退出码
+}
+
+console.log('AUDIT target_db=' + dbName + ' allow_db=' + (opts.allowDb || '(empty)') + ' allow_prod=' + (opts.allowProd ? 'yes' : 'no') + ' authorization=' + guard.authorization + ' authorized_prod=' + (guard.authorizedProd ? 'yes' : 'no'));
+console.log('STAGE=connect target_db=' + dbName); // ★机制标记：只有越过守卫才会打印
 
 const prisma = new PrismaClient({ datasources: { db: { url } } });
 const config = parseWorkerConfig();
@@ -59,6 +114,11 @@ let signalled = null;
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => { signalled = sig; stopSignal.stopped = true; console.log('WORKER_SIGNAL=' + sig + '（跑完当前 job 后退出）'); });
 }
+
+// R2-B9②：平台模型/端点（DB → env；未配置则不注入）
+const platform = await readPlatformLlmConfig(prisma);
+const llmDesc = describeLlmConfig(platform);
+console.log('PLATFORM_MODEL=' + llmDesc.platformModel + ' PLATFORM_BASE_URL=' + llmDesc.platformBaseUrl);
 
 const device = opts.device || 'node';
 const deviceArgs = opts.deviceArgs.length ? opts.deviceArgs : [path.join(SERVER, 'scripts', 'stub-device.mjs')];
@@ -69,7 +129,7 @@ console.log('WORKER_START db=/' + dbName + ' idle_backoff_ms=' + config.idleBack
 const res = await runWorkerLoop({
   prisma,
   runOnceImpl: ({ dbLimit }) => runOnce({
-    prisma, dbLimit, deviceCommand: device, deviceArgs, stubEnv: opts.stubEnv,
+    prisma, dbLimit, deviceCommand: device, deviceArgs, stubEnv: opts.stubEnv, extraEnv: llmEnv(platform), reuseChecker: opts.reuseChecker,
     timeoutMs: opts.timeoutMs, repoRoot: path.resolve(SERVER, '..'),
   }),
   config,

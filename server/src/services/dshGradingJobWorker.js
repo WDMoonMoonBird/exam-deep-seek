@@ -18,6 +18,36 @@ import { getDshGradingConcurrency } from '../infrastructure/ai/deepseek/config.j
 import logger from '../utils/logger.js';
 
 export const JOB_STATUS = { pending: 'pending', running: 'running', done: 'done', failed: 'failed', needsRerun: 'needs_rerun' };
+
+/** R2-B10②：复用模式常量与装置约定路径（以 scripts/dsh-grader 代码为准：
+ *  run.sh 在 measure-only-reuse 下**不清 out/**，并按 --checker 复制到 out/checker/checker.json；
+ *  lib_assignment.sh 的作业级流程读 out/assignment/checker.frozen.json。 */
+export const REUSE_CHECKER_MODE = 'measure-only-reuse';
+export const CHECKER_FROZEN_REL = 'out/assignment/checker.frozen.json';
+export const CHECKER_JSON_REL = 'out/checker/checker.json';
+
+/** 复用模式的装置参数：剥掉已有的 --checker/--checker-mode，再追加复用两项（顺序稳定，便于断言） */
+export function withReuseCheckerArgs(args = [], checkerPath) {
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--checker') { i++; continue; }
+    if (args[i] === '--checker-mode') { i++; continue; }
+    out.push(args[i]);
+  }
+  return [...out, '--checker', checkerPath, '--checker-mode', REUSE_CHECKER_MODE];
+}
+
+/** 把已入库的尺子落位到 run-root（两条路径都写；返回传给 --checker 的路径） */
+export function placeCheckerFiles({ runRoot, checkerJson }) {
+  const body = typeof checkerJson === 'string' ? checkerJson : JSON.stringify(checkerJson, null, 2);
+  const frozen = path.join(runRoot, CHECKER_FROZEN_REL);
+  fs.mkdirSync(path.dirname(frozen), { recursive: true });
+  fs.writeFileSync(frozen, body);
+  const plain = path.join(runRoot, CHECKER_JSON_REL);
+  fs.mkdirSync(path.dirname(plain), { recursive: true });
+  fs.writeFileSync(plain, body);
+  return frozen;
+}
 export const DEFAULT_MAX_ATTEMPTS = 3;
 
 /** 并发闸（FIFO；tryAcquire 失败 ⇒ 调用方不得领取 job） */
@@ -85,7 +115,7 @@ export async function finishJob({ prisma, jobId, status, written = 0, skipped = 
  * @returns {{consumed:boolean, reason?:string, jobId?:number, status?:string, written?:number, skipped?:number, runRoot?:string, exitCode?:number, timedOut?:boolean}}
  */
 export async function runOnce({
-  prisma, jobId = null, gate = null, dbLimit = undefined, deviceCommand, deviceArgs = [], stubEnv = {},
+  prisma, jobId = null, gate = null, dbLimit = undefined, deviceCommand, deviceArgs = [], stubEnv = {}, extraEnv = {}, reuseChecker = false,
   runRootBase = '/tmp', timeoutMs = 600000, maxAttempts = DEFAULT_MAX_ATTEMPTS,
   repoRoot = path.resolve(process.cwd(), '..'), deps = {},
 } = {}) {
@@ -104,18 +134,49 @@ export async function runOnce({
     const home = path.join(runRoot, 'home');
     fs.mkdirSync(home, { recursive: true });
 
+    // R2-B10②：复用已入库尺子（measure-only-reuse，零模型调用、尺子不变）
+    let reuse = null;
+    let runArgs = deviceArgs;
+    // 容错：老测试的 fake prisma 没有 gradingChecker（抛错 ⇒ 视为「无 ready 尺子」，不改写既有语义）
+    let readyChecker = null;
+    try {
+      readyChecker = await prisma.gradingChecker.findFirst({
+        where: { assignmentId: job.assignmentId, status: 'ready' }, orderBy: { id: 'desc' },
+        select: { checkerId: true, checkerJson: true },
+      });
+    } catch (err) {
+      readyChecker = null;
+      logger.warn({ jobId: job.id, err: err && err.message }, 'R2-B10：查询 ready 尺子失败 ⇒ 视为无尺子');
+    }
+    if (reuseChecker) {
+      if (!readyChecker) {
+        console.log('CHECKER_REUSE=none checker_id=(none) reason=no_ready_checker_for_assignment job=' + job.id);
+        await finishJob({ prisma, jobId: job.id, status: JOB_STATUS.needsRerun, error: 'no_ready_checker_for_assignment' });
+        logger.warn({ jobId: job.id, assignmentId: job.assignmentId }, 'R2-B10：该作业无 ready 尺子 ⇒ fail-closed 标 needs_rerun（不跑装置、零成本）');
+        return { consumed: true, jobId: job.id, runRoot, status: JOB_STATUS.needsRerun, reason: 'no_ready_checker', reuse: { applied: false, reason: 'no_ready_checker_for_assignment' } };
+      }
+      const frozenPath = placeCheckerFiles({ runRoot, checkerJson: readyChecker.checkerJson });
+      runArgs = withReuseCheckerArgs(deviceArgs, frozenPath);
+      reuse = { applied: true, checkerId: readyChecker.checkerId, mode: REUSE_CHECKER_MODE, frozenPath };
+      console.log('CHECKER_REUSE=applied checker_id=' + readyChecker.checkerId + ' mode=' + REUSE_CHECKER_MODE + ' frozen=' + frozenPath + ' job=' + job.id);
+      logger.info({ jobId: job.id, checkerId: readyChecker.checkerId, mode: REUSE_CHECKER_MODE }, 'R2-B10：复用已入库尺子（零模型调用）');
+    } else if (readyChecker) {
+      console.log('HINT=ready_checker_exists_consider_--reuse-checker checker_id=' + readyChecker.checkerId + ' job=' + job.id);
+    }
+
     const res = await (deps.runDshGrader || runDshGrader)({
       command: deviceCommand || 'node',
-      args: deviceArgs,
+      args: runArgs,
       runRoot,
       cwd: runRoot,
       timeoutMs,
-      extraEnv: { DSH_HOME: home, ...stubEnv },
+      // R2-B9②：平台模型/端点经 extraEnv 注入（未配置时 extraEnv 为空 ⇒ 行为不变）；stubEnv 最后合并（测试可覆盖）
+      extraEnv: { DSH_HOME: home, ...extraEnv, ...stubEnv },
       spawnImpl: deps.spawnImpl,
       logImpl: deps.logImpl || logger,
     });
 
-    const base = { consumed: true, jobId: job.id, runRoot, exitCode: res.exitCode, timedOut: !!res.timedOut };
+    const base = { consumed: true, jobId: job.id, runRoot, exitCode: res.exitCode, timedOut: !!res.timedOut, reuse };
 
     if (res.timedOut) {
       const retryable = job.attempts < maxAttempts;
