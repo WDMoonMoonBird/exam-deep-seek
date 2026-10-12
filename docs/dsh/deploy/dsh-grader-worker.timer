@@ -1,0 +1,23 @@
+# /etc/systemd/system/dsh-grader-worker.timer
+# 峰谷窗口定时器：到点启动 dsh-grader-worker.service（跑完即退）。
+# 三选一（取消对应注释），改完 systemctl daemon-reload && systemctl restart dsh-grader-worker.timer
+[Unit]
+Description=DSH 实训题批改 worker 的峰谷窗口定时器
+
+[Timer]
+# 方案 A（推荐 · 夜间峰谷）：每晚 01:00
+OnCalendar=*-*-* 01:00:00
+# 方案 B（每 2 小时一轮：00/02/…/22）
+#OnCalendar=*-*-* 00/2:00:00
+# 方案 C（工作日 22:00，避开白天资源高峰）
+#OnCalendar=Mon..Fri *-*-* 22:00:00
+
+# 关机/宕机错过的窗口，开机后补跑一次（夜间批改的关键）
+Persistent=true
+# 抖动，避免与其它定时任务同时抢占资源
+RandomizedDelaySec=300
+AccuracySec=1min
+Unit=dsh-grader-worker.service
+
+[Install]
+WantedBy=timers.target

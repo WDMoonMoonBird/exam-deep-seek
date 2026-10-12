@@ -1,0 +1,46 @@
+# /etc/systemd/system/dsh-grader-worker.service
+# DSH 实训题 · 作业级批改 worker —— 【峰谷窗口形态】（每次运行处理完即退出）
+# 安装与验证见同目录 README.md；本文件由 R2 批次实测配方固化（2026-10-12）。
+#
+# 为什么是 oneshot 而不是常驻：上线形态为峰谷批改（「立即批改」按钮已在方案中裁定上线取消），
+# 窗口外零内存零 CPU；短驻进程被中断留下的僵尸 running 行由 worker 启动时的回收器处理（t64）。
+[Unit]
+Description=DSH 实训题作业级批改 worker（峰谷窗口，Type=oneshot）
+Documentation=file:/srv/exam/docs/dsh/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/exam/server
+EnvironmentFile=/etc/dsh-grader/worker.env
+
+# ★必须显式放宽：Type=oneshot 的 TimeoutStartSec 走 DefaultTimeoutStartSec（默认 90s），
+#   而一次批改（复用尺子量 62 份）实测需数分钟 ⇒ 不放宽会被 systemd 中途杀掉。
+TimeoutStartSec=infinity
+# 优雅停机：stop 时让「当前 job 跑完再退」（worker 已实现），给足时间。
+TimeoutStopSec=1800
+KillMode=mixed
+KillSignal=SIGTERM
+
+# ★DSH CLI 路径：Linux 上不是 macOS 的 app 路径，按实际安装位置改（装置支持 DSH_GRADER_BIN 覆盖）。
+Environment=DSH_GRADER_BIN=/opt/dsh/runtime/cli/bin/dsh
+# 僵尸 running 回收阈值：必须 > 单次运行超时（见 README「运维约定」；缺省 15 分钟）。
+Environment=DSH_WORKER_STALE_RUNNING_MS=900000
+
+ExecStart=/usr/bin/node scripts/r2b5-worker.mjs --once \
+  --db-url ${DATABASE_URL} \
+  --allow-db exam_system --allow-prod \
+  --reuse-checker \
+  --device bash \
+  --device-arg scripts/dsh-grader/run.sh \
+  --device-arg --submissions --device-arg ${GRADER_SUBMISSIONS} \
+  --device-arg --allow-identical
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=dsh-grader-worker
+Nice=5
+
+[Install]
+WantedBy=multi-user.target
