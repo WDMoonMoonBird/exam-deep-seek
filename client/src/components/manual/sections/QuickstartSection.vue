@@ -20,8 +20,9 @@
           <Transition name="dm-fade" mode="out-in">
             <!-- ① 登录页：工号/密码已填好，高亮「登录」 -->
             <div v-if="step === 0" key="login" class="login">
-              <!-- 字标自绘，不 import assets/logo.svg：手册是公开路由，不引业务资源 -->
-              <span class="logo-mark">D</span>
+              <!-- 真 logo：client/src/assets/logo.svg 与仓库根的「学习中.svg」是同一份文件（sha256 一致），
+                   真实 Login.vue / Layout.vue 用的就是它；此前演示自绘的「D」是占位，已替换 -->
+              <img class="logo-mark" :src="logoUrl" alt="" />
               <div class="login-title">Deadpan 判题</div>
               <div class="login-desc">请登录以继续</div>
               <div class="login-form">
@@ -46,7 +47,7 @@
             <div v-else key="console" class="console">
               <!-- 侧栏：分组与命名照 teacher/Layout.vue（教学 / 组织），第 ⑤ 步高亮「题库管理」 -->
               <aside class="sider">
-                <div class="sider-logo"><span class="logo-mark sm">D</span><b>Deadpan 判题</b></div>
+                <div class="sider-logo"><img class="logo-mark sm" :src="logoUrl" alt="" /><b>Deadpan 判题</b></div>
                 <div class="sider-group">教学</div>
                 <div class="sider-item">作业管理</div>
                 <div class="sider-item">评分审核<span class="sider-badge tnum">3</span></div>
@@ -179,6 +180,8 @@ export const meta = { order: 2, title: '2. 快速入门 · 登录与进入控制
 import ManualStep from '../ManualStep.vue';
 import DemoFrame from '../DemoFrame.vue';
 import { quickstart as scene } from '../scenes/quickstart.js';
+// 与真实端同一份 logo：assets/logo.svg === 仓库根「学习中.svg」（sha256 一致）
+import logoUrl from '../../../assets/logo.svg';
 
 defineProps({
   /** 截图兜底（由 docs/manual/shots.mjs 生成）；不传则直接显示复刻界面 */
@@ -232,13 +235,9 @@ defineProps({
 
 .grow { flex: 1; min-width: 0; }
 
-/* 字标（自绘，代替 assets/logo.svg） */
-.logo-mark {
-  display: grid; place-items: center; width: calc(var(--u) * 34); height: calc(var(--u) * 34);
-  border-radius: calc(var(--u) * 9); background: var(--brand-600); color: #fff;
-  font-size: calc(var(--u) * 17); font-weight: 600;
-}
-.logo-mark.sm { width: calc(var(--u) * 18); height: calc(var(--u) * 18); border-radius: calc(var(--u) * 5); font-size: calc(var(--u) * 10); }
+/* 字标 = 项目真 logo（assets/logo.svg，即仓库根的学习中.svg）；图形自带圆角方块与配色，这里只管尺寸 */
+.logo-mark { display: block; width: calc(var(--u) * 34); height: calc(var(--u) * 34); }
+.logo-mark.sm { width: calc(var(--u) * 18); height: calc(var(--u) * 18); }
 
 /* ===== ① 登录页：负外边距抵掉 .df-body 的内边距，让页面铺满窗口内容区 ===== */
 .login {
