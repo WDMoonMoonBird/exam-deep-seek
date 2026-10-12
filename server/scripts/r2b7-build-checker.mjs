@@ -32,7 +32,7 @@ const REPO = path.resolve(SERVER, '..');
 const TEST_DB = 'exam_system_test';
 
 export function parseArgs(argv) {
-  const o = { assignmentId: null, workdir: '', limit: 2, device: 'bash', deviceArgs: null, stubEnv: {}, timeoutMs: 1800000, dryRun: false, forceChecker: false, dbUrl: '', allowDb: '', allowProd: false };
+  const o = { assignmentId: null, workdir: '', limit: 2, device: 'bash', deviceArgs: null, stubEnv: {}, timeoutMs: 1800000, dryRun: false, forceChecker: false, dbUrl: '', allowDb: '', allowProd: false, runRoot: '' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--assignment') o.assignmentId = Number(argv[++i]);
@@ -44,6 +44,7 @@ export function parseArgs(argv) {
     else if (a === '--timeout-ms') o.timeoutMs = Number(argv[++i]);
     else if (a === '--dry-run') o.dryRun = true;
     else if (a === '--force-checker') o.forceChecker = true;
+    else if (a === '--run-root') o.runRoot = String(argv[++i] || ''); // R2-B8②：复用已有产物入库（跳过装置）
     else if (a === '--db-url') o.dbUrl = String(argv[++i] || '');
     else if (a === '--allow-db') o.allowDb = String(argv[++i] || '');
     else if (a === '--allow-prod') o.allowProd = true;
@@ -102,11 +103,56 @@ function testDbUrl() {
   return toTestDbUrl(source);
 }
 
+/** R2-B8①：平台配置的模型/端点（system_configs → env；都没有则返回空 ⇒ 装置侧保持默认） */
+export async function readPlatformLlmConfig(prisma, env = process.env) {
+  let model = env.DEEPSEEK_MODEL || '';
+  let baseUrl = env.DEEPSEEK_BASE_URL || '';
+  try {
+    const rows = await prisma.$queryRawUnsafe("SELECT `key`, `value` FROM system_configs WHERE `key` IN ('deepseek_model','deepseek_base_url')");
+    for (const r of rows || []) {
+      if (r.key === 'deepseek_model' && r.value) model = String(r.value);
+      if (r.key === 'deepseek_base_url' && r.value) baseUrl = String(r.value);
+    }
+  } catch { /* 读不到就用 env/默认 */ }
+  return { model, baseUrl };
+}
+
+/** 消费 + 打印 SUMMARY（装置路径与 --run-root 复用路径共用，保证 SUMMARY 口径一致） */
+async function consumeAndSummarize({ prisma, runRoot, assignmentId, questionId, modelCalls, device }) {
+  const stored = await consumeChecker({ prisma, runRoot, assignmentId, questionId, repoRoot: REPO });
+  if (!stored.ok) {
+    console.log('RESULT=CHECKER_NOT_CONSUMED reason=' + stored.reason + ' violations=' + JSON.stringify(stored.violations || []));
+    console.log('SUMMARY_BEGIN');
+    console.log('ASSIGNMENT=' + assignmentId);
+    console.log('CHECKER_ID=(none)');
+    console.log('CONSUMED=0');
+    console.log('WRITTEN=0');
+    console.log('NEEDS_RERUN=0');
+    console.log('MODEL_CALLS=' + (modelCalls || 0));
+    console.log('SUMMARY_END');
+    return 1;
+  }
+  const consumed = await consumeMeasureResults({ prisma, runRoot, assignmentId });
+  const needsRerun = consumed.skipped.filter((r) => r.status === 'needs_rerun').length;
+  console.log('SUMMARY_BEGIN');
+  console.log('ASSIGNMENT=' + assignmentId);
+  console.log('CHECKER_ID=' + stored.checkerId);
+  console.log('CONSUMED=' + consumed.rows.length);
+  console.log('WRITTEN=' + consumed.written);
+  console.log('NEEDS_RERUN=' + needsRerun);
+  console.log('MODEL_CALLS=' + (modelCalls || 0));
+  console.log('SUMMARY_END');
+  console.log('KEPT_RUN_ROOT=' + runRoot + '（现场保留，未清理）');
+  return 0;
+}
+
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.help) return 0;
   if (opts.error) { console.log('RESULT=USAGE_ERROR reason=' + opts.error); return 4; }
   if (!Number.isFinite(opts.assignmentId) || opts.assignmentId < 1) { console.log('RESULT=USAGE_ERROR reason=assignment_required'); return 4; }
+  // ★--run-root 与 --device-arg 互斥（前者跳过装置，后者是装置参数）
+  if (opts.runRoot && opts.deviceArgs && opts.deviceArgs.length) { console.log('RESULT=USAGE_ERROR reason=run_root_conflicts_with_device_arg'); return 4; }
 
   const url = opts.dbUrl || testDbUrl();
   const dbName = dbNameOf(url);
@@ -158,6 +204,33 @@ async function main() {
     const links = await prisma.assignmentQuestion.findMany({ where: { assignmentId: opts.assignmentId }, select: { questionId: true } });
     const questionId = links.length ? links[0].questionId : null;
 
+    // R2-B8①：解析平台配置的模型/端点（system_configs → env → 不提供⇒装置侧保持默认）
+    const platform = await readPlatformLlmConfig(prisma);
+    console.log('PLATFORM_MODEL=' + (platform.model || '(unset:device-default)'));
+    console.log('PLATFORM_BASE_URL=' + (platform.baseUrl || '(unset:device-default)'));
+
+    // R2-B8②：--run-root 复用已有产物（跳过装置）；先校验产物存在，绝不静默成功
+    if (opts.runRoot) {
+      const rr = path.resolve(opts.runRoot);
+      const ck = path.join(rr, 'out', 'checker', 'checker.json');
+      if (!fs.existsSync(ck)) {
+        console.log('RESULT=RUN_ROOT_INVALID reason=checker_json_missing expected=' + ck);
+        console.log('SUMMARY_BEGIN');
+        console.log('ASSIGNMENT=' + opts.assignmentId);
+        console.log('CHECKER_ID=(none)');
+        console.log('CONSUMED=0');
+        console.log('WRITTEN=0');
+        console.log('NEEDS_RERUN=0');
+        console.log('MODEL_CALLS=0');
+        console.log('SUMMARY_END');
+        return 1;
+      }
+      console.log('RUN_ROOT=' + rr + ' (复用已有产物，未启动装置)');
+      console.log('DSH_HOME=(reuse: 未创建隔离 home)');
+      const kept = await consumeAndSummarize({ prisma, runRoot: rr, assignmentId: opts.assignmentId, questionId, modelCalls: 0 });
+      return kept;
+    }
+
     const existing = await prisma.gradingChecker.findFirst({ where: { assignmentId: opts.assignmentId, status: 'ready' }, orderBy: { id: 'desc' }, select: { checkerId: true } });
     if (existing && !opts.forceChecker) {
       console.log('RESULT=CHECKER_ALREADY_READY checker_id=' + existing.checkerId + ' hint=--force-checker');
@@ -186,7 +259,13 @@ async function main() {
       runRoot: workdir,
       cwd: REPO,
       timeoutMs: opts.timeoutMs,
-      extraEnv: { DSH_HOME: home, ...opts.stubEnv },
+      extraEnv: {
+        DSH_HOME: home,
+        // R2-B8①：只在平台配置提供时才传（否则不传 ⇒ 装置侧保持 deepseek-flash / 官方端点默认）
+        ...(platform.model ? { DEEPSEEK_MODEL: platform.model } : {}),
+        ...(platform.baseUrl ? { DEEPSEEK_BASE_URL: platform.baseUrl } : {}),
+        ...opts.stubEnv,
+      },
     });
     deviceRan = true;
     const dev = parseDeviceSummary(res.stdout);

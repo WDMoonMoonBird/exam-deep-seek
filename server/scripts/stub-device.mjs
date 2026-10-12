@@ -25,6 +25,9 @@ const subs = String(process.env.STUB_SUBMISSIONS || '1101').split(',').map((s) =
 const score = Number(process.env.STUB_SCORE || 62);
 
 const spanLog = process.env.STUB_SPAN_LOG;
+// R2-B8：落盘关键 env（供平台侧断言「模型/端点确实经子进程 env 传进装置」）
+const envDump = { DEEPSEEK_MODEL: process.env.DEEPSEEK_MODEL || null, DEEPSEEK_BASE_URL: process.env.DEEPSEEK_BASE_URL || null, DSH_HOME: process.env.DSH_HOME || null, GRADER_RUN_ROOT: process.env.GRADER_RUN_ROOT || null };
+try { fs.mkdirSync(path.join(runRoot, 'out'), { recursive: true }); fs.writeFileSync(path.join(runRoot, 'out', 'stub-env.json'), JSON.stringify(envDump, null, 1)); } catch { /* 忽略 */ }
 const startedAt = Date.now();
 const writeSpan = () => { if (spanLog) fs.appendFileSync(spanLog, 'start ' + startedAt + ' end ' + Date.now() + '\n'); };
 

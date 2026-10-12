@@ -106,6 +106,23 @@ scaffold_home() {
 - id: workflow-ptc
   disabled: true
 PATCH
+  # R2-B8：平台驱动时把平台配置的模型/端点带进隔离 profile（**未提供则完全不追加** ⇒ 默认行为不变）。
+  # 目标 id 取自 headless 默认 profile 树：agent-default-model（provider/model）/ llm-deepseek（baseURL）。
+  if [ -n "${DEEPSEEK_MODEL:-}" ]; then
+    cat >> "$home/profiles/$DSH_PROFILE_NAME/cordis.patch.yml" <<PATCH_MODEL
+- id: agent-default-model
+  config:
+    provider: ${DSH_GRADER_PROVIDER:-deepseek-official}
+    model: ${DEEPSEEK_MODEL}
+PATCH_MODEL
+  fi
+  if [ -n "${DEEPSEEK_BASE_URL:-}" ]; then
+    cat >> "$home/profiles/$DSH_PROFILE_NAME/cordis.patch.yml" <<PATCH_BASEURL
+- id: llm-deepseek
+  config:
+    baseURL: ${DEEPSEEK_BASE_URL}
+PATCH_BASEURL
+  fi
 }
 
 dsh_version() {
