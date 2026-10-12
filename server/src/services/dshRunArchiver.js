@@ -50,20 +50,21 @@ export function buildEvidenceSummary(runRoot) {
       for (const it of arr) {
         const slug = it.slug || it.id || it.name;
         if (!slug) continue;
-        put(String(slug), { measurable: it.measurable !== false, reason: it.reason || it.unmeasurable_reason || null });
+        put(String(slug), { measurable: it.measurable !== false && it.unmeasurable !== true, reason: it.reason || it.unmeasurable_reason || null });
       }
     }
   } catch { /* 证据缺失 ⇒ 不阻断 */ }
   try {
-    const resDir = path.join(outDir, 'results');
+    // ★R2-B31（云上实测修正）：量尺产物实际在 out/measure/*.json（消费侧同口径），out/results 仅兼容
+    const resDir = fs.existsSync(path.join(outDir, 'measure')) ? path.join(outDir, 'measure') : path.join(outDir, 'results');
     if (fs.existsSync(resDir)) {
       for (const f of fs.readdirSync(resDir).sort()) {
-        if (!f.endsWith('.model.json')) continue;
-        const slug = f.replace(/\.model\.json$/, '');
+        if (!f.endsWith('.json')) continue;   // ★R2-B31：measure/*.json 与 results/*.model.json 都收
+        const slug = f.replace(/\.[a-z0-9_]*\.?model\.json$/, '').replace(/\.json$/, '');   // ★R2-B31：measure/*.json 与 results/*.model.json 都能得 slug
         try {
           const doc = JSON.parse(fs.readFileSync(path.join(resDir, f), 'utf8'));
           const score = doc.score ?? doc.total_score ?? doc.total ?? null;
-          put(slug, { score });
+          put(slug, { score, measurable: it.unmeasurable !== true && it.measurable !== false, reason: it.reason || null });
         } catch { put(slug, { parseError: true }); }
       }
     }
@@ -79,6 +80,145 @@ export function buildEvidenceSummary(runRoot) {
   };
 }
 
+
+
+// ===== ★R2-B31：run-root 生命周期共享 helper（批改与造尺两条路径共用，禁止各自再实现一遍）=====
+//   teardown（会话销毁 + 凭据必删 + 证据 <run-root>/out/run-teardown.json）
+//   → 归档（<runsRoot>/<dirName>：teardown/日志/证据）→ 成功时清理 run-root（由 archiveRun 完成）。
+//   ★本函数**永不抛**、**永不改调用方退出码**（fail-soft）；source：批改 'worker'／造尺 'build'。
+export async function finalizeRunRoot({
+  runRoot, success = false, exitCode = null, source = 'worker', dirName = null,
+  runsRoot = DEFAULT_RUNS_ROOT, purge = true, keepDays = DEFAULT_SCENE_KEEP_DAYS, archive = true, failed = null, log = console,
+} = {}) {
+  const out = { teardown: null, archive: null, error: null };
+  if (!runRoot) return out;
+  try {
+    out.teardown = purgeRunRootSessions({ runRoot, exitCode: exitCode === null ? (success ? 0 : 1) : exitCode, purge, keepDays, source, failed, log });
+  } catch (err) { out.error = 'teardown:' + String(err && err.message).slice(0, 160); }
+  try {
+    if (archive) out.archive = await archiveRun({ runRoot, jobId: null, success, runsRoot, log, dirName });
+  } catch (err) { out.error = (out.error ? out.error + ';' : '') + 'archive:' + String(err && err.message).slice(0, 160); }
+  return out;
+}
+
+// ★R2-B31：造尺路径包装（归档 build-<assignmentId>-<ts>/；teardown 证据 source=build；不动退出码）
+export async function finalizeBuildRunRoot({ runRoot, assignmentId, exitCode = 0, success = null, runsRoot = DEFAULT_RUNS_ROOT, purge = true, keepDays = DEFAULT_SCENE_KEEP_DAYS, log = console } = {}) {
+  if (!runRoot) return { skipped: 'no_run_root' };
+  const ok = success === null ? Number(exitCode) === 0 : !!success;
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+  const dirName = 'build-' + String(assignmentId) + '-' + stamp;
+  const res = await finalizeRunRoot({ runRoot, success: ok, exitCode, source: 'build', dirName, runsRoot, purge, keepDays, log });
+  const ev = res.teardown && res.teardown.evidence ? res.teardown.evidence : null;
+  log.log('BUILD_RUN_FINALIZED dir=' + (res.archive && res.archive.dir ? res.archive.dir : '(none)')
+    + ' sessions_purged=' + (ev ? ev.sessions_purged : 'na') + ' session_files_after=' + (ev ? ev.session_files_after : 'na')
+    + ' credentials_removed=' + (ev ? ev.credentials_removed : 'na') + ' keep_scene=' + (ev ? ev.keep_scene : 'na')
+    + ' source=build' + (res.error ? ' error=' + res.error : ''));
+  return res;
+}
+
+// ===== ★R2-B30：run 计数映射（口径权威来源优先级；修 t87 前暴露的 measured/unmeasurable 恒 0 缺陷）=====
+//
+// 计数口径（写死为契约，勿再靠兜底默认值）：
+//   measured     = **成功量尺**的份数（有分且判为可量）
+//   unmeasurable = **C8 预检/量尺判定为不可量**的份数
+//   skipped      = **未写入分数**的份数（失败/不可量/缺产物）
+//   written      = **实际写入分数行**数（正常 ≤ measured；两者相等表示「量到即写入」）
+//
+// 权威来源优先级（越靠前越可信）：
+//   ① 装置自报行：日志里的 `ASSIGNMENT_RESULT=<...> N=<n> MEASURED=<m> UNMEASURABLE=<u>`
+//   ② out/assignment/comparability.json 的 ok/failed/unmeasurable
+//   ③ evidence-summary（out/diagnostics/measurable.json + out/results/*.model.json 汇总）
+//   ④ deviceExit/消费侧返回值（仅用于 skipped 兜底）
+export function resolveRunCounts({ deviceTail = '', summary = null, comparability = null, deviceExit = null, total = null, writtenHint = null, skippedHint = null } = {}) {
+  const counts = { measured: null, unmeasurable: null, skipped: null, written: null, failed: null, result: null, source: [] };
+  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+  // ① 装置自报行
+  // ★R2-B31：容忍字段顺序与可选 FAILED —— 逐字段抓取 ASSIGNMENT_RESULT= 行里的 KEY=VAL（云上真例含 FAILED=1）
+  const line = String(deviceTail || '')
+    .split(String.fromCharCode(10)).reverse().find((l) => l.includes('ASSIGNMENT_RESULT=')) || '';
+  let selfTotal = null;
+  if (line) {
+    const pick = (k) => { const r = new RegExp('(?:^|[\\s,])' + k + '=(-?\\d+)').exec(line); return r ? num(r[1]) : null; };
+    const rWords = /ASSIGNMENT_RESULT=([A-Z_]+)/.exec(line);
+    if (rWords) { counts.result = rWords[1]; counts.source.push('device_line'); }
+    selfTotal = pick('N');
+    counts.measured = pick('MEASURED');
+    counts.unmeasurable = pick('UNMEASURABLE');
+    counts.failed = pick('FAILED');
+    if (counts.measured === null) counts.source.pop();
+  }
+  // ② comparability.json
+  if (counts.measured === null && comparability && typeof comparability === 'object') {
+    const ok = num(comparability.ok ?? comparability.measured);
+    const un = num(comparability.unmeasurable);
+    if (ok !== null) { counts.measured = ok; counts.source.push('comparability'); }
+    if (un !== null) { counts.unmeasurable = un; if (!counts.source.includes('comparability')) counts.source.push('comparability'); }
+  }
+  // ③ evidence-summary
+  if (summary && typeof summary === 'object') {
+    if (counts.measured === null && num(summary.measurable) !== null) { counts.measured = num(summary.measurable); counts.source.push('evidence_summary'); }
+    if (counts.unmeasurable === null && num(summary.unmeasurable) !== null) { counts.unmeasurable = num(summary.unmeasurable); counts.source.push('evidence_summary'); }
+    if (selfTotal === null && num(summary.n) !== null) selfTotal = num(summary.n);
+  }
+  const n = selfTotal !== null ? selfTotal : num(total);
+  // written：优先消费侧提示，其次 = measured（量到即写入）
+  if (writtenHint !== null && num(writtenHint) !== null) { counts.written = num(writtenHint); counts.source.push('written_hint'); }
+  else if (counts.measured !== null) counts.written = counts.measured;
+  // skipped：优先消费侧提示，其次 = N − written
+  if (skippedHint !== null && num(skippedHint) !== null) { counts.skipped = num(skippedHint); counts.source.push('skipped_hint'); }
+  else if (n !== null && counts.written !== null) counts.skipped = Math.max(0, n - counts.written);
+  // deviceExit 非 0 且无任何权威计数 ⇒ 全量视为未写入（不假装成功）
+  if (deviceExit !== null && num(deviceExit) !== 0 && counts.written === null) {
+    counts.measured = counts.measured === null ? 0 : counts.measured;
+    counts.unmeasurable = counts.unmeasurable === null ? 0 : counts.unmeasurable;
+    counts.written = 0;
+    counts.skipped = n !== null ? n : 0;
+    counts.source.push('device_failed');
+  }
+  return {
+    measured: counts.measured === null ? 0 : counts.measured,
+    unmeasurable: counts.unmeasurable === null ? 0 : counts.unmeasurable,
+    skipped: counts.skipped === null ? 0 : counts.skipped,
+    written: counts.written === null ? 0 : counts.written,
+    failed: counts.failed === null ? 0 : counts.failed,   // ★R2-B31：无法评分份数（页面要显示）
+    result: counts.result || null,
+    total: n === null ? null : n,
+    source: counts.source.join('+') || 'none',
+  };
+}
+
+/** 从 run-root 收集计数的输入（日志尾部 + comparability + 证据汇总）；全部缺失时返回空对象，由 resolveRunCounts 兜底 */
+export function collectRunCountInputs(runRoot) {
+  const out = { deviceTail: '', comparability: null, summary: null };
+  try {
+    // ★R2-B31（云上实测修正）：装置自报行实际写在 <run-root>/out/device.stdout.log（原候选漏了 out/ ⇒ 解析未命中）
+    const cands = [
+      path.join(runRoot, 'out', 'device.stdout.log'),
+      path.join(runRoot, 'device.stdout.log'),
+      path.join(runRoot, 'out', 'device.stderr.log'),
+      path.join(runRoot, 'out', 'logs', 'grade.stdout.log'),
+      path.join(runRoot, 'out', 'run.log'),
+    ];
+    try {
+      const logDir = path.join(runRoot, 'out', 'logs');
+      if (fs.existsSync(logDir)) {
+        for (const f of fs.readdirSync(logDir).sort()) if (!cands.some((c) => c.endsWith(f))) cands.push(path.join(logDir, f));
+      }
+    } catch { /* ignore */ }
+    for (const c of cands) {
+      if (!fs.existsSync(c)) continue;
+      const t = tailText(c, 16384);
+      if (t && t.includes('ASSIGNMENT_RESULT=')) { out.deviceTail = t; break; }
+      if (t) out.deviceTail = out.deviceTail || t;
+    }
+  } catch { /* ignore */ }
+  try {
+    const cj = path.join(runRoot, 'out', 'assignment', 'comparability.json');
+    if (fs.existsSync(cj)) out.comparability = JSON.parse(fs.readFileSync(cj, 'utf8'));
+  } catch { /* ignore */ }
+  try { out.summary = buildEvidenceSummary(runRoot); } catch { /* ignore */ }
+  return out;
+}
 
 // ===== ★R2-B27（路线 2）：会话销毁上移到 worker 编排层 =====
 // 装置侧把 teardown 挂到 run.sh 的 EXIT trap 会与「预期非 0 退出」场景（R3.5-B S3 篡改 ⇒ exit 3）交互（t76/t79/t80 三轮实测）。
@@ -107,7 +247,7 @@ export function sessionStats(runRoot) {
 
 /** ★R2-B27：run-root 级 teardown（成功⇒销毁会话+凭据、保留骨架；失败⇒现场+.keep-scene；凭据任何情况必删）。
  *  早期退出防御：<run-root>/out 不可用 ⇒ 只打印 RUN_TEARDOWN_SKIPPED 并返回（无副作用）。 */
-export function purgeRunRootSessions({ runRoot, exitCode = 0, purge = true, keepDays = DEFAULT_SCENE_KEEP_DAYS, log = console } = {}) {
+export function purgeRunRootSessions({ runRoot, exitCode = 0, purge = true, keepDays = DEFAULT_SCENE_KEEP_DAYS, source = 'worker', failed = null, log = console } = {}) {
   const teardownFile = 'run-teardown.json';   // ★R2-B27：内联字面量（避免作用域/未定义导致写入被 catch 吞掉）
   const outDir = path.join(String(runRoot), 'out');
   const home = path.join(String(runRoot), 'home');
@@ -157,7 +297,8 @@ export function purgeRunRootSessions({ runRoot, exitCode = 0, purge = true, keep
     home_policy: 'sessions+credentials',
     purge_policy: 'purge_home=' + (purge ? 1 : 0) + ' keep_days=' + keepDays + ' exit=' + exitCode,
     keep_scene: keepScene,
-    source: 'worker',
+    failed: failed === null ? 0 : Number(failed) || 0,   // ★R2-B31：无法评分份数（与 measured/unmeasurable 并列，页面显示用）
+    source: source,          // ★R2-B31：批改 source=worker；造尺 source=build（字段与批改完全一致）
     ts: new Date().toISOString(),
   };
   const tail = String.fromCharCode(10);   // ★R2-B28 根因修复：R2-B27 曾引用未定义的 LF（ReferenceError）⇒ 证据写入被 catch 吞掉
@@ -171,17 +312,21 @@ export function purgeRunRootSessions({ runRoot, exitCode = 0, purge = true, keep
 export function isPrunableRunRoot(runRoot, jobId) {
   const resolved = path.resolve(runRoot);
   const base = path.basename(resolved);
-  return resolved.startsWith('/tmp/') && base.startsWith('r2b4-job-' + jobId + '-');
+  if (!resolved.startsWith('/tmp/')) return false;
+  // ★R2-B31：造尺 run-root（/tmp/r2b7-checker-*）与批改 run-root（/tmp/r2b4-job-<id>-*）都受同一安全形状约束
+  if (base.startsWith('r2b7-checker-')) return true;
+  return base.startsWith('r2b4-job-' + jobId + '-');
 }
 
 /**
  * 归档 + 策略处理。
  * @returns {Promise<{dir:string|null,bytes:number,files:string[],pruned:boolean,skipped?:string}>}
  */
-export async function archiveRun({ runRoot, jobId, success, runsRoot = DEFAULT_RUNS_ROOT, log = console }) {
+export async function archiveRun({ runRoot, jobId, success, runsRoot = DEFAULT_RUNS_ROOT, log = console, dirName = null }) {
   const result = { dir: null, bytes: 0, files: [], pruned: false };
   if (!runRoot || !fs.existsSync(runRoot)) { result.skipped = 'run_root_missing'; return result; }
-  const dir = path.join(runsRoot, String(jobId));
+  // ★R2-B31：归档目录名可定制（批改 <jobId>/；造尺 build-<assignmentId>-<ts>/）
+  const dir = path.join(runsRoot, dirName ? String(dirName) : String(jobId));
   try { fs.mkdirSync(dir, { recursive: true }); } catch { result.skipped = 'runs_root_unwritable'; return result; }
   const copy = (rel, name) => {
     const src = path.join(runRoot, rel);
@@ -199,6 +344,10 @@ export async function archiveRun({ runRoot, jobId, success, runsRoot = DEFAULT_R
     result.bytes += Buffer.byteLength(text);
   };
   copy(path.join('out', TEARDOWN_NAME), TEARDOWN_NAME);
+  // ★R2-B31（云上实测修正）：把比较性/结果产物一并归档，便于事后审计（存在才复制）
+  copy(path.join('out', 'assignment', 'comparability.json'), 'comparability.json');
+  copy(path.join('out', 'grading-results.json'), 'grading-results.json');
+  copy(path.join('out', 'diagnostics', 'measurable.json'), 'measurable.json');
   writeTail(path.join('out', 'device.stdout.log'), 'device.stdout.log');
   writeTail(path.join('out', 'device.stderr.log'), 'device.stderr.log');
   writeTail('run.log', 'run.log');

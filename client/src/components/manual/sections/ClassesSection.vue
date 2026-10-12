@@ -32,7 +32,7 @@
         </div>
 
         <!-- 列表：班级名称（两行式）/ 人数（右对齐等宽数字）/ 创建时间 / 操作 —— 列顺序同 Classes.vue -->
-        <div class="dm-surface list" :class="{ 'is-dim': step === 2 }">
+        <div class="dm-surface list">
           <div class="dm-row lrow is-head">
             <span class="grow">班级名称</span>
             <span class="c-count dm-target" :class="{ 'is-hot': step === 4 }">人数</span>
@@ -84,10 +84,13 @@
           </div>
         </Transition>
 
-        <!-- 新增班级模态框：第 2 步打开并逐字输入班级名称，第 3 步点「新增班级」确认（文案同 Classes.vue） -->
-        <Transition name="dm-fade">
-          <div v-if="step === 2 || step === 3" class="mt">
-            <div class="dm-surface dlg">
+        <!-- 新增班级模态框：第 2 步打开并逐字输入班级名称，第 3 步点「新增班级」确认（文案同 Classes.vue）。
+             呈现方式与真弹窗一致：遮罩铺满演示屏（页面头 + 工具栏 + 列表一起被盖住），弹窗居中压在遮罩之上。
+             它是覆盖层、不进文档流，所以打开/关闭都不会把演示框顶高（真 a-modal 的遮罩挂在 body 上）。 -->
+        <template v-if="step === 2 || step === 3">
+          <div class="dm-mask dm-mask-in" />
+          <div class="dm-modal-layer">
+            <div class="dm-surface dlg dm-modal dm-modal-in">
               <div class="dm-row dlg-head">
                 <b>{{ newClass.modalTitle }}</b>
                 <span class="grow" />
@@ -123,7 +126,7 @@
               </div>
             </div>
           </div>
-        </Transition>
+        </template>
       </DemoFrame>
     </template>
   </ManualStep>
@@ -164,7 +167,6 @@ defineProps({
 
 <style scoped>
 .grow { flex: 1; min-width: 0; }
-.mt { margin-top: calc(var(--u) * 10); }
 
 /* ---- 页头 / 工具栏 ---- */
 .page-head { align-items: flex-start; gap: calc(var(--u) * 12); margin-bottom: calc(var(--u) * 10); }
@@ -174,9 +176,8 @@ defineProps({
 /* 提示条固定在工具栏左侧：无论有没有 toast，工具栏高度都不跳 */
 .toast-slot { display: flex; align-items: center; min-height: calc(var(--u) * 26); }
 
-/* ---- 列表：三列定宽走 calc(var(--u) * N)，班级名称吃掉剩余宽度 ---- */
-.list { transition: opacity var(--duration-base) var(--ease-out); }
-.list.is-dim { opacity: 0.5; }
+/* ---- 列表：三列定宽走 calc(var(--u) * N)，班级名称吃掉剩余宽度 ----
+   弹窗打开时列表不再自己压暗：整屏由 .dm-mask 统一盖住（含工具栏与页头）。 */
 .lrow { align-items: center; padding: calc(var(--u) * 9) calc(var(--u) * 10); border-bottom: 1px solid var(--border-subtle); }
 .lrow:last-child { border-bottom: 0; }
 .is-head { background: var(--bg-surface-2); color: var(--text-tertiary); font-size: calc(var(--u) * 11.5); }

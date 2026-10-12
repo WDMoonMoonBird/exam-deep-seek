@@ -40,7 +40,10 @@ defineProps({
 .df-dot { width: calc(var(--u) * 9); height: calc(var(--u) * 9); border-radius: 50%; background: var(--border-strong); flex: none; }
 .df-title { margin-left: calc(var(--u) * 6); font-size: calc(var(--u) * 12); color: var(--text-tertiary); }
 .df-head { padding: calc(var(--u) * 8) calc(var(--u) * 12); font-size: calc(var(--u) * 13); font-weight: 600; color: var(--text-primary); border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface-2); }
-.df-body { padding: calc(var(--u) * 12); }
+.df-body { padding: calc(var(--u) * 12);
+  position: relative;   /* 让 .dm-mask / .dm-modal-layer 以"演示屏"为界，而不是以整页为界 */
+  overflow: hidden;
+}
 .df--window .df-body, .df--modal .df-body { padding: calc(var(--u) * 14); }
 </style>
 
@@ -80,5 +83,15 @@ defineProps({
 @keyframes dm-click-pulse { 0% { opacity: 0; transform: scale(0.6); } 40% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.6); } }
 .dm-fade-enter-active, .dm-fade-leave-active { transition: opacity var(--duration-base) var(--ease-out), transform var(--duration-base) var(--ease-out); }
 .dm-fade-enter-from, .dm-fade-leave-to { opacity: 0; transform: translateY(calc(var(--u) * 6)); }
+/* ===== 弹窗层（模态框演示用）=====
+   真 a-modal 把遮罩挂到 body 上盖住整个视口；演示里把遮罩限制在演示框内（.df-body 已 relative+hidden），
+   观感与真弹窗一致：整屏压暗 45% + 弹窗居中 + zoom 入场（数值与 antd 对齐）。 */
+.dm-mask { position: absolute; inset: 0; z-index: 3; background: rgba(0, 0, 0, 0.45); }
+.dm-modal-layer { position: absolute; inset: 0; z-index: 4; display: grid; place-items: start center; padding-top: calc(var(--u) * 40); }
+.dm-mask-in { animation: dm-mask-in 0.22s var(--ease-out) both; }
+.dm-modal-in { animation: dm-modal-in 0.24s var(--ease-spring) both; }
+@keyframes dm-mask-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dm-modal-in { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
+.dm-modal { width: calc(var(--u) * 460); max-width: 100%; box-shadow: 0 calc(var(--u) * 8) calc(var(--u) * 28) rgba(16, 24, 40, 0.22); }
 .dm-toast { display: inline-flex; align-items: center; gap: calc(var(--u) * 6); padding: calc(var(--u) * 6) calc(var(--u) * 10); border-radius: calc(var(--u) * 7); background: var(--card-bg); border: 1px solid var(--border-default); box-shadow: var(--shadow-md, 0 4px 12px rgba(16, 24, 40, 0.12)); font-size: calc(var(--u) * 12); color: var(--text-primary); }
 </style>

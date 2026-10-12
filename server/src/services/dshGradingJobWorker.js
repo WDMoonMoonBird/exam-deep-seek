@@ -15,7 +15,7 @@ import path from 'path';
 import { runDshGrader } from './dshGraderRunner.js';
 import { consumeChecker, consumeMeasureResults, resolveCheckerPath } from './dshCheckerConsumer.js';
 import { materializeAnchor, persistAnchor } from './dshGradingAnchor.js';
-import { archiveRun, persistJobRun, purgeRunRootSessions, resolveRunsRoot, tailText } from './dshRunArchiver.js';
+import { archiveRun, collectRunCountInputs, finalizeRunRoot, persistJobRun, purgeRunRootSessions, resolveRunCounts, resolveRunsRoot, tailText } from './dshRunArchiver.js';
 import { formatMaterialsMissing, formatMaterialsResolved, resolveMaterialsForAssignment, withMaterialsArgs } from './dshMaterialsResolver.js';
 
 /**
@@ -40,18 +40,31 @@ export async function runOnce(args = {}) {
     // ★R2-B27（路线 2）：**先 teardown**（销毁会话+凭据；失败保留现场）⇒ 再归档 ⇒ 成功时清理 run-root
     const purgeWanted = String((args.extraEnv && args.extraEnv.DSH_GRADER_PURGE_HOME) ?? process.env.DSH_GRADER_PURGE_HOME ?? '1') !== '0';
     const keepDays = Number((args.extraEnv && args.extraEnv.DSH_GRADER_SCENE_KEEP_DAYS) ?? process.env.DSH_GRADER_SCENE_KEEP_DAYS ?? 3) || 3;
-    purgeRunRootSessions({ runRoot: res.runRoot, exitCode: res.exitCode === undefined ? 0 : res.exitCode, purge: purgeWanted, keepDays, log: console });
-    const teardown = readTeardownEvidence(res.runRoot);
+    // ★R2-B30/B31：计数映射必须在 teardown/归档/**清理之前**采集（成功会剪掉 run-root）
+    const countInputs = collectRunCountInputs(res.runRoot);
+    const counts = resolveRunCounts({
+      deviceTail: countInputs.deviceTail, summary: countInputs.summary, comparability: countInputs.comparability,
+      deviceExit: res.exitCode === undefined ? null : res.exitCode,
+      writtenHint: res.written === undefined ? null : res.written,
+      skippedHint: res.skipped === undefined ? null : res.skipped,
+    });
+    console.log('RUN_COUNTS measured=' + counts.measured + ' unmeasurable=' + counts.unmeasurable + ' failed=' + counts.failed + ' skipped=' + counts.skipped + ' written=' + counts.written + ' total=' + (counts.total === null ? 'na' : counts.total) + ' source=' + counts.source);
     // 能力守卫（R2-B28b）：极简/老 fake prisma 没有 gradingJob.findUnique ⇒ 视为无作业元信息（不抛、不影响 job 终态）
     const jobLookup = args.prisma && args.prisma.gradingJob && typeof args.prisma.gradingJob.findUnique === 'function' ? await args.prisma.gradingJob.findUnique({ where: { id: res.jobId }, select: { assignmentId: true, checkerId: true, createdAt: true } }).catch(() => null) : null;
-    const arch = await archiveRun({ runRoot: res.runRoot, jobId: res.jobId, success, runsRoot: resolveRunsRoot(), log: console });
+    // ★R2-B31：共享生命周期 helper（teardown → 归档 → 清理）；批改路径 source=worker、归档目录 <jobId>/
+    const lifecycle = await finalizeRunRoot({
+      runRoot: res.runRoot, success, exitCode: res.exitCode === undefined ? 0 : res.exitCode,
+      source: 'worker', dirName: String(res.jobId), runsRoot: resolveRunsRoot(), purge: purgeWanted, keepDays,
+      failed: counts.failed, log: console,
+    });
+    const teardown = readTeardownEvidence(res.runRoot);
+    const arch = lifecycle.archive || { dir: null, bytes: 0, pruned: false };
     const dir = arch.dir;
     const persisted = await persistJobRun({
       prisma: args.prisma, jobId: res.jobId,
       assignmentId: jobLookup ? jobLookup.assignmentId : 0, checkerId: jobLookup ? jobLookup.checkerId : null,
       startedAt: jobLookup ? jobLookup.createdAt : null, finishedAt: new Date(), deviceExit: res.exitCode === undefined ? null : res.exitCode,
-      measured: teardown && teardown.session_files_before !== undefined ? 0 : 0,
-      unmeasurable: 0, skipped: res.skipped || 0, written: res.written || 0,
+      measured: counts.measured, unmeasurable: counts.unmeasurable, skipped: counts.skipped, written: counts.written,
       teardown, runDir: dir,
       logStdout: dir ? tailText(path.join(dir, 'device.stdout.log'), 8192) : null,
       logStderr: dir ? tailText(path.join(dir, 'device.stderr.log'), 8192) : null,

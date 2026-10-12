@@ -179,6 +179,9 @@ async function main() {
   // ★R2-B12 补充（t55 复核）：--workdir 的相对值同样要绝对化（与 --run-root 口径一致），
   //   否则 cd server 后用相对路径 ⇒ 装置 cwd=仓库根 ⇒ 目录错位（RUN_ROOT 原样透传、孤儿目录落在 server/ 下）。
   const workdir = opts.workdir ? path.resolve(opts.workdir) : path.join('/tmp', 'r2b7-checker-' + opts.assignmentId + '-' + Date.now());
+  // ★R2-B31：记录 run-root/assignment，供进程退出前统一做 run-root 生命周期（teardown→归档→清理）；
+  //   ownsRunRoot=yes 仅当我们**自己拉起装置**（dry-run 与 --run-root 复用路径不动别人的现场）
+  globalThis.__B31_BUILD_RUN__ = { workdir, assignmentId: opts.assignmentId, ownsRunRoot: !opts.dryRun && !opts.runRoot };
   const home = path.join(workdir, 'home');
 
   // ★守卫：连库/起进程之前
@@ -330,5 +333,15 @@ async function main() {
 const invokedDirectly = process.argv[1] && process.argv[1].endsWith('r2b7-build-checker.mjs');
 if (invokedDirectly) {
   const exitWith = (c) => process.exit(Number.isFinite(Number(c)) ? Number(c) : 1);
-  main().then(exitWith).catch((e) => { console.error('BUILD_CHECKER_ERROR ' + (e && e.message)); exitWith(1); });
+  // ★R2-B31：退出前做 run-root 生命周期（teardown→归档→清理）；**绝不改变原退出码**（fail-soft）
+  const finalize = async (rc) => {
+    const plan = globalThis.__B31_BUILD_RUN__;
+    if (!plan || !plan.ownsRunRoot || !plan.workdir) return;
+    try {
+      const { finalizeBuildRunRoot } = await import('../src/services/dshRunArchiver.js');
+      await finalizeBuildRunRoot({ runRoot: plan.workdir, assignmentId: plan.assignmentId, exitCode: rc });
+    } catch (err) { console.log('BUILD_RUN_FINALIZE_FAILED reason=' + String(err && err.message).slice(0, 160)); }
+  };
+  main().then(async (rc) => { await finalize(rc); exitWith(rc); })
+    .catch(async (e) => { console.error('BUILD_CHECKER_ERROR ' + (e && e.message)); await finalize(1); exitWith(1); });
 }

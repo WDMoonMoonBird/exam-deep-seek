@@ -69,16 +69,24 @@ describe('W51 装置侧零注入 + worker 层会话销毁（R2-B28b 改写）', 
     expect(archiver.includes('export function purgeRunRootSessions(')).toBe(true);
     expect(archiver.includes('export function sessionStats(')).toBe(true);
     expect(archiver.includes("home_policy: 'sessions+credentials'")).toBe(true);
-    const teardownIdx = worker.indexOf('purgeRunRootSessions({ runRoot: res.runRoot');
-    const archiveIdx = worker.indexOf('await archiveRun({ runRoot: res.runRoot');
-    expect(teardownIdx).toBeGreaterThan(-1);
-    expect(archiveIdx).toBeGreaterThan(-1);
-    expect(teardownIdx).toBeLessThan(archiveIdx);
+    // ★R2-B31：worker 改经共享 helper（finalizeRunRoot 内含 teardown→归档→清理），不再各自调底层函数
+    const finalizeIdx = worker.indexOf('await finalizeRunRoot({');
+    const persistIdx = worker.indexOf('await persistJobRun({');
+    expect(finalizeIdx).toBeGreaterThan(-1);
+    expect(persistIdx).toBeGreaterThan(-1);
+    expect(finalizeIdx).toBeLessThan(persistIdx);            // 生命周期先于落库摘要
+    expect(worker.includes('purgeRunRootSessions({ runRoot: res.runRoot')).toBe(false);   // 不重复实现
+    expect(worker.includes('await archiveRun({ runRoot: res.runRoot')).toBe(false);       // 不重复实现
   });
 
   it('★W51-5 装置脚本与 HEAD 逐字节一致（零注入的强证据）', () => {
     const c = (f) => spawnSync('bash', ['-c', `cd '${REPO}' && cmp -s ${f} <(git show HEAD:${f}) && echo SAME || echo DIFF`], { encoding: 'utf8' }).stdout.trim();
+    // ★R2-B31（F-T88-1 修复）：run.sh 仍是「与 HEAD 逐字节一致」；selftest.sh 因 t85 按契约新增 2 条断言
+    //   已按设计不等于 HEAD ⇒ 改断言「不含 teardown/purge 标记」（与 W51-3 同口径），不再要求逐字节一致。
     expect(c('scripts/dsh-grader/run.sh')).toBe('SAME');
-    expect(c('scripts/dsh-grader/selftest.sh')).toBe('SAME');
+    const selftest = fs.readFileSync(path.join(REPO, 'scripts/dsh-grader/selftest.sh'), 'utf8');
+    for (const needle of ['--purge-home', '--keep-home', 'PURGE_HOME=', 'teardown_home', 'purge_sessions', 'SCENE_KEEP_DAYS', 'run-teardown.json', 'RUN_TEARDOWN=']) {
+      expect(selftest.includes(needle)).toBe(false);
+    }
   }, 60000);
 });

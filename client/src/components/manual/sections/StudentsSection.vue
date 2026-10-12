@@ -30,7 +30,7 @@
         </div>
 
         <!-- 名单：学号（等宽）/ 姓名（首字头像 + 班级副行）/ 学校 / 操作 -->
-        <div class="dm-surface list" :class="{ 'is-dim': step >= 4 }">
+        <div class="dm-surface list">
           <div class="dm-row lrow is-head">
             <span class="c-sid">学号</span>
             <span class="grow">姓名</span>
@@ -83,10 +83,13 @@
           </div>
         </div>
 
-        <!-- 新增学生弹窗：第 1 步打开；第 2 步填入学号/姓名/班级；第 3 步「确定」后关闭并落成新行 -->
-        <Transition name="dm-fade">
-          <div v-if="step >= 1 && step <= 2" class="mt">
-            <div class="dm-surface dlg">
+        <!-- 新增学生弹窗：第 1 步打开；第 2 步填入学号/姓名/班级；第 3 步「确定」后关闭并落成新行。
+             呈现方式与真弹窗一致：遮罩铺满演示屏（页头 + 工具栏 + 名单一起被盖住），弹窗居中压在遮罩之上。
+             覆盖层不进文档流 —— 打开与关闭都不会改变演示框高度。 -->
+        <template v-if="step >= 1 && step <= 2">
+          <div class="dm-mask dm-mask-in" />
+          <div class="dm-modal-layer">
+            <div class="dm-surface dlg dm-modal dm-modal-in">
               <div class="dm-row dlg-head">
                 <b>新增学生</b>
                 <span class="grow" />
@@ -124,12 +127,13 @@
               </div>
             </div>
           </div>
-        </Transition>
+        </template>
 
-        <!-- 重置密码确认框（第 4 步）：确认后弹 toast -->
-        <Transition name="dm-fade">
-          <div v-if="step >= 4" class="mt cwrap">
-            <div class="dm-surface dlg">
+        <!-- 重置密码确认框（第 4 步）：同样是遮罩 + 居中弹窗（覆盖层），确认后弹 toast -->
+        <template v-if="step >= 4">
+          <div class="dm-mask dm-mask-in" />
+          <div class="dm-modal-layer">
+            <div class="dm-surface dlg dm-modal dm-modal-in">
               <div class="dm-row dlg-head">
                 <b>{{ resetConfirm.title }}</b>
                 <span class="grow" />
@@ -147,9 +151,13 @@
                 </span>
               </div>
             </div>
-            <div class="mt toast-row">
-              <span class="dm-toast">✓ {{ resetConfirm.toast }}</span>
-            </div>
+          </div>
+        </template>
+
+        <!-- toast 留在文档流里（对应真实界面确认后由 message 弹出的提示条）：它在遮罩之下，与页面一起被压暗 -->
+        <Transition name="dm-fade">
+          <div v-if="step >= 4" class="mt toast-row">
+            <span class="dm-toast">✓ {{ resetConfirm.toast }}</span>
           </div>
         </Transition>
       </DemoFrame>
@@ -200,9 +208,8 @@ defineProps({
 .dm-input.pin { flex: none; width: calc(var(--u) * 132); white-space: nowrap; }
 .dm-input--search { flex: none; width: calc(var(--u) * 122); }
 
-/* ---- 名单：四列定宽走 calc(var(--u) * N)，姓名列吃掉剩余宽度 ---- */
-.list { transition: opacity var(--duration-base) var(--ease-out); }
-.list.is-dim { opacity: 0.62; }
+/* ---- 名单：四列定宽走 calc(var(--u) * N)，姓名列吃掉剩余宽度 ----
+   弹窗打开时名单不再自己压暗：整屏由 .dm-mask 统一盖住。 */
 .lrow { padding: calc(var(--u) * 9) calc(var(--u) * 10); border-bottom: 1px solid var(--border-subtle); }
 .lrow:last-child { border-bottom: 0; }
 .is-head { background: var(--bg-surface-2); color: var(--text-tertiary); font-size: calc(var(--u) * 11.5); }
@@ -233,7 +240,7 @@ defineProps({
 .dm-btn.is-dashed { border-style: dashed; border-color: var(--status-danger-bd); color: var(--status-danger-fg); }
 .dm-btn.is-solid { background: var(--status-danger-fg); border-color: var(--status-danger-fg); color: #fff; }
 
-/* ---- 弹窗（新增学生 / 重置密码确认） ---- */
+/* ---- 弹窗（新增学生 / 重置密码确认）：本体是 .dm-modal（宽 460u），这里只补视觉细节 ---- */
 .dlg { box-shadow: 0 12px 32px rgba(16, 24, 40, 0.16); }
 .dlg-head { padding: calc(var(--u) * 10) calc(var(--u) * 12); border-bottom: 1px solid var(--border-subtle); font-size: calc(var(--u) * 13.5); }
 .dlg-body { display: flex; flex-direction: column; gap: calc(var(--u) * 10); padding: calc(var(--u) * 12); }
@@ -242,6 +249,5 @@ defineProps({
 .flabel { flex: none; width: calc(var(--u) * 44); text-align: right; font-size: calc(var(--u) * 12.5); color: var(--text-secondary); }
 .dm-input.is-focus { border-color: var(--brand-600); box-shadow: 0 0 0 calc(var(--u) * 3) var(--ring-focus, rgba(0, 102, 204, 0.18)); }
 .caret { flex: none; color: var(--text-tertiary); }
-.cwrap { position: relative; }
 .toast-row { display: flex; justify-content: flex-end; }
 </style>

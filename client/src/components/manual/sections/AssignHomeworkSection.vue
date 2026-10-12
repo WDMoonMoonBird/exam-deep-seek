@@ -8,26 +8,32 @@
   >
     <template #default="{ step }">
       <DemoFrame chrome="window" title="Deadpan 判题 · 作业管理" :design="720">
-        <!-- 工具栏：第 0 步高亮「布置作业」 -->
-        <div class="dm-row row-toolbar">
-          <span class="dm-input is-ph grow">搜索作业名称</span>
-          <span class="dm-btn">全部班级</span>
-          <span class="dm-btn dm-target" :class="{ 'is-hot': step === 0 }">
-            布置作业<i v-if="step === 0" class="dm-cursor is-on" />
-          </span>
+        <!-- 页面主体（框高由它决定）——弹窗是覆盖层，不参与高度计算 -->
+        <div class="screen">
+          <!-- 工具栏：第 0 步高亮「布置作业」 -->
+          <div class="dm-row row-toolbar">
+            <span class="dm-input is-ph grow">搜索作业名称</span>
+            <span class="dm-btn">全部班级</span>
+            <span class="dm-btn dm-target" :class="{ 'is-hot': step === 0 }">
+              布置作业<i v-if="step === 0" class="dm-cursor is-on" />
+            </span>
+          </div>
+
+          <!-- 列表：弹窗打开后由遮罩统一压暗（不再自己加 opacity 假装"在弹窗之下"） -->
+          <div class="dm-surface list">
+            <div class="dm-table-row head"><span class="grow">作业名称</span><span>班级</span><span>状态</span></div>
+            <div class="dm-table-row"><span class="grow">E2E测试作业</span><span class="dm-sub">软件工程 1 班</span><span class="dm-tag is-mute">已结束</span></div>
+            <div class="dm-table-row"><span class="grow">E2E过期作业</span><span class="dm-sub">软件工程 1 班</span><span class="dm-tag is-mute">已结束</span></div>
+          </div>
         </div>
 
-        <!-- 列表：弹窗打开后压暗（表示"在弹窗之下"） -->
-        <div class="dm-surface list" :class="{ 'is-dim': step >= 1 }">
-          <div class="dm-table-row head"><span class="grow">作业名称</span><span>班级</span><span>状态</span></div>
-          <div class="dm-table-row"><span class="grow">E2E测试作业</span><span class="dm-sub">软件工程 1 班</span><span class="dm-tag is-mute">已结束</span></div>
-          <div class="dm-table-row"><span class="grow">E2E过期作业</span><span class="dm-sub">软件工程 1 班</span><span class="dm-tag is-mute">已结束</span></div>
-        </div>
-
-        <!-- 弹窗：第 1 步出现 -->
-        <Transition name="dm-fade">
-          <div v-if="step >= 1" class="modal-wrap">
-            <div class="dm-surface modal">
+        <!-- 布置作业弹窗：第 1 步出现，之后一直开着（真 a-modal 是宽弹窗，遮罩挂在 body 上盖住整屏）。
+             演示里遮罩限制在演示屏内：页头 + 工具栏 + 列表一起被盖住，弹窗居中压在遮罩之上。
+             它是覆盖层、不进文档流 —— 打开/关闭都不会把演示框顶高。 -->
+        <template v-if="step >= 1">
+          <div class="dm-mask dm-mask-in" />
+          <div class="dm-modal-layer">
+            <div class="dm-surface modal dm-modal dm-modal-in">
               <div class="modal-head"><b>布置作业</b><span class="dm-sub">✕</span></div>
               <div class="modal-body">
                 <!-- ① 基本信息 -->
@@ -91,10 +97,12 @@
                 </div>
               </div>
             </div>
-            <Transition name="dm-fade">
-              <div v-if="step >= 4" class="toast-wrap"><span class="dm-toast">✓ 布置成功</span></div>
-            </Transition>
           </div>
+        </template>
+
+        <!-- toast 仍在文档流里（真页面由 message 弹出）：它在遮罩之下，与整屏一起被压暗 -->
+        <Transition name="dm-fade">
+          <div v-if="step >= 4" class="toast-wrap"><span class="dm-toast">✓ 布置成功</span></div>
         </Transition>
       </DemoFrame>
     </template>
@@ -131,11 +139,15 @@ defineProps({
 <style scoped>
 .row-toolbar { margin-bottom: calc(var(--u) * 10); }
 .grow { flex: 1; min-width: 0; }
-.list { transition: opacity var(--duration-base) var(--ease-out); }
-.list.is-dim { opacity: 0.42; }
 .head { color: var(--text-tertiary); background: var(--bg-surface-2); }
-.modal-wrap { position: relative; margin-top: calc(var(--u) * 12); }
 .modal { box-shadow: 0 12px 32px rgba(16, 24, 40, 0.16); }
+/* 真页面这个是宽弹窗（Assignments.vue 里 :width="1040"，窄屏才 100%）：460u 会把一页式表单挤得过高，
+   所以按同一套设计单位放宽（仍受 .dm-modal 自带的 max-width: 100% 兜底，小屏不会横向溢出）。 */
+.modal.dm-modal { width: calc(var(--u) * 620); }
+/* 这个一页式表单（40u 顶距 + 约 560u 高）比页面本身还高：把内容区最小高度钉在"弹窗完整放得下"的值上，
+   于是第 1~5 步框高完全一致 —— 弹窗既不把框顶高，也不会被 .df-body 的 overflow: hidden 裁掉。
+   数值按设计单位写，1280 与 375 下缩放一致。 */
+.screen { min-height: calc(var(--u) * 640); }
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: calc(var(--u) * 10) calc(var(--u) * 12); border-bottom: 1px solid var(--border-subtle); font-size: calc(var(--u) * 13); }
 .modal-body { display: flex; flex-direction: column; gap: calc(var(--u) * 10); padding: calc(var(--u) * 12); }
 .wrap { flex-wrap: wrap; }
@@ -144,5 +156,6 @@ defineProps({
 .dm-input.is-filled { border-color: var(--border-default); }
 .picked b { font-size: calc(var(--u) * 12.5); color: var(--text-strong); }
 .summary { display: flex; align-items: center; gap: calc(var(--u) * 8); padding: calc(var(--u) * 8) calc(var(--u) * 10); border: 1px dashed var(--border-default); border-radius: calc(var(--u) * 8); font-size: calc(var(--u) * 11.5); color: var(--text-secondary); }
-.toast-wrap { position: absolute; right: calc(var(--u) * 10); bottom: calc(var(--u) * -6); }
+/* toast 现在挂在 .df-body 上（.df-body 是 relative）：贴右下角，与页面一起在遮罩之下 */
+.toast-wrap { position: absolute; right: calc(var(--u) * 10); bottom: calc(var(--u) * 10); }
 </style>
