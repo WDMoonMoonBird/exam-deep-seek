@@ -504,6 +504,85 @@ const strengthNotCounted = cpBody.indexOf('noteOldPasswordFailure') > cpBody.ind
 check('⑪c 后端顺序：锁定判定 ⇒ 强度校验 ⇒ 原密码校验 ⇒ 失败计数 ⇒ 成功清零；强度失败不计入错误次数',
   orderOk && strengthNotCounted,
   JSON.stringify({ iLock, iStrength, iCompare, iNote, iClear, orderOk, strengthNotCounted }));
+
+// ⑫ 入口版本探测 + 当前版本可见（★R2-B59）
+const appVerSrc = String(read(path.join(CLIENT, 'src', 'composables', 'appVersion.js')) || '');
+const viteSrc = String(read(path.join(CLIENT, 'vite.config.js')) || '');
+const mainSrc = String(read(path.join(CLIENT, 'src', 'main.js')) || '');
+const pcSrc2 = String(read(path.join(CLIENT, 'src', 'components', 'ProfileCard.vue')) || '');
+check('⑫a 构建期版本常量已注入（vite define：v-<yyyyMMddHHmm> 形式，由日期各部分拼出）',
+  /define:\s*\{[^}]*__BUILD_VERSION__:\s*JSON\.stringify\(BUILD_STAMP\)/.test(viteSrc)
+    && /BUILD_STAMP\s*=\s*'v-'\s*\+\s*__now\.getFullYear\(\)/.test(viteSrc)
+    && /getMonth\(\)\s*\+\s*1/.test(viteSrc) && /getMinutes\(\)/.test(viteSrc),
+  'define=' + /__BUILD_VERSION__/.test(viteSrc) + ' stamp=' + /BUILD_STAMP/.test(viteSrc));
+check('⑫b main.js 在 mount **之后**安装版本探测；提示为**非打断式**（message.info + 点击刷新 ⇒ reload）且失败静默',
+  /import \{ installVersionWatcher \}/.test(mainSrc) && mainSrc.indexOf('installVersionWatcher(') > mainSrc.indexOf("app.mount('#app')")
+    && /message\.info\(\{/.test(mainSrc) && /点击刷新/.test(mainSrc) && /window\.location\.reload\(\)/.test(mainSrc)
+    && /duration:\s*0/.test(mainSrc) && /catch \{ \/\* 提示失败不得反过来影响渲染 \*\/ \}/.test(mainSrc),
+  'afterMount=' + (mainSrc.indexOf('installVersionWatcher(') > mainSrc.indexOf("app.mount('#app')")));
+check('⑫c 三端共用的 ProfileCard 资料区展示版本短码（小字）⇒ 三端一并可见',
+  /\{\{\s*versionLabel\s*\}\}/.test(pcSrc2) && /<dt>版本<\/dt>/.test(pcSrc2) && /appVersionLabel\(\)/.test(pcSrc2) && /pc-ver/.test(pcSrc2),
+  'row=' + /<dt>版本<\/dt>/.test(pcSrc2) + ' label=' + /versionLabel/.test(pcSrc2));
+check('⑫d 探测模块零依赖（未引入新依赖）且暴露四态所需 API',
+  !/^\s*import\s/m.test(appVerSrc) && /installVersionWatcher|checkForNewVersion|appVersionLabel|DEFAULT_CHECK_INTERVAL_MS|MIN_CHECK_GAP_MS/.test(appVerSrc),
+  'hasImport=' + /^\s*import\s/m.test(appVerSrc));
+// ⑫e 可执行：四态 + 健壮性（注入 fetch/doc/storage/notify 桩件；不发真实网络）
+const appVer = await import(path.join(CLIENT, 'src', 'composables', 'appVersion.js'));
+const vStore = (() => { const m2 = new Map(); return { getItem: (k) => (m2.has(k) ? m2.get(k) : null), setItem: (k, v) => m2.set(k, String(v)), _m: m2 }; })();
+const vDoc = { querySelector: () => ({ getAttribute: () => '/exam/assets/index-aaaaaaa1.js' }) };
+const vHtml = (h) => '<html><script type="module" crossorigin src="/exam/assets/index-' + h + '.js"></script></html>';
+const vRes = (html, ok) => ({ ok: ok !== false, text: async () => html });
+let vNotes = 0;
+const vNotify = () => { vNotes += 1; };
+const s1 = await appVer.checkForNewVersion({ fetchImpl: () => vRes(vHtml('aaaaaaa1')), doc: vDoc, storage: vStore, notify: vNotify, now: () => 1000 });
+const s2 = await appVer.checkForNewVersion({ fetchImpl: () => vRes(vHtml('bbbbbbb2')), doc: vDoc, storage: vStore, notify: vNotify, now: () => 2000 });
+const s3 = await appVer.checkForNewVersion({ fetchImpl: () => vRes(vHtml('bbbbbbb2')), doc: vDoc, storage: vStore, notify: vNotify, now: () => 100000 });
+const s4 = await appVer.checkForNewVersion({ fetchImpl: () => vRes(vHtml('bbbbbbb2')), doc: vDoc, storage: vStore, notify: vNotify, now: () => 200000 });
+const s5 = await appVer.checkForNewVersion({ fetchImpl: () => vRes('<html>bad</html>'), doc: vDoc, storage: vStore, notify: vNotify, now: () => 300000 });
+const s6 = await appVer.checkForNewVersion({ fetchImpl: () => { throw new Error('offline'); }, doc: vDoc, storage: vStore, notify: vNotify, now: () => 400000 });
+const s7 = await appVer.checkForNewVersion({ fetchImpl: () => vRes('', false), doc: vDoc, storage: vStore, notify: vNotify, now: () => 500000 });
+check('⑫e 可执行四态：相同 ⇒ 不提示；去抖（1s 内二次检测 ⇒ throttled）；不同 ⇒ 提示恰一次；同版本再次检测 ⇒ 不再提示；坏 HTML/离线/HTTP 错 ⇒ 静默忽略',
+  s1.status === 'same' && s2.status === 'throttled'
+    && s3.status === 'newer' && s3.notified === true
+    && s4.status === 'newer' && s4.notified === false && s4.reason === 'already_notified'
+    && s5.status === 'ignored' && s6.status === 'ignored' && s7.status === 'ignored' && vNotes === 1,
+  JSON.stringify({ s1, s2, s3, s4, s5, s6, s7, vNotes, label: appVer.appVersionLabel(vDoc) }));
+
+// ⑬ 原始 HTML 注入面已审计（★R2-B60）：危险 sink 清零 + v-html/innerHTML 仅允许「已清洗或静态」表达式 + 清洗器确用 DOMPurify
+const srcJs = [];
+const walkSink = (dir) => { for (const f of fs.readdirSync(dir)) { const p = path.join(dir, f); const st = fs.statSync(p); if (st.isDirectory()) walkSink(p); else if (/\.(vue|js)$/.test(p)) srcJs.push(p); } };
+walkSink(path.join(CLIENT, 'src'));
+const codeOfFile = (p) => String(read(p) || '').replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+const sinkHits = [];
+const newFnFiles = [];
+for (const p of srcJs) {
+  const t = codeOfFile(p);
+  if (/document\.write\s*\(|outerHTML|insertAdjacentHTML|\beval\s*\(/.test(t)) sinkHits.push(path.relative(CLIENT, p));
+  if (/new Function\s*\(/.test(t)) newFnFiles.push(path.relative(CLIENT, p));
+}
+check('⑬a 危险 sink 清零：client/src 无 document.write / outerHTML / insertAdjacentHTML / eval( 用法',
+  sinkHits.length === 0,
+  'hits=' + (sinkHits.join(',') || '(none)'));
+check('⑬b new Function 仅限浏览器能力探测（domain/browserCompat.js），不得用于渲染用户内容',
+  newFnFiles.length === 1 && newFnFiles[0] === 'src/domain/browserCompat.js',
+  'files=' + (newFnFiles.join(',') || '(none)'));
+const RAW_HTML_OK = /^(safe[A-Za-z]*|sec\.content|_sanHtml\()/;
+const rawHtmlBad = [];
+let rawHtmlCount = 0;
+for (const p of srcJs) {
+  const t = codeOfFile(p);
+  const exprs = [...t.matchAll(/v-html="([^"]+)"/g)].map((m) => m[1].trim()).concat([...t.matchAll(/innerHTML:\s*_sanHtml\(/g)].map(() => '_sanHtml('));
+  rawHtmlCount += exprs.length;
+  for (const ex of exprs) { if (!RAW_HTML_OK.test(ex)) rawHtmlBad.push(path.relative(CLIENT, p) + String.fromCharCode(58) + ex); }
+}
+check('⑬c 所有 v-html / innerHTML 表达式均在白名单内（已清洗或内置静态内容）——新增未清洗用法即失败',
+  rawHtmlBad.length === 0,
+  'count=' + rawHtmlCount + ' bad=' + (rawHtmlBad.join(' | ') || '(none)'));
+const ump = String(read(path.join(CLIENT, 'src', 'composables', 'submit', 'useSubmitPage.js')) || '');
+const qp = String(read(path.join(CLIENT, 'src', 'composables', 'question', 'questionPure.js')) || '');
+check('⑬d 清洗器确用 DOMPurify（safeMaterial/safeSqContent 与 _sanHtml 两条链路）',
+  /import DOMPurify/.test(ump) && /DOMPurify\.sanitize\(/.test(ump) && /DOMPurify\.sanitize\(/.test(qp),
+  'useSubmitPage=' + /import DOMPurify/.test(ump) + ' questionPure=' + /DOMPurify\.sanitize\(/.test(qp));
 const viteCfg = read(path.join(CLIENT, 'vite.config.js')) || '';
 check('⑧e 开发代理就位：vite.config.js 含 /exam/socket.io 代理（ws:true + 去前缀）',
   // ★锚定"代理键"位置（避免 rewrite 行里的同名字符串让断言恒真），并要求 target/ws/去前缀齐备

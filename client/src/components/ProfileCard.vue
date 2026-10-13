@@ -36,6 +36,12 @@
         <dd><span class="pc-v">{{ unitValue }}</span></dd>
       </div>
 
+      <!-- ★R2-B59：构建版本短码（小字）—— 用户与排障者一眼看清「浏览器跑的是哪一版」 -->
+      <div class="pc-f pc-ver">
+        <dt>版本</dt>
+        <dd><span class="pc-v pc-mono">{{ versionLabel }}</span></dd>
+      </div>
+
       <div v-if="school" class="pc-f">
         <dt>学校</dt>
         <dd><span class="pc-v">{{ school }}</span></dd>
@@ -88,6 +94,9 @@
  */
 import { computed, ref } from 'vue';
 import StatusTag from './StatusTag.vue';
+import { appVersionLabel } from '../composables/appVersion.js';   // ★R2-B59：构建版本短码（排障可见）
+
+const versionLabel = appVersionLabel();
 
 const props = defineProps({
   name: { type: String, default: '' },
@@ -300,6 +309,8 @@ async function copyId() {
 }
 
 /* 安全区：分区卡片（与列表 v2 同一套语言） */
+.pc-ver dd .pc-v { font-size: var(--fs-caption); color: var(--text-tertiary); }
+
 .pc-sec {
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);

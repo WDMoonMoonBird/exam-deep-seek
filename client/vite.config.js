@@ -150,7 +150,13 @@ function baseSlashRedirect() {
   }
 }
 
+// ★R2-B59：构建时间戳（展示成 v-<yyyyMMddHHmm>-<入口哈希前 7 位>；哈希由运行时从入口 script 标签读出）
+const __now = new Date();
+const __pad = (n) => String(n).padStart(2, '0');
+const BUILD_STAMP = 'v-' + __now.getFullYear() + __pad(__now.getMonth() + 1) + __pad(__now.getDate()) + __pad(__now.getHours()) + __pad(__now.getMinutes());
+
 export default defineConfig({
+  define: { __BUILD_VERSION__: JSON.stringify(BUILD_STAMP) },
   plugins: [vue(), legacy({ targets: ['chrome >= 69'] }), monacoLoaderLocalDefault(), monacoLocalVs(), baseSlashRedirect()],
   server: {
     port: 5173,
