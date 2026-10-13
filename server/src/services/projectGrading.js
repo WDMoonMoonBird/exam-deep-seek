@@ -11,164 +11,36 @@
  *       绝不让提交接口崩溃，也绝不回显内部错误。
  *   R7  每次评只针对「某个版本目录」，版本目录不可变，评分结果写入 Submission 行。
  *
- * 并发：信号量限制最多 3 个评分任务并行（D6）。
+ * 并发：信号量限制最多 3 个评分任务并行（D6，已移至 infrastructure/worker/projectGradingConcurrency.js）。
+ *
+ * B1 拆分（行为不变）：并发信号量 → infrastructure/worker/projectGradingConcurrency.js；
+ *   版本目录读取 → infrastructure/storage/project-tree-read.js；上下文构建 / 固定分项 / 预算兜底 →
+ *   infrastructure/ai/project-grading-context.js。本文件保留评分核心并再导出上述符号 ⇒ 契约不变。
  */
 
-import fs from 'fs';
-import path from 'path';
 import crypto from 'node:crypto';
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
 import {
   gradeProject,
   gradeSubjectiveItems,
-  selectImportantFiles,
   getProjectContextMode,
-  summarizeRubricItems,
-  getConcurrency,
 } from '../infrastructure/ai/deepseek/index.js';
 import { runRules } from '../infrastructure/rule/index.js';
 import { gradeProjectTrustJudge } from '../infrastructure/ai/trust-judge-grader.js';
-import {
-  buildFileTree,
-  filterProjectFiles,
-  buildFileTreeText,
-  extractSkeleton,
-  estimateTokens,
-  truncateToBudget,
-  BUDGET_TOKENS,
-} from './projectContextBuilder.js';
 import { ABNORMAL_FEEDBACK } from '../constants.js';
 import { standardDir, submissionDir, hasStandardPackage } from '../utils/projectPaths.js';
 import { parseProjectAnswer, serializeProjectAnswer } from '../domain/services/project-view.js';
-import { MAX_TEXT_BYTES } from '../utils/projectArchive.js';
-import { isIgnored } from '../utils/fileTree.js';
 import { loadAssignmentSnapshot, resolveSnapshot } from './assignmentSnapshot.js';
 import { textSha256, standardPackSha256 } from '../utils/snapshotHash.js';
 
-// ===================== 并发信号量（D6：并发数读管理端 ai_concurrency，默认 16，热更新） =====================
-let activeCount = 0;
-let maxConcurrent = 3; // 首次评分前由 refreshConcurrency 从配置刷新（默认 16）
-const waiters = [];
+import { acquire, release, refreshConcurrency } from '../infrastructure/worker/projectGradingConcurrency.js';
+import { ensureRubricItems, buildGradingContext } from '../infrastructure/ai/project-grading-context.js';
 
-/**
- * 刷新并发上限（2026-08-17 并发修复）：读管理端 ai_concurrency 配置（getConfig 自带 1 分钟缓存）。
- * 入队/评分前调用，配置变更 1 分钟内生效；失败保持当前值。
- */
-export async function refreshConcurrency() {
-  try {
-    const v = await getConcurrency();
-    if (v !== maxConcurrent) {
-      logger.info({ old: maxConcurrent, new: v }, '实训题评分并发配置已更新');
-      maxConcurrent = v;
-    }
-  } catch (err) {
-    logger.warn({ err: err.message }, '读取并发配置失败，保持当前值');
-  }
-}
-
-function acquire() {
-  return new Promise((resolve) => {
-    if (activeCount < maxConcurrent) {
-      activeCount += 1;
-      resolve();
-    } else {
-      waiters.push(resolve);
-    }
-  });
-}
-
-function release() {
-  activeCount = Math.max(0, activeCount - 1);
-  if (waiters.length && activeCount < maxConcurrent) {
-    activeCount += 1;
-    const next = waiters.shift();
-    next();
-  }
-}
-
-// ===================== 文件收集（标准包 + 学生版本） =====================
-
-export function readDirFiles(dir) {
-  const out = [];
-  if (!dir || !fs.existsSync(dir)) return out;
-  const walk = (base, rel = '') => {
-    let entries;
-    try {
-      entries = fs.readdirSync(base, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        if (isIgnored(entry.name)) continue;
-        walk(path.join(base, entry.name), rel + entry.name + '/');
-      } else if (entry.isFile()) {
-        if (isIgnored(entry.name)) continue;
-        const abs = path.join(base, entry.name);
-        const relPath = rel + entry.name;
-        try {
-          const { size } = fs.statSync(abs);
-          if (size > MAX_TEXT_BYTES) {
-            out.push(`// 文件过大（${relPath}，${(size / 1024 / 1024).toFixed(2)} MB），已跳过评分内容`);
-            continue;
-          }
-          out.push(`// 文件名: ${relPath}\n${fs.readFileSync(abs, 'utf-8')}`);
-        } catch {
-          // 单个文件读取失败不影响整体
-        }
-      }
-    }
-  };
-  walk(dir);
-  return out;
-}
-
-// ===================== 评分上下文构建 =====================
-
-/**
- * 读取单个文件内容（不抛错；失败返回空字符串）。
- */
-function readFileSafe(absPath) {
-  try {
-    return fs.readFileSync(absPath, 'utf-8');
-  } catch {
-    return '';
-  }
-}
-
-/**
- * 按 kept 列表读取文件正文（fold 折叠为占位行），与实评 readDirFiles 的格式保持一致。
- * @param {Array<{path, fold, size}>} kept filterProjectFiles 的 kept 输出（仅文件）
- * @param {string} base 根目录绝对路径
- * @returns {string}
- */
-function readKeptFiles(kept, base) {
-  return kept
-    .filter(f => !f.dir)
-    .map(f => (f.fold
-      ? "// 文件过大（" + f.path + "，" + (f.size / 1024 / 1024).toFixed(2) + " MB），已跳过评分内容"
-      : "// 文件名: " + f.path + "\n" + readFileSafe(path.join(base, f.path))))
-    .join('\n\n');
-}
-
-/**
- * 构建实训题评分上下文（L0 过滤 + L1 两阶段，任一环节失败安全降级为全量注入）。
- * @param {object} p
- * @param {'off'|'filter'|'two-stage'} p.mode 配置开关（system_config.project_context_mode）
- * @param {string} p.stdDir 标准包目录
- * @param {string} p.stuDir 学生版本目录
- * @param {object} p.question 题目（title/material/scoringRubric）
- * @returns {Promise<{standardFiles: string, studentFiles: string, info: object}>}
- */
-
-/**
- * 评分标准固定分项（2026-08-17 评分一致性方案）：懒生成 + 并发安全 + 失败降级。
- * 有缓存直接用；无缓存调 AI 提炼一次，写入 DB（UPDATE WHERE rubric_items IS NULL 防并发重复生成）；
- * 提炼失败返回 null（评分降级为模型自由分项，不阻断）。
- * @param {object} question 题目（id/scoringRubric/maxScore/rubricItems）
- * @returns {Promise<Array<{item, maxScore}>|null>}
- */
+// ── B1 兼容再导出：以下符号已搬出本文件，仍从原路径对外提供 ⇒ 接口契约不变 ──
+export { refreshConcurrency } from '../infrastructure/worker/projectGradingConcurrency.js';
+export { readDirFiles } from '../infrastructure/storage/project-tree-read.js';
+export { ensureRubricItems, buildGradingContext, enforceBudget } from '../infrastructure/ai/project-grading-context.js';
 
 /**
  * 检查器评分链路（2026-08-17 方案）：确定性分项由 AI 生成脚本执行（零 token、零波动），
@@ -228,188 +100,6 @@ async function gradeWithChecker({ question, stuDir, standardFiles, studentFiles 
   );
   logger.info({ items: breakdown.length, checker: checkerItems.length, ai: subjectiveItems.length }, '检查器评分完成');
   return { totalScore, breakdown, highlights: [], issues: [], overallComment: '' };
-}
-export async function ensureRubricItems(question) {
-  if (Array.isArray(question?.rubricItems) && question.rubricItems.length > 0) {
-    return question.rubricItems;
-  }
-  try {
-    const items = await summarizeRubricItems(question?.scoringRubric || '', question?.maxScore || 100);
-    if (!items || items.length === 0) return null;
-    // 并发安全：仅当仍为空时写入（其他并发任务可能已写入）；
-    // Prisma JSON 字段判空须用 DbNull（rubricItems: null 字面量会被拒）
-    const cur = await prisma.question.findUnique({
-      where: { id: question.id },
-      select: { rubricItems: true },
-    });
-    if (!Array.isArray(cur?.rubricItems) || cur.rubricItems.length === 0) {
-      await prisma.question.update({
-        where: { id: question.id },
-        data: { rubricItems: items },
-      });
-    }
-    logger.info({ questionId: question.id, items: items.length }, '评分标准固定分项已生成并缓存');
-    return items;
-  } catch (err) {
-    logger.warn({ err: err.message, questionId: question?.id }, '评分标准分项提炼失败，降级模型自由分项');
-    return null;
-  }
-}
-export async function buildGradingContext({ mode, stdDir, stuDir, question }) {
-  const fallback = () => ({
-    standardFiles: readDirFiles(stdDir).join('\n\n'),
-    studentFiles: readDirFiles(stuDir).join('\n\n'),
-    info: { mode: 'off', note: '降级全量' },
-  });
-
-  if (mode !== 'filter' && mode !== 'two-stage') return fallback();
-
-  try {
-    const stuTree = buildFileTree(stuDir);
-    if (!stuTree.length) return fallback();
-    const stdTree = buildFileTree(stdDir);
-
-    const stuFiltered = filterProjectFiles(stuTree, stuDir).kept;
-    const stdFiltered = filterProjectFiles(stdTree, stdDir).kept;
-
-    let standardText = readKeptFiles(stdFiltered, stdDir);
-    let studentText = readKeptFiles(stuFiltered, stuDir);
-    let pickedCount = 0;
-
-    if (mode === 'two-stage' && studentText) {
-      try {
-        const treeText = buildFileTreeText(stuFiltered, { withSizes: true });
-        const picked = await selectImportantFiles({
-          title: question.title || '未命名项目',
-          fileTreeText: treeText,
-          scoringRubric: question.scoringRubric || '',
-        });
-        const pickedPaths = new Set(picked.files);
-        // 学生包根目录名可能是学号/工程名，模型返回路径不带该前缀 → 后缀匹配兜底
-        const matchesPicked = (f) => pickedPaths.has(f.path)
-          || [...pickedPaths].some(p => p && f.path.endsWith('/' + p) || f.path === p);
-        const matchedList = stuFiltered.filter(f => !f.dir && matchesPicked(f));
-        // 强制选中文件总大小 ≤ 60KB（模型软约束之外的硬限制，按原始顺序截断）
-        const pickedList = [];
-        let pickedBytes = 0;
-        for (const f of matchedList) {
-          if (pickedBytes + f.size > 60 * 1024) break;
-          pickedList.push(f);
-          pickedBytes += f.size;
-        }
-        if (pickedList.length > 0) {
-          pickedCount = pickedList.length;
-          const pickedText = readKeptFiles(pickedList, stuDir);
-          // 未选中文件以清单附在末尾（骨架行），模型可点名补看
-          const restSkeleton = stuFiltered
-            .filter(f => !f.dir && !matchesPicked(f))
-            .slice(0, 300)
-            .map(f => "// " + f.path + "（" + (f.size / 1024).toFixed(1) + "KB，未提供内容；如评分确需可说明理由）")
-            .join('\n');
-          // 被 60KB 硬拦的选中文件也要出现在清单（标注超限，模型可点名）
-          const blockedSkeleton = matchedList
-            .filter(f => !pickedList.includes(f))
-            .map(f => "// " + f.path + "（" + (f.size / 1024).toFixed(1) + "KB，超60KB上限未提供；如评分确需可说明理由）")
-            .join('\n');
-          studentText = pickedText + '\n\n/* 未提供内容的文件清单 */\n' + restSkeleton
-            + (blockedSkeleton ? '\n' + blockedSkeleton : '');
-        }
-      } catch (err) {
-        logger.warn({ err: err.message, questionId: question.id }, '文件选择失败，降级为 L0 过滤注入');
-      }
-    }
-
-    // 预算兜底：双端 + 权重感知 + 骨架化，低权重文件优先牺牲
-    const budgetResult = enforceBudget({
-      standardText,
-      studentText,
-      stdFiltered,
-      stuFiltered,
-      stdBase: stdDir,
-      stuBase: stuDir,
-    });
-    standardText = budgetResult.standardText;
-    studentText = budgetResult.studentText;
-    if (budgetResult.truncated) {
-      logger.warn({ totalTokens: budgetResult.totalTokens }, '评分上下文超预算，已按权重压缩（骨架化/截断）');
-    }
-
-    if (!studentText.trim()) return fallback();
-
-    return {
-      standardFiles: standardText || '(无标准工程文件)',
-      studentFiles: studentText,
-      info: { mode, pickedCount },
-    };
-  } catch (err) {
-    logger.warn({ err: err.message }, '上下文构建异常，降级全量注入');
-    return fallback();
-  }
-}
-
-
-/**
- * 预算兜底：双端 + 权重感知 + 骨架化压缩。
- * 低权重文件优先被骨架化/占位，高权重文件保持全文；学生与标准包共用预算（7:3）。
- * @param {object} p
- * @param {string} p.standardText 标准包全文
- * @param {string} p.studentText 学生正文
- * @param {Array} p.stdFiltered 标准包 kept 列表
- * @param {Array} p.stuFiltered 学生 kept 列表
- * @param {string} p.stdBase 标准包根目录
- * @param {string} p.stuBase 学生根目录
- * @returns {{standardText: string, studentText: string, truncated: boolean, totalTokens: number}}
- */
-export function enforceBudget({ standardText, studentText, stdFiltered, stuFiltered, stdBase, stuBase }) {
-  const budget = BUDGET_TOKENS;
-  if (estimateTokens(studentText) + estimateTokens(standardText) <= budget) {
-    return { standardText, studentText, truncated: false, totalTokens: estimateTokens(studentText) + estimateTokens(standardText) };
-  }
-
-  // 权重感知压缩：高权重优先保全文（降序，低权重最后被骨架化/占位）
-  const compress = (kept, base, capTokens) => {
-    const files = kept.filter(f => !f.dir).sort((a, b) => (b.weight ?? 1) - (a.weight ?? 1));
-    const parts = [];
-    let acc = 0;
-    for (const f of files) {
-      if (f.fold) {
-        const line = '// 文件过大（' + f.path + '，已跳过评分内容）';
-        parts.push(line); acc += estimateTokens(line);
-        continue;
-      }
-      const content = readFileSafe(path.join(base, f.path));
-      const full = '// 文件名: ' + f.path + '\n' + content;
-      const fullT = estimateTokens(full);
-      if (acc + fullT <= capTokens) { parts.push(full); acc += fullT; continue; }
-      // 骨架化兜底（低权重文件转为骨架表示）
-      const skel = extractSkeleton(content, f.ext);
-      const skelLine = '// 文件名: ' + f.path + '（骨架）\n' + skel;
-      const skelT = estimateTokens(skelLine);
-      if (acc + skelT <= capTokens) { parts.push(skelLine); acc += skelT; }
-      else {
-        const line = '// ' + f.path + '（预算限制未提供内容）';
-        parts.push(line); acc += estimateTokens(line);
-      }
-    }
-    return { text: parts.join('\n\n'), tokens: acc };
-  };
-
-  // 学生 70% 预算、标准包 30%（双端）
-  const stu = compress(stuFiltered || [], stuBase, Math.floor(budget * 0.7));
-  const std = compress(stdFiltered || [], stdBase, Math.floor(budget * 0.3));
-  let out = {
-    standardText: std.text || standardText,
-    studentText: stu.text || studentText,
-    truncated: true,
-    totalTokens: stu.tokens + std.tokens,
-  };
-  // 最终仍超 → 字符截断（学生侧）
-  if (out.totalTokens > budget) {
-    const t = truncateToBudget(out.studentText, Math.floor(budget * 0.8) - std.tokens);
-    out.studentText = t.text;
-    out.totalTokens = estimateTokens(t.text) + std.tokens;
-  }
-  return out;
 }
 // ===================== 评分核心 =====================
 
