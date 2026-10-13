@@ -150,6 +150,11 @@ function shapeRow(row, { teardown = null, type = 'worker', archive = null, assig
 
 // ===================== ★R2-B37（P1）：用量 / 元信息 / 工具调用（只读扩展） =====================
 // 数据来源：① grading_run_usage（R2-B36 落库；job_id / run_ref 唯一）② run-teardown.json 的 usage 摘要（旧运行兜底）
+// ★R2-B49 口径（监测呈现侧）：**尺子零 LLM；评语（总评）按需生成、单独计量、可关**——
+//   评语会话的 tokens/费用由 worker 落在 usage_json.summary_session（R2-B48 数据侧），此处**单独分列**为
+//   usage.summary_session 与 usage.cost_split{judge,summary,total}；开关 DSH_SUMMARY_MODE=off|cached|always：
+//   off ⇒ 未生成评语（summary_session.state='not_generated'）；cached ⇒ 命中/未命中可辨（state='cached_hit'|'generated'）；
+//   always ⇒ 每次生成（state='generated'）。旧运行/未开启 ⇒ 如实返回 not_generated + note，**不报错、不显示假 0**。
 // 口径：不可得一律**如实置 null + reason**（不显示假 0）；零 LLM 运行 no_model_session=true（页面显示「本次无模型会话（零 token）」）。
 
 /** 运行 → 用量键：worker = job:<id>；造尺 = build:<assignmentId>:<归档目录名>（与 R2-B36 落库口径一致） */
@@ -205,8 +210,11 @@ const numOrNull = (v) => (v === null || v === undefined || v === '' ? null : (Nu
 
 /** 列表行（形状与详情 usage 一致、但只取列表需要的 4 列） */
 export function usageListFields(row) {
-  if (!row) return { cost_total: null, cost_currency: null, cache_hit_rate: null, no_model_session: null, model_calls: null };
+  if (!row) return { cost_total: null, cost_currency: null, cache_hit_rate: null, no_model_session: null, model_calls: null, summary_session_cost: null };
+  const ssList = shapeSummarySession({ row });
   return {
+    // ★R2-B49：列表也带上「评语消耗」一列（null ⇒ 未生成评语，不显示假 0）
+    summary_session_cost: ssList.generated ? ssList.cost_total : null,
     cost_total: numOrNull(row.cost_total),
     cost_currency: row.cost_currency || null,
     cache_hit_rate: numOrNull(row.cache_hit_rate),
@@ -215,12 +223,92 @@ export function usageListFields(row) {
   };
 }
 
-/** 详情 usage 块（字段齐备：token 四项 + 命中率 + 费用 + 模型调用次数 + 价目版本） */
-export function shapeUsageBlock({ row = null, teardownUsage = null } = {}) {
+/** 安全解析（字符串/对象都接受；坏值 ⇒ null） */
+function parseMaybeJson(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'object') return v;
+  try { return JSON.parse(String(v)); } catch { return null; }
+}
+
+/**
+ * 读归档里的 out/summaries.json（R2-B48 产物）meta —— 仅取**呈现所需**的统计字段。
+ * 归档未包含该文件（旧归档/未开启评语）⇒ null（调用方降级为"未生成评语"）。
+ */
+function readSummariesMeta(archive) {
+  if (!archive) return null;
+  for (const rel of ['out/summaries.json', 'summaries.json']) {
+    const doc = readJsonSafe(archive, rel);
+    if (!doc || typeof doc !== 'object' || !doc.summaries) continue;
+    const entries = Object.values(doc.summaries).filter((x) => x && typeof x === 'object');
+    if (entries.length === 0) continue;
+    return {
+      mode: doc.mode || null,
+      entries: entries.length,
+      cache_hits: entries.filter((x) => x.cache_hit === true).length,
+      truncated: entries.filter((x) => x.truncated === true).length,
+      generated_at: doc.generated_at || null,
+    };
+  }
+  return null;
+}
+
+/**
+ * ★R2-B49：评语（总评）会话消耗块 —— 判据/评语**分账**呈现，三态可辨（见文件头口径注释）。
+ * 数据优先级：usage_json.summary_session（B48 落库）> run-teardown 摘要 > 归档 out/summaries.json 的 meta > 无。
+ */
+export function shapeSummarySession({ row = null, teardownUsage = null, archive = null, summaryMeta = null } = {}) {
+  const uj = row ? parseMaybeJson(row.usage_json) : null;
+  const ss = (uj && uj.summary_session) || (teardownUsage && teardownUsage.summary_session) || null;
+  const meta = summaryMeta === null ? readSummariesMeta(archive) : summaryMeta;   // 归档 meta 兜底（可注入，便于测试与复用）
+  const cacheHit = ss && ss.cache_hit !== undefined && ss.cache_hit !== null
+    ? ss.cache_hit === true
+    : (meta ? meta.cache_hits > 0 && meta.cache_hits >= meta.entries : null);
+  const mode = (ss && ss.mode) || (meta && meta.mode) || null;
+  if (!ss && !meta) {
+    return {
+      generated: false, available: false, state: 'not_generated', note: '未生成评语（开关 off 或旧运行）',
+      tokens: null, cost_total: null, model: null, cache_hit: null, mode: null, entries: null, truncated: null,
+      generated_at: null, source: null,
+    };
+  }
+  const state = cacheHit === true ? 'cached_hit' : 'generated';
+  return {
+    generated: true,
+    available: true,
+    state,
+    note: state === 'cached_hit' ? '评语已生成（缓存命中，未新增模型调用）' : '评语已生成（本次会话生成）',
+    tokens: (ss && ss.tokens) || null,
+    cost_total: numOrNull(ss && ss.cost_total),
+    model: (ss && ss.model) || null,
+    cache_hit: cacheHit,
+    mode,
+    entries: meta ? meta.entries : null,
+    truncated: meta ? meta.truncated : null,
+    generated_at: (ss && ss.recorded_at) || (meta && meta.generated_at) || null,
+    source: ss ? 'usage_json' : 'archive_meta',
+  };
+}
+
+/** ★R2-B49：判据 / 评语 成本分账（任一缺失 ⇒ 该项 null；合计只在两项都可算时给出，避免假 0） */
+export function costSplit({ judgeCost = null, summaryCost = null } = {}) {
+  // ★负值视作不可得（坏数据不参与分账，避免把审计数字算歪）
+  const sanitize = (v) => { const n = numOrNull(v); return n === null || n < 0 ? null : n; };
+  const judge = sanitize(judgeCost);
+  const summary = sanitize(summaryCost);
+  const total = judge === null && summary === null ? null : Number(((judge || 0) + (summary || 0)).toFixed(6));
+  return { judge, summary, total, currency: 'CNY' };
+}
+
+/** 详情 usage 块（字段齐备：token 四项 + 命中率 + 费用 + 模型调用次数 + 价目版本 + ★评语分账） */
+export function shapeUsageBlock({ row = null, teardownUsage = null, archive = null } = {}) {
+  const summarySession = shapeSummarySession({ row, teardownUsage, archive });
   if (row) {
+    const judgeCost = numOrNull(row.cost_total);
     return {
       available: true,
       source: 'grading_run_usage',
+      summary_session: summarySession,
+      cost_split: costSplit({ judgeCost, summaryCost: summarySession.cost_total }),
       model: row.model || null,
       model_calls: numOrNull(row.model_calls) || 0,
       uncached_input_tokens: numOrNull(row.uncached_input_tokens) || 0,
@@ -241,6 +329,8 @@ export function shapeUsageBlock({ row = null, teardownUsage = null } = {}) {
     return {
       available: true,
       source: 'teardown_json',
+      summary_session: summarySession,
+      cost_split: costSplit({ judgeCost: numOrNull(teardownUsage.cost_total), summaryCost: summarySession.cost_total }),
       model: null,
       model_calls: numOrNull(teardownUsage.model_calls) || 0,
       uncached_input_tokens: numOrNull(teardownUsage.uncached_input_tokens) || 0,
@@ -256,7 +346,7 @@ export function shapeUsageBlock({ row = null, teardownUsage = null } = {}) {
       no_model_session: teardownUsage.no_model_session === true,
     };
   }
-  return { available: false, reason: 'no_usage_record' };
+  return { available: false, reason: 'no_usage_record', summary_session: summarySession, cost_split: costSplit({ judgeCost: null, summaryCost: summarySession.cost_total }) };
 }
 
 /** 详情 tools 块：可取 ⇒ items；不可得（无记录/未采集）⇒ items:null + reason（不伪造） */
@@ -570,7 +660,7 @@ export const getGradingRun = async (req, res) => {
     });
     const usageRow = usageKey ? (usageIndex.get(usageKey) || null) : null;
     const teardownUsage = teardown && teardown.usage ? teardown.usage : null;
-    const usageBlock = shapeUsageBlock({ row: usageRow, teardownUsage });
+    const usageBlock = shapeUsageBlock({ row: usageRow, teardownUsage, archive });   // ★R2-B49：带上归档 ⇒ 可读 out/summaries.json 的评语 meta
     const toolsBlock = shapeToolsBlock({ row: usageRow });
     const meta = await loadRunMeta({ assignmentId: row && row.assignment_id, archive });
     const usageReason = usageBlock.available ? null

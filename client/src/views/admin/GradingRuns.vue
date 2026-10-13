@@ -173,9 +173,9 @@
                 <a-descriptions-item label="模型调用次数">
                   <a-tooltip title="原键：model_calls（≈ 会话 steps）">{{ usage.model_calls ?? '—' }}</a-tooltip>
                 </a-descriptions-item>
-                <a-descriptions-item label="本次无模型会话">
-                  <a-tooltip title="原键：no_model_session">
-                    {{ usage.no_model_session === true ? '是 —— 本次无模型会话（零 token）' : '否' }}
+                <a-descriptions-item label="本次判据会话">
+                  <a-tooltip title="原键：no_model_session（只反映**判据**会话；评语消耗见下方分账）">
+                    {{ usage.no_model_session === true ? '零模型调用（尺子复用/未起模型会话）' : '有模型调用' }}
                   </a-tooltip>
                 </a-descriptions-item>
                 <a-descriptions-item label="输入（未命中缓存）">
@@ -203,6 +203,42 @@
                   <a-tooltip :title="'原键：price_tier=' + (usage.price_tier || '—') + '（peak=高峰 / idle=空闲 / mixed=跨时段 / na=无模型调用）'">{{ tierLabel(usage.price_tier) }}</a-tooltip>
                 </a-descriptions-item>
               </a-descriptions>
+
+              <!-- ★R2-B49：判据/评语**分账**（口径：尺子零 LLM；评语按需生成、单独计量、可关） -->
+              <div class="split-block">
+                <div class="split-title">消耗分账 · 判据 / 评语（总评）</div>
+                <a-descriptions size="small" bordered :column="2" class="mt-s">
+                  <a-descriptions-item label="判据会话（打分）">
+                    {{ fmtCost4(usage.cost_split ? usage.cost_split.judge : null, usage.cost_currency) }}
+                    <span class="muted"> · tokens 见上方四项</span>
+                  </a-descriptions-item>
+                  <a-descriptions-item label="评语会话（总评）">
+                    <template v-if="usage.summary_session && usage.summary_session.generated">
+                      {{ fmtCost4(usage.summary_session.cost_total, usage.cost_currency) }}
+                      <span class="muted"> · {{ summaryStateLabel(usage.summary_session) }} · 原键 summary_session</span>
+                    </template>
+                    <span v-else class="muted">未生成评语（开关 off / 旧运行）</span>
+                  </a-descriptions-item>
+                  <a-descriptions-item label="合计">
+                    <a-tooltip title="原键：cost_split.total = 判据 + 评语（任一项不可得则如实留空，不显示假 0）">
+                      {{ fmtCost4(usage.cost_split ? usage.cost_split.total : null, usage.cost_currency) }}
+                    </a-tooltip>
+                  </a-descriptions-item>
+                  <a-descriptions-item label="评语 tokens">
+                    <template v-if="usage.summary_session && usage.summary_session.generated && usage.summary_session.tokens">
+                      {{ fmtTokens(usage.summary_session.tokens.prompt) }} 输入 / {{ fmtTokens(usage.summary_session.tokens.completion) }} 输出
+                      <a-tooltip v-if="usage.summary_session.tokens.reasoning" title="推理型模型的 reasoning_tokens（不计费但占预算）">
+                        <span class="muted"> · 推理 {{ fmtTokens(usage.summary_session.tokens.reasoning) }}</span>
+                      </a-tooltip>
+                    </template>
+                    <span v-else class="muted">—</span>
+                  </a-descriptions-item>
+                </a-descriptions>
+                <div class="muted mt-s">
+                  口径：<b>尺子零 LLM；评语按需生成、单独计量、可关</b>（<code>DSH_SUMMARY_MODE=off|cached|always</code>，默认 cached；预算超限只停评语、不影响分数）。
+                  <span v-if="usage.summary_session && usage.summary_session.mode">本次运行开关：<code>{{ usage.summary_session.mode }}</code>。</span>
+                </div>
+              </div>
               <p class="muted note">{{ usageNote }}</p>
             </template>
             <a-empty v-else :image="false" :description="usageEmptyText" />
@@ -416,12 +452,27 @@ const toolCols = [
   { title: '耗时', key: 'ms', width: 110, tooltip: '原键：tools[].ms（调用→返回墙钟差累计）' },
   { title: '失败', dataIndex: 'errors', width: 70, tooltip: '原键：tools[].errors（isError 计数）' },
 ];
+/** ★R2-B49：判据会话与评语会话分开陈述（口径：尺子零 LLM；评语按需生成、单独计量、可关） */
 const usageAlert = computed(() => {
   if (!detail.value) return '';
-  if (usage.value && usage.value.no_model_session === true) return '本次无模型会话（零 token）';
-  if (!usage.value) return '用量不可得（reason=' + (usageInfo.value.reason || 'unknown') + '）—— 不是接口错误，不显示假 0';
+  const u = usage.value;
+  const ss = u && u.summary_session;
+  if (u && u.no_model_session === true) {
+    return ss && ss.generated
+      ? '本次判据会话零模型调用（尺子复用）；评语已单独生成（' + summaryStateLabel(ss) + '，费用见"评语会话"分账）'
+      : '本次判据会话零模型调用（尺子复用）；未生成评语（开关 off / 旧运行）';
+  }
+  if (!u) return '用量不可得（reason=' + (usageInfo.value.reason || 'unknown') + '）—— 不是接口错误，不显示假 0';
   return '';
 });
+
+/** 评语生成方式的人话标签（三态可辨：命中缓存 / 本次生成 / 生成方式未记录） */
+function summaryStateLabel(ss) {
+  if (!ss || !ss.generated) return '未生成评语';
+  if (ss.state === 'cached_hit' || ss.cache_hit === true) return '缓存命中（未新增模型调用）';
+  if (ss.cache_hit === false) return '本次会话生成';
+  return '生成方式未记录（旧数据）';
+};
 const usageAlertType = computed(() => {
   if (usage.value && usage.value.no_model_session === true) return 'info';
   return usage.value ? 'success' : 'warning';
@@ -608,4 +659,8 @@ onMounted(load);
 .link { cursor: pointer; }
 .mr { margin-right: 6px; }
 .ml { margin-left: 6px; }
+/* ★R2-B49：判据 / 评语（总评）消耗分账 */
+.split-block { margin-top: 10px; border-top: 1px dashed var(--border-subtle); padding-top: 8px; }
+.split-title { font-size: var(--fs-caption); font-weight: 600; color: var(--text-secondary); }
+.mt-s { margin-top: 6px; }
 </style>
