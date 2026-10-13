@@ -419,8 +419,19 @@ export const uploadPackage = (req, res) => {
         data: { tree, fileCount, totalSize, tempId },
       });
     } catch (e) {
+      // ★R3-D10（t19）：与 t16/D8 的学生侧（student/project-submit.js）**同口径** ——
+      //   已知的「客户端压缩包问题」⇒ 400 + 可读文案（code 1001），不再 500；
+      //   adm-zip 内部文案已在 utils/projectArchive.extractZipSafely 统一收敛为「压缩包内容非法」，
+      //   本处只做状态码/文案白名单归一（路径穿越按其语义归一为同一文案）。
+      const msg = e?.message || '未知错误';
+      const isTraversal = msg.includes('Path traversal denied') || msg.includes('Invalid path segment');
+      const isClientError = isTraversal || msg.includes('压缩包');
+      if (isClientError) {
+        logger.warn({ err: e }, '标准工程包解压被拒（客户端压缩包问题）');
+        return res.status(400).json({ code: 1001, message: isTraversal ? '压缩包内容非法' : msg, data: null });
+      }
       logger.error({ err: e }, '解压 zip 失败');
-      res.status(500).json({ code: 2001, message: '解压失败: ' + (e.message || '未知错误'), data: null });
+      res.status(500).json({ code: 2001, message: '解压失败: ' + msg, data: null });
     }
   });
 };
