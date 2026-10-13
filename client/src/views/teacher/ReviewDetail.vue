@@ -195,7 +195,24 @@
                 <div class="sq-review-fb-row">
                   <div class="sq-review-fb-col">
                     <span class="sq-review-fb-label">AI 评语</span>
-                    <div class="sq-review-fb-ai">{{ getSub(sq.id)?.aiFeedback || '暂无评语' }}</div>
+                    <div class="sq-review-fb-ai">
+                      <template v-if="fbOf(sq.id).kind === 'checker'">
+                        <div class="ai-fb-summary">
+                          AI 评分依据：本次 {{ fbOf(sq.id).scoreText }} / {{ fbOf(sq.id).maxText }} 分
+                          ｜ {{ fbOf(sq.id).total }} 项中 {{ fbOf(sq.id).hits }} 项达标
+                        </div>
+                        <div class="ai-fb-list">
+                          <div v-for="(row, ri) in fbOf(sq.id).rows" :key="ri" class="ai-fb-row">
+                            <span class="ai-fb-mark" :title="row.status || ''">{{ row.ok === true ? '✅' : (row.ok === false ? '❌' : '•') }}</span>
+                            <span class="ai-fb-title">{{ row.title || row.item || '（未命名分项）' }}</span>
+                            <span class="ai-fb-score">{{ row.score ?? '—' }} / {{ row.maxScore ?? '—' }}</span>
+                            <span class="ai-fb-comment" :class="{ 'is-evidence': /证据[:：]/.test(row.comment) }">{{ row.comment || '（无判据说明）' }}</span>
+                          </div>
+                        </div>
+                      </template>
+                      <template v-else-if="fbOf(sq.id).kind === 'text'">{{ fbOf(sq.id).text }}</template>
+                      <template v-else>暂无评语</template>
+                    </div>
                   </div>
                   <div class="sq-review-fb-col">
                     <span class="sq-review-fb-label">教师评语</span>
@@ -240,6 +257,7 @@ import { onMounted, onUnmounted } from 'vue';
 import CodeEditor from '../../components/CodeEditor.vue';
 import StatusTag from '../../components/StatusTag.vue';
 import { useReviewPage } from '../../composables/review/useReviewPage.js';
+import { parseCheckerFeedback } from '../../composables/review/parseCheckerFeedback.js';
 
 // 接线根唯一入口（方案 §2.1-b）：7 个单元在 setup 同步阶段无条件各调用一次，跨单元共享一律参数注入。
 // 本文件不得出现任何响应式原语（ref / reactive / computed / watch）—— 出现即等于造第二个真值源。
@@ -255,11 +273,27 @@ const {
   subStatusColor, subStatusTagClass, subStatusText, onPageMounted, onPageUnmounted,
 } = useReviewPage();
 
+// ★R2-B41：AI 评分依据（纯函数 + 模块级缓存；本文件禁止响应式原语 ⇒ 不用 computed）
+function fbOf(sqId) {
+  return parseCheckerFeedback(getSub(sqId)?.aiFeedback);
+}
+
 onMounted(onPageMounted);
 onUnmounted(onPageUnmounted);
 </script>
 
 <style scoped>
+/* ★R2-B41：AI 评分依据（分项表） */
+.ai-fb-summary { font-size: var(--fs-caption); font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+.ai-fb-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow: auto; }
+.ai-fb-row { display: grid; grid-template-columns: 18px minmax(80px, 1.2fr) 56px 2fr; gap: 6px; align-items: start; padding: 2px 0; border-top: 1px dashed var(--border-subtle, var(--border-default)); }
+.ai-fb-row:first-child { border-top: none; }
+.ai-fb-mark { line-height: 1.5; }
+.ai-fb-title { font-size: var(--fs-caption); color: var(--text-primary); }
+.ai-fb-score { font-size: var(--fs-caption); color: var(--text-secondary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ai-fb-comment { font-size: var(--fs-caption); color: var(--text-secondary); word-break: break-all; }
+.ai-fb-comment.is-evidence { color: var(--color-success-text, var(--text-secondary)); }
+
 /* AI 提示词预览 */
 .prompt-block { margin-bottom: 12px; }
 .prompt-role-label { font-size:var(--fs-caption); font-weight: 600; color: var(--text-secondary); margin: 8px 0 4px; }

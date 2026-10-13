@@ -44,9 +44,83 @@ export function decideScoreWrite({ score, stale, unsupported, exitCode } = {}) {
   return { write: true, status: 'graded', reason: 'ok', score: n };
 }
 
+/**
+ * ★R2-B41：逐项「依据」投影归一 —— 只取 items（+totals 便于对账），其余字段不参与回写。
+ * 支持三种形状：①单份 doc `{items:[…]}` ②裸 items 数组 ③`{results|submissions:[{slug,items}]}`（由调用方按 slug 拆分）
+ */
+export function normalizeDetailDoc(doc) {
+  if (!doc || typeof doc !== 'object') return null;
+  if (Array.isArray(doc)) return { items: doc, totals: null, source_shape: 'items_array' };
+  const items = Array.isArray(doc.items) ? doc.items : null;
+  if (items) return { items, totals: doc.totals || null, source_shape: 'items_doc' };
+  return null;
+}
+
+/**
+ * ★R2-B41：读装置**带依据**的逐项结果投影（title/status/reason 含「证据: <路径>」），按 slug 建索引。
+ * 优先级：`out/grading-result/<slug>.json` > `out/grading-result.json`（单份契约）> `out/results/<slug>*.json`（兼容）。
+ * 只读、绝不改分数来源：分数与「是否写分」仍由 listMeasureResults()/decideScoreWrite() 的原来源决定。
+ * @returns {{bySlug: Map<string,object>, fallback: object|null, sources: string[]}}
+ */
+export function loadGradingResultIndex(runRoot) {
+  const bySlug = new Map();
+  const sources = [];
+  let fallback = null;
+  const put = (slug, doc, rel) => {
+    const norm = normalizeDetailDoc(doc);
+    if (!slug || !norm || !norm.items || norm.items.length === 0) return;
+    if (bySlug.has(String(slug))) return;                       // 先到先得（顺序=优先级）
+    bySlug.set(String(slug), { ...norm, source: rel });
+    sources.push(rel + ':' + String(slug));
+  };
+  // ① 单份文件（优先）
+  const perDir = path.join(runRoot, 'out', 'grading-result');
+  if (fs.existsSync(perDir)) {
+    for (const f of fs.readdirSync(perDir).sort()) {
+      if (!f.endsWith('.json')) continue;
+      try { put(f.replace(/\.json$/, ''), JSON.parse(fs.readFileSync(path.join(perDir, f), 'utf8')), 'out/grading-result/' + f); } catch { /* 坏文件跳过，不影响分数路径 */ }
+    }
+  }
+  // ② 单份契约 out/grading-result.json：items 数组 ⇒ 全局兜底；带 slug 的条目数组 ⇒ 按 slug 索引
+  const single = path.join(runRoot, 'out', 'grading-result.json');
+  if (fs.existsSync(single)) {
+    try {
+      const doc = JSON.parse(fs.readFileSync(single, 'utf8'));
+      const bare = normalizeDetailDoc(doc);
+      if (bare) {
+        fallback = { ...bare, source: 'out/grading-result.json' };
+      } else {
+        const arr = Array.isArray(doc) ? doc : (doc.results || doc.submissions || []);
+        for (const it of arr || []) {
+          const slug = it && (it.slug || (it.submission && it.submission.id) || it.submission_id);
+          if (slug) put(String(slug), it, 'out/grading-result.json');
+        }
+      }
+    } catch { /* 坏 JSON ⇒ 无依据可用（不崩、不改分数） */ }
+  }
+  // ③ 兼容旧布局 out/results/<slug>*.json
+  const resDir = path.join(runRoot, 'out', 'results');
+  if (fs.existsSync(resDir)) {
+    for (const f of fs.readdirSync(resDir).sort()) {
+      if (!f.endsWith('.json')) continue;
+      const slug = f.replace(/\.[a-z0-9_]*\.?model\.json$/, '').replace(/\.json$/, '');
+      try { put(slug, JSON.parse(fs.readFileSync(path.join(resDir, f), 'utf8')), 'out/results/' + f); } catch { /* 坏文件跳过 */ }
+    }
+  }
+  return { bySlug, fallback, sources };
+}
+
 /** 回写载荷（审计字段齐备） */
 export function buildWriteback({ result, score }) {
   const items = Array.isArray(result?.items) ? result.items : [];
+  // ★R2-B41：逐项依据（title/status/reason）来自 grading-result 投影；缺失 ⇒ 退化为原 items 的 comment/reason（不崩、不改分）
+  const detail = (result && (result.grading_detail || result.detail)) || null;
+  const detailItems = Array.isArray(detail && detail.items) ? detail.items : [];
+  const detailById = new Map();
+  for (const d of detailItems) {
+    const k = String((d && (d.id ?? d.name)) ?? '');
+    if (k && !detailById.has(k)) detailById.set(k, d);
+  }
   // ★F-R2C4-2：ai_score 是 INT 列 ⇒ 小数分会被静默截断。把原始分与取整口径一并写进 aiFeedback，
   // 使 62.5 这类分数可追溯（raw_score=62.5 / score_int=62 / score_rounding=trunc）。
   const rawScore = result?.totals?.score;
@@ -62,15 +136,26 @@ export function buildWriteback({ result, score }) {
       score_rounding: 'trunc(ai_score INT 列；原始分见 raw_score)',
       checker_id: result?.checker_id ?? null,
       canonical_sha256: result?.canonical_sha256 ?? null,
+      // ★R2-B41：依据来源留痕（审计：分数来源 vs 依据来源；缺失 ⇒ null）
+      detail_source: (detail && detail.source) || null,
+      detail_items: detailItems.length || 0,
       max_score: result?.totals?.max_score ?? null,
       aggregate: result?.totals?.aggregate ?? null,
-      breakdown: items.map((it) => ({
-        item: String(it.id || it.name || '').slice(0, 50),
-        score: Number(it.score) || 0,
-        maxScore: Number(it.max_score ?? it.maxScore) || 0,
-        comment: String(it.comment || it.reason || '').slice(0, 60),
-        kind: 'checker',
-      })).slice(0, 200),
+      // ★R2-B41：逐项**依据**合并 —— 从装置 grading-result 投影按 item id 取 title/status/reason；
+      //   分数/满分**只取原来源**（result.items）⇒ 判定与分数路径零改动。
+      breakdown: items.map((it) => {
+        const key = String(it?.id || it?.name || '');
+        const rich = detailById.get(key) || (detailItems.length === 1 && items.length === 1 ? detailItems[0] : null);
+        return {
+          item: String(it.id || it.name || '').slice(0, 50),
+          title: String((rich && rich.title) || '').slice(0, 80),                     // ★新增：分项名（≤80）
+          status: rich && rich.status !== undefined && rich.status !== null ? String(rich.status).slice(0, 24) : null, // ★新增：hit/miss…
+          score: Number(it.score) || 0,                                              // ★原来源
+          maxScore: Number(it.max_score ?? it.maxScore) || 0,                        // ★原来源
+          comment: String((rich && (rich.comment || rich.reason)) || it.comment || it.reason || '').slice(0, 300), // ★上限 60→300（保住「证据: <路径>」）
+          kind: 'checker',
+        };
+      }).slice(0, 200),
     }),
     checkerId: result?.checker_id ?? null,
     canonicalSha256: result?.canonical_sha256 ?? null,
@@ -127,6 +212,7 @@ export async function consumeChecker({ prisma, runRoot, assignmentId, questionId
 /** 读量尺产物（out/measure/*.json 优先，兼容 out/results/*.json） */
 export function listMeasureResults(runRoot) {
   const out = [];
+  const gradingIndex = loadGradingResultIndex(runRoot);   // ★R2-B41：依据投影（只读；不影响分数来源）
   for (const dir of ['out/measure', 'out/results']) {
     const d = path.join(runRoot, dir);
     if (!fs.existsSync(d)) continue;
@@ -134,7 +220,13 @@ export function listMeasureResults(runRoot) {
       if (!f.endsWith('.json')) continue;
       if (dir.endsWith('measure') && (f.startsWith('matrix-') || f.startsWith('coverage-'))) continue;
       const p = path.join(d, f);
-      try { out.push({ path: p, result: JSON.parse(fs.readFileSync(p, 'utf8')) }); } catch { /* 跳过坏文件 */ }
+      try {
+        const result = JSON.parse(fs.readFileSync(p, 'utf8'));
+        // ★R2-B41：按 slug 挂上**依据**投影（单份契约的 items 数组作为兜底）；找不到 ⇒ null（原行为）
+        const slug = result?.submission?.id ?? null;
+        const detail = (slug && gradingIndex.bySlug.get(String(slug))) || gradingIndex.fallback || null;
+        out.push({ path: p, result: detail ? { ...result, grading_detail: detail } : result });
+      } catch { /* 跳过坏文件 */ }
     }
   }
   return out;
