@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
+import { getJwtSecret } from '../config/jwtSecret.js';   // ★R2-B60：与中间件共用同一密钥解析（消除两处兜底）
 
 export const login = async (req, res) => {
   try {
@@ -55,7 +56,7 @@ export const login = async (req, res) => {
 
     const token = jwt.sign(
       { id: user.id, username: user.username, role: user.role },
-      process.env.JWT_SECRET || 'exam_system_fallback_secret',
+      getJwtSecret(),
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
