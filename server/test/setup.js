@@ -102,8 +102,15 @@ export async function cleanupOrphanGradingRows(prisma, log = console) {
   // ★R2-B35：绑定表按「assignment 是否仍存在」判孤儿。grading_rulers 是**按内容指纹的全局资产**
   //   （跨班/跨教师共享，命中即零 LLM）⇒ **不随绑定消失而删**，否则会连带毁掉仍被其他作业复用的尺子。
   const bindings = await del('DELETE FROM assignment_question_rulers WHERE assignment_id NOT IN (SELECT id FROM assignments)');
-  if (jobs || checkers || anchors || bindings) log.log('ORPHAN_GRADING_CLEANUP jobs=' + jobs + ' checkers=' + checkers + ' anchors=' + anchors + ' bindings=' + bindings);
-  return { jobs, checkers, anchors, bindings };
+  // ★R2-B37（t4 现场发现的既有隔离缺口）：grading_job_runs / grading_run_usage 的孤儿行此前**从不清理** ⇒
+  //   每跑一次全量 integration 都会在库里堆行，让「管理员批改记录」列表（w56 断言恰好 3 条）随历史随机失败。
+  //   口径与上面一致：只删「assignment 已不存在」的行；仍在产的运行记录一行不动。
+  const runs = await del('DELETE FROM grading_job_runs WHERE assignment_id NOT IN (SELECT id FROM assignments)');
+  const usage = await del('DELETE FROM grading_run_usage WHERE job_id IS NOT NULL AND job_id NOT IN (SELECT job_id FROM grading_job_runs)');
+  if (jobs || checkers || anchors || bindings || runs || usage) {
+    log.log('ORPHAN_GRADING_CLEANUP jobs=' + jobs + ' checkers=' + checkers + ' anchors=' + anchors + ' bindings=' + bindings + ' runs=' + runs + ' usage=' + usage);
+  }
+  return { jobs, checkers, anchors, bindings, runs, usage };
 }
 
 export async function seedTestData() {
