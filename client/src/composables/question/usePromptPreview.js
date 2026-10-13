@@ -6,6 +6,7 @@
  *      形态真值源唯一（U3），本文件不得自行创建第二份。
  * 主观题专属（模板 :307 按钮 v-if=isEdit && questionKind===subjective）；无 watch / 无 hook。
  */
+import { errorCopyOf } from '../errorCopy.js';   // ★R2-B55：UI 文案统一出口（固定友好 + 原始错误只进 console）
 import { ref } from 'vue';
 import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
@@ -27,7 +28,7 @@ async function showPromptPreview() {
     promptPreviewData.value = r.data;
     promptActiveKeys.value = (r.data.subs || []).map(s => s.id);
   } catch (e) {
-    message.error('获取提示词失败：' + (e.response?.data?.message || e.message));
+    message.error(errorCopyOf(e, { tag: 'usePromptPreview.js 获取提示词', action: '获取提示词' }));
   } finally {
     promptLoading.value = false;
   }

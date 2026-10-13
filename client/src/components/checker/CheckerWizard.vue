@@ -156,6 +156,7 @@
 </template>
 
 <script setup>
+import { errorCopyOf } from '../../composables/errorCopy.js';   // ★R2-B55：UI 文案统一出口（固定友好 + 原始错误只进 console）
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { message } from 'ant-design-vue';
 import GenerateProgress from './GenerateProgress.vue';
@@ -283,7 +284,7 @@ function handleGenerate() {
       setStatus('generating');
       pollReal();
     } catch (e) {
-      error.value = e.response?.data?.message || e.message;
+      error.value = errorCopyOf(e, { tag: 'CheckerWizard.vue 校验评分器', action: '校验' });
       setStatus('failed');
     }
   })();
@@ -339,7 +340,7 @@ function pollReal() {
       if (isFinal) stopPollTimer(timer);
     } catch (e) {
       stopPollTimer(timer);
-      error.value = e.message;
+      error.value = errorCopyOf(e, { tag: 'CheckerWizard.vue 生成评分器', action: '生成' });
       setStatus('failed');
       pendingResult.value = true;
     }
@@ -376,7 +377,7 @@ async function handleReportAction(record, action) {
     applyState(d);
     message.success('已处理：' + item.ruleLabel);
   } catch (e) {
-    message.error('处理失败：' + (e.response?.data?.message || e.message));
+    message.error(errorCopyOf(e, { tag: 'CheckerWizard.vue 处理评分器', action: '处理' }));
   }
 }
 
@@ -426,7 +427,7 @@ async function saveJson() {
     parsed = JSON.parse(jsonText.value);
     if (!parsed.objective_items || !Array.isArray(parsed.objective_items)) throw new Error('缺少 objective_items');
   } catch (e) {
-    message.error('JSON 非法：' + e.message);
+    message.error(errorCopyOf(e, { tag: 'CheckerWizard.vue JSON 校验', action: 'JSON 校验' }));
     return;
   }
   if (props.mock) {
@@ -443,7 +444,7 @@ async function saveJson() {
     message.success('Schema 校验通过，已保存规则草稿');
     jsonEditing.value = false;
   } catch (e) {
-    message.error('保存失败：' + (e.response?.data?.message || e.message));
+    message.error(errorCopyOf(e, { tag: 'CheckerWizard.vue 保存评分器', action: '保存' }));
   }
 }
 

@@ -11,6 +11,7 @@
  *   { packageFile, tree, fileContents, keptBytes, keptCount }
  * 上传动作由使用方决定（教师页立即传服务端拿 tempId；学生页提交时传）。
  */
+import { errorCopyOf } from './errorCopy.js';   // ★R2-B55：UI 文案统一出口（固定友好 + 原始错误只进 console）
 import { ref } from 'vue';
 import { filterAndRepackZip } from '../domain/uploadFilter.js';
 
@@ -50,7 +51,7 @@ export function useProjectUpload(options = {}) {
         keptCount: r.keptCount,
       };
     } catch (err) {
-      errorMsg.value = '解析失败：' + (err.message || '未知错误');
+      errorMsg.value = errorCopyOf(err, { tag: 'useProjectUpload.js 解析题目文件', action: '解析' });
       return null;
     } finally {
       processing.value = false;

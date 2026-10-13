@@ -5,6 +5,7 @@
  * ⚠️ 双模式：本文件服务教师端与学生端两条路由，模式常量由接线根唯一创建（不得自行 computed）。
  */
 
+import { errorCopyOf } from '../errorCopy.js';   // ★R2-B55：UI 文案统一出口（固定友好 + 原始错误只进 console）
 import { ref, nextTick } from 'vue';
 import { message } from 'ant-design-vue';
 import { uploadPackage } from '../../api/projects.js';
@@ -63,7 +64,7 @@ async function teacherUpload(blob, name) {
     message.success(`上传成功（已过滤依赖），保留 ${uploadKeptCount.value} 个代码文件 ${(uploadKeptBytes.value / 1024).toFixed(0)}KB`);
   } catch (err) {
     form.tempId = '';
-    message.error('上传失败：' + (err.response?.data?.message || err.message) + '（可重试上传；也可不上传，直接保存为开放性题目）');
+    message.error(errorCopyOf(err, { tag: 'useZipUpload.js 上传压缩包', action: '上传', suffix: '（可重试上传；也可不上传，直接保存为开放性题目）' }));
   }
 }
 

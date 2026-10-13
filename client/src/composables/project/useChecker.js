@@ -5,6 +5,7 @@
  * ⚠️ 双模式：本文件服务教师端与学生端两条路由，模式常量由接线根唯一创建（不得自行 computed）。
  */
 
+import { errorCopyOf } from '../errorCopy.js';   // ★R2-B55：UI 文案统一出口（固定友好 + 原始错误只进 console）
 import { ref, computed, watch } from 'vue';
 import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
@@ -28,7 +29,7 @@ async function showPromptPreview() {
     const r = await request.get('/teacher/questions/' + id + '/project-prompt-preview');
     promptPreview.value = r.data;
   } catch (e) {
-    message.error('获取提示词失败：' + (e.response?.data?.message || e.message));
+    message.error(errorCopyOf(e, { tag: 'useChecker.js 获取提示词', action: '获取提示词' }));
   } finally {
     promptLoading.value = false;
   }
@@ -85,7 +86,7 @@ async function fetchChecker() {
     };
     if (checkerStatus.value !== 'generating') stopCheckerPoll();
   } catch (e) {
-    message.error('获取自动评分器状态失败：' + (e.response?.data?.message || e.message));
+    message.error(errorCopyOf(e, { tag: 'useChecker.js 获取自动评分器状态', action: '获取自动评分器状态' }));
     stopCheckerPoll();
   }
 }
@@ -124,7 +125,7 @@ async function handleGenerateChecker() {
     }
     startCheckerPoll();
   } catch (e) {
-    message.error('生成失败：' + (e.response?.data?.message || e.message));
+    message.error(errorCopyOf(e, { tag: 'useChecker.js 生成评分器', action: '生成' }));
   } finally {
     checkerLoading.value = false;
   }

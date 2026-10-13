@@ -5,6 +5,7 @@
  * ⚠️ 双模式：本文件服务教师端与学生端两条路由，模式常量由接线根唯一创建（不得自行 computed）。
  */
 
+import { errorCopyOf } from '../errorCopy.js';   // ★R2-B55：UI 文案统一出口（固定友好 + 原始错误只进 console）
 import { ref, computed, nextTick } from 'vue';
 import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
@@ -77,7 +78,7 @@ async function handleSubmit() {
     message.success(`提交成功（已过滤依赖），保留 ${uploadKeptCount.value} 个代码文件 ${(uploadKeptBytes.value / 1024).toFixed(0)}KB，已生成第 ${data.version ?? '新'} 个版本`);
     submitting.value = false;
   } catch (e) {
-    message.error('提交失败：' + (e.response?.data?.message || e.message));
+    message.error(errorCopyOf(e, { tag: 'useStudentSubmission.js 提交', action: '提交' }));
     submitting.value = false;
   }
 }

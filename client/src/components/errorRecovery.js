@@ -51,7 +51,7 @@ export function clearChunkReloadMark(fullPath, { storage = null, prefix = RELOAD
 export function handleRouterError(err, to, { storage = null, reload = null, notify = null, prefix = RELOAD_PREFIX } = {}) {
   const fullPath = (to && (to.fullPath || to.path)) || '(unknown)';
   if (!isChunkLoadError(err)) {
-    if (notify) notify('页面加载出错（' + fullPath + '）：' + ((err && err.message) || err));
+    if (notify) notify('页面加载出错了，请重试（路由：' + fullPath + '）');   // ★R2-B55：UI 固定友好 + 保留路由；原始错误已 console.error
     return { handled: false, reloaded: false, reason: 'not_chunk_error' };
   }
   const key = reloadKeyOf(fullPath, prefix);
@@ -91,7 +91,7 @@ export function installGlobalErrorHandling(app, { router = null, win = null, not
     app.config.errorHandler = (err, instance, info) => {
       // eslint-disable-next-line no-console
       console.error('[R2-B52] app.config.errorHandler', { route: describeRoute(router), info, err });
-      if (notify) notify('页面出错（' + describeRoute(router) + '）：' + ((err && err.message) || err));
+      if (notify) notify('页面出错了，请重试（路由：' + describeRoute(router) + '）');   // ★R2-B55
     };
   }
   if (win && typeof win.addEventListener === 'function') {
@@ -103,7 +103,7 @@ export function installGlobalErrorHandling(app, { router = null, win = null, not
         // 未捕获的 chunk 失败同样走自愈（例如非路由上下文的手动 import()）
         handleRouterError(reason, { fullPath: describeRoute(router) }, { storage: win.sessionStorage || null, reload: () => win.location && win.location.reload() });
       } else if (notify) {
-        notify('页面出错（' + describeRoute(router) + '）：' + ((reason && reason.message) || reason));
+        notify('页面出错了，请重试（路由：' + describeRoute(router) + '）');   // ★R2-B55
       }
     });
   }
@@ -129,7 +129,7 @@ export function boundaryState(err, fullPath = '') {
     title: '页面加载失败',
     message: chunk
       ? '页面资源加载失败（可能是应用刚更新、缓存过期）。可点「重试」或刷新页面。'
-      : '页面渲染出错：' + ((err && err.message) || err),
+      : '页面渲染出错，请重试（路由：' + (fullPath || '(unknown)') + '）',   // ★R2-B55：不再拼原始 message
     route: fullPath || '(unknown)',
     canRetry: true,
   };

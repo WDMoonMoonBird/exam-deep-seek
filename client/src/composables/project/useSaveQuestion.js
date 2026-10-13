@@ -5,6 +5,7 @@
  * ⚠️ 双模式：本文件服务教师端与学生端两条路由，模式常量由接线根唯一创建（不得自行 computed）。
  */
 
+import { errorCopyOf } from '../errorCopy.js';   // ★R2-B55：UI 文案统一出口（固定友好 + 原始错误只进 console）
 import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
 
@@ -67,7 +68,7 @@ async function handleSave() {
     }
     router.push('/teacher/questions');
   } catch (e) {
-    message.error('保存失败：' + (e.response?.data?.message || e.message));
+    message.error(errorCopyOf(e, { tag: 'useSaveQuestion.js 保存题目', action: '保存' }));
   }
 }
 
