@@ -4,12 +4,15 @@
  *       创建/提交（含 Q9 软警告二次确认）、放弃确认。
  * 源：:423-474（弹窗态/校验/派生/「套用上次」）、:476-524（表单数据、班级点选、下拉选项）、:534-549（openAdd）、
  *     :574-632（预设/套用上次/草稿）、:633-709（取消/班级加载/创建/提交）。
- * 行为不变：接口路径与请求体（mode='exam'、maxAttempts=null、confirmWithoutStandardPackage 二次提交）、
+ * R3-D1（t3）扩展：新增三开关状态（允许重交+次数 / 计分口径 / 答案可见性）—— 题型默认值预填、
+ *     教师改动后不被覆盖、随草稿存取、随创建请求下发（纯逻辑见 ./assignmentSwitches.js）。
+ * 行为（相对拆分前）：接口路径与 confirmWithoutStandardPackage 二次提交不变；请求体由
+ *     「mode='exam' + maxAttempts=null」改为「三开关按表单值 + mode='exam'」；
  *          草稿 key assign-draft-v1、全部提示文案与 h() 结构、submitting 复位、确认框文案逐字保持。
  * 偏差（与 D1 §1.2 分组的偏差，行为不受影响）：pickError 归 useQuestionPicker（状态属题库），
  *          toggleLock 归 useAssignmentsList（行操作），missing/deadlineText 保留为 computed（不做纯函数改写）。
  */
-import { ref, reactive, computed, onBeforeUnmount, h } from 'vue';
+import { ref, reactive, computed, watch, onBeforeUnmount, h } from 'vue';
 import { message } from 'ant-design-vue';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
@@ -17,6 +20,12 @@ import request from '../../api/request.js';
 import { useConfirm } from '../useConfirm.js';
 import { classCount } from './assignmentsPure.js';
 import { useQuestionPicker } from './useQuestionPicker.js';
+import {
+  ANSWER_VISIBILITY_OPTIONS, COST_TIP, SCORE_POLICY_OPTIONS,
+  answerVisibilityHint, answerVisibilityLabel, buildSwitchPayload, isProjectQuestion,
+  maxAttemptsError as validateMaxAttempts, nextSwitchesForKind, questionKind, scorePolicyHint, scorePolicyLabel,
+  switchDefaultsFor,
+} from './assignmentSwitches.js';
 
 dayjs.locale('zh-cn');   // 源 :311（原在 setup 首行；模块级一次性设定，效果与拆分前一致）
 
@@ -32,7 +41,41 @@ export function useAssignmentForm({ list, onSaved }) {
     qSelectColumnTitle, qCols, searchQuestions, onQSelect, questionRow, changeQuestion,
   } = useQuestionPicker({ visible });
 
-  /* ===== 布置作业 v2：一页式表单 + 右侧实时摘要（约束：只改 UI · 题目单选 · 模式 UI 暂不显示） ===== */
+  /* ===== 三开关（R3 / US-B1）：①允许重交 + 次数上限 ②计分口径 ③答案可见性 =====
+     默认值按题型预填（编程题：不限次+取最高+提交后可见；实训题：1 次+取最后+发布后可见）；
+     教师手动改过之后，再换题/换题型**不覆盖**教师的选择（switchesTouched）。
+     纯逻辑（默认值/校验/文案/请求体）在 ./assignmentSwitches.js，字段名与后端逐字一致。 */
+  const switches = reactive(switchDefaultsFor(questionKind(null)));
+  const switchesTouched = ref(false);
+  /** 程序化套用默认值期间不算「教师改过」（flush:'sync' 保证标志在赋值期间持续有效） */
+  let applyingDefaults = false;
+  watch(
+    () => [switches.allowResubmit, switches.maxAttempts, switches.scorePolicy, switches.answerVisibility],
+    () => { if (!applyingDefaults) switchesTouched.value = true; },
+    { flush: 'sync' },
+  );
+  function applySwitchDefaults(kind) {
+    applyingDefaults = true;
+    Object.assign(switches, nextSwitchesForKind({
+      current: switches, kind, touched: switchesTouched.value,
+    }));
+    applyingDefaults = false;
+  }
+  /** 选中题目类型变化（选新题 / 换题 / 恢复草稿）⇒ 未手改时重新按题型预填 */
+  watch(() => questionKind(selectedQ.value), (kind) => applySwitchDefaults(kind));
+
+  const maxAttemptsError = computed(() => validateMaxAttempts({
+    allowResubmit: switches.allowResubmit, maxAttempts: switches.maxAttempts,
+  }));
+  const isProjectSelected = computed(() => isProjectQuestion(selectedQ.value));
+  const switchSummary = computed(() => ({
+    score: scorePolicyLabel(switches.scorePolicy),
+    visibility: answerVisibilityLabel(switches.answerVisibility),
+  }));
+  const scorePolicyText = computed(() => scorePolicyHint(switches.scorePolicy));
+  const answerVisibilityText = computed(() => answerVisibilityHint(switches.answerVisibility));
+
+  /* ===== 布置作业 v2：一页式表单 + 右侧实时摘要（约束：只改 UI · 题目单选） ===== */
   /** ≤768 时弹窗改为全屏 sheet（宽度走 prop，避免用 !important 盖 antd 的行内宽度；高度/圆角见文件末尾非 scoped 段） */
   const narrowMq = window.matchMedia('(max-width: 768px)');
   const isNarrow = ref(narrowMq.matches);
@@ -56,6 +99,7 @@ export function useAssignmentForm({ list, onSaved }) {
     if (!selectedCIds.value.length) m.push('班级');
     if (!timeForm.title.trim()) m.push('作业标题');
     if (!(timeForm.timeRange && timeForm.timeRange.length)) m.push('起止时间');
+    if (maxAttemptsError.value) m.push('次数上限');
     return m;
   });
   const deadlineText = computed(() => {
@@ -96,15 +140,20 @@ export function useAssignmentForm({ list, onSaved }) {
     if (idx >= 0) selectedCIds.value.splice(idx, 1);
     else selectedCIds.value.push(id);
   }
-  /* 模式 UI 暂不显示 → 去掉了 isPractice / maxAttempts；提交口径仍是 mode='exam'、maxAttempts=null */
-  const timeForm = reactive({ title: '', description: '', timeRange: [], allowResubmit: false });
+  /* R3-D1：开关①（允许重交/次数）与②③ 独立成上面的 switches；timeForm 只留标题/说明/时间。
+     mode 仍固定 'exam'（US-B5 后行为由三开关驱动，建作业不再写 practice）。 */
+  const timeForm = reactive({ title: '', description: '', timeRange: [] });
 
   async function openAdd() {
     submitting.value = false;
     selectedQIds.value = [];
     selectedCIds.value = [];
     selectedQ.value = null;
-    Object.assign(timeForm, { title: '', description: '', timeRange: [], allowResubmit: false });
+    Object.assign(timeForm, { title: '', description: '', timeRange: [] });
+    switchesTouched.value = false;                          // 新开一次布置 ⇒ 回到题型默认值
+    applyingDefaults = true;
+    Object.assign(switches, switchDefaultsFor(questionKind(null)));
+    applyingDefaults = false;
     titleTouched.value = false;
     timeTouched.value = false;
     pickTouched.value = false;
@@ -141,7 +190,7 @@ export function useAssignmentForm({ list, onSaved }) {
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
         title: timeForm.title,
         description: timeForm.description,
-        allowResubmit: timeForm.allowResubmit,
+        ...buildSwitchPayload(switches),   // 三开关一并存草稿（字段名与后端一致）
         timeRange: (timeForm.timeRange || []).map((d) => d.toISOString()),
         classIds: selectedCIds.value.slice(),
         questionIds: selectedQIds.value.slice(),
@@ -162,7 +211,13 @@ export function useAssignmentForm({ list, onSaved }) {
       const d = JSON.parse(raw);
       timeForm.title = d.title || '';
       timeForm.description = d.description || '';
-      timeForm.allowResubmit = !!d.allowResubmit;
+      // 旧草稿没有开关字段 ⇒ 保持「未手改」，由题型 watcher 按选中题目类型预填默认值
+      if (['allowResubmit', 'maxAttempts', 'scorePolicy', 'answerVisibility'].some((k) => k in d)) {
+        applyingDefaults = true;
+        Object.assign(switches, buildSwitchPayload(d));
+        applyingDefaults = false;
+        switchesTouched.value = true;
+      }
       timeForm.timeRange = (d.timeRange || []).map((s) => dayjs(s));
       selectedCIds.value = (d.classIds || []).filter((id) => avalClasses.value.some((c) => c.id === id));
       selectedQIds.value = (d.questionIds || []).filter((id) => questions.value.some((q) => q.id === id));
@@ -195,10 +250,9 @@ export function useAssignmentForm({ list, onSaved }) {
     const payload = {
       title: timeForm.title, description: timeForm.description,
       startTime: timeForm.timeRange[0].toISOString(), endTime: timeForm.timeRange[1].toISOString(),
-      // 模式 UI 暂不显示：口径与改前「非练习态」完全一致（mode='exam'、maxAttempts=null）
-      allowResubmit: timeForm.allowResubmit,
-      mode: 'exam',
-      maxAttempts: null,
+      // R3-D1（US-B1）：三开关按表单当前值下发（字段名与后端一致）
+      ...buildSwitchPayload(switches),
+      mode: 'exam',   // 建作业不再写 practice；行为由三开关驱动（US-B5）
       questionIds: selectedQIds.value.slice(), classIds: selectedCIds.value.slice(),
     };
     if (confirmWithoutStandardPackage) payload.confirmWithoutStandardPackage = true;
@@ -257,6 +311,10 @@ export function useAssignmentForm({ list, onSaved }) {
     visible, modalWidth, timeForm, titleTouched, timeTouched, pickTouched, classTouched,
     titleError, timeError, pickError, classError, missing, deadlineText, totalStudents,
     lastClasses, lastTime, submitting, draftRestored, selectedQ,
+    // 三开关（US-B1）：状态 + 派生文案/选项（模板只做绑定）
+    switches, switchesTouched, maxAttemptsError, isProjectSelected, switchSummary,
+    scorePolicyText, answerVisibilityText,
+    scorePolicyOptions: SCORE_POLICY_OPTIONS, answerVisibilityOptions: ANSWER_VISIBILITY_OPTIONS, costTip: COST_TIP,
     avalClasses, selectedCIds, classSearch, filteredClasses, classOptions, toggleClass,
     questions, qKeyword, qCols, qSelectColumnTitle, selectedQIds, searchQuestions, onQSelect, questionRow, changeQuestion,
     openAdd, onCancel, submit, saveDraftAndClose, clearDraft, loadClasses, applyPreset,

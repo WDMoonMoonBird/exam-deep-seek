@@ -132,9 +132,10 @@
     </ListPage>
 
     <!-- 布置作业（一页式两栏 —— 左分区表单 / 右实时摘要）
-         约束：只改 UI（数据全部取自现有接口：班级人数 _count.studentClasses、题目 type/maxScore、
-         上次作业 assignmentClasses[].classId + startTime/endTime）· 题目单选 · 考试/练习模式 UI 暂不显示
-         （提交口径不变：mode='exam'、maxAttempts=null）。 -->
+         数据全部取自现有接口（班级人数 _count.studentClasses、题目 type/maxScore、
+         上次作业 assignmentClasses[].classId + startTime/endTime）· 题目单选。
+         R3-D1（US-B1）：⑤ 提交与评分 = 三个正交开关（允许重交 + 次数上限 / 计分口径 / 答案可见性），
+         按题型（题目 type：project = 实训题）预填默认值且可修改；mode 仍固定 'exam'（不写 practice）。 -->
     <a-modal
       :open="visible"
       title="布置作业"
@@ -241,7 +242,7 @@
             <div v-if="classError" class="afld-err afld-err--block" role="alert">⚠ 请至少选择一个班级</div>
           </section>
 
-          <!-- ④ 起止时间（默认已填 + 快捷预设；「允许补交」保留为考试态下的独立选项） -->
+          <!-- ④ 起止时间（默认已填 + 快捷预设） -->
           <section class="ablk">
             <div class="ablk-h">
               <b>④ 起止时间</b><span class="ablk-n">已默认填好，可修改</span>
@@ -265,10 +266,33 @@
                 </div>
                 <div v-if="timeError" class="afld-err" role="alert">⚠ 请选择起止时间</div>
               </div>
+            </div>
+          </section>
+          <!-- ⑤ 提交与评分：三个正交开关（US-B1）—— 按题型预填默认值，可修改 -->
+          <section class="ablk">
+            <div class="ablk-h"><b>⑤ 提交与评分</b><span class="ablk-n">已按题型预填，可修改</span></div>
+            <div class="ablk-b">
               <div class="afld">
-                <label>允许补交</label>
-                <div class="switch-row"><span>截止后仍可提交（记为补交）</span><a-switch v-model:checked="timeForm.allowResubmit" /></div>
+                <label>允许重交</label>
+                <div class="switch-row"><span>关闭则每人只能提交一次</span><a-switch v-model:checked="switches.allowResubmit" /></div>
               </div>
+              <div class="afld">
+                <label for="assign-max-attempts">提交次数上限</label>
+                <a-input-number id="assign-max-attempts" v-model:value="switches.maxAttempts" :min="1" :max="99" :disabled="!switches.allowResubmit" placeholder="不限次" class="w-full" />
+                <div class="ahint">留空 = 不限次；达到上限后学生再次提交会被拒绝并提示「已达提交次数上限」。</div>
+                <div v-if="maxAttemptsError" class="afld-err" role="alert">⚠ {{ maxAttemptsError }}</div>
+              </div>
+              <div class="afld">
+                <label for="assign-score-policy">计分口径</label>
+                <a-select id="assign-score-policy" v-model:value="switches.scorePolicy" :options="scorePolicyOptions" class="w-full" />
+                <div class="ahint">{{ scorePolicyText }}</div>
+              </div>
+              <div class="afld">
+                <label for="assign-answer-visibility">答案可见性</label>
+                <a-select id="assign-answer-visibility" v-model:value="switches.answerVisibility" :options="answerVisibilityOptions" class="w-full" />
+                <div class="ahint">{{ answerVisibilityText }}</div>
+              </div>
+              <div v-if="isProjectSelected" class="cost-tip" role="note">{{ costTip }}</div>
             </div>
           </section>
         </div>
@@ -280,6 +304,8 @@
               <div class="kv"><dt>题目</dt><dd>{{ selectedQIds.length }} 题</dd></div>
               <div class="kv"><dt>班级</dt><dd>{{ selectedCIds.length }} 个 · {{ totalStudents }} 人</dd></div>
               <div class="kv"><dt>截止</dt><dd>{{ deadlineText }}</dd></div>
+              <div class="kv"><dt>计分</dt><dd>{{ switchSummary.score }}</dd></div>
+              <div class="kv"><dt>答案解析</dt><dd>{{ switchSummary.visibility }}</dd></div>
             </dl>
           </div>
           <div class="aready" :class="missing.length ? 'is-warn' : 'is-ok'" role="status">
@@ -306,7 +332,9 @@ import { useAssignmentsPage } from '../../composables/assignments/useAssignments
 
 /**
  * ★R2-B64 / t4：本页 script 427 行 → composables/assignments/*（列表 / 布置作业表单 / 题目选择 / 纯函数）。
- * 函数体逐字搬移，行为不变；模板绑定的名字与拆分前逐一相同 ⇒ <template> 与两段 <style> 零改动。
+ * ★R3-D1 / t3：⑤ 提交与评分的三开关（允许重交+次数 / 计分口径 / 答案可见性 + 实训题成本提示）
+ *   落在本文件模板与 composables/assignments/{useAssignmentForm,assignmentSwitches}.js；
+ *   默认值与字段名同后端（assignmentSwitchDefaults / POST /teacher/assignments 入参）。
  */
 const {
   loading, list, pagination, filters, summary, hasFilter, classOptions,
@@ -314,6 +342,9 @@ const {
   visible, modalWidth, timeForm, titleTouched, timeTouched, titleError, timeError, pickError, classError,
   missing, deadlineText, totalStudents, lastClasses, lastTime, submitting, draftRestored, selectedQ,
   avalClasses, selectedCIds, classSearch, filteredClasses, toggleClass, applyPreset, applyLastClasses, applyLastTime,
+  // R3-D1（US-B1）：三开关状态与派生文案/选项（纯逻辑见 composables/assignments/assignmentSwitches.js）
+  switches, maxAttemptsError, isProjectSelected, switchSummary, scorePolicyText, answerVisibilityText,
+  scorePolicyOptions, answerVisibilityOptions, costTip,
   questions, qKeyword, qCols, qSelectColumnTitle, selectedQIds, searchQuestions, onQSelect, questionRow, changeQuestion,
   openAdd, onCancel, submit, saveDraftAndClose, clearDraft,
 } = useAssignmentsPage();
@@ -368,6 +399,8 @@ const {
 .qbtn { border: 0; background: transparent; padding: 0 2px; color: var(--text-brand); font-size: var(--fs-caption); cursor: pointer; }
 .qbtn:hover { text-decoration: underline; }
 .switch-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); font-size: var(--fs-body-sm); color: var(--text-secondary); }
+/* R3-D1（US-B1 AC4）：实训题成本提示（与右栏 .aready.is-warn 同一套状态令牌） */
+.cost-tip { padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--status-warning-bd); background: var(--status-warning-bg); color: var(--status-warning-fg); font-size: var(--fs-caption); line-height: 1.5; }
 
 /* 已选题卡（单选：选中后收起表格，避免选项滚出视野） */
 .picked { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3); }
