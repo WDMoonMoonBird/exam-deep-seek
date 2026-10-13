@@ -7,6 +7,7 @@
 import prisma from '../../../../utils/prisma.js';
 import logger from '../../../../utils/logger.js';
 import { resolveVisibleClassScope } from './class-scope.js';
+import { pickCountedScore } from '../../../../domain/services/scorePolicy.js';
 
 export const exportReviewData = async (req, res) => {
   try {
@@ -29,7 +30,8 @@ export const exportReviewData = async (req, res) => {
 
     const submissions = await prisma.submission.findMany({
       where: { assignmentId: aid, studentId: { in: students.map(s => s.studentId) } },
-      include: { subQuestion: true },
+      // R3-D1（US-B4）：导出分与学生端同口径 —— 需要作业的计分口径
+      include: { subQuestion: true, assignment: { select: { scorePolicy: true } } },
     });
 
     const subQuestions = await prisma.subQuestion.findMany({
@@ -44,7 +46,14 @@ export const exportReviewData = async (req, res) => {
       if (!subMap.has(sid)) subMap.set(sid, {});
       const sqKey = s.subQuestionId || s.questionId;
       subMap.get(sid)[sqKey] = {
-        score: s.finalScore ?? s.aiScore,
+        // R3-D1（US-B4）：计入分 = finalScore（教师分，权威）?? 按作业口径的机器分
+        //（best ⇒ bestScore / last ⇒ 最新 aiScore；未配置 ⇒ last = 改动前 finalScore ?? aiScore）
+        score: pickCountedScore({
+          scorePolicy: s.assignment?.scorePolicy,
+          finalScore: s.finalScore,
+          aiScore: s.aiScore,
+          bestScore: s.bestScore,
+        }),
         status: s.status,
         answer: s.answer,
       };

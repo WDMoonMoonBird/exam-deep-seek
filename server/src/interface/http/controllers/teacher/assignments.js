@@ -11,6 +11,7 @@ import { getVisibleClassIds } from '../../../../controllers/teamController.js';
 import { hasStandardPackage } from '../../../../utils/projectPaths.js';
 import { getSchoolId, canTeacherManageClasses } from './guards.js';
 import { buildPublishSnapshot } from '../../../../services/assignmentSnapshot.js';
+import { resolveAssignmentSwitches } from '../../../../domain/services/assignmentSwitches.js';
 
 // ===================== 作业管理 =====================
 
@@ -191,6 +192,8 @@ export const getAssignments = async (req, res) => {
         select: {
           id: true, title: true, startTime: true, endTime: true, createdAt: true,
           mode: true, maxAttempts: true, locked: true,
+          // R3-D1（US-B1）：列表回显三开关，供前端编辑/展示（历史行为不变：仅多回显字段）
+          allowResubmit: true, scorePolicy: true, answerVisibility: true,
           teacher: { select: { realName: true } },
           assignmentClasses: { include: { class: { select: { id: true, name: true } } } },
           _count: { select: { assignmentQuestions: true } },
@@ -308,7 +311,9 @@ export const getAssignment = async (req, res) => {
 
 export const createAssignment = async (req, res) => {
   try {
-    const { title, description, startTime, endTime, allowResubmit, questionIds, classIds, mode, maxAttempts, confirmWithoutStandardPackage } = req.body;
+    // R3-D1（US-B1）：三开关入参 ②计分口径 scorePolicy ③答案可见性 answerVisibility
+    //（①允许重交/次数上限 = 既有 allowResubmit/maxAttempts，本次只做题型默认值归一化，零新增列）
+    const { title, description, startTime, endTime, allowResubmit, questionIds, classIds, mode, maxAttempts, scorePolicy, answerVisibility, confirmWithoutStandardPackage } = req.body;
     if (!title || !startTime || !endTime || !questionIds?.length || !classIds?.length) {
       return res.status(400).json({ code: 1001, message: '参数错误', data: null });
     }
@@ -354,6 +359,12 @@ export const createAssignment = async (req, res) => {
       logger.warn({ questionIds: openProjectWarnings.map(w => w.questionId) }, '按开放性题目布置作业（教师已确认无标准工程包）');
     }
 
+    // R3-D1 / D2 题型默认值：题目里含实训题（type='project'）⇒ 1 次 + 取最后 + 发布后可见；
+    // 纯编程题 ⇒ 不限次 + 取最高 + 提交后可看答案解析。教师显式传值优先（见 resolveAssignmentSwitches）。
+    // 历史作业不经过此处：迁移列默认值 'last'/'after_publish' 即既有行为（US-B1 AC3）。
+    const hasProject = questions.some((q) => q.type === 'project');
+    const sw = resolveAssignmentSwitches({ hasProject, allowResubmit, maxAttempts, scorePolicy, answerVisibility });
+
     const assignment = await prisma.assignment.create({
       data: {
         teacherId: req.user.id,
@@ -362,8 +373,11 @@ export const createAssignment = async (req, res) => {
         startTime: new Date(startTime),
         endTime: new Date(endTime),
         mode: mode || 'exam',
-        allowResubmit: mode === 'practice' ? true : !!allowResubmit,
-        maxAttempts: maxAttempts != null ? +maxAttempts : null,
+        // practice 形态沿用既有强制开重交（US-B5 前保持等价），其余按三开关走
+        allowResubmit: mode === 'practice' ? true : sw.allowResubmit,
+        maxAttempts: sw.maxAttempts,
+        scorePolicy: sw.scorePolicy,
+        answerVisibility: sw.answerVisibility,
         assignmentQuestions: {
           create: questionIds.map((qid, i) => ({ questionId: +qid, sortOrder: i + 1 })),
         },

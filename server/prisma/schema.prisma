@@ -208,8 +208,11 @@ model Assignment {
   startTime        DateTime @map("start_time")
   endTime         DateTime  @map("end_time")
   allowResubmit   Boolean   @default(false) @map("allow_resubmit")
-  mode        String?   @default("exam") @db.VarChar(20)   // 'exam' | 'practice'
+  mode        String?   @default("exam") @db.VarChar(20)   // 'exam' | 'practice'（US-B5：保留字段，不再作为行为开关）
   maxAttempts Int?      @map("max_attempts")               // NULL=不限
+  // R3-D1（US-B1/US-B4/US-B2）：三开关之②③。nullable + DB 默认值 ⇒ 历史行 = 'last'/'after_publish'（既有行为不变）。
+  scorePolicy      String?  @default("last") @map("score_policy") @db.VarChar(16)              // 'best'=取最高(bestScore) | 'last'=取最后(最新 aiScore)
+  answerVisibility String?  @default("after_publish") @map("answer_visibility") @db.VarChar(16) // 'immediate'=评分完成即可见 | 'after_publish'=发布后可见
   locked      Boolean   @default(false)                    // 教师锁定
   createdAt   DateTime  @default(now()) @map("created_at")
   deletedAt   DateTime? @map("deleted_at")

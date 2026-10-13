@@ -56,9 +56,12 @@ export class SubmissionUseCases {
     if (submission && submission.status !== 'draft' && !assignment.allowResubmit && !force) {
       throw new DomainError('已提交，不可重复提交');
     }
-    if (assignment.mode === 'practice' && assignment.maxAttempts != null) {
+    // R3-D1/US-C2：次数上限由**开关**驱动（maxAttempts 已配置即生效），不再以「练习模式」为前提 ——
+    // 需求 v1.0 的练习形态 = 不限次 + 提交后可见答案（US-B5），mode 不再作为行为开关。
+    // 文案对齐 US-C2 AC1：必须出现「已达提交次数上限」。
+    if (assignment.maxAttempts != null) {
       const currentCount = submission?.attemptCount || 0;
-      if (currentCount >= assignment.maxAttempts) throw new DomainError('已达最大提交次数（' + assignment.maxAttempts + '次）');
+      if (currentCount >= assignment.maxAttempts) throw new DomainError('已达提交次数上限（最多 ' + assignment.maxAttempts + ' 次）');
     }
 
     const data = { answer, status: 'submitted', submittedAt: new Date() };

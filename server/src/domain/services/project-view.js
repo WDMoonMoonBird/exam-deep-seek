@@ -89,6 +89,8 @@ export function toTeacherView(submission) {
     attemptCount: submission.attemptCount || 0,
     version: env.currentVersion,
     aiScore: submission.aiScore ?? null,
+    // R3-D1（US-B4 AC4）：历次最高机器分（口径=取最高时的「当前计入分」来源），教师侧可见
+    bestScore: submission.bestScore ?? null,
     aiFeedback: submission.aiFeedback ?? null,
     finalScore: submission.finalScore ?? null,
     teacherFeedback: submission.teacherFeedback ?? null,

@@ -170,7 +170,7 @@ describe('可扩展性：第二个提交仓储替身（替换 SubmissionReposito
     expect(r2.message).toContain('自动提交');
   });
 
-  it('submit 练习次数拦截不变：maxAttempts 达上限 → DomainError', async () => {
+  it('submit 次数拦截不变：maxAttempts 达上限 → DomainError（R3-D1 文案）', async () => {
     const practice = { ...openAssignment, mode: 'practice', maxAttempts: 2 };
     const repo = new SecondSubmissionRepository({
       assignments: { 1: practice },
@@ -178,7 +178,7 @@ describe('可扩展性：第二个提交仓储替身（替换 SubmissionReposito
     });
     const alt = composeAlt({ submissionRepo: repo });
     await expect(alt.submissionUseCases.submit({ assignmentId: 1, studentId: 2, questionId: 3, answer: 'x' }))
-      .rejects.toMatchObject({ message: '已达最大提交次数（2次）' });
+      .rejects.toMatchObject({ message: '已达提交次数上限（最多 2 次）' });
   });
 
   it('saveDraft 不变：新建草稿 / 已提交跳过 / 过期跳过', async () => {

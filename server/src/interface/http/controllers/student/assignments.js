@@ -7,6 +7,8 @@
 import prisma from '../../../../utils/prisma.js';
 import logger from '../../../../utils/logger.js';
 import { toStudentSubmissionView } from './view.js';
+import { pickCountedScore } from '../../../../domain/services/scorePolicy.js';
+import { canSeeAnswerAndAnalysis } from '../../../../domain/services/answerVisibility.js';
 
 // ===================== 作业列表 =====================
 
@@ -59,11 +61,13 @@ export const getAssignments = async (req, res) => {
         where,
         select: {
           id: true, title: true, description: true, startTime: true, endTime: true, allowResubmit: true, createdAt: true, deletedAt: true, mode: true, locked: true,
+          // R3-D1（US-B1/US-B6）：学生端渲染「剩余次数 / 当前计入分」所需的三开关配置（非敏感配置项）
+          maxAttempts: true, scorePolicy: true, answerVisibility: true,
           _count: { select: { assignmentQuestions: true } },
           assignmentQuestions: { select: { question: { select: { id: true, type: true, maxScore: true } } } },
           submissions: {
             where: { studentId },
-            select: { id: true, status: true, submittedAt: true, finalScore: true, aiScore: true, attemptCount: true },
+            select: { id: true, status: true, submittedAt: true, finalScore: true, aiScore: true, attemptCount: true, bestScore: true },
           },
         },
         orderBy: { createdAt: 'desc' },
@@ -91,10 +95,12 @@ export const getAssignments = async (req, res) => {
       // exam 模式仅 published 可见；practice 模式 ai_graded/reviewed 亦可见（现有规则不变）。
       const scoreVisible = realSubs.filter((s) =>
         s.status === 'published' || (isPractice && (s.status === 'ai_graded' || s.status === 'reviewed')));
-      // R14：取值口径与 /student/scores 的 totalScore 完全一致 = finalScore ?? aiScore
-      // （published 但教师未定案分时为 aiScore，不再返回 null；aiScore 仅作数值来源，字段名依然不下发）
+      // R14/R3-D1：取值口径与 /student/scores 的 totalScore 完全一致 = 「计入分」
+      //   = finalScore（教师分，权威）?? 按作业计分口径的机器分（best ⇒ bestScore / last ⇒ 最新 aiScore）
+      // 未配置口径的历史作业 ⇒ 'last'，与 R14 的 finalScore ?? aiScore 逐字等价。
+      // aiScore/bestScore 仅作数值来源，字段名依然不下发。
       const scoreValues = scoreVisible
-        .map((s) => (s.finalScore ?? s.aiScore ?? null))
+        .map((s) => pickCountedScore({ scorePolicy: a.scorePolicy, finalScore: s.finalScore, aiScore: s.aiScore, bestScore: s.bestScore }))
         .filter((v) => v != null);
 
       const { submissions, ...rest } = a;
@@ -146,13 +152,16 @@ export const getAssignmentDetail = async (req, res) => {
     // 未发布的提交不返回评分/评语，但练习模式例外。
     // 旧实现 published 分支直接 return s（整行下发，含 aiScore/aiFeedback）——已改为白名单裁剪。
     const isPractice = assignment.mode === 'practice';
-    const safeSubmissions = submissions.map((s) => toStudentSubmissionView(s, isPractice));
+    const safeSubmissions = submissions.map((s) => toStudentSubmissionView(s, isPractice, assignment.scorePolicy));
 
-    // 学生有权看答案的条件 → 考试已发布 或 练习已评分
-    const canSeeAnswers = safeSubmissions.some(s =>
-      s.status === 'published' ||
-      (isPractice && (s.status === 'ai_graded' || s.status === 'reviewed'))
-    );
+    // R3-D1（US-B2）：是否下发标准答案/解析 —— 由可见性开关驱动
+    //   'immediate' 评分完成即可见 / 'after_publish' 仅发布后可见（默认）；
+    //   历史作业（列默认 'after_publish'）与 practice 旧规则（已评分即可见）均保持原行为。
+    const canSeeAnswers = safeSubmissions.some((s) => canSeeAnswerAndAnalysis({
+      answerVisibility: assignment.answerVisibility,
+      status: s.status,
+      isPractice,
+    }));
 
     // strip 敏感字段：未出分时隐藏参考答案
     if (!canSeeAnswers) {

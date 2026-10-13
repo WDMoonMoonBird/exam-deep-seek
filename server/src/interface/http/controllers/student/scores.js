@@ -4,6 +4,7 @@
 
 import prisma from '../../../../utils/prisma.js';
 import logger from '../../../../utils/logger.js';
+import { pickCountedScore } from '../../../../domain/services/scorePolicy.js';
 
 // ===================== 查看成绩 =====================
 
@@ -21,7 +22,7 @@ export const getScores = async (req, res) => {
       include: {
         question: { select: { id: true, title: true, maxScore: true } },
         subQuestion: { select: { id: true, title: true } },
-        assignment: { select: { id: true, title: true, mode: true } },
+        assignment: { select: { id: true, title: true, mode: true, scorePolicy: true } },
       },
       orderBy: { reviewedAt: 'desc' },
     });
@@ -43,10 +44,18 @@ export const getScores = async (req, res) => {
         });
       }
       const agg = assignMap.get(key);
-      agg.totalScore += s.finalScore ?? s.aiScore ?? 0;
+      // R3-D1（US-B4）：计入分 = finalScore（教师分，权威）?? 按作业口径的机器分
+      //（best ⇒ bestScore / last ⇒ 最新 aiScore；未配置 ⇒ last = 改动前口径）。与 /student/assignments 一致。
+      const counted = pickCountedScore({
+        scorePolicy: s.assignment?.scorePolicy,
+        finalScore: s.finalScore,
+        aiScore: s.aiScore,
+        bestScore: s.bestScore,
+      });
+      agg.totalScore += counted ?? 0;
       agg.subItems.push({
         title: s.subQuestion?.title || s.question.title,
-        score: s.finalScore ?? s.aiScore,
+        score: counted,
         feedback: s.teacherFeedback || s.aiFeedback,
       });
     }

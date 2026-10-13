@@ -5,6 +5,7 @@
  */
 
 import { DomainError, EntityNotFoundError } from '../../../../domain/errors.js';
+import { pickCountedScore } from '../../../../domain/services/scorePolicy.js';
 
 // ===================== 提交答案 =====================
 
@@ -28,17 +29,22 @@ export function mapSubmissionError(res, err) {
  *   - practice 模式且 ai_graded / reviewed：分数/评语可见（现有规则不变）；
  *   - 其余状态：finalScore / teacherFeedback / bestScore 一律置空。
  *
+ * R3-D1（US-B4）：可见分 = **计入分** —— 教师定案分 finalScore 优先（权威值，不被机器分覆盖），
+ * 否则按作业计分口径取机器分（scorePolicy='best' ⇒ bestScore；'last' ⇒ 最新 aiScore；
+ * 未配置/历史作业 ⇒ 'last'，与改动前逐字等价）。字段名集合不变（安全白名单铁律）。
+ *
  * @param {object} s submission 行
- * @param {boolean} isPractice 作业是否为练习模式
+ * @param {boolean} isPractice 作业是否为练习模式（历史兼容分支，US-B5 后由开关驱动）
+ * @param {string|null} [scorePolicy] 作业计分口径（'best'|'last'；缺省 ⇒ 'last'）
  * @returns {object} 学生可见字段的白名单视图
  */
-export function toStudentSubmissionView(s, isPractice) {
+export function toStudentSubmissionView(s, isPractice, scorePolicy) {
   const published = s.status === 'published';
   const practiceScored = isPractice && (s.status === 'ai_graded' || s.status === 'reviewed');
   const showScore = published || practiceScored;
-  // 可见即取 finalScore ?? aiScore —— 与 /student/scores、/student/assignments 列表完全同口径（t6 收敛）：
-  // published 但教师未定案分时回退 aiScore（数值），aiScore/aiFeedback 字段名依然一律不下发
-  const finalScore = showScore ? (s.finalScore ?? s.aiScore ?? null) : null;
+  const finalScore = showScore
+    ? pickCountedScore({ scorePolicy, finalScore: s.finalScore, aiScore: s.aiScore, bestScore: s.bestScore })
+    : null;
   const teacherFeedback = published
     ? (s.teacherFeedback ?? null)
     : (practiceScored ? (s.teacherFeedback || s.aiFeedback || null) : null);

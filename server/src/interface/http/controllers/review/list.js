@@ -59,7 +59,8 @@ export const getSubmissions = async (req, res) => {
       prisma.submission.findMany({
         where,
         select: {
-          id: true, status: true, aiScore: true, finalScore: true, submittedAt: true,
+          // R3-D1（US-B4 AC4）：教师侧须能看到「取最高」口径下的历次最高分（bestScore）
+          id: true, status: true, aiScore: true, bestScore: true, finalScore: true, submittedAt: true,
           student: { select: { id: true, username: true, realName: true } },
           question: { select: { id: true, title: true, maxScore: true } },
           assignment: { select: { id: true, title: true } },

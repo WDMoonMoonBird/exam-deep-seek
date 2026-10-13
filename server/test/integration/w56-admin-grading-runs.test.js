@@ -168,7 +168,10 @@ describe('W56 管理员批改记录（只读接口语义）', () => {
     }
     expect(ctrl.includes('$queryRawUnsafe')).toBe(true);
     const routes = fs.readFileSync(path.resolve(process.cwd(), 'src/interface/http/routes/admin.js'), 'utf8');
-    expect((routes.match(/router\.get\(/g) || []).length).toBe(3);
+    // 计数口径 = 「admin 路由全部为只读 GET」：现为 4 条
+    //   （/、/loss-distribution、/:id、/:id/log；第 2 条由 646de80 WAVE3/t14「按班看失分项分布」加入，
+    //    属只读聚合接口，断言主旨不变 —— 仍要求**没有任何**写路由）。
+    expect((routes.match(/router\.get\(/g) || []).length).toBe(4);
     expect(/router\.(post|put|patch|delete)\(/.test(routes)).toBe(false);
   });
 });

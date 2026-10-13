@@ -98,18 +98,20 @@ export async function submitProjectCore(req, res) {
           return res.status(403).json({ code: 1003, message: '成绩已发布，如需重交请联系老师', data: null });
         }
 
-        // ---- 次数上限校验 ----
-        // allowResubmit=false：已有正式提交（status !== 'draft'）即不可再交
-        if (!guard.assignment.allowResubmit && existing && existing.status !== 'draft') {
-          return res.status(403).json({ code: 1003, message: '该作业不允许重复提交', data: null });
-        }
-        // maxAttempts > 0：attemptCount 达到上限即拒绝
+        // ---- 次数上限校验（US-C2 AC1：文案必须明确为「已达提交次数上限」）----
+        // ★判定顺序：显式配置了次数上限（maxAttempts > 0）时**先按次数拦截**，
+        //   否则「次数=1」的作业会先命中下一段的 allowResubmit 分支，给出泛化的
+        //   「该作业不允许重复提交」，与 US-B1 AC2 / US-C2 AC1 要求的提示不一致。
         if (
           guard.assignment.maxAttempts != null &&
           guard.assignment.maxAttempts > 0 &&
           (existing?.attemptCount ?? 0) >= guard.assignment.maxAttempts
         ) {
-          return res.status(403).json({ code: 1003, message: `已达最大提交次数（${guard.assignment.maxAttempts}次）`, data: null });
+          return res.status(403).json({ code: 1003, message: `已达提交次数上限（最多 ${guard.assignment.maxAttempts} 次）`, data: null });
+        }
+        // allowResubmit=false：已有正式提交（status !== 'draft'）即不可再交（未配置次数上限时的既有行为）
+        if (!guard.assignment.allowResubmit && existing && existing.status !== 'draft') {
+          return res.status(403).json({ code: 1003, message: '该作业不允许重复提交', data: null });
         }
 
         // ---- 解压到版本目录（R7：新目录，不动旧版本）----

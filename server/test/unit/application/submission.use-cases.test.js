@@ -120,26 +120,27 @@ describe('SubmissionUseCases.submit（等价 submitAnswer）', () => {
     }
   });
 
-  it('练习模式达到最大次数 → 拒绝', async () => {
+  // R3-D1（US-C2 AC1）：文案改为「已达提交次数上限」，且不再以 mode 为前提（开关驱动）
+  it('maxAttempts 达上限 → 拒绝（文案：已达提交次数上限）', async () => {
     const uc = new SubmissionUseCases({
       submissionRepo: makeRepo({
         findAssignmentContext: async () => ({ ...assignment, mode: 'practice', maxAttempts: 2, allowResubmit: true }),
         findByAssignmentAndQuestion: async () => ({ id: 9, status: 'draft', attemptCount: 2 }),
       }),
     });
-    await expect(uc.submit(baseCmd)).rejects.toThrow('已达最大提交次数');
+    await expect(uc.submit(baseCmd)).rejects.toThrow('已达提交次数上限（最多 2 次）');
   });
 
-  it('练习模式 maxAttempts=0 且无历史提交 → 拒绝（0>=0）', async () => {
+  it('maxAttempts=0 且无历史提交 → 拒绝（0>=0，边界语义不变）', async () => {
     const uc = new SubmissionUseCases({
       submissionRepo: makeRepo({
         findAssignmentContext: async () => ({ ...assignment, mode: 'practice', maxAttempts: 0 }),
       }),
     });
-    await expect(uc.submit(baseCmd)).rejects.toThrow('已达最大提交次数（0次）');
+    await expect(uc.submit(baseCmd)).rejects.toThrow('已达提交次数上限（最多 0 次）');
   });
 
-  it('练习模式未达上限 → 允许提交', async () => {
+  it('未达上限 → 允许提交', async () => {
     const uc = new SubmissionUseCases({
       submissionRepo: makeRepo({
         findAssignmentContext: async () => ({ ...assignment, mode: 'practice', maxAttempts: 5, allowResubmit: true }),
