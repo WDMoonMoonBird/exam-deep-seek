@@ -45,6 +45,7 @@ export function parseCheckerFeedbackText(raw) {
   // ★R2-B43：自然语言总评（脚本写入 ai_feedback.summary）——缺失时保持旧渲染（分项面板）
   const rawSummary = doc.summary && typeof doc.summary === 'object' && doc.summary.text ? doc.summary : null;
   const failedItems = rows.filter((r) => r.ok === false).map((r) => r.item || r.title).filter(Boolean);
+  const rowsFailedCount = rows.filter((r) => r.ok === false).length;   // ★O2：无 summary 时用**未截断**的分项推断
   const factsFailed = rawSummary && rawSummary.facts && Array.isArray(rawSummary.facts.failed_items) && rawSummary.facts.failed_items.length
     ? rawSummary.facts.failed_items.map((x) => String(x))
     : failedItems;
@@ -70,19 +71,37 @@ export function parseCheckerFeedbackText(raw) {
       facts: rawSummary.facts || null,
     } : null,
     failedItems: factsFailed.slice(0, 12),
-    basisText: buildBasisText({ hits, total: rows.length, score: basisScore, max: maxNum, failedItems: factsFailed }),
+    // ★O2（R2-B45）：真实失分项数 —— 有 summary 时优先 summary.facts.failed_count（写库时即在，**不受 12 条列表截断影响**）；
+    //   旧数据缺该字段 ⇒ 回落数组长度（可能少报，但绝不虚报）；无 summary ⇒ 用未截断的 rows 推断。
+    failedCount: rawSummary
+      ? (() => {
+        const stored = rawSummary.facts && Number.isFinite(Number(rawSummary.facts.failed_count)) ? Number(rawSummary.facts.failed_count) : null;
+        return stored === null ? factsFailed.length : Math.max(stored, factsFailed.length);
+      })()
+      : rowsFailedCount,
+    basisText: buildBasisText({
+      hits, total: rows.length, score: basisScore, max: maxNum, failedItems: factsFailed,
+      failedCount: rawSummary
+        ? (() => {
+          const stored = rawSummary.facts && Number.isFinite(Number(rawSummary.facts.failed_count)) ? Number(rawSummary.facts.failed_count) : null;
+          return stored === null ? factsFailed.length : Math.max(stored, factsFailed.length);
+        })()
+        : rowsFailedCount,
+    }),
   };
 }
 
-/** 一行依据：本次 N 分 ｜ M 项检查通过 K 项 ｜ 失分：P06、P24… */
-export function buildBasisText({ hits = 0, total = 0, score = null, max = null, failedItems = [] } = {}) {
+/** 一行依据：本次 N 分 ｜ M 项检查通过 K 项 ｜ 失分：P06、P24…（「等 N 项」用**真实**失分项数） */
+export function buildBasisText({ hits = 0, total = 0, score = null, max = null, failedItems = [], failedCount = null } = {}) {
   const parts = [];
   if (score !== null && score !== undefined) parts.push('本次 ' + fmtNum(Number(score)) + (max === null || max === undefined ? ' 分' : ' / ' + fmtNum(Number(max)) + ' 分'));
   parts.push(total + ' 项检查通过 ' + hits + ' 项');
   const failed = (Array.isArray(failedItems) ? failedItems : []).filter(Boolean);
-  if (failed.length) {
+  // ★O2：条目数取 max(真实计数, 已列条目数) —— 旧数据（无 failed_count）回落条目数，且永不因截断而少报
+  const n = Number.isFinite(Number(failedCount)) ? Math.max(Number(failedCount), failed.length) : failed.length;
+  if (n > 0 || failed.length > 0) {
     const shown = failed.slice(0, 6).join('、');
-    parts.push('失分：' + shown + (failed.length > 6 ? ' 等 ' + failed.length + ' 项' : ''));
+    parts.push('失分：' + shown + (n > 6 ? ' 等 ' + n + ' 项' : ''));
   } else if (total > 0) {
     parts.push('无失分项');
   }

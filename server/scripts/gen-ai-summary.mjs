@@ -21,7 +21,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import prisma from '../src/utils/prisma.js';
-import { computeCost } from '../src/services/dshSessionUsage.js';
+import { computeCost, priceModelKey, resolvePriceTable } from '../src/services/dshSessionUsage.js';
 
 const NL = String.fromCharCode(10);
 export const PROMPT_VERSION = 'ai-summary/1';
@@ -140,19 +140,47 @@ export function mergeSummary(currentRaw, summary) {
   return { text: JSON.stringify(base), doc: base };
 }
 
-/** 估算单次调用费用（复用平台价目口径；仅用于护栏展示） */
+/**
+ * ★O1（R2-B45）：未登记价目的型号 ⇒ `computeCost` 返回 `ok:false / cost_total:null`，
+ * 旧实现把它当 0 ⇒ 逐份 cost=0.000000 ⇒ **`--max-cost` 静默失效**（C 实测 `--model deepseek-reasoner`）。
+ * 修法（选项 a）：未知型号按价目表内**最高的 peak 档**作保守上限估算，并要求调用方打印 `PRICE_FALLBACK` 警示
+ * ⇒ 成本护栏在未知型号下**仍然可信**（宁可高估、不可静默放过）。
+ */
+export function conservativeUpperBoundPrice(table = null) {
+  const t = resolvePriceTable(table);
+  let best = null;
+  for (const [key, def] of Object.entries(t.models || {})) {
+    const p = def && def.peak ? def.peak : null;
+    if (!p) continue;
+    const rank = Number(p.cache_hit || 0) + Number(p.cache_miss || 0) + Number(p.output || 0);
+    if (!best || rank > best.rank) best = { model_key: key, peak: p, rank };
+  }
+  if (!best) best = { model_key: '(builtin-max)', peak: { cache_hit: 0.30, cache_miss: 9, output: 27 }, rank: 0 };
+  return best;
+}
+
+/** 估算单次调用费用（复用平台价目口径；未知型号 ⇒ 保守上限 + fallback 标记） */
 export function estimateCostOfUsage(usage, model, at = new Date()) {
-  const c = computeCost({
-    totals: {
-      cache_read_tokens: Number((usage && usage.prompt_cache_hit_tokens) || 0),
-      uncached_input_tokens: Number((usage && (usage.prompt_cache_miss_tokens ?? usage.prompt_tokens)) || 0),
-      output_tokens: Number((usage && usage.completion_tokens) || 0),
-      cache_write_tokens: 0,
-    },
-    model: model || null,
-    at,
-  });
-  return { cost_total: c.cost_total === null || c.cost_total === undefined ? 0 : c.cost_total, currency: c.currency || 'CNY', tier: c.tier || null, ok: c.ok !== false };
+  const totals = {
+    cache_read_tokens: Number((usage && usage.prompt_cache_hit_tokens) || 0),
+    uncached_input_tokens: Number((usage && (usage.prompt_cache_miss_tokens ?? usage.prompt_tokens)) || 0),
+    output_tokens: Number((usage && usage.completion_tokens) || 0),
+    cache_write_tokens: 0,
+  };
+  const c = computeCost({ totals, model: model || null, at });
+  if (c.ok !== false && c.model_key) {
+    return { cost_total: c.cost_total === null || c.cost_total === undefined ? 0 : c.cost_total, currency: c.currency || 'CNY', tier: c.tier || null, ok: true, fallback: false, model_key: c.model_key, reason: null };
+  }
+  // ★未知型号（未登记价目）⇒ 保守上限（峰值档）估算，并标记 fallback ⇒ 护栏仍可拦住
+  const fb = conservativeUpperBoundPrice();
+  const cost = (totals.cache_read_tokens * Number(fb.peak.cache_hit || 0)
+    + totals.uncached_input_tokens * Number(fb.peak.cache_miss || 0)
+    + totals.output_tokens * Number(fb.peak.output || 0)) / 1e6;
+  return {
+    cost_total: cost, currency: 'CNY', tier: 'fallback_upper_bound(peak)', ok: true,
+    fallback: true, fallback_rule: fb.model_key + '.peak', model_key: null,
+    reason: c.reason || 'model_not_priced',
+  };
 }
 
 /** 单次 chat/completions 调用（可注入 fetchImpl；返回 {ok, text, finish_reason, usage, error, status}） */
@@ -278,12 +306,24 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || (!args.assignmentId && !args.submissionId)) { console.log(USAGE); process.exit(args.help ? 0 : 1); }
   const cfg = await resolveModelConfig(args);
+  // ★O1（R2-B45）：未登记价目的型号 ⇒ 先声明保守上限（否则 computeCost 返回 null ⇒ 旧实现当成 0 ⇒ 护栏静默失效）
+  const priceTable = resolvePriceTable(null);
+  const modelPriced = !!priceModelKey(cfg.model, priceTable);
+  let priceFallback = null;
+  if (!modelPriced) {
+    const fb = conservativeUpperBoundPrice(priceTable);
+    priceFallback = { model: cfg.model, rule: fb.model_key + '.peak', peak: fb.peak };
+    console.log('PRICE_FALLBACK model=' + cfg.model + ' rule=' + fb.model_key + '.peak'
+      + '（未登记价目 ⇒ 按价目表最高档作**保守上限**估算：cache_hit=' + fb.peak.cache_hit + ' cache_miss=' + fb.peak.cache_miss + ' output=' + fb.peak.output
+      + ' 元/百万 token ⇒ 成本护栏仍可信；如需精确价目请在 system_configs.llm_prices 登记该型号）');
+  }
   console.log('MODEL=' + cfg.model + ' BASE_URL=' + cfg.baseUrl + ' MODE=' + (args.apply ? 'apply' : 'dry-run')
-    + ' MAX_TOKENS=' + args.maxTokens + ' MAX_COST=' + args.maxCost + ' FORCE=' + (args.force ? 'yes' : 'no'));
+    + ' MAX_TOKENS=' + args.maxTokens + ' MAX_COST=' + args.maxCost + ' FORCE=' + (args.force ? 'yes' : 'no')
+    + (modelPriced ? '' : ' PRICE_FALLBACK=yes'));
   const rows = await loadRows(args);
   console.log('ROWS=' + rows.length);
   const before = rows.map((r) => ({ id: Number(r.id), aiScore: r.aiScore === null || r.aiScore === undefined ? null : Number(r.aiScore), finalScore: r.finalScore === null || r.finalScore === undefined ? null : Number(r.finalScore), status: String(r.status || '') }));
-  const summary = { mode: args.apply ? 'apply' : 'dry-run', rows: rows.length, generated: 0, changed: 0, skipped_existing: 0, no_breakdown: 0, failed: 0, truncated: 0, cost_estimated: 0, results: [] };
+  const summary = { mode: args.apply ? 'apply' : 'dry-run', rows: rows.length, generated: 0, changed: 0, skipped_existing: 0, no_breakdown: 0, failed: 0, truncated: 0, cost_estimated: 0, price_fallback: priceFallback, results: [] };
   let spent = 0;
   for (const row of rows) {
     const doc = row.aiFeedback && String(row.aiFeedback).trim().startsWith('{') ? safeJson(row.aiFeedback) : null;
@@ -321,7 +361,8 @@ async function main() {
     if (gen.truncated) summary.truncated += 1;
     const payload = {
       text: gen.text,
-      facts: { passed: facts.passed, total: facts.total, score: facts.score, failed_items: facts.failed_items },
+      // ★O2（R2-B45）：failed_count = **真实**失分项数（prompt 仍只列 ≤12 条 ⇒ 展示不再少报）
+      facts: { passed: facts.passed, total: facts.total, score: facts.score, failed_count: facts.failed_count, failed_items: facts.failed_items },
       model: cfg.model,
       prompt_version: PROMPT_VERSION,
       tokens: gen.tokens,
