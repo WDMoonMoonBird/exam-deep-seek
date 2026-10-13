@@ -621,9 +621,11 @@ export const getProjectQuestion = async (req, res) => {
 export const submitProject = (req, res) => {
   upload.single('file')(req, res, async (uploadErr) => {
     if (uploadErr) {
-      // multer 错误中文化
-      const msg = uploadErr.code === 'LIMIT_FILE_SIZE' ? '文件过大（超过 50MB 上限）' : uploadErr.message;
-      return res.status(400).json({ code: 1001, message: msg, data: null });
+      // ★R2-B61（P1-4）：与教师侧**同口径** —— 超限 413 + code1403；其它 multer 错误 400 + 可读 message
+      if (uploadErr.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ code: 1403, message: '文件超过大小限制', data: null });
+      }
+      return res.status(400).json({ code: 1001, message: uploadErr.message, data: null });
     }
     if (!req.file) {
       return res.status(400).json({ code: 1001, message: '未选择文件', data: null });

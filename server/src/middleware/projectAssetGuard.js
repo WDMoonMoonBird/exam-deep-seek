@@ -32,7 +32,7 @@ export default function projectAssetGuard(req, res, next) {
   const p = normalize(req.path);
   for (const prefix of BLOCKED_PREFIXES) {
     if (p === prefix || p.startsWith(prefix + '/')) {
-      return res.status(403).json({ error: 'forbidden' });
+      return res.status(403).json({ code: 1003, message: '无权访问该资源', data: null });   // ★R2-B61（P1-8）：统一 body 形状
     }
   }
   next();

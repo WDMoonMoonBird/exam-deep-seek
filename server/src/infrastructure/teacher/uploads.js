@@ -22,22 +22,46 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({
-  storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
-  defParamCharset: 'utf8',
-  fileFilter: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (ext !== '.zip') return cb(new Error('仅支持 zip 文件'));
-    cb(null, true);
-  },
-});
+// ★R2-B61（P1-4）：上限可注入（便于用「小上限」做 413 测试，无需真传 50MB）
+export const MATERIAL_MAX_BYTES = 50 * 1024 * 1024;
 
-export const uploadMaterial = (req, res) => {
-  upload.single('file')(req, res, (err) => {
-    if (err) return res.status(400).json({ code: 1001, message: err.message, data: null });
-    if (!req.file) return res.status(400).json({ code: 1001, message: '未选择文件', data: null });
-    const url = `/uploads/materials/${req.file.filename}`;
-    res.json({ code: 0, message: '上传成功', data: { url, name: req.file.originalname } });
+export function createMaterialUpload(maxBytes = MATERIAL_MAX_BYTES) {
+  return multer({
+    storage,
+    limits: { fileSize: maxBytes },
+    defParamCharset: 'utf8',
+    fileFilter: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      if (ext !== '.zip') return cb(new Error('仅支持 zip 文件'));
+      cb(null, true);
+    },
   });
-};
+}
+
+const upload = createMaterialUpload();
+
+/**
+ * ★R2-B61（P1-4）：multer 错误 → 统一响应（学生/教师两条上传路径共用同一口径）。
+ *   LIMIT_FILE_SIZE ⇒ 413 + code1403「文件超过大小限制」；其它错误 ⇒ 400 + 可读 message；body 恒为 {code,message,data}。
+ */
+export function multerErrorResponse(err) {
+  if (err && err.code === 'LIMIT_FILE_SIZE') {
+    return { status: 413, body: { code: 1403, message: '文件超过大小限制', data: null } };
+  }
+  const message = (err && err.message) ? String(err.message) : '上传失败';
+  return { status: 400, body: { code: 1001, message, data: null } };
+}
+
+/** 处理函数工厂（测试可传入小上限实例，走的仍是生产同一条代码路径） */
+export function makeUploadMaterialHandler(uploader = upload) {
+  return (req, res) => {
+    uploader.single('file')(req, res, (err) => {
+      if (err) { const m = multerErrorResponse(err); return res.status(m.status).json(m.body); }
+      if (!req.file) return res.status(400).json({ code: 1001, message: '未选择文件', data: null });
+      const url = '/uploads/materials/' + req.file.filename;
+      res.json({ code: 0, message: '上传成功', data: { url, name: req.file.originalname } });
+    });
+  };
+}
+
+export const uploadMaterial = makeUploadMaterialHandler(upload);

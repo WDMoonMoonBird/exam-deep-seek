@@ -5,6 +5,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import bcrypt from 'bcryptjs';
 import path from 'path';
+import fs from 'fs';   // ★R2-B61（P1-6）：错误页存在性检查
 import { fileURLToPath } from 'url';
 import { randomBytes } from 'crypto';
 import logger from './utils/logger.js';
@@ -115,11 +116,35 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// 统一错误处理
-app.use((err, _req, res, _next) => {
-  logger.error({ err }, '服务器内部错误');
-  res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
-});
+// ★R2-B61（P0-3）：/api 未命中 ⇒ 统一 JSON 404。
+//   位置：**所有路由之后、错误中间件之前**；nginx 将 /exam/api/* 前缀改写为 /api/* 后，公网路径同样命中这里
+//   （此前无该中间件 ⇒ Express 默认 HTML 404「Cannot GET /api/xxx」——这正是公网看到 HTML 的原因）。
+app.use('/api', (_req, res) => res.status(404).json({ code: 1404, message: '接口不存在', data: null }));
+
+/**
+ * ★R2-B61（P1-6）：统一错误中间件 —— 按 Accept 分流（json / html）。
+ *   HTML 请求 ⇒ 尝试 sendFile(<errorPagesDir>/<status>.html)；**文件（或目录）不存在 ⇒ 回落 JSON**，绝不再抛、状态码不变；
+ *   其余（含通配 Accept 或不带 Accept）⇒ 保持既有 JSON 契约 { code, message, data } 不变。
+ *   导出为工厂（可注入 errorPagesDir/logger）⇒ 便于单测「HTML 分支」「不存在回落」两类路径。
+ */
+export function makeErrorMiddleware({ errorPagesDir = path.join(__dirname, '../../client/public/error-pages'), log = logger } = {}) {
+  return (err, req, res, _next) => {
+    const status = Number((err && err.status) || (err && err.statusCode)) || 500;
+    try { log.error({ err }, '服务器内部错误'); } catch { /* 日志失败不得影响响应 */ }
+    const wants = typeof req.accepts === 'function' ? req.accepts(['html', 'json']) : 'json';
+    if (wants === 'html') {
+      const file = path.join(errorPagesDir, String(status) + '.html');
+      try { if (fs.existsSync(file)) return res.status(status).sendFile(file); } catch { /* 回落 JSON */ }
+    }
+    const body = status === 500
+      ? { code: 2001, message: '服务器内部错误', data: null }
+      : { code: 1404, message: '请求处理失败', data: null };
+    return res.status(status).json(body);
+  };
+}
+
+// 统一错误处理（Accept 分流见 makeErrorMiddleware）
+app.use(makeErrorMiddleware());
 
 // 启动服务
 async function start() {
