@@ -120,7 +120,11 @@ export function buildEvidenceSummary(runRoot) {
   //    注：out/measure/*.json 在云上真例里是 coverage/matrix 干扰产物 ⇒ 本实现刻意不把它当结果源（由主源 grading-result 负责）。
   try {
     const resDir = path.join(outDir, 'results');
-    if (items.size === 0 && fs.existsSync(resDir)) {
+    // ★R2-CAP3（C 在 t7 抓到 F-T7-1）：此处原写 `items.size`，但本作用域内**没有 items 绑定**
+    //   （Map 名为 slugs）⇒ ReferenceError 被本块外层空 catch 静默吞掉 ⇒ 整段旧布局兜底是死代码：
+    //   ① 仅含 out/results 的历史运行拿不到逐份 submissions；② 新增的 results:non_json|not_result|
+    //   parse_error 三键恒 0 永不可达。修为 slugs.size。
+    if (slugs.size === 0 && fs.existsSync(resDir)) {
       for (const f of fs.readdirSync(resDir).sort()) {
         if (!f.endsWith('.json')) { skip('results:non_json'); continue; }
         const slug = f.replace(/\.[a-z0-9_]*\.?model\.json$/, '').replace(/\.json$/, '');
