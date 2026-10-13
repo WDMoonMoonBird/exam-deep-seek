@@ -6,6 +6,8 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { extractZipSafely } from '../utils/projectArchive.js';
+// ★R2-B62（F-T54-1）：multer 错误映射**复用**教师上传那一条（不再本地新写一份口径）
+import { multerErrorResponse } from '../infrastructure/teacher/uploads.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECTS_UPLOAD_DIR = path.join(__dirname, '../../uploads/projects');
@@ -386,9 +388,9 @@ export const deleteProject = async (req, res) => {
 export const uploadPackage = (req, res) => {
   upload.single('file')(req, res, async (err) => {
     if (err) {
-      // multer 错误中文化：LIMIT_FILE_SIZE → 友好提示
-      const msg = err.code === 'LIMIT_FILE_SIZE' ? '文件过大（超过 50MB 上限）' : err.message;
-      return res.status(400).json({ code: 1001, message: msg, data: null });
+      // ★R2-B62（F-T54-1）：与 studentController/教师上传**同口径** —— LIMIT_FILE_SIZE ⇒ 413 + code1403，其它 ⇒ 400 + 可读 message
+      const m = multerErrorResponse(err);
+      return res.status(m.status).json(m.body);
     }
     if (!req.file) {
       return res.status(400).json({ code: 1001, message: '未选择文件', data: null });

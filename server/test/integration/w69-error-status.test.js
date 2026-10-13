@@ -56,6 +56,15 @@ describe('W69-2 上传超限 ⇒ 413 + code1403（学生/教师两条路径同�
     expect(none.body.message).toBe('未选择文件');
   });
 
+  test('★R2-B62（F-T54-1）防回退：projectController.uploadPackage 复用同一映射，不再本地回落 400', () => {
+    const src = fs.readFileSync(path.resolve(process.cwd(), 'src/controllers/projectController.js'), 'utf8');
+    expect(src).toContain("import { multerErrorResponse } from '../infrastructure/teacher/uploads.js'");
+    expect(src).toContain('const m = multerErrorResponse(err);');
+    expect(src).toContain('return res.status(m.status).json(m.body);');
+    expect(src).not.toContain('文件过大（超过 50MB 上限）');
+    expect(src).not.toContain("err.code === 'LIMIT_FILE_SIZE' ? ");
+  });
+
   test('学生侧同口径（源码断言）：LIMIT_FILE_SIZE 分支 ⇒ 413 + code1403，不再回落 400「文件过大（超过 50MB 上限）」', () => {
     const src = fs.readFileSync(path.resolve(process.cwd(), 'src/controllers/studentController.js'), 'utf8');
     expect(src).toContain("uploadErr.code === 'LIMIT_FILE_SIZE'");
