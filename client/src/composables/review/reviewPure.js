@@ -2,8 +2,8 @@
  * reviewPure.js —— 由 client/src/views/teacher/ReviewDetail.vue 的 <script setup> 拆分而来
  * （step 7 / 批次 B1，源行 306-321 / 325 / 445 / 467-490）。
  * 逐字搬移：本文件内的函数体与源文件对应区间字节相同，未做任何逻辑改动（导出集中在文末）。
- * 注意：本页有四条形态轴（practice/exam × code/objective × narrow × 数据状态族）；
- *      模式真值源唯一（U2 的 data/isPracticeMode），本文件不得自行创建第二份。
+ * ★R3-D9（t17 / F-C4-2）：本页**不再有「模式」真值源**（isPracticeMode 已删除）——
+ *      控件显隐与行为差异一律由三开关与提交状态表达，不看 assignment.mode。
  * 纯叶子：零 vue / 零响应式 / 零内部依赖（只 import dompurify），被 U3/U7 import。
  * getItemKey 是源文件里的死代码（方案 §7.3-K1）—— 照旧保留并导出，不得删。
  */

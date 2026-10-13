@@ -44,10 +44,9 @@
       </template>
 
       <template #toolbar-right>
-        <template v-if="!isPracticeMode">
-          <a-button type="primary" @click="batchReview" :loading="reviewing">一键审核全班</a-button>
-          <a-button @click="batchPublish" :loading="publishing">一键发布全班</a-button>
-        </template>
+        <!-- ★R3-D9（t17 / F-C4-2）：批量控件不再按作业模式隐藏 —— 历史「练习」作业同样需要一键审核/发布 -->
+        <a-button type="primary" @click="batchReview" :loading="reviewing">一键审核全班</a-button>
+        <a-button @click="batchPublish" :loading="publishing">一键发布全班</a-button>
         <a-button @click="exportXlsx">导出 Excel</a-button>
       </template>
 
@@ -211,21 +210,15 @@ function statusText(s) {
   if (s === 'published') return '已发布';
   if (s === 'reviewed') return '已审核';
   if (s === 'abnormal') return '评分异常';
-  if (s === 'ai_graded') return isPracticeMode.value ? '已完成' : 'AI已评分';
+  if (s === 'ai_graded') return 'AI已评分';   // ★R3-D9：不再按模式改写状态文案
   if (s === 'submitted') return '待评分';
   return s;
 }
 
-const isPracticeMode = computed(() => {
-  const first = list.value.find(r => r.mode);
-  return first?.mode === 'practice';
-});
-
-/** 页头副标题：班级名 + 练习模式（原先标题下方的两枚标签） */
+/** 页头副标题：班级名（★R3-D9：不再追加「练习模式」等由 mode 派生的字样） */
 const pageDesc = computed(() => {
   const parts = [];
   if (className.value) parts.push(className.value);
-  if (isPracticeMode.value) parts.push('练习模式');
   return parts.join(' · ');
 });
 

@@ -85,7 +85,8 @@
              徽标是 inline-flex，不改变标题行的行盒高度，故行高与其它两行单元格一致 -->
         <template v-if="column.key === 'title'">
           <span class="lp-stack">
-            <b :title="record.title">{{ record.title }} <StatusTag v-if="record.mode === 'practice'" tone="accent" text="练习" /><lock-outlined v-if="record.locked" class="lock-icon" title="已锁定" /></b>
+            <!-- ★R3-D9（t17）：不再按作业模式打「练习」标（mode 不驱动任何行为）—— 改由三开关回显 -->
+            <b :title="record.title">{{ record.title }}<StatusTag v-if="record.maxAttempts" tone="neutral" :text="'限 ' + record.maxAttempts + ' 次'" /><StatusTag v-else-if="record.allowResubmit" tone="accent" text="可重交" /><lock-outlined v-if="record.locked" class="lock-icon" title="已锁定" /></b>
             <span>共 {{ record._count?.assignmentQuestions || 0 }} 题</span>
           </span>
         </template>
@@ -135,7 +136,7 @@
          数据全部取自现有接口（班级人数 _count.studentClasses、题目 type/maxScore、
          上次作业 assignmentClasses[].classId + startTime/endTime）· 题目单选。
          R3-D1（US-B1）：⑤ 提交与评分 = 三个正交开关（允许重交 + 次数上限 / 计分口径 / 答案可见性），
-         按题型（题目 type：project = 实训题）预填默认值且可修改；mode 仍固定 'exam'（不写 practice）。 -->
+         按题型（题目 type：project = 实训题）预填默认值且可修改；建作业固定写 mode='exam'（mode 不再驱动行为）。 -->
     <a-modal
       :open="visible"
       title="布置作业"

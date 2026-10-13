@@ -2,8 +2,8 @@
  * useReviewActions.js —— 由 client/src/views/teacher/ReviewDetail.vue 的 <script setup> 拆分而来
  * （step 7 / 批次 B4，源行 515-593）。
  * 逐字搬移：本文件内的函数体与源文件对应区间字节相同，未做任何逻辑改动（导出集中在文末）。
- * 注意：本页有四条形态轴（practice/exam × code/objective × narrow × 数据状态族）；
- *      模式真值源唯一（U2 的 data/isPracticeMode），本文件不得自行创建第二份。
+ * ★R3-D9（t17 / F-C4-2）：本页**不再有「模式」真值源**（isPracticeMode 已删除）——
+ *      控件显隐与行为差异一律由三开关与提交状态表达，不看 assignment.mode。
  * 审核动作 + 编辑器实例持有：editorRefs 是全文件唯一的非响应式外部实例容器，
  * 必须单实例（复制成两份 ⇒ formatCode 因 ed?.format 的可选链而静默 no-op，L0/L1/build 三类判据全盲）。
  * 既有行为照旧：setEditorRef 的 if (el) 守卫让条目永不删除（方案 §7.3-K4，不得加 delete）。

@@ -2,8 +2,8 @@
  * useReviewAiPrompt.js —— 由 client/src/views/teacher/ReviewDetail.vue 的 <script setup> 拆分而来
  * （step 7 / 批次 B3，源行 492-513）。
  * 逐字搬移：本文件内的函数体与源文件对应区间字节相同，未做任何逻辑改动（导出集中在文末）。
- * 注意：本页有四条形态轴（practice/exam × code/objective × narrow × 数据状态族）；
- *      模式真值源唯一（U2 的 data/isPracticeMode），本文件不得自行创建第二份。
+ * ★R3-D9（t17 / F-C4-2）：本页**不再有「模式」真值源**（isPracticeMode 已删除）——
+ *      控件显隐与行为差异一律由三开关与提交状态表达，不看 assignment.mode。
  * AI 提示词查看：4 个 ref + 1 个 async 请求；promptSubTitle 的拼接含全角括号，逐字保留。
  */
 import { errorCopyOf } from '../errorCopy.js';   // ★R2-B55：UI 文案统一出口（固定友好 + 原始错误只进 console）

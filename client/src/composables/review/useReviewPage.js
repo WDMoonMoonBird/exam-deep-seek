@@ -2,8 +2,8 @@
  * useReviewPage.js —— 由 client/src/views/teacher/ReviewDetail.vue 的 <script setup> 拆分而来
  * （step 7 / 批次 B4，源行 248-257 / 615-627（2 个 hook 回调体））。
  * 逐字搬移：本文件内的函数体与源文件对应区间字节相同，未做任何逻辑改动（导出集中在文末）。
- * 注意：本页有四条形态轴（practice/exam × code/objective × narrow × 数据状态族）；
- *      模式真值源唯一（U2 的 data/isPracticeMode），本文件不得自行创建第二份。
+ * ★R3-D9（t17 / F-C4-2）：本页**不再有「模式」真值源**（isPracticeMode 已删除）——
+ *      控件显隐与行为差异一律由三开关与提交状态表达，不看 assignment.mode。
  * 接线根（.vue 的唯一 import 入口）：U1..U6 在 setup 同步阶段各调用一次，跨单元以参数注入。
  * route/confirm 只在本文件创建一次并向下注入（不得让 U5/U6 各自 useRoute()/useConfirm()）；
  * 不得新增 useRouter()（模板 :5 的 $router 是全局属性）；两个 hook 的注册语句仍只在 .vue。
@@ -37,7 +37,7 @@ function onShellMq(e) { narrow.value = e.matches; if (!e.matches) panelOpen.valu
 const {
   pageStatus, data, studentName, studentNo, schoolName, q, subQuestions, showMaterial,
   subMap, reviewScores, reviewFeedbacks, regrading, reviewingAll, publishingAll,
-  materialText, safeMaterial, totalAiScore, isPracticeMode, displayStudentNo, getSub, fetch,
+  materialText, safeMaterial, totalAiScore, displayStudentNo, getSub, fetch,
 } = useReviewData({ route });
 const {
   contentRef, activeAnchor, collapsedSqs, toggleCollapse, getNavLabel,
@@ -70,7 +70,7 @@ function onPageUnmounted() {
     route, confirm, narrow, panelOpen, collapsed,
     pageStatus, data, studentName, studentNo, schoolName, q, subQuestions, showMaterial,
     subMap, reviewScores, reviewFeedbacks, regrading, reviewingAll, publishingAll,
-    materialText, safeMaterial, totalAiScore, isPracticeMode, displayStudentNo, getSub, fetch,
+    materialText, safeMaterial, totalAiScore, displayStudentNo, getSub, fetch,
     contentRef, activeAnchor, collapsedSqs, toggleCollapse, getNavLabel, sqResultColor, sqBoxClass, scrollTo, activateAnchor,
     parsedAnswers, getStudentItem, isItemAnswered, isItemCorrect, getItemStudentStr, getItemRefStr, itemResultColor,
     promptModalOpen, promptLoading, promptData, promptSubTitle, showPrompt,

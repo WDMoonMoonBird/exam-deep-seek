@@ -2,9 +2,10 @@
  * useReviewData.js —— 由 client/src/views/teacher/ReviewDetail.vue 的 <script setup> 拆分而来
  * （step 7 / 批次 B2，源行 259-282 / 323 / 439-465 / 595-613）。
  * 逐字搬移：本文件内的函数体与源文件对应区间字节相同，未做任何逻辑改动（导出集中在文末）。
- * 注意：本页有四条形态轴（practice/exam × code/objective × narrow × 数据状态族）；
- *      模式真值源唯一（U2 的 data/isPracticeMode），本文件不得自行创建第二份。
- * 数据所有权唯一（方案 §1.5-A1）：data/isPracticeMode 是模式真值源，跨单元一律以参数注入同一引用。
+ * ★R3-D9（t17 / F-C4-2）：本页**不再有「模式」真值源** —— 原先的 isPracticeMode（读 assignment.mode）
+ *      已删除：控件显隐不再由作业模式决定（历史「练习」作业同样要显示保存审核/发布成绩/批量按钮），
+ *      行为差异统一由三开关（是否允许重交+次数 / 计分口径 / 答案可见性）与提交状态表达。
+ * 注意：本页仍有多条形态轴（code/objective × narrow × 数据状态族）。
  * fetch 的 route.params.id 读取位置逐字保留在函数体内（不得提升为 setup 期常量、不得改形参）；
  * fetch 与浏览器全局同名 —— ④ 自由标识符扫描对它全盲（方案 §4.4-B-1），由 ⑤ T9 兜住。
  */
@@ -51,10 +52,6 @@ const totalAiScore = computed(() => {
   return sum;
 });
 
-const isPracticeMode = computed(() => {
-  return data.value?.assignment?.mode === 'practice';
-});
-
 const displayStudentNo = computed(() => {
   const no = studentNo.value;
   if (!no) return '';
@@ -91,7 +88,7 @@ async function fetch() {
   return {
     pageStatus, data, studentName, studentNo, schoolName, q, subQuestions, showMaterial,
     subMap, reviewScores, reviewFeedbacks, regrading, reviewingAll, publishingAll,
-    materialText, safeMaterial, totalAiScore, isPracticeMode, displayStudentNo, getSub, fetch,
+    materialText, safeMaterial, totalAiScore, displayStudentNo, getSub, fetch,
   };
 }
 
