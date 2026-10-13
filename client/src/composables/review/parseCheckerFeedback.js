@@ -42,6 +42,13 @@ export function parseCheckerFeedbackText(raw) {
   const scoreNum = Number.isFinite(Number(doc.score_int)) ? Number(doc.score_int)
     : (Number.isFinite(Number(doc.raw_score)) ? Number(doc.raw_score) : sumScore);
   const maxNum = Number.isFinite(Number(doc.max_score)) ? Number(doc.max_score) : sumMax;
+  // ★R2-B43：自然语言总评（脚本写入 ai_feedback.summary）——缺失时保持旧渲染（分项面板）
+  const rawSummary = doc.summary && typeof doc.summary === 'object' && doc.summary.text ? doc.summary : null;
+  const failedItems = rows.filter((r) => r.ok === false).map((r) => r.item || r.title).filter(Boolean);
+  const factsFailed = rawSummary && rawSummary.facts && Array.isArray(rawSummary.facts.failed_items) && rawSummary.facts.failed_items.length
+    ? rawSummary.facts.failed_items.map((x) => String(x))
+    : failedItems;
+  const basisScore = rawSummary && rawSummary.facts && Number.isFinite(Number(rawSummary.facts.score)) ? Number(rawSummary.facts.score) : scoreNum;
   return {
     kind: 'checker',
     rows,
@@ -53,7 +60,33 @@ export function parseCheckerFeedbackText(raw) {
     maxText: fmtNum(maxNum),
     checkerId: doc.checker_id || null,
     hasEvidence: rows.some((r) => /证据[:：]/.test(r.comment)),
+    // ★总评 + 一行依据（缺失 ⇒ summary=null ⇒ 视图回落旧分项面板）
+    summary: rawSummary ? {
+      text: String(rawSummary.text),
+      truncated: rawSummary.truncated === true,
+      model: rawSummary.model || null,
+      generatedAt: rawSummary.generated_at || null,
+      tokens: rawSummary.tokens || null,
+      facts: rawSummary.facts || null,
+    } : null,
+    failedItems: factsFailed.slice(0, 12),
+    basisText: buildBasisText({ hits, total: rows.length, score: basisScore, max: maxNum, failedItems: factsFailed }),
   };
+}
+
+/** 一行依据：本次 N 分 ｜ M 项检查通过 K 项 ｜ 失分：P06、P24… */
+export function buildBasisText({ hits = 0, total = 0, score = null, max = null, failedItems = [] } = {}) {
+  const parts = [];
+  if (score !== null && score !== undefined) parts.push('本次 ' + fmtNum(Number(score)) + (max === null || max === undefined ? ' 分' : ' / ' + fmtNum(Number(max)) + ' 分'));
+  parts.push(total + ' 项检查通过 ' + hits + ' 项');
+  const failed = (Array.isArray(failedItems) ? failedItems : []).filter(Boolean);
+  if (failed.length) {
+    const shown = failed.slice(0, 6).join('、');
+    parts.push('失分：' + shown + (failed.length > 6 ? ' 等 ' + failed.length + ' 项' : ''));
+  } else if (total > 0) {
+    parts.push('无失分项');
+  }
+  return parts.join(' ｜ ');
 }
 
 /** 带缓存的入口（模板里可安全多次调用） */

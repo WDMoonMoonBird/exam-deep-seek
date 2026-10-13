@@ -197,18 +197,32 @@
                     <span class="sq-review-fb-label">AI 评语</span>
                     <div class="sq-review-fb-ai">
                       <template v-if="fbOf(sq.id).kind === 'checker'">
-                        <div class="ai-fb-summary">
+                        <!-- ★R2-B43：有总评 ⇒ 顶部醒目总评 + 一行依据 + 分项清单**默认折叠**；无总评 ⇒ 回落既有分项面板（不白屏） -->
+                        <div v-if="fbOf(sq.id).summary" class="ai-sum-box">
+                          <span class="ai-sum-tag">AI 总评</span>
+                          <p class="ai-sum-text">{{ fbOf(sq.id).summary.text }}</p>
+                          <p v-if="fbOf(sq.id).summary.truncated" class="muted ai-sum-note">（该总评因模型输出长度限制被截断，可重新生成）</p>
+                        </div>
+                        <div v-else class="ai-fb-summary">
                           AI 评分依据：本次 {{ fbOf(sq.id).scoreText }} / {{ fbOf(sq.id).maxText }} 分
                           ｜ {{ fbOf(sq.id).total }} 项中 {{ fbOf(sq.id).hits }} 项达标
                         </div>
-                        <div class="ai-fb-list">
-                          <div v-for="(row, ri) in fbOf(sq.id).rows" :key="ri" class="ai-fb-row">
-                            <span class="ai-fb-mark" :title="row.status || ''">{{ row.ok === true ? '✅' : (row.ok === false ? '❌' : '•') }}</span>
-                            <span class="ai-fb-title">{{ row.title || row.item || '（未命名分项）' }}</span>
-                            <span class="ai-fb-score">{{ row.score ?? '—' }} / {{ row.maxScore ?? '—' }}</span>
-                            <span class="ai-fb-comment" :class="{ 'is-evidence': /证据[:：]/.test(row.comment) }">{{ row.comment || '（无判据说明）' }}</span>
-                          </div>
-                        </div>
+                        <div class="ai-fb-basis">{{ fbOf(sq.id).basisText }}</div>
+                        <a-collapse
+                          ghost size="small" class="ai-fb-collapse"
+                          :defaultActiveKey="fbOf(sq.id).summary ? [] : ['items']"
+                        >
+                          <a-collapse-panel key="items" :header="'分项清单（' + fbOf(sq.id).total + ' 项' + (fbOf(sq.id).summary ? '，点击展开' : '') + '）'">
+                            <div class="ai-fb-list">
+                              <div v-for="(row, ri) in fbOf(sq.id).rows" :key="ri" class="ai-fb-row">
+                                <span class="ai-fb-mark" :title="row.status || ''">{{ row.ok === true ? '✅' : (row.ok === false ? '❌' : '•') }}</span>
+                                <span class="ai-fb-title">{{ row.title || row.item || '（未命名分项）' }}</span>
+                                <span class="ai-fb-score">{{ row.score ?? '—' }} / {{ row.maxScore ?? '—' }}</span>
+                                <span class="ai-fb-comment" :class="{ 'is-evidence': /证据[:：]/.test(row.comment) }">{{ row.comment || '（无判据说明）' }}</span>
+                              </div>
+                            </div>
+                          </a-collapse-panel>
+                        </a-collapse>
                       </template>
                       <template v-else-if="fbOf(sq.id).kind === 'text'">{{ fbOf(sq.id).text }}</template>
                       <template v-else>暂无评语</template>
@@ -283,6 +297,15 @@ onUnmounted(onPageUnmounted);
 </script>
 
 <style scoped>
+/* ★R2-B43：AI 总评（顶部醒目）+ 一行依据 + 分项折叠 */
+.ai-sum-box { border: 1px solid var(--border-default); border-left: 3px solid var(--color-primary, #1677ff); border-radius: var(--radius-sm); padding: 8px 10px; background: var(--bg-sunken); margin-bottom: 6px; }
+.ai-sum-tag { display: inline-block; font-size: var(--fs-caption); font-weight: 600; color: var(--color-primary, #1677ff); margin-bottom: 4px; }
+.ai-sum-text { margin: 0; font-size: var(--fs-body, 13px); line-height: 1.7; color: var(--text-primary); white-space: pre-wrap; }
+.ai-sum-note { margin: 4px 0 0; }
+.ai-fb-basis { font-size: var(--fs-caption); color: var(--text-secondary); margin: 4px 0 2px; }
+.ai-fb-collapse :deep(.ant-collapse-header) { padding: 4px 0 !important; font-size: var(--fs-caption); color: var(--text-secondary); }
+.ai-fb-collapse :deep(.ant-collapse-content-box) { padding: 0 !important; }
+
 /* ★R2-B41：AI 评分依据（分项表） */
 .ai-fb-summary { font-size: var(--fs-caption); font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
 .ai-fb-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow: auto; }
