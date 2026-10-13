@@ -547,6 +547,10 @@ export async function archiveRun({ runRoot, jobId, success, runsRoot = DEFAULT_R
   // ★R2-B31（云上实测修正）：把比较性/结果产物一并归档，便于事后审计（存在才复制）
   copy(path.join('out', 'assignment', 'comparability.json'), 'comparability.json');
   copy(path.join('out', 'grading-results.json'), 'grading-results.json');
+  // ★R2-B50（B49-F2）：会话内总评产物随归档落地（**平铺为 summaries.json**，与 session-usage.json/grading-results.json 同风格）
+  //   ⇒ 批改记录页三态（未生成/缓存命中/本次生成）在 usage_json 缺字段的**老数据**上也能由归档 meta 精确推导；
+  //   字节原样复制（不重序列化）。读取侧兼容 out/summaries.json 与 summaries.json 两种位置。
+  copy(path.join('out', 'summaries.json'), 'summaries.json');
   // ★R2-B42（CAP-BF-3）：**复用运行**（measure-only、零 LLM）里装置不写 out/grading-results.json
   //   ⇒ 归档缺「逐份分项」。此处把 run-root 的逐份分项投影（out/grading-result/<slug>.json 等）聚合为
   //   **与 build 路径同形**的 grading-results.json；device 已写过则一行不改（逐字节保留）。
