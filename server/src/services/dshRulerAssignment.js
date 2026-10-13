@@ -19,7 +19,7 @@ import {
 } from './dshRulerStore.js';
 import {
   buildAssignmentDescription, computeContentKey, descriptionContentSha256, explainContentKey,
-  normalizeRulerText, resolveStandardPackageSha256, resolveUploadsRoot, rubricContentSha256, standardDirDigest, UPLOADS_ROOT_ENV,
+  normalizeRulerText, resolveStandardPackageSha256, resolveUploadsRoot, rubricContentSha256, sha256Hex, standardDirDigest, UPLOADS_ROOT_ENV,
 } from './dshRulerContentKey.js';
 
 export const CHECKER_JSON_REL = 'out/checker/checker.json';
@@ -156,17 +156,33 @@ export async function registerRulerFromLocalChecker({ prisma, assignmentId, ques
       Number(assignmentId), candidate.checker_id,
     ).catch(() => []);
     const anchorRow = (aRows && aRows[0]) || null;
+    // ★O1（R2-B38）：字节来源必须可归因 —— ① 锚点原始字节（**优先，逐字节原样取用**）
+    //   ② 无原始字节时才用 checker_json 兜底**重序列化**（此路径必须与锚点 frozen_sha256 对账，见下）
     let raw = anchorRow && anchorRow.checker_raw ? Buffer.from(anchorRow.checker_raw) : null;
+    let bytesSource = raw ? 'anchor_raw' : null;
     let parsed = null;
     if (!raw && candidate.checker_json) {
       try {
         parsed = typeof candidate.checker_json === 'string' ? JSON.parse(candidate.checker_json) : candidate.checker_json;
         raw = Buffer.from(JSON.stringify(parsed, null, 2), 'utf8');
-      } catch { raw = null; }
+        bytesSource = 'checker_json_reserialized';
+      } catch { raw = null; bytesSource = null; }
     }
     if (!raw || raw.length === 0) continue;
     if (!parsed) { try { parsed = JSON.parse(raw.toString('utf8')); } catch { parsed = null; } }
     if (!parsed || parsed.checker_id !== candidate.checker_id) continue;
+    // ★O1：重序列化字节若与锚点登记的 frozen_sha256 不一致 ⇒ 装置 frozen 预检必然 fail-closed（永远不产分），
+    //   且该尺子会按 content_key **全局共享**（影响面远超本作业）⇒ 拒绝登记，交回「造尺」正常路径。
+    const frozenHash = (anchorRow && anchorRow.frozen_sha256) || null;
+    const rawHash = 'sha256:' + sha256Hex(raw);
+    if (bytesSource === 'checker_json_reserialized' && frozenHash && frozenHash !== rawHash) {
+      if (typeof log?.log === 'function') {
+        log.log('RULER_INGEST_SKIP checker_id=' + candidate.checker_id + ' assignment=' + assignmentId
+          + ' reason=reserialized_frozen_mismatch frozen_sha256=' + frozenHash + ' raw_sha256=' + rawHash
+          + '（无锚点原始字节 ⇒ 重序列化与冻结哈希不一致，登记会被装置拒收且会全局共享）');
+      }
+      continue;
+    }
     // ★同级校验（A 复核 B②）：就地登记必须证明「与当前内容同源」，否则会把内容不符的旧尺登记成当前 content_key 的 ready 尺
     const verify = verifyCheckerMatchesContent({ parsed, content });
     if (!verify.ok) {
@@ -175,9 +191,11 @@ export async function registerRulerFromLocalChecker({ prisma, assignmentId, ques
     }
     if (typeof log?.log === 'function') {
       log.log('RULER_INGEST_LOCAL checker_id=' + candidate.checker_id + ' assignment=' + assignmentId + ' question=' + questionId
-        + ' checker_raw_bytes=' + raw.length + ' source=' + (raw && anchorRow && anchorRow.checker_raw ? 'anchor_raw' : 'checker_json'));
+        + ' checker_raw_bytes=' + raw.length + ' source=' + bytesSource
+        + ' frozen_sha256=' + (frozenHash ? (frozenHash === rawHash ? 'matched' : 'mismatch(仅记录，未阻断 anchor_raw 路径)') : 'absent')
+        + (bytesSource === 'checker_json_reserialized' ? ' ★重序列化登记路径（无锚点原始字节；已与 frozen_sha256 对账）' : ''));
     }
-    return { checkerId: candidate.checker_id, frozenSha256: (anchorRow && anchorRow.frozen_sha256) || null, checkerRaw: raw, checkerJson: parsed, source: 'local_checker' };
+    return { checkerId: candidate.checker_id, frozenSha256: frozenHash, checkerRaw: raw, checkerJson: parsed, source: bytesSource };
   }
   return null;
 }

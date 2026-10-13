@@ -48,6 +48,18 @@ export const RULER_TAG = {
   adoptSkip: 'RULER_ADOPT_SKIP',
 };
 
+/**
+ * ★O2（R2-B38，in-scope 部分）：失败原因**前缀归一** —— 绝不把已带 `ruler_` 家族前缀的 last_error 再包一层
+ * （历史数据/重试链里会出现 `ruler_failed:ruler_failed:…`，让 last_error 与日志难以判读）。
+ * ★注意：worker 侧 `'ruler_' + reason`（=> `ruler_ruler_failed:…`）需改 `server/src/services/dshGradingJobWorker.js`，
+ *   该文件**不在本批 inScope** ⇒ 已在 R2-B38 记录 §8 记档并给出单行修法；本函数只保证本层不产生嵌套前缀。
+ */
+export function composeFailedReason(lastError) {
+  const raw = lastError === null || lastError === undefined || lastError === '' ? 'unknown' : String(lastError);
+  const stripped = raw.replace(/^ruler_failed:/, '').replace(/^ruler_/, '');
+  return 'ruler_failed:' + (stripped || 'unknown');
+}
+
 export const RULER_TABLE = 'grading_rulers';
 export const BINDING_TABLE = 'assignment_question_rulers';
 /** 等待者默认轮询间隔 / 超时（env 可覆盖；测试用参数注入缩短） */
@@ -428,7 +440,7 @@ export async function resolveRulerForContent({
         continue; // 别人抢先重试 ⇒ 回到循环等待
       }
       if (typeof log?.warn === 'function') log.warn(RULER_TAG.waitFailed + ' content_key=' + contentKey + ' status=failed last_error=' + (ruler.lastError || '(none)'));
-      return { status: 'failed', ruler, contentKey, zeroLlm: false, reason: 'ruler_failed:' + (ruler.lastError || 'unknown') };
+      return { status: 'failed', ruler, contentKey, zeroLlm: false, reason: composeFailedReason(ruler.lastError) };
     }
     // 无行 ⇒ 先确认「有人能造尺」，否则绝不抢占（避免把本可复用的行污染成 failed）
     if (!(await canProduce())) {

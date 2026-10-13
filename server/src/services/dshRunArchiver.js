@@ -46,6 +46,9 @@ export function buildEvidenceSummary(runRoot) {
   const slugs = new Map();
   const put = (slug, patch) => { const cur = slugs.get(slug) || { slug }; slugs.set(slug, { ...cur, ...patch }); };
   let skippedArtifacts = 0;
+  // ★R2-B38（t6）：按类型计数（诊断/审计用）——**不改变** skipped_artifacts 的既有口径（总数仍是同一个累加器）
+  const skippedKinds = { 'grading-result:non_json': 0, 'grading-result:not_result': 0, 'grading-result:parse_error': 0, 'grading-results-index:no_slug': 0, 'measure:entry': 0, 'results:non_json': 0, 'results:not_result': 0, 'results:parse_error': 0 };
+  const skip = (kind) => { skippedArtifacts += 1; skippedKinds[kind] += 1; };
   const numOf = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
   // 只把「看起来是逐份结果」的 JSON 当 submission（避免 coverage/matrix 之类的干扰产物被计入）
   const looksLikeResult = (doc) => !!doc && (doc.totals !== undefined || doc.score !== undefined || doc.total_score !== undefined
@@ -77,13 +80,13 @@ export function buildEvidenceSummary(runRoot) {
     const perDir = path.join(outDir, 'grading-result');
     if (fs.existsSync(perDir)) {
       for (const f of fs.readdirSync(perDir).sort()) {
-        if (!f.endsWith('.json')) { skippedArtifacts += 1; continue; }
+        if (!f.endsWith('.json')) { skip('grading-result:non_json'); continue; }
         const slug = f.replace(/\.json$/, '');
         try {
           const doc = JSON.parse(fs.readFileSync(path.join(perDir, f), 'utf8'));
-          if (!looksLikeResult(doc)) { skippedArtifacts += 1; continue; }
+          if (!looksLikeResult(doc)) { skip('grading-result:not_result'); continue; }
           put(slug, shapeItem(slug, doc));
-        } catch { skippedArtifacts += 1; }
+        } catch { skip('grading-result:parse_error'); }
       }
     }
   } catch { /* ignore */ }
@@ -95,7 +98,7 @@ export function buildEvidenceSummary(runRoot) {
       const arr = Array.isArray(doc) ? doc : (doc.results || doc.submissions || doc.items || []);
       for (const it of arr) {
         const slug = it.slug || (it.submission && (it.submission.slug || it.submission.id)) || it.id || it.name;
-        if (!slug) { skippedArtifacts += 1; continue; }
+        if (!slug) { skip('grading-results-index:no_slug'); continue; }
         put(String(slug), shapeItem(String(slug), it));
       }
     }
@@ -108,8 +111,8 @@ export function buildEvidenceSummary(runRoot) {
       //   ⇒ 该目录顶层**每个文件**都计 1（口径=文件数、范围=out/measure 顶层），不再用 looksLikeResult 判定
       //   （此前把含 checker_id 的文件当结果 ⇒ 计数恒 0，与记录里「可恢复 >=2」不符）。
       for (const f of fs.readdirSync(noiseDir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
-        if (!f.isFile()) { skippedArtifacts += 1; continue; }   // 子目录也计 1（按「条目数」口径）
-        skippedArtifacts += 1;
+        if (!f.isFile()) { skip('measure:entry'); continue; }   // 子目录也计 1（按「条目数」口径）
+        skip('measure:entry');
       }
     }
   } catch { /* ignore */ }
@@ -119,13 +122,13 @@ export function buildEvidenceSummary(runRoot) {
     const resDir = path.join(outDir, 'results');
     if (items.size === 0 && fs.existsSync(resDir)) {
       for (const f of fs.readdirSync(resDir).sort()) {
-        if (!f.endsWith('.json')) { skippedArtifacts += 1; continue; }
+        if (!f.endsWith('.json')) { skip('results:non_json'); continue; }
         const slug = f.replace(/\.[a-z0-9_]*\.?model\.json$/, '').replace(/\.json$/, '');
         try {
           const doc = JSON.parse(fs.readFileSync(path.join(resDir, f), 'utf8'));
-          if (!looksLikeResult(doc)) { skippedArtifacts += 1; continue; }
+          if (!looksLikeResult(doc)) { skip('results:not_result'); continue; }
           put(slug, shapeItem(slug, doc));
-        } catch { skippedArtifacts += 1; }
+        } catch { skip('results:parse_error'); }
       }
     }
   } catch { /* ignore */ }
@@ -182,6 +185,8 @@ export function buildEvidenceSummary(runRoot) {
     unmeasurable: list.filter((x) => x.measurable === false && x.failed !== true).length,   // ★R2-B33：失败份数不重复计入不可量
     failed: list.filter((x) => x.failed === true).length,
     skipped_artifacts: skippedArtifacts,
+    // ★R2-B38（t6）：按类型计数（键固定全量给出，便于断言与看板；总数口径不变 = skipped_artifacts）
+    skipped_kinds: { ...skippedKinds },
     submissions: list,
   };
 }

@@ -17,6 +17,7 @@ import { standardPackSha256 } from '../utils/snapshotHash.js';
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 20;
 const LOG_LINE_LIMIT = 200;
+const LOG_LIMIT_MAX = 20000;   // ★R2-B38：单次日志窗口上限（防超大响应；不带窗口参数仍是全量）
 
 /** 归档根目录（可经 env 覆盖，与 worker 同口径） */
 export function runsRootDir() {
@@ -43,8 +44,8 @@ export function maskSecrets(text) {
   return String(text).replace(/sk-[A-Za-z0-9_-]{4,}/g, 'sk-****');
 }
 
-/** 读归档内的文件（白名单目录 + 固定文件名），带行数截断与脱敏 */
-function readArchiveFile(dirName, fileName, { maxLines = null, root = null } = {}) {
+/** 读归档内的文件（白名单目录 + 固定文件名），带行数截断/行窗口与脱敏（★先脱敏再开窗） */
+function readArchiveFile(dirName, fileName, { maxLines = null, offset = null, limit = null, root = null } = {}) {
   const dir = safeArchiveDir(dirName, { root });
   if (!dir) return { ok: false, reason: 'invalid_archive_dir' };
   if (!/^[A-Za-z0-9._-]+$/.test(fileName)) return { ok: false, reason: 'invalid_file_name' };
@@ -53,11 +54,27 @@ function readArchiveFile(dirName, fileName, { maxLines = null, root = null } = {
   if (!fs.existsSync(file)) return { ok: false, reason: 'missing' };
   try {
     const raw = fs.readFileSync(file, 'utf8');
-    const masked = maskSecrets(raw);
-    if (maxLines === null) return { ok: true, text: masked };
-    const lines = masked.split(String.fromCharCode(10));
+    const masked = maskSecrets(raw);   // ★R2-B38：脱敏在开窗之前完成 —— 窗口内绝不出现原文
+    const NL = String.fromCharCode(10);
+    if (maxLines === null && offset === null && limit === null) return { ok: true, text: masked };
+    const lines = masked.split(NL);
+    const total = lines.length;
+    if (offset !== null || limit !== null) {
+      // ★R2-B38：行窗口（offset 从 0 起、limit=行数）——不带窗口参数=全量；窗口用于分页查看大日志
+      const from = Math.max(0, Number.isFinite(Number(offset)) ? Number(offset) : 0);
+      const to = limit === null ? total : from + Math.max(0, Number(limit));
+      return {
+        ok: true,
+        text: lines.slice(from, Math.max(from, to)).join(NL),
+        total_lines: total,
+        offset: from,
+        limit: limit === null ? null : Number(limit),
+        truncated: from > 0 || to < total,
+        more: to < total,
+      };
+    }
     const tail = lines.slice(-maxLines);
-    return { ok: true, text: tail.join(String.fromCharCode(10)), truncated: lines.length > maxLines, total_lines: lines.length };
+    return { ok: true, text: tail.join(NL), truncated: total > maxLines, total_lines: total };
   } catch (err) {
     return { ok: false, reason: 'read_failed:' + String(err && err.message).slice(0, 120) };
   }
@@ -581,7 +598,12 @@ export const getGradingRun = async (req, res) => {
       tools: toolsBlock.available ? toolsBlock.items : null,
       tools_info: { available: toolsBlock.available, reason: toolsReason, source: toolsBlock.source || null, count: toolsBlock.available ? toolsBlock.items.length : null },
       submissions: summary && Array.isArray(summary.submissions) ? summary.submissions : [],
-      submission_counts: summary ? { n: summary.n, measurable: summary.measurable, unmeasurable: summary.unmeasurable } : null,
+      submission_counts: summary ? {
+        n: summary.n, measurable: summary.measurable, unmeasurable: summary.unmeasurable,
+        // ★R2-B38（t6）：干扰产物总数 + 按类型计数（旧 summary 无该字段 ⇒ 如实 null，不伪造 0）
+        skipped_artifacts: summary.skipped_artifacts === undefined ? null : Number(summary.skipped_artifacts) || 0,
+        skipped_kinds: summary.skipped_kinds || null,
+      } : null,
       logs: {
         stdout: { present: stdout.ok, tail: stdout.ok ? stdout.text : null, truncated: !!stdout.truncated, missing_reason: stdout.ok ? null : stdout.reason },
         stderr: { present: stderr.ok, tail: stderr.ok ? stderr.text : null, truncated: !!stderr.truncated, missing_reason: stderr.ok ? null : stderr.reason },
@@ -606,13 +628,30 @@ export const getGradingRunLog = async (req, res) => {
     if (/^job-\d+$/.test(id) || /^\d+$/.test(id)) archive = String(id.replace(/^job-/, ''));
     else if (/^archive-/.test(id)) archive = id.slice('archive-'.length);
     if (!safeArchiveDir(archive)) return res.status(400).json({ code: 1001, message: '归档目录名非法', data: null });
-    const r = readArchiveFile(archive, fileName);
+    // ★R2-B38（t6）：行窗口参数校验（非法一律 400，便于前端报错）
+    const hasWindow = req.query.limit !== undefined || req.query.offset !== undefined;
+    if (req.query.limit !== undefined && !Number.isFinite(Number(req.query.limit))) {
+      return res.status(400).json({ code: 1001, message: 'limit 必须是数字（行数）', data: null });
+    }
+    if (req.query.offset !== undefined && !Number.isFinite(Number(req.query.offset))) {
+      return res.status(400).json({ code: 1001, message: 'offset 必须是数字（起始行，0 起）', data: null });
+    }
+    const wantLimit = req.query.limit === undefined ? null : Math.min(LOG_LIMIT_MAX, Math.max(0, Number(req.query.limit)));
+    const wantOffset = req.query.offset === undefined ? null : Math.max(0, Number(req.query.offset));
+    const download = String(req.query.download || '') === '1' || String(req.query.download || '').toLowerCase() === 'true';
+    const r = readArchiveFile(archive, fileName, hasWindow ? { offset: wantOffset === null ? 0 : wantOffset, limit: wantLimit } : {});
     if (!r.ok) {
       res.type('text/plain; charset=utf-8');
+      res.setHeader('X-Log-Missing-Reason', String(r.reason || 'unknown'));
       return res.status(200).send('# 日志缺失\nreason=' + r.reason + '\narchive=' + archive + '\nkind=' + kind + '\n#');
     }
     res.type('text/plain; charset=utf-8');
-    res.setHeader('Content-Disposition', 'inline; filename="' + archive + '.' + kind + '.log"');
+    const from = r.offset === undefined ? 0 : r.offset;
+    const gotLines = String(r.text).split(String.fromCharCode(10)).length;
+    res.setHeader('X-Total-Lines', String(r.total_lines === undefined ? gotLines : r.total_lines));
+    res.setHeader('X-Log-Range', from + '-' + (from + Math.max(0, gotLines - 1)) + (wantLimit === null ? '/全量' : '/limit=' + wantLimit));
+    res.setHeader('X-Log-More', r.more ? 'yes' : 'no');
+    res.setHeader('Content-Disposition', (download ? 'attachment' : 'inline') + '; filename="' + archive + '.' + kind + '.log"');
     res.send(r.text);
   } catch (err) {
     logger.error({ err }, 'R2-B24：批改记录日志读取失败');

@@ -200,7 +200,7 @@
                   <a-tooltip title="原键：price_version（system_configs.llm_prices.effective_from[:source]）">{{ usage.price_version || '—' }}</a-tooltip>
                 </a-descriptions-item>
                 <a-descriptions-item label="时段档">
-                  <a-tooltip title="原键：price_tier（peak=高峰 / idle=空闲 / mixed=跨时段）">{{ usage.price_tier === 'peak' ? '高峰' : (usage.price_tier === 'idle' ? '空闲' : (usage.price_tier || '—')) }}</a-tooltip>
+                  <a-tooltip :title="'原键：price_tier=' + (usage.price_tier || '—') + '（peak=高峰 / idle=空闲 / mixed=跨时段 / na=无模型调用）'">{{ tierLabel(usage.price_tier) }}</a-tooltip>
                 </a-descriptions-item>
               </a-descriptions>
               <p class="muted note">{{ usageNote }}</p>
@@ -274,6 +274,7 @@
               <a-button size="small" @click="loadLog('stdout')">stdout 尾部</a-button>
               <a-button size="small" @click="loadLog('stderr')">stderr 尾部</a-button>
               <a-button size="small" @click="loadLog('run')">run.log</a-button>
+              <a-button size="small" :loading="logDownloading" @click="downloadLog('stdout')">下载全量日志（stdout）</a-button>
             </a-space>
             <a-alert v-if="logMissing" type="info" show-icon class="mb" :message="`该通道日志缺失（present=false，reason=${logMissing}）—— 不是接口错误`" />
             <pre v-if="logText" class="log">{{ logText }}</pre>
@@ -303,12 +304,16 @@ const detail = ref(null);
 const detailError = ref('');
 const logText = ref('');
 const logMissing = ref('');
+const logDownloading = ref(false);   // ★R2-B38：全量日志下载中（走既有 axios 实例 + Blob，不产生裸根 URL）
 
 /** ★R2-B37b 中文化映射（中文为主；英文原键放 tooltip，便于与日志/DB 对照） */
 const TYPE_LABELS = { worker: '批改运行', build: '造尺运行' };
 const SOURCE_LABELS = { worker: '批改 worker', build: '造尺脚本' };
 const HOME_POLICY_LABELS = { 'sessions+credentials': '会话文件 + 凭据（保留 home 骨架）' };
 const STATUS_LABELS = { done: '完成', failed: '失败', pending: '排队中', running: '运行中', needs_rerun: '需重跑' };
+const TIER_LABELS = { peak: '高峰', idle: '空闲', mixed: '跨时段', na: '不适用（无模型调用）' };
+/** ★R2-B38：时段档中文化 —— 零 LLM 时后端给 na ⇒ 与命中率 na 口径统一显示「不适用（无模型调用）」 */
+function tierLabel(t) { return TIER_LABELS[t] || (t || '—'); }
 function typeLabel(t) { return TYPE_LABELS[t] || (t || '—'); }
 function sourceLabel(s) { return SOURCE_LABELS[s] || (s || '—'); }
 function homePolicyLabel(v) { return HOME_POLICY_LABELS[v] || (v || '—'); }
@@ -560,6 +565,33 @@ async function loadLog(kind) {
     else logText.value = String(text).slice(-8000);
   } catch (err) {
     logMissing.value = 'request_failed:' + (err && err.message ? err.message : String(err));
+  }
+}
+
+/** ★R2-B38（t6）：下载**全量**日志（后端 download=1 + 不带窗口参数 ⇒ 整份文件；脱敏在服务端完成）。
+ *  走既有 axios 实例（带鉴权头），Blob + 临时 objectURL 触发下载 ⇒ 不引入任何裸根资源路径。 */
+async function downloadLog(kind) {
+  const id = detail.value && detail.value.run ? detail.value.run.id : null;
+  if (!id) return;
+  logDownloading.value = true;
+  try {
+    const res = await request.get(`/admin/grading-runs/${encodeURIComponent(id)}/log`, {
+      params: { kind, download: 1 }, responseType: 'blob',
+    });
+    const blob = (res && res.data) || (res && res instanceof Blob ? res : null);
+    if (!blob) { logMissing.value = 'download_failed:empty'; return; }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = String(id) + '.' + kind + '.log';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  } catch (err) {
+    logMissing.value = 'download_failed:' + (err && err.message ? err.message : String(err));
+  } finally {
+    logDownloading.value = false;
   }
 }
 

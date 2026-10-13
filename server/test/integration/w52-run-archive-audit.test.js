@@ -9,6 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import prisma from '../../src/utils/prisma.js';
 import { archiveRun, buildEvidenceSummary, persistJobRun, resolveRunsRoot, tailText } from '../../src/services/dshRunArchiver.js';
+import { getGradingRunLog } from '../../src/controllers/adminGradingRunsController.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '../..');
@@ -86,9 +87,19 @@ describe('W52 运行归档 + 落库 + 审计', () => {
     // ★R2-B24b（t93）：真机不变式 —— out/measure 里的 coverage/matrix **干扰产物绝不能被当 submission**（这是云上缺陷的直接反面）
     expect(summary.submissions.some((s) => /coverage|matrix/.test(String(s.slug)))).toBe(false);
     expect(summary.submissions.map((s) => s.slug).sort()).toEqual(['s01', 's02', 's03']);
-    // skipped_artifacts 字段存在（当前实现只在「主源无条目」时才扫描旧布局，故此处只断言字段为数字；
-    // 「扫描 out/measure 并计数」的实现增强属 server/src/services（本轮 out of scope）⇒ 见记录 findings）
-    expect(Number.isFinite(Number(summary.skipped_artifacts))).toBe(true);
+    // ★R2-B38（t6）：恢复**具体**断言（依据：夹具 out/measure 顶层恰有 coverage-s01.json / matrix-s01.json 两个干扰产物；
+    //   out/grading-result 两文件都是结果、out/grading-results.json 条目都带 slug ⇒ 只有 measure:entry 计数为 2）
+    expect(summary.skipped_artifacts).toBe(2);
+    expect(summary.skipped_kinds).toEqual({
+      'grading-result:non_json': 0,
+      'grading-result:not_result': 0,
+      'grading-result:parse_error': 0,
+      'grading-results-index:no_slug': 0,
+      'measure:entry': 2,
+      'results:non_json': 0,
+      'results:not_result': 0,
+      'results:parse_error': 0,
+    });
     expect(res.pruned).toBe(true);
     expect(fs.existsSync(root)).toBe(false);
     expect(logs.join('\n')).toMatch(/RUN_ARCHIVED dir=.* pruned_run_root=yes/);
@@ -218,5 +229,91 @@ describe('W52b 剪枝健壮化 + 口径一致（R2-B34）', () => {
     expect(res.pruned).toBe(false);
     expect(String(res.prune_reason)).toMatch(/shape_guard\(jobId=90002\)/);
     fs.rmSync(notJobShaped, { recursive: true, force: true });
+  }, 60000);
+});
+
+/**
+ * W52c（R2-B38 / t6）：管理员日志接口的**全量下载 + 行窗口**语义（只读、脱敏、非法参数可判定）。
+ * 用临时归档根夹具（不触库）；`DSH_GRADER_RUNS_ROOT` 决定控制器读哪个目录。
+ */
+describe('W52c 日志全量下载 / 行窗口（R2-B38）', () => {
+  const NL = String.fromCharCode(10);
+  const RUNS_ROOT_ENV = 'DSH_GRADER_RUNS_ROOT';
+  const OLD_ROOT = process.env[RUNS_ROOT_ENV];
+  let root = null;
+  const TOTAL = 500;
+
+  function fakeRes() {
+    const res = { statusCode: 200, body: null, text: null, typeValue: null, headers: {} };
+    res.status = (c) => { res.statusCode = c; return res; };
+    res.json = (b) => { res.body = b; return res; };
+    res.send = (t) => { res.text = t; return res; };
+    res.type = (t) => { res.typeValue = t; return res; };
+    res.setHeader = (k, v) => { res.headers[k] = v; return res; };
+    return res;
+  }
+
+  beforeAll(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'w52c-logs-'));
+    process.env[RUNS_ROOT_ENV] = root;
+    const arc = path.join(root, '91001');
+    fs.mkdirSync(arc, { recursive: true });
+    const lines = [];
+    for (let i = 0; i < TOTAL; i += 1) lines.push('line-' + i + ' DEEPSEEK_API_KEY=sk-live-abcdef1234567890');
+    fs.writeFileSync(path.join(arc, 'device.stdout.log'), lines.join(NL) + NL);
+  });
+  afterAll(() => {
+    if (OLD_ROOT === undefined) delete process.env[RUNS_ROOT_ENV]; else process.env[RUNS_ROOT_ENV] = OLD_ROOT;
+    if (root) fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('★W52c-1 全量下载（不带窗口参数）：整份日志返回 + 脱敏 + inline；download=1 ⇒ 附件', async () => {
+    const res = fakeRes();
+    await getGradingRunLog({ params: { id: 'job-91001' }, query: { kind: 'stdout' } }, res);
+    expect(res.statusCode).toBe(200);
+    const got = String(res.text).split(NL).filter(Boolean);
+    expect(got).toHaveLength(TOTAL);                       // ★全量：500 行都在（不是 200 行尾巴）
+    expect(got[0]).toContain('line-0');
+    expect(got[TOTAL - 1]).toContain('line-' + (TOTAL - 1));
+    expect(res.headers['X-Total-Lines']).toBe(String(TOTAL + 1));  // 末行结尾换行 ⇒ 空尾行
+    expect(res.headers['X-Log-More']).toBe('no');
+    expect(String(res.text)).toContain('sk-****');          // 脱敏未回退
+    expect(String(res.text)).not.toContain('sk-live-abcdef1234567890');
+    expect(res.headers['Content-Disposition']).toContain('inline');
+    const dl = fakeRes();
+    await getGradingRunLog({ params: { id: '91001' }, query: { kind: 'stdout', download: '1' } }, dl);
+    expect(dl.headers['Content-Disposition']).toContain('attachment');
+    expect(String(dl.text)).toContain('sk-****');
+  }, 60000);
+
+  it('★W52c-2 行窗口：limit/offset 精确切片 + X-Log-Range/X-Log-More + 上限保护', async () => {
+    const res = fakeRes();
+    await getGradingRunLog({ params: { id: 'job-91001' }, query: { kind: 'stdout', limit: '100', offset: '200' } }, res);
+    expect(res.statusCode).toBe(200);
+    const rows = String(res.text).split(NL);
+    expect(rows).toHaveLength(100);
+    expect(rows[0]).toContain('line-200');
+    expect(rows[99]).toContain('line-299');
+    expect(res.headers['X-Log-Range']).toContain('200-299');
+    expect(res.headers['X-Log-More']).toBe('yes');
+    // 尾部窗口：offset 到底 ⇒ more=no
+    const tail = fakeRes();
+    await getGradingRunLog({ params: { id: 'job-91001' }, query: { kind: 'stdout', limit: '100', offset: String(TOTAL - 10) } }, tail);
+    expect(tail.headers['X-Log-More']).toBe('no');
+    expect(String(tail.text).split(NL)[0]).toContain('line-' + (TOTAL - 10));
+    // 非法参数 ⇒ 400（可判定）
+    for (const q of [{ limit: 'abc' }, { offset: 'x' }]) {
+      const bad = fakeRes();
+      await getGradingRunLog({ params: { id: 'job-91001' }, query: { kind: 'stdout', ...q } }, bad);
+      expect(bad.statusCode).toBe(400);
+      expect(bad.body.code).toBe(1001);
+    }
+    // kind 白名单与目录穿越防护未回退
+    const badKind = fakeRes();
+    await getGradingRunLog({ params: { id: 'job-91001' }, query: { kind: 'etc-passwd' } }, badKind);
+    expect(badKind.statusCode).toBe(400);
+    const badDir = fakeRes();
+    await getGradingRunLog({ params: { id: 'job-../etc' }, query: { kind: 'stdout' } }, badDir);
+    expect(badDir.statusCode).toBe(400);
   }, 60000);
 });

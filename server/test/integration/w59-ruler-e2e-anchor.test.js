@@ -135,26 +135,44 @@ describe('W59 尺子内容化端到端（老锚点/worker/r2b7/HTTP/导出）', 
     expect(ruler.status).toBe('ready');
     expect(ruler.checkerId).toBe(oldCheckerId);
     expect(ruler.checkerRaw.toString('utf8')).toBe(oldRaw.toString('utf8')); // 老锚点原始字节逐位补建
-    // 反向断言（A 复核：形状不符即不采纳）：把候选快照的 standard_hash 写成 bare hex64 ⇒ 必须不采纳
+    // 反向断言（★O4/R2-B38：**可归因** —— 候选快照 bare hex64 vs 目标内容 sha256:<…>，两侧形状/取值确实不同；
+    //   断言只认「本候选行」的 skip 留痕，并附**正向对照**（同夹具同一行、只把形状改回正常 ⇒ 被采纳））
     const { teacher: t2, q: q2, dir: dir2 } = await mkQuestion('-anchor2');
     const cA = await resolveAssignmentContent({ prisma, assignmentId: aNew, uploadsRoot });
-    const aBad = await mkAssignment({ teacherId: t2.id, questionId: q2.id, rubric: '标准-anchor', material: '材料-anchor', suffix: '-anchor-bad' });
-    await prisma.$executeRawUnsafe('UPDATE assignment_questions SET standard_hash = ? WHERE assignment_id = ?', 'f'.repeat(64), aBad); // 形状不符（非 sha256:<…>）
-    const aBad2 = await mkAssignment({ teacherId: t2.id, questionId: q2.id, rubric: '标准-anchor-bad2', material: '材料-anchor', suffix: '-anchor-bad2' });
-    const cBad = await resolveAssignmentContent({ prisma, assignmentId: aBad2, uploadsRoot });
+    const aBadCand = await mkAssignment({ teacherId: t2.id, questionId: q2.id, rubric: '标准-anchor', material: '材料-anchor', suffix: '-anchor-badcand' });
+    const aBadTgt = await mkAssignment({ teacherId: t2.id, questionId: q2.id, rubric: '标准-anchor', material: '材料-anchor', suffix: '-anchor-badtgt' });
+    const cBad = await resolveAssignmentContent({ prisma, assignmentId: aBadTgt, uploadsRoot });
     cleanup.contentKeys.add(cBad.contentKey);
-    // 该内容的锚点：快照 standard_hash 形状不符 ⇒ 不得被采纳
+    await deleteRulers([cBad.contentKey]);
+    // 候选作业快照 = bare hex64（形状不符）；目标作业快照 = mkAssignment 默认 sha256:<…>（正常形状）
+    await prisma.$executeRawUnsafe('UPDATE assignment_questions SET standard_hash = ? WHERE assignment_id = ?', 'f'.repeat(64), aBadCand);
+    // 该内容的锚点：assignment_ref 用**目标标准包目录**的装置口径摘要（⇒ 判据 2 成立），使判据 1 成为唯一差异
     const badCheckerId = 'sha256:' + crypto.randomBytes(32).toString('hex');
-    const docBad = { ...doc, checker_id: badCheckerId, assignment_ref: { ...doc.assignment_ref, rubric_hash: rubricContentSha256(cBad.content.rubric) } };
-    await prisma.$executeRawUnsafe('UPDATE assignment_questions SET standard_hash = ? WHERE assignment_id = ?', 'f'.repeat(64), aBad2);
+    const docBad = { ...doc, checker_id: badCheckerId, assignment_ref: { ...doc.assignment_ref, rubric_hash: rubricContentSha256(cBad.content.rubric), standard_hash: standardDirDigest(dir2, (doc.input_contract || {}).ignore || []) } };
     const rawBad = Buffer.from(JSON.stringify(docBad, null, 2), 'utf8');
-    await prisma.gradingChecker.create({ data: { checkerId: badCheckerId, assignmentId: aBad2, questionId: q2.id, versionHash: badCheckerId, rubricHash: docBad.assignment_ref.rubric_hash, standardHash: docBad.assignment_ref.standard_hash, status: 'ready', checkerJson: docBad } });
-    await insertOldAnchor({ assignmentId: aBad2, checkerId: badCheckerId, checkerRaw: rawBad, frozenSha256: 'sha256:' + sha256Hex(rawBad) });
+    await prisma.gradingChecker.create({ data: { checkerId: badCheckerId, assignmentId: aBadCand, questionId: q2.id, versionHash: badCheckerId, rubricHash: docBad.assignment_ref.rubric_hash, standardHash: docBad.assignment_ref.standard_hash, status: 'ready', checkerJson: docBad } });
+    await insertOldAnchor({ assignmentId: aBadCand, checkerId: badCheckerId, checkerRaw: rawBad, frozenSha256: 'sha256:' + sha256Hex(rawBad) });
+    const runBad = async (spy) => {
+      await deleteRulers([cBad.contentKey]);
+      return resolveRulerForAssignment({ prisma, assignmentId: aBadTgt, questionId: cBad.questionId, mode: 'build', log: spy });
+    };
     const spyBad = mkLog();
-    const rBad = await resolveRulerForAssignment({ prisma, assignmentId: aBad2, questionId: cBad.questionId, mode: 'build', log: spyBad });
+    const rBad = await runBad(spyBad);
     expect(rBad.status).not.toBe('adopted');
-    expect(spyBad.has('RULER_ADOPT_SKIP')).toBe(true);
-    expect(spyBad.has('snapshot_standard_hash_mismatch')).toBe(true);
+    // ★可归因：只取**本候选行**（按 checker_id）的留痕 —— 同库其它锚点行的同名 reason 不算数
+    const badSkips = spyBad.lines.filter((l) => l.includes('RULER_ADOPT_SKIP') && l.includes(badCheckerId));
+    expect(badSkips.length).toBe(1);
+    expect(badSkips[0]).toContain('snapshot_standard_hash_mismatch');
+    // ★正向对照（同夹具、同一行，只把候选快照改回正常形状）⇒ 该行被采纳（证明判据「能失败也能通过」）
+    await prisma.$executeRawUnsafe('UPDATE assignment_questions SET standard_hash = ? WHERE assignment_id = ?', 'sha256:' + 'b'.repeat(64), aBadCand);
+    const spyCtl = mkLog();
+    const rCtl = await runBad(spyCtl);
+    expect(rCtl.status).toBe('adopted');
+    expect(rCtl.zeroLlm).toBe(true);
+    const ctlSkips = spyCtl.lines.filter((l) => l.includes('RULER_ADOPT_SKIP') && l.includes(badCheckerId));
+    expect(ctlSkips.join(' ')).not.toContain('snapshot_standard_hash_mismatch');
+    const adoptedRuler = await findRulerByContentKey(prisma, cBad.contentKey);
+    expect(adoptedRuler.checkerId).toBe(badCheckerId);   // 被采纳的确实是该行
     expect(dir2).toBeTruthy();
     expect(cA.contentKey).toBe(c.contentKey);
   }, 120000);
@@ -306,6 +324,11 @@ describe('W59 尺子内容化端到端（老锚点/worker/r2b7/HTTP/导出）', 
     expect(after.status).toBe('needs_rerun');
     expect(after.writtenCount).toBe(0);
     expect(String(after.lastError)).toContain('ruler_failed');
+    // ★O2（R2-B38）：worker 侧前缀必须**幂等** ⇒ last_error 单前缀（不再出现 ruler_ruler_failed:），原因尾巴保留
+    expect(String(after.lastError).startsWith('ruler_failed:')).toBe(true);
+    expect(String(after.lastError)).not.toContain('ruler_ruler_');
+    expect(out).not.toContain('ruler_ruler_');
+    expect(String(after.lastError)).toContain('夹具：装置造尺失败');
     const dirs = fs.readdirSync('/tmp').filter((d) => d.startsWith('r2b4-job-' + job.id + '-'));
     expect(dirs.some((d) => fs.existsSync(path.join('/tmp', d, 'out', 'stub-env.json')))).toBe(false); // 装置从未启动
   }, 180000);
@@ -373,5 +396,51 @@ describe('W59 尺子内容化端到端（老锚点/worker/r2b7/HTTP/导出）', 
     expect('sha256:' + m.assignment_doc.sha256).toBe(c.content.descriptionSha256);
     expect(m.standard.sha256).toBe(c.content.standardSha256);
     fs.rmSync(outDir, { recursive: true, force: true });
+  }, 120000);
+
+  it('★W59-8 O1/O2（R2-B38）：无锚点原始字节时**重序列化登记**必须与 frozen_sha256 对账；失败原因前缀归一', async () => {
+    const { registerRulerFromLocalChecker } = await import('../../src/services/dshRulerAssignment.js');
+    const { composeFailedReason } = await import('../../src/services/dshRulerStore.js');
+    // ── O2：前缀归一（w58 场景逐字不变；嵌套前缀被剥掉，不再产生 ruler_failed:ruler_failed:…）
+    expect(composeFailedReason('装置造尺失败(夹具)')).toBe('ruler_failed:装置造尺失败(夹具)');
+    expect(composeFailedReason('ruler_failed:嵌套')).toBe('ruler_failed:嵌套');
+    expect(composeFailedReason('ruler_builder_failed:x')).toBe('ruler_failed:builder_failed:x');
+    expect(composeFailedReason(null)).toBe('ruler_failed:unknown');
+    // ── O1：无锚点（既无 checker_raw 也无 frozen_sha256）⇒ 允许重序列化，但**必须留痕**来源
+    const { teacher, q, dir } = await mkQuestion('-o1-ok');
+    const aOk = await mkAssignment({ teacherId: teacher.id, questionId: q.id, rubric: '标准-o1', material: '材料-o1', suffix: '-o1-ok' });
+    const cOk = await resolveAssignmentContent({ prisma, assignmentId: aOk, uploadsRoot });
+    cleanup.contentKeys.add(cOk.contentKey);
+    const docOk = { ...JSON.parse(FIXTURE_RAW.toString('utf8')), checker_id: 'sha256:' + crypto.randomBytes(32).toString('hex') };
+    docOk.assignment_ref = { ...docOk.assignment_ref, rubric_hash: rubricContentSha256(cOk.content.rubric), standard_hash: standardDirDigest(dir, (docOk.input_contract || {}).ignore || []) };
+    await prisma.gradingChecker.create({ data: { checkerId: docOk.checker_id, assignmentId: aOk, questionId: q.id, versionHash: docOk.checker_id, rubricHash: docOk.assignment_ref.rubric_hash, standardHash: docOk.assignment_ref.standard_hash, status: 'ready', checkerJson: docOk } });
+    const spyOk = mkLog();
+    const okRes = await registerRulerFromLocalChecker({ prisma, assignmentId: aOk, questionId: q.id, content: cOk.content, log: spyOk });
+    expect(okRes).toBeTruthy();
+    expect(okRes.source).toBe('checker_json_reserialized');       // ★重序列化路径必须可归因
+    expect(okRes.frozenSha256).toBe(null);                        // 无锚点 ⇒ 不得伪造 frozen
+    expect(spyOk.lines.join(' ')).toContain('source=checker_json_reserialized');
+    expect(spyOk.lines.join(' ')).toContain('★重序列化登记路径');
+    // ── O1 反例：锚点存在但**无 checker_raw**，且 frozen_sha256 与重序列化字节不一致 ⇒ 必须拒绝登记（fail-closed）
+    const { teacher: t2, q: q2, dir: dir2 } = await mkQuestion('-o1-bad');
+    const aBad = await mkAssignment({ teacherId: t2.id, questionId: q2.id, rubric: '标准-o1bad', material: '材料-o1bad', suffix: '-o1-bad' });
+    const cBad = await resolveAssignmentContent({ prisma, assignmentId: aBad, uploadsRoot });
+    cleanup.contentKeys.add(cBad.contentKey);
+    const docBad = { ...JSON.parse(FIXTURE_RAW.toString('utf8')), checker_id: 'sha256:' + crypto.randomBytes(32).toString('hex') };
+    docBad.assignment_ref = { ...docBad.assignment_ref, rubric_hash: rubricContentSha256(cBad.content.rubric), standard_hash: standardDirDigest(dir2, (docBad.input_contract || {}).ignore || []) };
+    await prisma.gradingChecker.create({ data: { checkerId: docBad.checker_id, assignmentId: aBad, questionId: q2.id, versionHash: docBad.checker_id, rubricHash: docBad.assignment_ref.rubric_hash, standardHash: docBad.assignment_ref.standard_hash, status: 'ready', checkerJson: docBad } });
+    // 锚点行：checker_raw = NULL，frozen_sha256 故意与「重序列化后」的字节不同（模拟原始字节丢失/被改写）
+    await prisma.$executeRawUnsafe(
+      'INSERT INTO grading_assignment_anchors (assignment_id, checker_id, frozen_sha256, materials_manifest_digest, n_submissions, submissions_json, anchor_json, checker_raw, created_at, updated_at) '
+      + 'VALUES (?, ?, ?, NULL, 0, CAST(? AS JSON), CAST(? AS JSON), NULL, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3)) '
+      + 'ON DUPLICATE KEY UPDATE checker_raw = NULL, frozen_sha256 = VALUES(frozen_sha256)',
+      aBad, docBad.checker_id, 'sha256:' + '9'.repeat(64), JSON.stringify([]), JSON.stringify({ schema_version: 'assignment-manifest/v1' }),
+    );
+    const spyBad = mkLog();
+    const badRes = await registerRulerFromLocalChecker({ prisma, assignmentId: aBad, questionId: q2.id, content: cBad.content, log: spyBad });
+    expect(badRes).toBe(null);                                    // ★不得登记「装置必然拒收」的尺子
+    const skips = spyBad.lines.filter((l) => l.includes('RULER_INGEST_SKIP') && l.includes(docBad.checker_id));
+    expect(skips.length).toBe(1);
+    expect(skips[0]).toContain('reason=reserialized_frozen_mismatch');
   }, 120000);
 });

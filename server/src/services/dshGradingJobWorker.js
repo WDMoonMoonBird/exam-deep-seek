@@ -10,6 +10,16 @@
  *  4) 超时 ⇒ kill + 释放闸 + attempts 递增 + 回到 pending（可重试）；超过 maxAttempts ⇒ failed。
  *  5) 安全：装置在隔离 DSH_HOME 下运行（env 注入），凭据只经子进程 env（批 1 runner），run-root 在 /tmp。
  */
+/**
+ * ★O2（R2-B38）：失败原因前缀**幂等** —— reason 已带 `ruler_` 家族前缀（如 store 层 `ruler_failed:<cause>`）时
+ * 不再重复拼接，避免 `grading_jobs.last_error` 出现 `ruler_ruler_failed:`（C 的 191-t2-wiring.txt:23 实测）。
+ * 未带前缀时仍补 `ruler_`（既有语义与 w58/w59 的 `ruler_failed` 断言逐字不变）。
+ */
+export function withRulerPrefix(reason) {
+  const r = reason === null || reason === undefined || reason === '' ? 'unknown' : String(reason);
+  return /^ruler_/.test(r) ? r : 'ruler_' + r;
+}
+
 import fs from 'fs';
 import path from 'path';
 import { runDshGrader } from './dshGraderRunner.js';
@@ -345,10 +355,10 @@ async function runOnceInner({
           console.log('RULER_RESOLVE=' + rr.status + ' content_key=' + rr.contentKey + ' checker_id=' + ((rr.ruler && rr.ruler.checkerId) || '(none)') + ' job=' + job.id);
         } else if (rr.failClosed) {
           console.log('RULER_RESOLVE=fail_closed reason=' + rr.reason + ' content_key=' + rr.contentKey + ' job=' + job.id);
-          console.log('CHECKER_REUSE=none checker_id=(none) reason=ruler_' + rr.reason + ' job=' + job.id);
-          await finishJob({ prisma, jobId: job.id, status: JOB_STATUS.needsRerun, error: 'ruler_' + rr.reason });
+          console.log('CHECKER_REUSE=none checker_id=(none) reason=' + withRulerPrefix(rr.reason) + ' job=' + job.id);
+          await finishJob({ prisma, jobId: job.id, status: JOB_STATUS.needsRerun, error: withRulerPrefix(rr.reason) });
           logger.warn({ jobId: job.id, reason: rr.reason }, 'R2-B35：内容尺子不可用 ⇒ fail-closed needs_rerun（不跑装置、不产出分数）');
-          return { consumed: true, jobId: job.id, runRoot, status: JOB_STATUS.needsRerun, reason: 'ruler_' + rr.reason, reuse: { applied: false, reason: 'ruler_' + rr.reason } };
+          return { consumed: true, jobId: job.id, runRoot, status: JOB_STATUS.needsRerun, reason: withRulerPrefix(rr.reason), reuse: { applied: false, reason: withRulerPrefix(rr.reason) } };
         } else {
           console.log('RULER_RESOLVE=legacy reason=' + rr.reason + ' job=' + job.id);
         }
@@ -367,8 +377,8 @@ async function runOnceInner({
         const placed = writeRulerCheckerFiles({ runRoot, ruler });
         if (!placed.ok) {
           console.log('CHECKER_REUSE=none checker_id=(none) reason=' + placed.reason + ' job=' + job.id);
-          await finishJob({ prisma, jobId: job.id, status: JOB_STATUS.needsRerun, error: 'ruler_' + placed.reason });
-          return { consumed: true, jobId: job.id, runRoot, status: JOB_STATUS.needsRerun, reason: 'ruler_' + placed.reason, reuse: { applied: false, reason: placed.reason } };
+          await finishJob({ prisma, jobId: job.id, status: JOB_STATUS.needsRerun, error: withRulerPrefix(placed.reason) });
+          return { consumed: true, jobId: job.id, runRoot, status: JOB_STATUS.needsRerun, reason: withRulerPrefix(placed.reason), reuse: { applied: false, reason: placed.reason } };
         }
         // ★不变量：grading_jobs.checker_id == grading_rulers.checker_id == 锚点行.checker_id（不一致会让装置 frozen 预检找不到锚点）
         if (ruler.checkerId && String(ruler.checkerId) !== String(jobCheckerId)) {
