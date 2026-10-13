@@ -129,7 +129,18 @@
           </div>
 
           <div v-if="aiResult" class="ai-block">
-            <a-collapse v-if="aiResult.breakdown?.length" ghost size="small" class="ai-collapse">
+            <!-- ★R2-B46：AI 总评（教师真正打开的页 = 本页；此前只加在通用复审页 ReviewDetail.vue ⇒ 用户看不到） -->
+            <div v-if="hasSummary" class="ai-sum-card">
+              <span class="ai-sum-tag">AI 总评</span>
+              <p class="ai-sum-text">{{ fbView.summary.text }}</p>
+              <p v-if="fbView.summary.truncated" class="ai-sum-note">（该总评因模型输出长度限制被截断，可重新生成）</p>
+            </div>
+            <div v-if="hasSummary" class="ai-sum-basis">{{ fbView.basisText }}</div>
+            <!-- 有总评 ⇒ 分项默认折叠（点开才看）；无总评 ⇒ 不传 defaultActiveKey（DOM/行为与改动前逐字一致，不白屏） -->
+            <a-collapse
+              v-if="aiResult.breakdown?.length" ghost size="small" class="ai-collapse"
+              :defaultActiveKey="hasSummary ? [] : undefined"
+            >
               <a-collapse-panel :header="'评分标准（' + aiResult.breakdown.length + ' 项）'" key="breakdown">
                 <div v-for="(b, i) in aiResult.breakdown" :key="i" class="bd-row">
                   <span class="bd-name">{{ b.item }}</span>
@@ -222,6 +233,7 @@ import { useMonacoKeyboardA11y } from '../../composables/useMonacoKeyboardA11y.j
 import { getClassWithColor } from 'file-icons-js';
 import 'file-icons-js/css/style.css';
 import { getProjectReview, saveProjectReview, regradeProjectSubmission } from '../../api/projects.js';
+import { parseCheckerFeedback } from '../../composables/review/parseCheckerFeedback.js';
 import request from '../../api/request.js';
 import { getLanguage } from '../../domain/fileLang.js';
 import StatusTag from '../../components/StatusTag.vue';
@@ -235,6 +247,9 @@ const question = ref({});
 const student = ref({});
 const version = ref(0);
 const aiResult = ref(null);
+/** ★R2-B46：总评视图（复用同一解析器 parseCheckerFeedback，**不改其语义**；无 summary ⇒ null ⇒ 本页行为与改动前一致） */
+const fbView = computed(() => (aiResult.value && typeof aiResult.value === 'object' ? parseCheckerFeedback(JSON.stringify(aiResult.value)) : null));
+const hasSummary = computed(() => !!(fbView.value && fbView.value.kind === 'checker' && fbView.value.summary));
 const aiScore = computed(() => submission.value.aiScore ?? null);
 const maxScore = ref(100);
 const gradingState = ref('none');
@@ -699,6 +714,12 @@ onBeforeUnmount(() => {
 }
 .ai-score-label { font-size:var(--fs-caption); color:var(--text-tertiary); }
 .ai-score-num { font-size:var(--fs-title-1); font-weight:700; color:var(--text-brand); }
+/* ★R2-B46：AI 总评（顶部醒目）+ 一行依据 */
+.ai-sum-card { border:1px solid var(--border-default); border-left:3px solid var(--color-primary, #1677ff); border-radius:var(--radius-sm); padding:8px 10px; background:var(--bg-sunken); margin-bottom:6px; }
+.ai-sum-tag { display:inline-block; font-size:var(--fs-caption); font-weight:600; color:var(--color-primary, #1677ff); margin-bottom:4px; }
+.ai-sum-text { margin:0; font-size:var(--fs-body, 13px); line-height:1.7; color:var(--text-primary); white-space:pre-wrap; }
+.ai-sum-note { margin:4px 0 0; font-size:var(--fs-caption); color:var(--text-secondary); }
+.ai-sum-basis { font-size:var(--fs-caption); color:var(--text-secondary); margin:4px 0 2px; }
 .ai-collapse { margin-bottom:6px; }
 .ai-collapse :deep(.ant-collapse-item > .ant-collapse-header) { padding:4px 0; font-size:var(--fs-body-sm); color:var(--text-secondary); }
 .bd-row { display:flex; gap:10px; font-size:var(--fs-caption); padding:3px 0; border-bottom:1px dashed var(--border-subtle); }
