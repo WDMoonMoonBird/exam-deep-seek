@@ -100,6 +100,7 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from
 import { useRoute, useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { io } from 'socket.io-client';
+import { createTeacherSocket } from '../../composables/socketConfig.js';   // ★R2-B53：端点（默认 /exam/socket.io）与一次性日志
 import request from '../../api/request.js';
 import { useUserStore } from '../../stores/user.js';
 import { savedSortField, savedSortOrder, savedPage } from '../../stores/reviewStore.js';
@@ -299,17 +300,26 @@ async function exportXlsx() {
 }
 
 let socket = null;
+/**
+ * ★R2-B53：与 Review.vue 同款 —— 端点由 composables/socketConfig.js 统一解析（默认 path=/exam/socket.io，
+ *   可经 VITE_WS_PATH / VITE_WS_URL 覆盖）。旧注释「socket 挂根路径 /socket.io」**有误**：
+ *   nginx 按**最长前缀**匹配，云上 location /exam/socket.io/ 优先于静态块 location /exam/ ⇒ 该路径可用；
+ *   而根路径 /socket.io/ 在 nginx 上无 location ⇒ 必然连不上（实机控制台已证实）。
+ * 连接失败**不得影响渲染**：创建包在 try/catch 内，且不阻塞挂载（不在 setup 顶层 await）。
+ */
 function connectSocket() {
-  const base = import.meta.env.VITE_WS_URL || undefined;
-  // 同 Review.vue：socket 挂在服务端根路径 /socket.io，与 SPA 的 /exam/ 前缀无关（缺陷 D2）
-  const opts = { transports: ['websocket', 'polling'], path: '/socket.io' };
-  socket = io(base, opts);
-  socket.on('connect', () => { socket.emit('join-school', userStore.currentSchool?.id); });
-  let lastRefresh = 0;
-  socket.on('graded', () => {
-    const now = Date.now();
-    if (now - lastRefresh > 3000) { lastRefresh = now; fetch(); }
-  });
+  try {
+    socket = createTeacherSocket(io);
+    if (!socket) return;
+    socket.on('connect', () => { socket.emit('join-school', userStore.currentSchool?.id); });
+    let lastRefresh = 0;
+    socket.on('graded', () => {
+      const now = Date.now();
+      if (now - lastRefresh > 3000) { lastRefresh = now; fetch(); }
+    });
+  } catch (err) {
+    console.warn('[socket] 初始化异常（页面功能不受影响）：', err && err.message);
+  }
 }
 
 /** ★R2-B47（U-1）：路由参数变化（同组件复用/带新 query 重入）⇒ 重置页码并重建数据 */

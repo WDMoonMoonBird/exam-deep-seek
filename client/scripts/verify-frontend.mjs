@@ -213,6 +213,49 @@ check('⑦g 两处 Layout 的 router-view 过渡均已去掉 mode=out-in（消�
   !routerOutIn(scopeTeacher) && !routerOutIn(scopeAdmin),
   'teacherRouterOutIn=' + routerOutIn(scopeTeacher) + ' adminRouterOutIn=' + routerOutIn(scopeAdmin));
 const recSrc = read(path.join(CLIENT, 'src', 'components', 'errorRecovery.js')) || '';
+
+// ⑧ 实时通道（socket.io）端点与可观测性（★R2-B53）：默认 path=/exam/socket.io（与生产 nginx 专用 location 一致）+ 可配置 + 失败不阻塞渲染
+const socketMod = await import(path.join(CLIENT, 'src', 'composables', 'socketConfig.js'));
+const reviewSrc = read(path.join(CLIENT, 'src', 'views', 'teacher', 'Review.vue')) || '';
+const reviewClassSrc = read(path.join(CLIENT, 'src', 'views', 'teacher', 'ReviewClass.vue')) || '';
+const srcFiles = [];
+const walkSrc = (dir) => { for (const f of fs.readdirSync(dir)) { const p = path.join(dir, f); const st = fs.statSync(p); if (st.isDirectory()) walkSrc(p); else if (p.endsWith('.vue') || p.endsWith('.js')) srcFiles.push(read(p) || ''); } };
+walkSrc(path.join(CLIENT, 'src'));
+const rootPathResidue = srcFiles.filter((t) => /path:\s*'\/socket\.io'/.test(t)).length;
+// ★必须是不带 env 覆盖的 createTeacherSocket(io)（覆盖会改写 path ⇒ 那时生效值取决于 env，不再等于"与生产一致"）
+const usesBareFactory = (t) => /createTeacherSocket\(\s*io\s*\)/.test(t);
+check('⑧a 两处教师页以 createTeacherSocket(io) 建连（不带覆盖 ⇒ 生效 path=默认=/exam/socket.io），且全仓无根路径 /socket.io 残留',
+  usesBareFactory(reviewSrc) && usesBareFactory(reviewClassSrc) && rootPathResidue === 0 && socketMod.DEFAULT_SOCKET_PATH === '/exam/socket.io',
+  'review=' + usesBareFactory(reviewSrc) + ' reviewClass=' + usesBareFactory(reviewClassSrc) + ' rootResidue=' + rootPathResidue + ' default=' + socketMod.DEFAULT_SOCKET_PATH);
+const epDefault = socketMod.resolveSocketEndpoint({});
+const epOverride = socketMod.resolveSocketEndpoint({ VITE_WS_PATH: '/custom/socket.io', VITE_WS_URL: 'https://ws.example.com' });
+check('⑧b 端点可经 VITE_WS_PATH / VITE_WS_URL 覆盖（默认与生产一致；url 缺省=同源代理）',
+  epDefault.options.path === '/exam/socket.io' && epDefault.url === undefined
+    && epOverride.options.path === '/custom/socket.io' && epOverride.url === 'https://ws.example.com'
+    && Array.isArray(epDefault.options.transports) && epDefault.options.transports.includes('websocket'),
+  JSON.stringify({ def: epDefault, ovr: epOverride }));
+const logs = [];
+const fakeSocket = { handlers: {}, on(ev, fn) { this.handlers[ev] = fn; } };
+socketMod.attachSocketLogging(fakeSocket, { log: { info: (t) => logs.push('I:' + t), warn: (t) => logs.push('W:' + t) } });
+fakeSocket.handlers.connect(); fakeSocket.handlers.connect();
+fakeSocket.handlers.connect_error(new Error('x')); fakeSocket.handlers.connect_error(new Error('y'));
+const idempotent = socketMod.attachSocketLogging(fakeSocket, { log: { info: () => logs.push('I:dup'), warn: () => logs.push('W:dup') } });
+check('⑧c 连接事件可观测且不刷屏（connect/connect_error 各一次；重复挂载幂等）',
+  logs.filter((l) => l.startsWith('I:')).length === 1 && logs.filter((l) => l.startsWith('W:')).length === 1 && idempotent === true,
+  JSON.stringify({ logs }));
+let threw = false; let nullReturn = false;
+try { nullReturn = socketMod.createTeacherSocket(() => { throw new Error('boom'); }, { log: { info() {}, warn() {} } }) === null; } catch { threw = true; }
+const noBlockingAwait = !/await\s+connectSocket\s*\(/.test(reviewSrc) && !/await\s+connectSocket\s*\(/.test(reviewClassSrc);
+const guardedCall = /try \{[\s\S]{0,200}createTeacherSocket/.test(reviewSrc) && /try \{[\s\S]{0,200}createTeacherSocket/.test(reviewClassSrc);
+check('⑧d 连接失败不影响渲染：建连异常被吞（返回 null 不抛）+ 无顶层 await + 两处调用均在 try/catch 内',
+  threw === false && nullReturn === true && noBlockingAwait && guardedCall,
+  JSON.stringify({ threw, nullReturn, noBlockingAwait, guardedCall }));
+const viteCfg = read(path.join(CLIENT, 'vite.config.js')) || '';
+check('⑧e 开发代理就位：vite.config.js 含 /exam/socket.io 代理（ws:true + 去前缀）',
+  // ★锚定"代理键"位置（避免 rewrite 行里的同名字符串让断言恒真），并要求 target/ws/去前缀齐备
+  /[\n\r]\s*'\/exam\/socket\.io'\s*:\s*\{/.test(viteCfg) && /target:\s*'http:\/\/127\.0\.0\.1:3002'/.test(viteCfg)
+  && /ws:\s*true/.test(viteCfg) && viteCfg.includes("replace('/exam/socket.io', '/socket.io')"),
+  'hasPath=' + viteCfg.includes("'/exam/socket.io'") + ' ws=' + /ws:\s*true/.test(viteCfg));
 check('⑦h main.js 在 mount 之前安装错误自愈；模块含 app.config.errorHandler + unhandledrejection + chunk-reload 键（不静默）',
   /installErrorRecovery\(/.test(mainJs) && mainJs.indexOf('installErrorRecovery(') < mainJs.indexOf("app.mount('#app')")
     && /app\.config\.errorHandler/.test(recSrc) && /unhandledrejection/.test(recSrc) && /chunk-reload:/.test(recSrc)

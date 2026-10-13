@@ -101,6 +101,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 import { io } from 'socket.io-client';
+import { createTeacherSocket } from '../../composables/socketConfig.js';   // ★R2-B53：端点（默认 /exam/socket.io）与一次性日志
 import request from '../../api/request.js';
 import { useUserStore } from '../../stores/user.js';
 import { savedSortField, savedSortOrder, savedPage } from '../../stores/reviewStore.js';
@@ -195,19 +196,33 @@ let socket = null;
 onMounted(() => {
   loadClasses();
   fetch();
-  const wsUrl = import.meta.env.VITE_WS_URL || undefined;
-  // socket.io 挂在服务端**根路径** /socket.io（server/src/socket.js initSocket 未指定 path）。
-  // 别把 API 前缀当 socket 前缀：/exam/api/ 只是 nginx 对 /api/ 的公开前缀改写；
-  // 写死 /exam/socket.io 会落进 nginx 的 location /exam/ 静态块拿到 SPA HTML → 永远连不上（缺陷 D2）。
-  const wsOpts = { transports: ['websocket', 'polling'], path: '/socket.io' };
-  socket = io(wsUrl, wsOpts);
-  socket.on('connect', () => socket.emit('join-school', userStore.currentSchool?.id));
-  let lastRefresh = 0;
-  socket.on('graded', () => {
-    const now = Date.now();
-    if (now - lastRefresh > 3000) { lastRefresh = now; fetch(); }
-  });
+  connectSocket();   // ★R2-B53：实时通道（连不上也**不影响渲染**，只是降级为手动刷新）
 });
+
+/**
+ * ★R2-B53：socket.io 端点统一由 composables/socketConfig.js 解析
+ *   —— 默认 path = /exam/socket.io（与生产一致），可经 VITE_WS_PATH / VITE_WS_URL 覆盖。
+ * ★旧注释更正：原文称「写死 /exam/socket.io 会落进 nginx 的 location /exam/ 静态块拿到 SPA HTML ⇒ 永远连不上」，
+ *   该判断**有误** —— nginx 按**最长前缀**匹配，云上已有
+ *     location /exam/socket.io/ { proxy_pass http://127.0.0.1:3002/socket.io/; }
+ *   ⇒ 专用 location 优先于静态块的 location /exam/，不会拿到 SPA HTML；
+ *   反而**根路径** /socket.io/ 在 nginx 上**没有**对应 location ⇒ 必然连不上（实机控制台已反复证实）。
+ */
+function connectSocket() {
+  try {
+    socket = createTeacherSocket(io);
+    if (!socket) return;                       // 初始化失败 ⇒ 仅降级（不抛、不阻塞）
+    socket.on('connect', () => socket.emit('join-school', userStore.currentSchool?.id));
+    let lastRefresh = 0;
+    socket.on('graded', () => {
+      const now = Date.now();
+      if (now - lastRefresh > 3000) { lastRefresh = now; fetch(); }
+    });
+  } catch (err) {
+    // 连接初始化异常绝不影响页面渲染（不得抛未捕获错误）
+    console.warn('[socket] 初始化异常（页面功能不受影响）：', err && err.message);
+  }
+}
 
 onUnmounted(() => {
   if (socket) { socket.emit('leave-school', userStore.currentSchool?.id); socket.disconnect(); }

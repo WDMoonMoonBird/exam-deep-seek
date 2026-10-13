@@ -159,6 +159,14 @@ export default defineConfig({
         target: 'http://localhost:3000',
         changeOrigin: true,
       },
+      // ★R2-B53：实时通道（socket.io）—— 与生产 nginx 的「/exam/socket.io/ → 后端 /socket.io/」保持一致；
+      //   ws:true 才会把 WebSocket 升级请求一并代理；rewrite 去掉 /exam 前缀（后端挂在根 /socket.io）。
+      '/exam/socket.io': {
+        target: 'http://127.0.0.1:3002',
+        changeOrigin: true,
+        ws: true,
+        rewrite: (p) => p.replace('/exam/socket.io', '/socket.io'),   // 去 /exam 前缀（后端挂在根 /socket.io）
+      },
     },
   },
   build: {
