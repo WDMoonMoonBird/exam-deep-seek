@@ -651,3 +651,22 @@ model GradingJobRun {
   @@index([assignmentId])
   @@map("grading_job_runs")
 }
+/// R2-B48：会话内生成「自然语言总评」的缓存（summary_key = sha256(content_key + 结果摘要)）
+/// 自然失效：rubric/尺子内容变化 ⇒ content_key 变化 ⇒ summary_key 变化 ⇒ 必 miss（无需清理任务）
+model GradingSummary {
+  summaryKey    String   @id @map("summary_key") @db.Char(71)
+  contentKey    String   @map("content_key") @db.Char(71)
+  resultDigest  String   @map("result_digest") @db.Char(71)
+  text          String   @db.Text
+  facts         Json?    @map("facts")
+  model         String?  @db.VarChar(100)
+  promptVersion String?  @map("prompt_version") @db.VarChar(40)
+  tokens        Json?    @map("tokens")
+  source        String?  @db.VarChar(40)
+  hits          Int      @default(0)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([contentKey])
+  @@map("grading_summaries")
+}

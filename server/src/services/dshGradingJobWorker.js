@@ -24,6 +24,7 @@ import fs from 'fs';
 import path from 'path';
 import { runDshGrader } from './dshGraderRunner.js';
 import { consumeChecker, consumeMeasureResults, resolveCheckerPath } from './dshCheckerConsumer.js';
+import { runSummarySession, recordSummaryUsage } from './dshSummarySession.js';   // ★R2-B48：第二会话（总评）
 import { loadAnchor, materializeAnchor, persistAnchor, readAnchorFromRunRoot } from './dshGradingAnchor.js';
 import { findRulerByContentKey, resolvePollMs, resolveWaitMs, setJobContentKey } from './dshRulerStore.js';
 import { captureSessionUsage, summarizeUsageForEvidence } from './dshSessionUsage.js';
@@ -547,6 +548,24 @@ async function runOnceInner({
     // ★R2-B14①：入库时持久化作业锚点（供后续复用回填；upsert 幂等）
     const anchorSaved = await persistAnchor({ prisma, assignmentId: job.assignmentId, checkerId: jobCheckerId, runRoot });
     console.log('ANCHOR_PERSISTED=' + (anchorSaved.persisted ? 'yes' : 'no') + (anchorSaved.persisted ? ' frozen_sha256=' + (anchorSaved.frozenSha256 || 'na') + ' n_submissions=' + anchorSaved.nSubmissions + ' ANCHOR_RAW_PERSISTED=' + (anchorSaved.rawBytes > 0 ? 'yes bytes=' + anchorSaved.rawBytes + ' sha256=' + anchorSaved.rawSha256 : 'no') : ' reason=' + anchorSaved.reason));
+
+    // ★R2-B48（设计 R2-A26）：**第二会话** —— 装置跑完之后、消费之前，产出 <run-root>/out/summaries.json。
+    //   语义：尺子零 LLM；**评语按需生成、单独计量、可关**（DSH_SUMMARY_MODE=off|cached|always，默认 cached）。
+    //   永不抛出：预算超限/模型失败/坏 JSON ⇒ 只是「本次没有总评」⇒ 消费侧不写 summary 键、教师页回落旧面板，**分数不受影响**。
+    let summaryRun = null;
+    try {
+      summaryRun = await runSummarySession({ prisma, runRoot, assignmentId: job.assignmentId, log: logger });
+      console.log('SUMMARY_SESSION mode=' + summaryRun.mode + ' ok=' + (summaryRun.ok ? 'yes' : 'no')
+        + ' generated=' + summaryRun.generated + ' cache_hits=' + summaryRun.cache_hits + ' written=' + summaryRun.written
+        + ' failed=' + summaryRun.failed + ' cost=' + summaryRun.cost + (summaryRun.reason ? ' reason=' + summaryRun.reason : '') + ' job=' + job.id);
+      if (summaryRun.written > 0) {
+        // 监测：同一 run-root ⇒ 消耗并入既有 usage_json（分列 summary_session，便于把"判据/评语"分开算）
+        const merged = await recordSummaryUsage(prisma, { runRef: 'job:' + job.id, tokens: summaryRun.tokens || null, cost: summaryRun.cost, model: summaryRun.model || null });
+        console.log('SUMMARY_SESSION_USAGE merged=' + (merged ? 'yes' : 'no') + ' job=' + job.id);
+      }
+    } catch (err) {
+      console.log('SUMMARY_SESSION ok=no reason=' + String(err && err.message).slice(0, 160) + ' job=' + job.id);
+    }
 
     const consumed = await consumeMeasureResults({ prisma, runRoot, assignmentId: job.assignmentId });
     const status = consumed.written > 0 ? JOB_STATUS.done : JOB_STATUS.needsRerun;

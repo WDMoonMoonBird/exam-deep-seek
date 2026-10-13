@@ -12,6 +12,7 @@ import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'node:child_process';
 import logger from '../utils/logger.js';
+import { loadSummaries } from './dshSummarySession.js';   // ★R2-B48：会话内总评产物（缺失/坏 JSON ⇒ 降级不写 summary）
 
 export const NO_SCORE_STATUS = 'needs_rerun'; // 需重跑/人工（显式呈现，不写分）
 
@@ -111,7 +112,7 @@ export function loadGradingResultIndex(runRoot) {
 }
 
 /** 回写载荷（审计字段齐备） */
-export function buildWriteback({ result, score }) {
+export function buildWriteback({ result, score, previousFeedback = null }) {
   const items = Array.isArray(result?.items) ? result.items : [];
   // ★R2-B41：逐项依据（title/status/reason）来自 grading-result 投影；缺失 ⇒ 退化为原 items 的 comment/reason（不崩、不改分）
   const detail = (result && (result.grading_detail || result.detail)) || null;
@@ -126,6 +127,14 @@ export function buildWriteback({ result, score }) {
   const rawScore = result?.totals?.score;
   const rawNum = rawScore === null || rawScore === undefined ? null : Number(rawScore);
   const scoreInt = Number.isFinite(Number(score)) ? Math.trunc(Number(score)) : null; // 显式截断（口径见 aiFeedback.score_rounding）
+  // ★R2-B48（最高优先兼容点）：本函数**整体重建** ai_feedback（重评路径同样走它）——
+  //   若本次没有新总评（无 summaries/超预算/会话失败/坏 JSON），必须把**既有 summary 原样带过来**，否则重评会抹掉总评。
+  const prevDoc = (() => {
+    const raw = previousFeedback || (result && result.previous_feedback) || null;
+    if (!raw) return null;
+    try { const d = JSON.parse(String(raw)); return d && typeof d === 'object' ? d : null; } catch { return null; }
+  })();
+  const summaryOut = (result && result.summary) || (prevDoc && prevDoc.summary) || null;
   return {
     aiScore: scoreInt,
     aiFeedback: JSON.stringify({
@@ -156,6 +165,8 @@ export function buildWriteback({ result, score }) {
           kind: 'checker',
         };
       }).slice(0, 200),
+      // ★R2-B48：总评（会话内产出；缺失 ⇒ 不写该键 ⇒ 教师页回落旧面板）
+      ...(summaryOut ? { summary: summaryOut } : {}),
     }),
     checkerId: result?.checker_id ?? null,
     canonicalSha256: result?.canonical_sha256 ?? null,
@@ -213,6 +224,7 @@ export async function consumeChecker({ prisma, runRoot, assignmentId, questionId
 export function listMeasureResults(runRoot) {
   const out = [];
   const gradingIndex = loadGradingResultIndex(runRoot);   // ★R2-B41：依据投影（只读；不影响分数来源）
+  const summaries = loadSummaries(runRoot);               // ★R2-B48：会话内产出的总评（缺失/坏 JSON ⇒ 空表 ⇒ 降级不写 summary）
   for (const dir of ['out/measure', 'out/results']) {
     const d = path.join(runRoot, dir);
     if (!fs.existsSync(d)) continue;
@@ -225,7 +237,9 @@ export function listMeasureResults(runRoot) {
         // ★R2-B41：按 slug 挂上**依据**投影（单份契约的 items 数组作为兜底）；找不到 ⇒ null（原行为）
         const slug = result?.submission?.id ?? null;
         const detail = (slug && gradingIndex.bySlug.get(String(slug))) || gradingIndex.fallback || null;
-        out.push({ path: p, result: detail ? { ...result, grading_detail: detail } : result });
+        const summary = (slug && summaries.bySlug.get(String(slug))) || null;             // ★R2-B48：按 slug 取总评
+        const merged = { ...result, ...(detail ? { grading_detail: detail } : {}), ...(summary ? { summary } : {}) };
+        out.push({ path: p, result: merged });
       } catch { /* 跳过坏文件 */ }
     }
   }
@@ -273,7 +287,13 @@ export async function consumeMeasureResults({ prisma, runRoot, assignmentId = nu
     }
     if (dryRun) { row.reason = 'dry_run'; rows.push(row); continue; }
     try {
-      await prisma.submission.update({ where: { id: subId }, data: buildWriteback({ result, score: decision.score }) });
+      // ★R2-B48：读-改-写——取既有 ai_feedback 传入，保证「本次没有新总评」时**既有 summary 不被抹掉**
+      let previousFeedback = null;
+      try {
+        const prev = await prisma.submission.findUnique({ where: { id: subId }, select: { aiFeedback: true } });
+        previousFeedback = (prev && prev.aiFeedback) || null;
+      } catch { previousFeedback = null; }
+      await prisma.submission.update({ where: { id: subId }, data: buildWriteback({ result, score: decision.score, previousFeedback }) });
       row.write = true;
       written += 1;
     } catch (err) {

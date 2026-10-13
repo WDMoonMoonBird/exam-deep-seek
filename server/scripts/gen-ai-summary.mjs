@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 /**
+ * ★R2-B48（t29）起：本脚本**退役为「回填 / 兜底」工具**——总评的主路径已改为「平台同运行的第二个会话」：
+ *   runDshGradingJobWorker.js（装置后、consumeMeasureResults 前）⇒ runSummarySession()
+ *   ⇒ <run-root>/out/summaries.json（schema=summaries/1）⇒ consumer 写 submissions.ai_feedback.summary。
+ *   本脚本保留可用，用于：①历史数据回填；②会话路径不可用/需人工复核时补生成；③口径对齐的参考实现。
+ *   两者 summary 结构**同构**（text/facts/model/prompt_version/tokens/generated_at[/truncated]）⇒ 前端解析零差异。
+ *
  * R2-B43（t18）：为每份提交生成**自然语言总评**（教师视角「像老师说的话」），写入 submissions.ai_feedback.summary。
  *
  * ★铁律：
