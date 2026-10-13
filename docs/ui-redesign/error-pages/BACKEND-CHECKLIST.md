@@ -1,5 +1,14 @@
 # 错误状态码后端配合清单（前端提，待后端确认）
 
+> **读者**：后端会话 / 后端同学（同仓库 `master` 分支）。
+> **为什么放这儿**：改了 `server/` 的只有后端会话，前端这边只出清单与静态错误页产物，避免抢文件。
+> **参考位置（本次实测行号）**：
+> - `server/src/app.js:110` `app.use(express.static(distDir))`
+> - `server/src/app.js:111-115` SPA fallback（`res.sendFile(index.html)`，**永远 200**）
+> - `server/src/app.js:119-121` 统一错误中间件（`500` JSON）
+> - `server/src/middleware/projectAssetGuard.js:35` `403 {error:'forbidden'}`（响应体不一致）
+> - `server/src/middleware/auth.js` → 401 + `code:1002`；`server/src/middleware/role.js` → 403 + `code:1003`
+
 目标口径（用户要求）：**所有不合理的访问都返回对应的 HTTP 状态码**，并且 HTML 请求看到错误页、API 请求拿到统一 JSON。
 
 ## 一、现状（本次实际扫描 `server/src`，非猜测）
@@ -67,3 +76,15 @@
 已生成/将生成：`client/public/error-pages/{400,401,403,404,405,408,409,410,413,418,429,500,501,502,503,504}.html`
 （基于 MIT 授权的 tarampampam/error-pages ghost 模板改写，中文文案，**保留版权声明**）。
 nginx 用法：`error_page 404 /error-pages/404.html;`（含 `internal;` 限定）或由 Express `sendFile` 提供。
+
+## 六、前端产出的可直接使用产物（后端无需自己写页面）
+
+- 静态错误页：`client/public/error-pages/<code>.html`（ghost 视觉、中文文案、MIT 声明保留、深浅色自动、429/5xx 自带 30 秒自动重试）
+  → Express 用法：`res.status(404).sendFile(path.join(__dirname, '../../client/public/error-pages/404.html'))`
+  → nginx 用法：`error_page 404 /error-pages/404.html;`（建议配 `internal;`）+ `proxy_intercept_errors on`（502/503/504 才有用）
+- 视觉/文案与前端 SPA 内的错误页一致（同一份来源），不会出现两套长得不一样。
+
+## 七、如果要我出补丁
+
+P0 三项合计约 12 行（都在 `server/src/app.js`）。我可以直接写成 diff 发出来，但**不主动改 `server/`**（避免与后端会话撞车）——
+后端会话说一声「要补丁」，我就把 diff 贴进本文件。
