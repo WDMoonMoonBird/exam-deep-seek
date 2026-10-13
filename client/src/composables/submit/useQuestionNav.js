@@ -4,57 +4,21 @@
  */
 
 import { ref, reactive, computed, nextTick } from 'vue';
-import { message } from 'ant-design-vue';
-import request from '../../api/request.js';
 
-export function useQuestionNav({
-  route, confirm, subQuestions,
-  answers, itemAnswers, multiAnswerBind, subStatuses, subScores, subFeedbacks, bestScore,
-  dirtySet, dirtyCount,
-  stopPolling, loadAssignment,
-  resetEditors,
-}) {
+/**
+ * 题号导航 / 面板状态。
+ *
+ * ★R3-D1（US-B5 前端部分）：原「练习模式 · 重新答题」入口（retryPractice）随练习模式壳一并移除 ——
+ *   其能力等价于「允许重交 + 不限次」+ 提交后可见答案（三开关），学生直接改答案再提交即可；
+ *   后端 /student/assignments/:id/retry 端点未删（属后端 US-B5 范围）。
+ */
+export function useQuestionNav({ subQuestions }) {
 
 // ===================== 导航 =====================
 
 const contentRef = ref(null);
 const activeAnchor = ref('');
 const collapsedSqs = reactive(new Set()); // 折叠状态
-
-async function retryPractice() {
-  // 危险操作（清空全部作答）→ danger=true；ok 文案动词化（R-15）
-  confirm({
-    title: '重新答题',
-    content: '将清空当前所有答案，之前的高分记录会被保留。',
-    okText: '重新答题',
-    cancelText: '取消',
-    danger: true,
-    onOk: async () => {
-      try {
-        await request.post(`/student/assignments/${route.params.id}/retry`);
-        // 清空本地状态
-        for (const key in answers) answers[key] = '';
-        for (const key in itemAnswers) {
-          itemAnswers[key].answer = '';
-          itemAnswers[key].correct = undefined;
-        }
-        for (const key in multiAnswerBind) multiAnswerBind[key] = [];
-        for (const key in subStatuses) subStatuses[key] = null;
-        for (const key in subScores) subScores[key] = null;
-        for (const key in subFeedbacks) subFeedbacks[key] = '';
-        bestScore.value = null;
-        stopPolling();
-        dirtySet.clear();
-        dirtyCount.value = 0;
-        // 卸载旧的编辑器状态以便重新挂载
-        resetEditors();
-        // 重新加载
-        await nextTick();
-        await loadAssignment();
-      } catch { message.error('操作失败'); }
-    },
-  });
-}
 
 // 方块 class
 function sqBoxClass(sqId, itemKey, result) {
@@ -138,6 +102,6 @@ function activateAnchor(anchor) {
   return {
     contentRef, activeAnchor, collapsedSqs, boxIndex, isActiveAnchor, focusBoxAt,
     activateBoxAt, onBoxKeydown, toggleCollapse, scrollTo, activateAnchor,
-    retryPractice, sqBoxClass,
+    sqBoxClass,
   };
 }

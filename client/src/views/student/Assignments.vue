@@ -40,7 +40,9 @@
             <h3 class="assign-title">
               <span class="ellipsis" :title="record.title">{{ record.title }}</span>
               <StatusTag :tone="statusTone(record)" :text="statusText(record)" dot />
-              <StatusTag v-if="record.mode === 'practice'" tone="accent" text="练习" />
+              <!-- R3-D1（US-B5 前端部分）：不再按「练习模式」打标，改由三开关（次数/重交）驱动 -->
+              <StatusTag v-if="record.maxAttempts" tone="neutral" :text="'限 ' + record.maxAttempts + ' 次'" />
+              <StatusTag v-else-if="record.allowResubmit" tone="accent" text="可重交" />
               <LockOutlined v-if="record.locked" class="lock-icon" title="已锁定" />
             </h3>
             <div class="assign-meta">

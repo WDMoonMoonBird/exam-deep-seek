@@ -45,15 +45,11 @@
           </span>
         </template>
 
-        <!-- 状态：沿用本页原有的「练习」标签（accent，加 dot）；考试作业接口只返回已发布的提交，
-             故为「已发布」（success）——措辞与色调沿用全站既有口径（Review.vue 的「已评分」同款）。
-             后端补 status 字段后替换此处即可，见交付报告。 -->
+        <!-- 状态：R3-D1（US-B5 前端部分）不再按「练习模式」分支 —— /student/scores 只返回**已出分**的行
+              （已发布；或历史 practice 作业已评分），故统一显示「已出分」；色调沿用全站 success 口径。
+              后端补 status/口径字段后可再细分（见交付报告的已知缺口）。 -->
         <template v-else-if="column.key === 'status'">
-          <StatusTag
-            :tone="record.mode === 'practice' ? 'accent' : 'success'"
-            :text="record.mode === 'practice' ? '练习' : '已发布'"
-            dot
-          />
+          <StatusTag tone="success" text="已出分" dot />
         </template>
       </template>
     </ListPage>
@@ -97,12 +93,11 @@ function goAssignments() {
 }
 
 /**
- * 作业列次行：题型 · 满分[ · 最高分]，全部沿用现有字段。
- * mode 取值 'exam' | 'practice'（server/prisma/schema.prisma 的 Assignment.mode）；
- * 满分/最高分缺失时各自跳过，不渲染空段。
+ * 作业列次行：满分[ · 最高分]，全部沿用现有字段。
+ * R3-D1（US-B5 前端部分）：不再渲染「练习/考试」题型词（mode 不再是行为开关）；缺失段自动跳过。
  */
 function assignmentSub(record) {
-  const parts = [record.mode === 'practice' ? '练习' : '考试'];
+  const parts = [];
   if (record.maxScore != null) parts.push('满分 ' + record.maxScore);
   if (record.bestScore != null) parts.push('最高 ' + record.bestScore);
   return parts.join(' · ');

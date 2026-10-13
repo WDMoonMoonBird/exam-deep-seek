@@ -11,7 +11,10 @@ import { message } from 'ant-design-vue';
 import { getProjectReview } from '../../api/projects.js';
 import { errorCopyOf } from '../errorCopy.js';
 import { useMonacoWorkspace } from './useMonacoWorkspace.js';
-import { STATUS_TONE, statusColorOf, statusTextOf, displayNoOf, findFirstFile } from './projectReviewPure.js';
+import {
+  STATUS_TONE, statusColorOf, statusTextOf, displayNoOf, findFirstFile,
+  bestScoreNotice, newSubmissionNotice, reviewHintOf,
+} from './projectReviewPure.js';
 
 export function useProjectReviewPage() {
   const route = useRoute();
@@ -34,11 +37,23 @@ export function useProjectReviewPage() {
   const teacherFeedback = ref('');
 
   const status = computed(() => submission.value.status || '');
-  const locked = computed(() => status.value === 'published');
+  /** 已发布：**不再锁死**（US-A2 / G4）—— 仅用于提示「改分立即对学生可见」 */
+  const published = computed(() => status.value === 'published');
   /** a-tag 配色 → StatusTag tone（与 statusColor 一一对应，状态判断未改） */
   const statusTone = computed(() => STATUS_TONE[statusColorOf(status.value)] || 'neutral');
   const statusText = computed(() => statusTextOf(status.value));
   const displayNo = computed(() => displayNoOf(student.value));
+
+  // ── R3-D1（t4）：审核页提示（纯逻辑见 projectReviewPure.js）──
+  /** 历次最高机器分（后端 best_score；未配置/历史行可能为 null） */
+  const bestScore = computed(() => submission.value.bestScore ?? null);
+  const attemptCount = computed(() => submission.value.attemptCount || 0);
+  /** 取最高口径下「计入分 ≠ 最近一次明细」的错配提示（US-B4 AC4） */
+  const scoreNotice = computed(() => bestScoreNotice({ aiScore: aiScore.value, bestScore: bestScore.value }));
+  /** 多次提交且未定案 ⇒ 有新提交，建议复核 */
+  const newSubmitNotice = computed(() => newSubmissionNotice({ attemptCount: attemptCount.value, status: status.value }));
+  /** 教师区提示（已发布 ⇒ 明示立即生效） */
+  const hintText = computed(() => reviewHintOf(status.value));
 
   // saving 定义在 useProjectReviewGrading（人工评分提交中），模板绑的那一个来自它
   const regrading = ref(false);       // 重评请求中（轮询完成/超时后复位）
@@ -153,7 +168,8 @@ export function useProjectReviewPage() {
 
   return {
     submissionId, submission, question, student, version, aiResult, aiScore, maxScore,
-    status, statusTone, statusText, displayNo, locked, loaded, loadError, loadingDetail,
+    status, statusTone, statusText, displayNo, published, loaded, loadError, loadingDetail,
+    bestScore, attemptCount, scoreNotice, newSubmitNotice, hintText,
     gradingState, gradingError, finalScore, teacherFeedback, regrading,
     standardFiles, studentFiles, hasStandardFiles, fetchData, startPolling, stopPolling,
     activeTree, editorContainerRef, fileTreeData, openTabs, activePath, defaultExpandedKeys, fading,

@@ -12,8 +12,9 @@ import { message } from 'ant-design-vue';
 import { saveProjectReview, regradeProjectSubmission } from '../../api/projects.js';
 import request from '../../api/request.js';
 import { errorCopyOf } from '../errorCopy.js';
+import { resolveScoreToSave, scoreIssue } from './projectReviewPure.js';
 
-export function useProjectReviewGrading({ submissionId, submission, aiResult, finalScore, teacherFeedback, regrading, gradingState, startPolling }) {
+export function useProjectReviewGrading({ submissionId, submission, aiResult, finalScore, teacherFeedback, regrading, gradingState, startPolling, maxScore }) {
   const saving = ref(false);
   // ===== AI 提示词查看（该次评分的实际提示词，含学生源码） =====
   const promptModalOpen = ref(false);
@@ -30,25 +31,35 @@ export function useProjectReviewGrading({ submissionId, submission, aiResult, fi
     message.success('已引用 AI 评语，可编辑后审核');
   }
 
-  /** 审核通过（R4：放分唯一开关，状态 reviewed 后学生端才可见分数） */
+  /**
+   * 审核通过 / 保存评分（US-A1 / US-A2 / G1 / G2 / G4）：
+   *   - 只改评语不改分：清空分值输入 ⇒ 回落该提交已保存的最终分（分值不变），评语照常保存；
+   *   - 非法分值前端拦截（数字/整数/0≤分≤满分），给出可读文案，不发请求（不会出现后端 NaN→500）；
+   *   - 已发布提交不再锁死：保存后学生端立即生效（后端 G3 由 D5/t12 对齐状态语义）。
+   */
   async function onApprove() {
-    if (finalScore.value == null) {
-      message.warning('请填写最终分数');
+    const resolved = resolveScoreToSave({ input: finalScore.value, saved: submission.value.finalScore });
+    const issue = scoreIssue({ score: resolved.score, maxScore: maxScore ? maxScore.value : undefined });
+    if (issue) {
+      message.warning(issue);
       return;
     }
     saving.value = true;
     try {
       await saveProjectReview(submissionId.value, {
-        finalScore: finalScore.value,
+        finalScore: resolved.score,
         teacherFeedback: teacherFeedback.value,
       });
+      finalScore.value = resolved.score;                 // 只改评语时，输入框回填为已保存的分值
+      const prevStatus = submission.value.status;
       submission.value = {
         ...submission.value,
-        status: 'reviewed',
-        finalScore: finalScore.value,
+        // 已发布的提交改分后仍保持 published（US-A2 AC2：学生端无需重新发布即可见）
+        status: prevStatus === 'published' ? 'published' : 'reviewed',
+        finalScore: resolved.score,
         teacherFeedback: teacherFeedback.value,
       };
-      message.success('审核通过，学生已可见成绩');
+      message.success(resolved.source === 'saved' ? '评语已保存（分数保持不变）' : '审核通过，学生已可见成绩');
     } catch (e) {
       message.error(errorCopyOf(e, { tag: 'ProjectReviewNew.vue 保存人工评分', action: '保存' }));
     } finally {

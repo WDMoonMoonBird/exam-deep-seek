@@ -30,6 +30,63 @@ export function displayNoOf(student) {
   return at > 0 ? no.substring(0, at) : no;
 }
 
+/**
+ * R3-D1（t4 / US-A1 AC2）：最终分取值 —— 支持「只改评语不改分」。
+ * 输入为空（教师清空）⇒ 回落该提交**已保存**的最终分（分值不变）；都没有 ⇒ null（首次给分必须填）。
+ * @returns {{score: number|null, source: 'input'|'saved'|'missing'}}
+ */
+export function resolveScoreToSave({ input, saved } = {}) {
+  const hasInput = input !== null && input !== undefined && input !== '';
+  if (hasInput) return { score: Number(input), source: 'input' };
+  const hasSaved = saved !== null && saved !== undefined && saved !== '';
+  if (hasSaved) return { score: Number(saved), source: 'saved' };
+  return { score: null, source: 'missing' };
+}
+
+/**
+ * R3-D1（t4 / G2）：分值合法性前端拦截 —— 返回可读文案（null = 合法）。
+ * 口径：有限数字 + 整数（submissions.final_score 为整型）+ 0 ≤ 分 ≤ 满分。
+ */
+export function scoreIssue({ score, maxScore } = {}) {
+  if (score === null || score === undefined || score === '') return '请填写最终分数';
+  const n = Number(score);
+  if (!Number.isFinite(n)) return '最终分数需为数字';
+  if (!Number.isInteger(n)) return '最终分数需为整数';
+  if (n < 0) return '最终分数不能小于 0';
+  if (maxScore != null && n > maxScore) return `最终分数不能超过满分 ${maxScore}`;
+  return null;
+}
+
+/**
+ * R3-D1（t4 / US-B4 AC4）：口径=取最高时，若历次最高分高于最近一次 AI 分，
+ * 则「计入分」与下方 AI 明细**不同源** ⇒ 返回提示（避免分数 85 但明细来自 78 那次）。
+ */
+export function bestScoreNotice({ aiScore, bestScore } = {}) {
+  const latest = aiScore ?? null;
+  const best = bestScore ?? null;
+  if (best == null || latest == null || best <= latest) return null;
+  return {
+    best,
+    latest,
+    text: `计入分 ${best} 分（历次最高）；下方 AI 明细来自最近一次评分（${latest} 分）—— 两者不一致时以计入分为准`,
+  };
+}
+
+/** R3-D1（t4）：多次提交且尚未定案 ⇒ 「有新提交，建议复核」（US-B4 冲突 3 的审核页提示） */
+export function newSubmissionNotice({ attemptCount, status } = {}) {
+  const n = Number(attemptCount) || 0;
+  if (n < 2) return null;
+  if (status === 'reviewed' || status === 'published') return null;
+  return `该生已提交 ${n} 次，最近一次尚未定案：有新提交，建议复核后再给分`;
+}
+
+/** R3-D1（t4 / G4）：教师区提示 —— 已发布不再锁死，改为明示「立即生效」 */
+export function reviewHintOf(status) {
+  if (status === 'published') return '已发布：改分/评语保存后学生端立即生效';
+  if (status === 'reviewed') return '已审核，可修改后再次保存（学生端立即生效）';
+  return '审核通过后学生即可看到分数与评语';
+}
+
 /** 源 :444-451 —— 收集全部目录节点 path，用于「全展开」（切源后仍生效） */
 export function collectDirKeys(nodes, acc = []) {
   for (const n of nodes || []) {

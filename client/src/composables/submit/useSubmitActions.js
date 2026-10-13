@@ -6,17 +6,27 @@
 import { computed } from 'vue';
 import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
+import { limitReached as isLimitReached, limitText } from './submitSwitches.js';
 
 export function useSubmitActions({
   route, confirm, q, subQuestions, subStatuses, answers,
-  allowResubmit, isPracticeMode, currentAttempt, submittedAttempts, submittingAll,
+  allowResubmit, maxAttempts, currentAttempt, submittedAttempts, submittingAll,
   allSubmitted, draftNotice,
   isSqReadonly, hasObjectiveAnswer, hasPartialOmissions, buildObjectiveAnswer,
   startPolling,
 }) {
 
-// 不允许补交时，一旦有题已提交就不能再交
+/** US-C2 AC2：已达次数上限 ⇒ 禁止提交（并给出原因文案） */
+const limitReached = computed(() => isLimitReached({
+  maxAttempts: maxAttempts.value, submittedAttempts: submittedAttempts.value,
+}));
+
+/** 上限原因文案（与后端同口径：已达提交次数上限（最多 N 次）） */
+const limitNote = computed(() => (limitReached.value ? limitText(maxAttempts.value) : ''));
+
+// 不允许重交时，一旦有题已提交就不能再交；达次数上限时一律禁止
 const submitDisabled = computed(() => {
+  if (limitReached.value) return true;
   if (allSubmitted.value) return true;
   if (!allowResubmit.value) {
     for (const sq of subQuestions.value) {
@@ -25,20 +35,6 @@ const submitDisabled = computed(() => {
     }
   }
   return false;
-});
-
-const practiceAllGraded = computed(() => {
-  if (!isPracticeMode.value) return false;
-  // 只检查已提交的小题是否全部评分完毕
-  const submitted = subQuestions.value.filter(sq => {
-    const s = subStatuses[sq.id];
-    return s === 'submitted' || s === 'ai_graded' || s === 'reviewed' || s === 'published';
-  });
-  if (!submitted.length) return false;
-  return submitted.every(sq => {
-    const s = subStatuses[sq.id];
-    return s === 'ai_graded' || s === 'reviewed' || s === 'published';
-  });
 });
 
 // ===================== 提交全部 =====================
@@ -106,11 +102,12 @@ async function submitAll() {
         draftNotice.value = '';   // 答案已随提交入库，此前的「改动仅在重新提交时保存」提示随之失效
         currentAttempt.value += 1;
         submittedAttempts.value += 1;
-        if (isPracticeMode.value) startPolling();
+        // 有提交在评分中 ⇒ 轮询刷新状态与分数（开关驱动，不再限定练习模式）
+        if (ok > 0) startPolling();
       } else message.warning(`${ok} 题成功，${fail} 题失败`);
     },
   });
 }
 
-  return { submitDisabled, practiceAllGraded, submitAll };
+  return { submitDisabled, limitReached, limitNote, submitAll };
 }

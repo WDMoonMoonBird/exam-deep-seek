@@ -6,7 +6,7 @@
 import request from '../../api/request.js';
 
 export function useAssignmentLoader({
-  route, data, allowResubmit, endTime, isPracticeMode, maxAttempts, q, subQuestions,
+  route, data, allowResubmit, endTime, maxAttempts, scorePolicy, answerVisibility, q, subQuestions,
   answers, editorLangs, subStatuses, subScores, subFeedbacks, bestScore,
   submittedAttempts, currentAttempt,
   initObjectiveAnswers, markObjectiveCorrect, armDeadlineTimer,
@@ -23,7 +23,9 @@ async function loadAssignment() {
   if (ass) {
     allowResubmit.value = !!ass.allowResubmit;
     endTime.value = ass.endTime;
-    isPracticeMode.value = ass.mode === 'practice';
+    // R3-D1：三开关（②计分口径 / ③答案可见性 -> 未配置时与后端默认一致：取最后 / 发布后可见）
+    scorePolicy.value = ass.scorePolicy === 'best' ? 'best' : 'last';
+    answerVisibility.value = ass.answerVisibility === 'immediate' ? 'immediate' : 'after_publish';
     maxAttempts.value = ass.maxAttempts || null;
   }
   const aq = ass?.assignmentQuestions?.[0];
@@ -46,16 +48,15 @@ async function loadAssignment() {
       answers[key] = s.answer || '';
     }
     subStatuses[key] = s.status;
-    // 已发布 或 练习模式已评分 → 显示分数
-    const isScored = s.status === 'published' || (isPracticeMode.value && (s.status === 'ai_graded' || s.status === 'reviewed'));
-    if (isScored) {
-      subScores[key] = s.finalScore ?? s.aiScore;
-      if (sq?.type === 'code' || !sq?.type) {
-        subFeedbacks[key] = s.teacherFeedback || s.aiFeedback || '';
-      }
-      if (sq?.type === 'objective') {
-        markObjectiveCorrect(sq, s);
-      }
+    // 分数/评语/对错：一律以**后端下发的字段**为准（后端按「已发布 / 开关 / 历史 practice」规则裁剪），
+    // 前端不再依据 mode 判断 —— 开关驱动（US-B5 前端部分）。
+    if (s.finalScore != null || s.bestScore != null) {
+      subScores[key] = s.finalScore ?? s.bestScore;
+    }
+    if (s.teacherFeedback) subFeedbacks[key] = s.teacherFeedback;
+    // 标准答案已随本次响应下发（可见性开关放行）⇒ 客观题可就地判定对错（与后端同源，不额外泄漏）
+    if (sq?.type === 'objective' && (sq.objectiveItems || []).some(it => it.answer != null)) {
+      markObjectiveCorrect(sq, s);
     }
   });
 
@@ -82,11 +83,8 @@ async function loadAssignment() {
   submittedAttempts.value = maxAttemptCount;
   currentAttempt.value = maxAttemptCount + 1;
 
-  // 练习模式：如果有正在评分中的提交，开启轮询
-  if (isPracticeMode.value) {
-    const hasGrading = (r.data.submissions || []).some(s => s.status === 'submitted');
-    if (hasGrading) startPolling();
-  }
+  // 有正在评分中的提交 ⇒ 开启轮询（开关驱动，不再限定练习模式）
+  if ((r.data.submissions || []).some(s => s.status === 'submitted')) startPolling();
 }
 
 // ===================== 评分轮询 =====================

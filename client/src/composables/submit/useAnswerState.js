@@ -5,6 +5,7 @@
 
 import { ref, reactive } from 'vue';
 import { getItemKey, itemTypeLabel } from './answerFormat.js';
+import { hasScore as hasScoreValue } from './submitSwitches.js';
 
 export function useAnswerState({ markDirty, isSqReadonly }) {
 
@@ -16,7 +17,9 @@ const subQuestions = ref([]);
 const allowResubmit = ref(false);
 const endTime = ref(null);
 const showMaterial = ref(true);
-const isPracticeMode = ref(false);
+/** R3-D1（US-B1）：三开关中的②③ —— 页面不再以「练习模式」驱动任何行为 */
+const scorePolicy = ref('last');
+const answerVisibility = ref('after_publish');
 const maxAttempts = ref(null);
 const currentAttempt = ref(1);
 const submittedAttempts = ref(0);
@@ -46,9 +49,9 @@ function getNavLabel(sq, i) {
   return n; // group 模式只显示小题号
 }
 
+/** 是否已出分：以后端**实际下发**的分数为准（可见性规则在后端，前端不按模式判断） */
 function sqHasScore(sqId) {
-  const s = subStatuses[sqId];
-  return s === 'published' || (isPracticeMode.value && (s === 'ai_graded' || s === 'reviewed'));
+  return hasScoreValue(subScores[sqId]);
 }
 
 function isSqAnswered(sq) {
@@ -63,9 +66,8 @@ function isSqAnswered(sq) {
 // 主观题方块状态：出分后按得分率着色，否则只看是否作答
 function getSqResult(sq) {
   const key = sq.id;
-  const status = subStatuses[key];
-  // 考试已发布 或 练习已评分 → 按得分率着色
-  if (status === 'published' || (isPracticeMode.value && (status === 'ai_graded' || status === 'reviewed'))) {
+  // 已出分（后端下发了分数）→ 按得分率着色
+  if (sqHasScore(key)) {
     const ratio = (subScores[key] || 0) / (sq.score || 1);
     if (ratio >= 0.8) return 'correct';
     if (ratio >= 0.4) return 'partial';
@@ -86,9 +88,7 @@ function getItemResult(sqId, itemKey) {
 
 // 客观题卡片 class（出分后显示对错框色）
 function oiCardClass(sqId, item) {
-  const subStatus = subStatuses[sqId];
-  const isScored = subStatus === 'published' || (isPracticeMode.value && (subStatus === 'ai_graded' || subStatus === 'reviewed'));
-  if (!isScored) return { 'oi-readonly': isSqReadonly(sqId) };
+  if (!sqHasScore(sqId)) return { 'oi-readonly': isSqReadonly(sqId) };
   const entry = itemAnswers[getItemKey(sqId, item.key)];
   if (!entry || !(entry.answer || '').trim()) return {};
   return {
@@ -185,7 +185,8 @@ function hasObjectiveAnswer(sq) {
 }
 
   return {
-    data, q, subQuestions, allowResubmit, endTime, showMaterial, isPracticeMode,
+    data, q, subQuestions, allowResubmit, endTime, showMaterial,
+    scorePolicy, answerVisibility,
     maxAttempts, currentAttempt, submittedAttempts, bestScore, submittingAll, langs,
     answers, itemAnswers, multiAnswerBind, subStatuses, subScores, subFeedbacks, editorLangs,
     getNavLabel, sqHasScore, isSqAnswered, getSqResult, getItemResult, oiCardClass,

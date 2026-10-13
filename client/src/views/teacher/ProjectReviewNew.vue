@@ -101,6 +101,7 @@
         <!-- T4-F2 类别收口：antd green 预置色亮 3.37:1 不达 AA → 走令牌语义类；
              red 实测亮 5.07 / 暗 4.54、blue 亮 5.50 / 暗 4.91 均达标，保持预置色不动。 -->
         <a-tag v-if="aiScore != null" class="tag-success" size="small">AI {{ aiScore }} 分</a-tag>
+        <a-tag v-if="bestScore != null && bestScore !== aiScore" class="tag-success" size="small">最高 {{ bestScore }} 分</a-tag>
         <a-tag v-if="gradingState === 'failed'" color="red" size="small">评分异常</a-tag>
         <a-tag v-if="status === 'reviewed'" color="blue" size="small">已审核</a-tag>
         <a-tag v-if="status === 'published'" class="tag-success" size="small">已发布</a-tag>
@@ -114,6 +115,8 @@
           <div class="ai-head">
             <span class="ai-score-label">AI 评分</span>
             <span class="ai-score-num">{{ aiScore ?? '—' }}<span v-if="maxScore && aiScore != null"> / {{ maxScore }}</span></span>
+            <!-- R3-D1：历次最高机器分（口径=取最高时的「计入分」；与最近一次不一致时并列展示） -->
+            <a-tag v-if="bestScore != null && bestScore !== aiScore" class="tag-success" size="small">计入分（最高）{{ bestScore }}</a-tag>
             <a-tag v-if="gradingState === 'failed'" color="red">评分异常</a-tag>
             <a-tag v-else-if="status === 'submitted' && !aiResult" class="tag-warning">评分中</a-tag>
             <a-popconfirm
@@ -185,9 +188,13 @@
 
         <!-- 右：教师区 -->
         <div class="teacher-section">
+          <!-- R3-D1（t4）：审核页提示 —— 已发布不锁死（改分即刻生效）/ 取最高时分数与明细不同源 / 有新提交建议复核 -->
+          <div v-if="published" class="pr-notice is-warn" role="status">该提交已发布：改分/评语保存后学生端立即生效</div>
+          <div v-if="scoreNotice" class="pr-notice is-info" role="status">{{ scoreNotice.text }}</div>
+          <div v-if="newSubmitNotice" class="pr-notice is-warn" role="status">{{ newSubmitNotice }}</div>
           <div class="t-row">
             <span class="t-label">最终分数</span>
-            <a-input-number v-model:value="finalScore" :min="0" :max="maxScore" :step="1" style="width:110px" :disabled="locked" />
+            <a-input-number v-model:value="finalScore" :min="0" :max="maxScore" :step="1" style="width:110px" />
             <span class="t-max">满分 {{ maxScore }}</span>
           </div>
           <div class="t-row t-feedback">
@@ -196,12 +203,11 @@
               v-model:value="teacherFeedback"
               :rows="3"
               placeholder="审核后对学生可见；AI 评语不会自动下发，可点左侧「引用到教师评语」"
-              :disabled="locked"
             />
           </div>
           <div class="t-actions">
-            <span class="t-hint">{{ locked ? '成绩已发布，不可修改' : (status === 'reviewed' ? '已审核，可修改后重新提交' : '审核通过后学生即可看到分数与评语') }}</span>
-            <a-button type="primary" :loading="saving" :disabled="locked" @click="onApprove">{{ status === 'reviewed' ? '更新审核' : '审核通过' }}</a-button>
+            <span class="t-hint">{{ hintText }}</span>
+            <a-button type="primary" :loading="saving" @click="onApprove">{{ status === 'reviewed' || published ? '更新审核' : '审核通过' }}</a-button>
           </div>
         </div>
       </div>
@@ -249,15 +255,16 @@ import { useReviewLayout } from '../../composables/projectReviewNew/useReviewLay
  */
 const {
   submissionId, submission, aiResult, question, student, displayNo,
-  status, statusTone, statusText, locked, loaded, loadError,
-  aiScore, maxScore, gradingState, finalScore, teacherFeedback, hasStandardFiles, fetchData,
+  status, statusTone, statusText, published, loaded, loadError,
+  aiScore, bestScore, scoreNotice, newSubmitNotice, hintText,
+  maxScore, gradingState, finalScore, teacherFeedback, hasStandardFiles, fetchData,
   regrading, startPolling,
   activeTree, editorContainerRef, fileTreeData, openTabs, activePath, defaultExpandedKeys, fading,
   onTreeSelect, onTreeDblclick, switchTab, closeTab,
 } = useProjectReviewPage();
 
 const { saving, promptModalOpen, promptLoading, promptData, onApprove, onRegrade, showPrompt, quoteAiComment } =
-  useProjectReviewGrading({ submissionId, submission, aiResult, finalScore, teacherFeedback, regrading, gradingState, startPolling });
+  useProjectReviewGrading({ submissionId, submission, aiResult, finalScore, teacherFeedback, regrading, gradingState, startPolling, maxScore });
 
 const { narrow, panelOpen, collapsed } = useReviewLayout();
 
@@ -371,6 +378,11 @@ const hasSummary = computed(() => !!(fbView.value && fbView.value.kind === 'chec
 .ai-comment { margin-top:8px; padding:8px 10px; background:var(--bg-surface-2); border-radius:var(--radius-sm); border-left:3px solid var(--brand-600); }
 .ai-comment-text { font-size:12.5px; line-height:1.7; color:var(--text-primary); white-space:pre-wrap; }
 .ai-empty { margin-top:12px; }
+
+/* R3-D1（t4）：审核页提示条（已发布 / 取最高分数错配 / 有新提交）—— 走状态令牌，与全局语义色一致 */
+.pr-notice { padding:6px 10px; border-radius:var(--radius-sm); border:1px solid; font-size:var(--fs-caption); line-height:1.6; }
+.pr-notice.is-warn { background:var(--status-warning-bg); border-color:var(--status-warning-bd); color:var(--status-warning-fg); }
+.pr-notice.is-info { background:var(--status-info-bg); border-color:var(--status-info-bd); color:var(--status-info-fg); }
 
 .t-row { display:flex; align-items:center; gap:8px; }
 .t-label { font-size:var(--fs-body-sm); color:var(--text-secondary); width:56px; flex-shrink:0; }
