@@ -258,4 +258,65 @@ describe('W62 AI 自然语言总评（R2-B43）', () => {
     expect(view).toContain('defaultActiveKey');
     expect(view).toContain("fbOf(sq.id).summary ? [] : ['items']");     // ★有总评默认折叠、无总评保持展开
   }, 60000);
+
+  it('★W62-8 O1（R2-B45）：未登记价目的型号 ⇒ PRICE_FALLBACK 保守上限 + 成本护栏仍可信；已登记型号行为不变', async () => {
+    const model = await startFakeModel([{}, {}]);
+    // ① 未知型号：dry-run 必须先声明保守上限，且逐份 cost **非 0**
+    const dry = await runScript(['--submission', String(env.rows[2].id), '--base-url', model.url, '--api-key', 'fake', '--model', 'deepseek-reasoner', '--force', '--json']);
+    expect(dry.status).toBe(0);
+    expect(dry.stdout).toContain('PRICE_FALLBACK model=deepseek-reasoner rule=deepseek-v4-pro.peak');
+    expect(dry.stdout).toContain('PRICE_FALLBACK=yes');
+    const costMatch = /cost=(\d+\.\d{6})/.exec(dry.stdout);
+    expect(costMatch).toBeTruthy();
+    expect(Number(costMatch[1])).toBeGreaterThan(0);              // ★不再是 0.000000（旧缺陷）
+    expect(dry.stdout).toContain('SCORE_UNCHANGED=yes');
+    expect(dry.stdout).toContain('price_fallback');               // JSON 摘要里带 fallback 标记
+    // ② 未知型号 + 极小 --max-cost ⇒ **护栏仍能拦住**（退出码 2）
+    const stopped = await runScript(['--submission', String(env.rows[2].id), '--base-url', model.url, '--api-key', 'fake', '--model', 'deepseek-reasoner', '--force', '--apply', '--max-cost', '0.0000001']);
+    expect(stopped.status).toBe(2);
+    expect(stopped.stdout).toContain('COST_GUARD_STOP');
+    expect(stopped.stdout).toContain('PRICE_FALLBACK');
+    // ③ 已登记型号：不打印 PRICE_FALLBACK，正常退出
+    const known = await runScript(['--submission', String(env.rows[2].id), '--base-url', model.url, '--api-key', 'fake', '--model', 'deepseek-v4-flash', '--force', '--json']);
+    expect(known.status).toBe(0);
+    expect(known.stdout).not.toContain('PRICE_FALLBACK');
+    const knownCost = Number((/cost=(\d+\.\d{6})/.exec(known.stdout) || [])[1]);
+    expect(knownCost).toBeGreaterThan(0);
+  }, 180000);
+
+  it('★W62-9 O2（R2-B45）：真实 13 项失分 ⇒ facts.failed_count 落库且依据行显示 13（不再少报为 12）；旧数据兼容不虚报', async () => {
+    // 夹具：13 个未通过分项（prompt 仍只列 12 条）
+    const items13 = Array.from({ length: 13 }, (_, i) => ({ item: 'F' + String(i + 1).padStart(2, '0'), title: '失分项' + (i + 1), status: 'miss', score: 0, maxScore: 1, comment: '判据 | 证据: src/F' + (i + 1) + '.java' }));
+    await prisma.submission.update({
+      where: { id: env.rows[0].id },
+      data: { aiFeedback: JSON.stringify({ source: 'dsh-checker', raw_score: 93, score_int: 93, max_score: 100, breakdown: items13 }) },
+    });
+    const model = await startFakeModel([{}]);
+    const r = await runScript(['--submission', String(env.rows[0].id), '--base-url', model.url, '--api-key', 'fake', '--model', 'fake-model', '--apply', '--force', '--json']);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('listed=12(截断到12条)');           // prompt 上限不变
+    expect(r.stdout).toContain('failed=13');
+    const stored = await prisma.submission.findUnique({ where: { id: env.rows[0].id }, select: { aiFeedback: true, aiScore: true } });
+    const doc = JSON.parse(stored.aiFeedback);
+    expect(doc.summary.facts.failed_count).toBe(13);              // ★真实失分项数落库
+    expect(doc.summary.facts.failed_items).toHaveLength(12);      // 列表仍 ≤12
+    expect(stored.aiScore).toBe(93);
+    // 端到端：教师侧解析该行 ⇒ 依据行显示「等 13 项」
+    const mod = await import('../../../client/src/composables/review/parseCheckerFeedback.js');
+    const parsed = (mod.parseCheckerFeedbackText || mod.parseCheckerFeedback)(stored.aiFeedback);
+    expect(parsed.failedCount).toBe(13);
+    expect(parsed.basisText).toContain('等 13 项');
+    expect(parsed.basisText).not.toContain('等 12 项');
+    // 旧数据兼容：有 summary 但缺 failed_count（列表截断到 12）⇒ 回落 12（不虚报）
+    const legacy = (mod.parseCheckerFeedbackText || mod.parseCheckerFeedback)(JSON.stringify({
+      source: 'dsh-checker', score_int: 93, max_score: 100, breakdown: items13,
+      summary: { text: '旧总评', facts: { passed: 0, total: 13, score: 93, failed_items: items13.slice(0, 12).map((x) => x.item) } },
+    }));
+    expect(legacy.failedCount).toBe(12);
+    expect(legacy.basisText).toContain('等 12 项');
+    // 无 summary 路径不变：用**未截断**的分项推断 ⇒ 13
+    const noSum = (mod.parseCheckerFeedbackText || mod.parseCheckerFeedback)(JSON.stringify({ source: 'dsh-checker', score_int: 93, max_score: 100, breakdown: items13 }));
+    expect(noSum.failedCount).toBe(13);
+    expect(noSum.basisText).toContain('等 13 项');
+  }, 180000);
 });
