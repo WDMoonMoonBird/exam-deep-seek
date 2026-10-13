@@ -349,4 +349,86 @@ describe('W61 AI 评分依据（R2-B41）', () => {
     expect((dry.stdout.match(/ROW sub=/g) || []).length).toBe(2);
     expect(dry.stdout).toContain('SCORE_UNCHANGED=yes');
   }, 180000);
+
+  it('★W61-8 F-T17-1：同名多行 ⇒ AMBIGUOUS 且零写入（dry-run 与 apply 一致）；--pick-first-by-name 只写第一行且留痕；--map 可精确指定', async () => {
+    // 独立夹具：两名学生 realName 相同（username 不同）、分数相同 ⇒ 只能由映射策略决定写谁
+    const dupName = TAG + '-DUP';
+    const teacher = await prisma.user.create({ data: { username: TAG + '-dup-t', password: 'x', role: 'teacher', realName: TAG } });
+    cleanup.userIds.push(teacher.id);
+    const q = await prisma.question.create({ data: { teacherId: teacher.id, title: TAG + '-dup', type: 'project', difficulty: 'medium', material: 'm', scoringRubric: 'r', maxScore: 100 } });
+    cleanup.questionIds.push(q.id);
+    const a = await prisma.assignment.create({ data: { teacherId: teacher.id, title: TAG + '-dup', startTime: new Date('2026-05-01'), endTime: new Date('2099-01-01') } });
+    cleanup.assignmentIds.push(a.id);
+    await prisma.assignmentQuestion.create({ data: { assignmentId: a.id, questionId: q.id, sortOrder: 1 } });
+    const dupIds = [];
+    for (let i = 0; i < 2; i += 1) {
+      const u = await prisma.user.create({ data: { username: TAG + '-dups' + i, password: 'x', role: 'student', realName: dupName } });
+      cleanup.userIds.push(u.id);
+      const s = await prisma.submission.create({
+        data: {
+          assignmentId: a.id, studentId: u.id, questionId: q.id, status: 'submitted', aiScore: 70,
+          aiFeedback: JSON.stringify({ source: 'dsh-checker', raw_score: 70, score_int: 70, max_score: 100, breakdown: [{ item: 'P01', status: 'miss', score: 0, maxScore: 1, comment: '旧依据' }] }),
+        },
+      });
+      cleanup.submissionIds.push(s.id);
+      dupIds.push(s.id);
+    }
+    dupIds.sort((x, y) => x - y);                                  // 第一行 = id 较小者（脚本按 id asc 取候选）
+    const src = fs.mkdtempSync(path.join(os.tmpdir(), 'w61-dup-'));
+    cleanup.roots.push(src);
+    const mkSrc = (evidence) => {
+      fs.writeFileSync(path.join(src, 'grading-results.json'), JSON.stringify([
+        { submission_id: dupName, totals: { score: 70, max_score: 100 }, items: [{ id: 'P01', title: '分项一', max_score: 1, score: 0, status: 'miss', reason: 'P01 | 证据: ' + evidence }] },
+      ]));
+    };
+    const run = (args) => spawnSync(process.execPath, [SCRIPT, '--from', src, '--assignment', String(a.id), ...args], { encoding: 'utf8', timeout: 120000, env: { ...process.env } });
+    const fbOf = async (id) => (await prisma.submission.findUnique({ where: { id }, select: { aiFeedback: true, aiScore: true } }));
+
+    // ① 默认（无 --map）：同名 ⇒ AMBIGUOUS + 零写入 + ambiguous=1；dry-run 与 apply 行为一致
+    mkSrc('src/dup1.java');
+    const before = [await fbOf(dupIds[0]), await fbOf(dupIds[1])];
+    const dry = run(['--json']);
+    expect(dry.status).toBe(0);
+    expect(dry.stdout).toContain('AMBIGUOUS name=' + dupName + ' subs=[' + dupIds[0] + ',' + dupIds[1] + ']');
+    expect(dry.stdout).toContain('ambiguous=1');
+    expect(dry.stdout).toContain('MODE=dry-run');
+    const apply = run(['--apply', '--json']);
+    expect(apply.status).toBe(0);
+    expect(apply.stdout).toContain('AMBIGUOUS name=' + dupName);
+    expect(apply.stdout).toContain('ambiguous=1');
+    expect(apply.stdout).toContain('applied=0');
+    expect(apply.stdout).toContain('SCORE_UNCHANGED=yes');
+    const afterAmbig = [await fbOf(dupIds[0]), await fbOf(dupIds[1])];
+    expect(afterAmbig[0].aiFeedback).toBe(before[0].aiFeedback);      // ★零写入（两行都原样）
+    expect(afterAmbig[1].aiFeedback).toBe(before[1].aiFeedback);
+    expect(String(afterAmbig[0].aiFeedback)).not.toContain('src/dup1.java');
+    expect(String(afterAmbig[1].aiFeedback)).not.toContain('src/dup1.java');
+
+    // ② --pick-first-by-name：只写第一行（id 较小者）并打印 PICK_FIRST（含 taken/dropped）
+    const picked = run(['--apply', '--pick-first-by-name', '--json']);
+    expect(picked.status).toBe(0);
+    expect(picked.stdout).toContain('PICK_FIRST name=' + dupName + ' taken=' + dupIds[0] + ' dropped=[' + dupIds[1] + ']');
+    expect(picked.stdout).toContain('ambiguous=0');
+    expect(picked.stdout).toContain('applied=1');
+    const afterPick = [await fbOf(dupIds[0]), await fbOf(dupIds[1])];
+    expect(String(afterPick[0].aiFeedback)).toContain('src/dup1.java');    // 第一行被写
+    expect(String(afterPick[1].aiFeedback)).not.toContain('src/dup1.java'); // 第二行零写入
+    expect(afterPick[1].aiFeedback).toBe(before[1].aiFeedback);
+    expect(afterPick[0].aiScore).toBe(70);                                 // 分数零变化
+
+    // ③ --map 显式指定同名之一 ⇒ 精确写入该行（不触发 AMBIGUOUS 跳过）
+    mkSrc('src/dup2.java');
+    const mapFile = path.join(src, 'dup-map.json');
+    fs.writeFileSync(mapFile, JSON.stringify({ [dupName]: dupIds[1] }));
+    const mapped = run(['--from', src, '--assignment', String(a.id), '--map', mapFile, '--apply', '--json']);
+    expect(mapped.status).toBe(0);
+    expect(mapped.stdout).not.toContain('AMBIGUOUS');
+    expect(mapped.stdout).toContain('applied=1');
+    const afterMap = [await fbOf(dupIds[0]), await fbOf(dupIds[1])];
+    expect(String(afterMap[1].aiFeedback)).toContain('src/dup2.java');      // ★精确写第二行
+    expect(String(afterMap[0].aiFeedback)).not.toContain('src/dup2.java'); // 第一行未被覆盖
+    expect(String(afterMap[0].aiFeedback)).toContain('src/dup1.java');
+    expect(afterMap[0].aiScore).toBe(70);
+    expect(afterMap[1].aiScore).toBe(70);
+  }, 180000);
 });

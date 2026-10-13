@@ -15,6 +15,7 @@
  *   选项：--map <json> 显式 slug→submissionId 映射（{ "<slug>": 123 } 或 { "submissions": {...} }）
  *        --student-key name|username  按学生姓名/账号映射（默认 name=realName；两者都会尝试）
  *        --force-score-mismatch       允许「源总分 ≠ 行 ai_score」的行也回填（默认跳过并报告）
+ *        --pick-first-by-name         同名多行时显式取第一行（**默认关闭**：默认打印 AMBIGUOUS 并跳过，避免把 A 的依据写进 B）
  *        --json                       以 JSON 输出汇总（便于机器判读）
  *
  * 源形状兼容（读码结论 + 云端归档实测形状）：
@@ -39,6 +40,7 @@ function parseArgs(argv) {
     if (a === '--apply') out.apply = true;
     else if (a === '--json') out.json = true;
     else if (a === '--force-score-mismatch') out.forceScoreMismatch = true;
+    else if (a === '--pick-first-by-name') out.pickFirstByName = true;   // ★F-T17-1：默认关（同名默认跳过并告警）
     else if (a === '--from') out.from = argv[++i];
     else if (a === '--job') out.job = argv[++i];
     else if (a === '--runs-root') out.runsRoot = argv[++i];
@@ -279,27 +281,89 @@ async function main() {
     ? await prisma.user.findMany({ where: { id: { in: studentIds } }, select: { id: true, realName: true, username: true } })
     : [];
   const userById = new Map(users.map((u) => [Number(u.id), u]));
-  const byName = new Map();
+  // ★F-T17-1（R2-B44）：名字索引必须是「名字 → 候选提交集合」，**不得先到先得**（同名静默取第一行 = 数据安全隐患）。
+  const byRealName = new Map();   // name → Set<submissionId>
+  const byUsername = new Map();
+  const addName = (map, raw, id) => {
+    const key = String(raw || '').trim();
+    if (!key) return;
+    if (!map.has(key)) map.set(key, new Set());
+    map.get(key).add(Number(id));
+  };
   for (const s of subs) {
     const u = userById.get(Number(s.studentId)) || {};
-    for (const key of [u.realName, u.username].filter(Boolean)) {
-      const k = String(key).trim();
-      if (k && !byName.has(k)) byName.set(k, s);
-    }
+    addName(byRealName, u.realName, s.id);
+    addName(byUsername, u.username, s.id);
   }
+  /** 按名字解析候选：返回 {ids:[…], via} 或 null（无命中）。ids>1 ⇒ 同名歧义，调用方必须显式处置。 */
+  const resolveName = (name) => {
+    const key = String(name || '').trim();
+    if (!key) return null;
+    for (const [map, via] of [[byRealName, 'realName'], [byUsername, 'username']]) {
+      const ids = map.get(key);
+      if (ids && ids.size) return { ids: [...ids].map(Number).sort((a, b) => a - b), via };
+    }
+    return null;
+  };
   const bySlug = new Map(Object.entries(explicitMap).map(([k, v]) => [String(k), Number(v)]));
   const subById = new Map(subs.map((s) => [Number(s.id), s]));
+  // ★F-T17-1（R2-B44）：名字索引的**唯一命中视图** —— `has()` 只在「恰好命中一行」时为真，
+  //   歧义（同名多行）一律交给上方的 ambiguous 分支显式处置（跳过 / --pick-first-by-name），**绝不静默取第一行**。
+  const uniqueView = (resolve) => ({
+    has: (k) => { const hit = resolve(k); return !!(hit && hit.ids.length === 1); },
+    get: (k) => { const hit = resolve(k); return hit && hit.ids.length === 1 ? (subById.get(hit.ids[0]) || null) : null; },
+  });
+  const byNameUserGet = (k) => {
+    const key = String(k || '').trim();
+    const ids = byUsername.get(key);
+    return ids && ids.size ? { ids: [...ids].map(Number).sort((a, b) => a - b), via: 'username' } : null;
+  };
+  const byName = uniqueView(resolveName);
+  const byNameUser = uniqueView((k) => {
+    const key = String(k || '').trim();
+    const ids = byUsername.get(key);
+    return ids && ids.size ? { ids: [...ids].map(Number).sort((a, b) => a - b), via: 'username' } : null;
+  });
 
   const plan = [];
+  let ambiguousCount = 0;
   for (const row of loaded.rows) {
-    let target = null; let via = null;
+    let target = null; let via = null; let ambiguous = null;
     // ★CAP-BF-2：映射顺序 ① --map 显式（最高优先）② 源文档 studentName ③ **slug 作 realName 兜底**
     //   ④ slug 作 username 兜底 ⑤ 数值 slug 兜底（平台手工映射）。前四步覆盖云端「文件名=学生姓名」的真实形态。
     if (row.slug && bySlug.has(String(row.slug))) { target = subById.get(bySlug.get(String(row.slug))) || null; via = 'explicit_map'; }
     const docName = row.studentName ? String(row.studentName).trim() : '';
-    if (!target && docName && byName.has(docName)) { target = byName.get(docName); via = args.studentKey === 'username' ? 'doc_username' : 'doc_student_name'; }
     const slugKey = row.slug ? String(row.slug).trim() : '';
+    // ★F-T17-1（R2-B44）：**先只做歧义预检**（不解析）——命中 >1 行 ⇒ 记 ambiguous，解析仍走下面的唯一命中路径。
+    if (!target) {
+      for (const [name, kind] of [[docName, 'doc'], [slugKey, 'slug']]) {
+        if (ambiguous || !name) continue;
+        const hit = args.studentKey === 'username' && kind === 'doc' ? byNameUserGet(name) : resolveName(name);
+        if (hit && hit.ids.length > 1) ambiguous = { name, ids: hit.ids, via: kind === 'slug' ? 'slug_as_realName_or_username' : hit.via, kind };
+      }
+    }
+    // ★B42 口径的唯一命中路径（via 标签沿用既有审计口径；歧义名字在此**不会**被放行 ⇒ 不会被静默取第一行）
+    if (!target && docName && (args.studentKey === 'username' ? byNameUser.has(docName) : byName.has(docName))) {
+      target = args.studentKey === 'username' ? byNameUser.get(docName) : byName.get(docName);
+      via = args.studentKey === 'username' ? 'doc_username' : 'doc_student_name';
+    }
     if (!target && slugKey && byName.has(slugKey)) { target = byName.get(slugKey); via = 'slug_as_realName_or_username'; }
+    if (!target && ambiguous) {
+      if (args.pickFirstByName) {
+        // ★逃生开关（默认关）：显式取第一行，但必须留痕（taken / dropped 可审计）
+        const taken = ambiguous.ids[0];
+        console.log('PICK_FIRST name=' + ambiguous.name + ' taken=' + taken + ' dropped=[' + ambiguous.ids.slice(1).join(',') + '] via=' + ambiguous.via
+          + '（--pick-first-by-name 已开启 ⇒ 旧行为，可审计）');
+        target = subById.get(taken) || null;
+        if (target) via = ambiguous.via + '+pick_first';
+      } else {
+        ambiguousCount += 1;
+        console.log('AMBIGUOUS name=' + ambiguous.name + ' subs=[' + ambiguous.ids.join(',') + '] via=' + ambiguous.via
+          + '（同名多行 ⇒ 跳过不写；用 --map 指定目标或 --pick-first-by-name 显式取第一行）');
+        plan.push({ row, matched: false, ambiguous, reason: 'ambiguous_name' });
+        continue;
+      }
+    }
     if (!target && row.slug) { // 兜底：slug 恰好等于提交 id（平台侧手工建的映射）
       const n = Number(String(row.slug).replace(/^s/, ''));
       if (Number.isFinite(n) && subById.has(n)) { target = subById.get(n); via = 'slug_as_id'; }
@@ -357,14 +421,14 @@ async function main() {
   const summary = {
     mode: args.apply ? 'apply' : 'dry-run',
     source: src, rows: loaded.rows.length, matched: plan.filter((p) => p.matched && !p.skip).length,
-    unmapped, skipped, changed, applied: applied.length,
+    unmapped, skipped, ambiguous: ambiguousCount, changed, applied: applied.length,
     score_unchanged: scoreChanged.length === 0, score_changed_rows: scoreChanged.map((x) => x.id),
     idempotent: secondPassChanged === null ? null : secondPassChanged === 0, second_pass_changed: secondPassChanged,
   };
   if (args.json) console.log('SUMMARY_JSON=' + JSON.stringify(summary));
   console.log('SCORE_UNCHANGED=' + (summary.score_unchanged ? 'yes' : 'no') + ' rows_checked=' + before.length);
   if (summary.idempotent !== null) console.log('IDEMPOTENT=' + (summary.idempotent ? 'yes' : 'no') + ' second_pass_changed=' + secondPassChanged);
-  console.log('MODE=' + summary.mode + ' changed=' + changed + ' applied=' + applied.length + ' unmapped=' + unmapped + ' skipped=' + skipped);
+  console.log('MODE=' + summary.mode + ' changed=' + changed + ' applied=' + applied.length + ' unmapped=' + unmapped + ' skipped=' + skipped + ' ambiguous=' + ambiguousCount);
   if (!summary.score_unchanged) process.exit(3);
 }
 
