@@ -470,6 +470,56 @@ export function isPrunableRunRoot(runRoot, jobId) {
  * 归档 + 策略处理。
  * @returns {Promise<{dir:string|null,bytes:number,files:string[],pruned:boolean,skipped?:string}>}
  */
+/**
+ * ★R2-B42（CAP-BF-3）：把 run-root 的**逐份分项**投影聚合为归档 grading-results.json 的统一样式：
+ *   `[{ submission_id, student_name?, totals?, items:[…], source }]`（按 submission_id 稳定排序，便于逐字节对拍）。
+ * 读取优先级与消费侧一致：`out/grading-result/<slug>.json` > `out/grading-result.json`（单份/条目数组）。
+ * 只读、幂等；任何坏文件跳过（绝不因聚合失败阻断归档）。
+ */
+export function aggregateDetailResults(runRoot) {
+  const rows = [];
+  const readJson = (p) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; } };
+  const push = (slug, studentName, items, totals, source) => {
+    if (!Array.isArray(items) || items.length === 0) return;
+    rows.push({ submission_id: slug ? String(slug) : null, student_name: studentName || null, totals: totals || null, items, source });
+  };
+  const perDir = path.join(runRoot, 'out', 'grading-result');
+  if (fs.existsSync(perDir)) {
+    for (const f of fs.readdirSync(perDir).sort()) {
+      if (!f.endsWith('.json')) continue;
+      const rel = 'out/grading-result/' + f;
+      const doc = readJson(path.join(perDir, f));
+      if (!doc) continue;
+      if (Array.isArray(doc)) { push(f.replace(/\.json$/, ''), null, doc, null, rel); continue; }
+      const sub = (doc && doc.submission) || {};
+      push((sub.id || doc.slug || f.replace(/\.json$/, '')), sub.student_name || sub.studentName || doc.student_name || null, doc.items, doc.totals, rel);
+    }
+  }
+  const single = path.join(runRoot, 'out', 'grading-result.json');
+  if (fs.existsSync(single)) {
+    const doc = readJson(single);
+    if (doc) {
+      const rel = 'out/grading-result.json';
+      if (Array.isArray(doc)) {
+        // 条目数组（每条一份）优先；否则视为单份 items 数组
+        const perSubmission = doc.some((e) => e && (Array.isArray(e.items) || e.submission_id !== undefined || e.submission !== undefined));
+        if (perSubmission) {
+          for (const e of doc) {
+            const sub = (e && e.submission) || {};
+            push(e && (e.submission_id || sub.id || e.slug), (e && (e.student_name || sub.student_name || sub.studentName)) || null, e && e.items, e && e.totals, rel);
+          }
+        } else {
+          push(null, null, doc, null, rel);
+        }
+      } else {
+        const sub = doc.submission || {};
+        push(sub.id || doc.slug || null, sub.student_name || sub.studentName || doc.student_name || null, doc.items, doc.totals, rel);
+      }
+    }
+  }
+  return rows.sort((a, b) => String(a.submission_id || '').localeCompare(String(b.submission_id || '')) || String(a.source).localeCompare(String(b.source)));
+}
+
 export async function archiveRun({ runRoot, jobId, success, runsRoot = DEFAULT_RUNS_ROOT, log = console, dirName = null }) {
   const result = { dir: null, bytes: 0, files: [], pruned: false };
   if (!runRoot || !fs.existsSync(runRoot)) { result.skipped = 'run_root_missing'; return result; }
@@ -497,6 +547,25 @@ export async function archiveRun({ runRoot, jobId, success, runsRoot = DEFAULT_R
   // ★R2-B31（云上实测修正）：把比较性/结果产物一并归档，便于事后审计（存在才复制）
   copy(path.join('out', 'assignment', 'comparability.json'), 'comparability.json');
   copy(path.join('out', 'grading-results.json'), 'grading-results.json');
+  // ★R2-B42（CAP-BF-3）：**复用运行**（measure-only、零 LLM）里装置不写 out/grading-results.json
+  //   ⇒ 归档缺「逐份分项」。此处把 run-root 的逐份分项投影（out/grading-result/<slug>.json 等）聚合为
+  //   **与 build 路径同形**的 grading-results.json；device 已写过则一行不改（逐字节保留）。
+  if (!result.files.includes('grading-results.json')) {
+    try {
+      const agg = aggregateDetailResults(runRoot);
+      if (agg.length) {
+        const dst = path.join(dir, 'grading-results.json');
+        fs.writeFileSync(dst, JSON.stringify(agg, null, 2) + String.fromCharCode(10));
+        result.files.push('grading-results.json');
+        result.bytes += fs.statSync(dst).size;
+        log.log('RUN_DETAIL_AGGREGATED=yes count=' + agg.length + ' source=out/grading-result');
+      } else {
+        log.log('RUN_DETAIL_AGGREGATED=no count=0（run-root 无逐份分项投影 ⇒ 不写空文件）');
+      }
+    } catch (err) {
+      log.log('RUN_DETAIL_AGGREGATED=error reason=' + String(err && err.message).slice(0, 120));   // 聚合失败不得阻断归档
+    }
+  }
   copy(path.join('out', 'diagnostics', 'measurable.json'), 'measurable.json');
   writeTail(path.join('out', 'device.stdout.log'), 'device.stdout.log');
   writeTail(path.join('out', 'device.stderr.log'), 'device.stderr.log');

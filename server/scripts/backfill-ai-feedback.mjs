@@ -57,12 +57,46 @@ const USAGE = [
   '默认 dry-run（不写库）；--apply 才写；仅更新 ai_feedback 列。',
 ].join(NL);
 
-/** 归一单份 doc ⇒ {items, totals}（items 数组 / {items:[…]} 两种形状） */
+/** 单份 doc ⇒ {items, totals}（只认对象；数组请先经 classifyArray/expandSubmissionArray 展开） */
 function normalizeDoc(doc) {
-  if (!doc) return null;
-  if (Array.isArray(doc)) return { items: doc, totals: null };
+  if (!doc || typeof doc !== 'object') return null;
+  if (Array.isArray(doc)) return null;                       // ★CAP-BF-1：数组不再无条件当 items（由 classifyArray 判定）
   if (Array.isArray(doc.items)) return { items: doc.items, totals: doc.totals || null };
   return null;
+}
+
+/**
+ * ★CAP-BF-1：数组归档（云端实测：`grading-results.json` = array[40]，每条含 `submission_id`/`items`）
+ * 必须**按条展开**为多份，不能整包当成一份的 items。
+ * @returns {{kind:'per_submission'|'items_array'|'empty', entries?:Array}}
+ */
+export function classifyArray(arr) {
+  if (!Array.isArray(arr) || arr.length === 0) return { kind: 'empty' };
+  const perSubmission = arr.some((e) => e && typeof e === 'object' && (Array.isArray(e.items) || e.submission_id !== undefined || e.submission !== undefined || e.student_name !== undefined || e.studentName !== undefined));
+  return perSubmission ? { kind: 'per_submission', entries: arr } : { kind: 'items_array' };
+}
+
+/** 展开「逐份条目数组」⇒ 行（slug 取 submission_id → submission.id → slug → id；都没有记 missingSlug） */
+export function expandSubmissionArray(arr, rel) {
+  const rows = [];
+  const missingSlug = [];
+  arr.forEach((entry, idx) => {
+    if (!entry || typeof entry !== 'object') { missingSlug.push(idx); return; }
+    const inner = normalizeDoc(entry);
+    const sub = entry.submission || {};
+    const slug = entry.submission_id !== undefined && entry.submission_id !== null ? entry.submission_id
+      : (sub.id !== undefined && sub.id !== null ? sub.id : (entry.slug !== undefined && entry.slug !== null ? entry.slug : (entry.id !== undefined && entry.id !== null && Array.isArray(entry.items) ? null : entry.id)));
+    if (slug === null || slug === undefined || String(slug) === '') missingSlug.push(idx);      // ★UNMAPPED_EXPAND 明细
+    rows.push({
+      slug: slug === null || slug === undefined || String(slug) === '' ? null : String(slug),
+      studentName: entry.student_name || entry.studentName || sub.student_name || sub.studentName || null,
+      items: (inner && inner.items) || (Array.isArray(entry.items) ? entry.items : []),
+      totals: (inner && inner.totals) || entry.totals || null,
+      source: rel + (rows.length >= 0 ? '#' + idx : ''),
+      entry_index: idx,
+    });
+  });
+  return { rows, missingSlug };
 }
 
 /** 读源目录/文件 ⇒ [{slug, studentName, items, totals, source}] */
@@ -71,6 +105,7 @@ export function loadDetailRows(src) {
   const stat = fs.existsSync(src) ? fs.statSync(src) : null;
   if (!stat) return { rows, sources: [], error: 'source_not_found:' + src };
   const sources = [];
+  const expandMissing = [];   // ★CAP-BF-1：数组里无法判定 slug 的条目（UNMAPPED_EXPAND 明细）
   const pushRow = (row) => { if (row && Array.isArray(row.items) && row.items.length) rows.push(row); };
 
   const readJson = (p) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; } };
@@ -106,8 +141,14 @@ export function loadDetailRows(src) {
       if (fs.existsSync(p)) candidates.push(p);
     }
   }
+  // 来源标签：目录源 ⇒ 相对源目录（不含临时目录名）；文件源 ⇒ basename（避免把临时路径写进 ai_feedback.detail_source）
+  const relOf = (p) => {
+    if (!stat.isDirectory()) return path.basename(p);
+    const rel = path.relative(src, p);
+    return rel && !rel.startsWith('..') ? rel.split(path.sep).join('/') : path.basename(p);
+  };
   for (const p of candidates) {
-    const rel = path.relative(src.endsWith(path.sep) ? src : path.dirname(src), p) || path.basename(p);
+    const rel = relOf(p);
     const doc = readJson(p);
     if (doc === null) continue;
     const bare = normalizeDoc(doc);
@@ -119,6 +160,24 @@ export function loadDetailRows(src) {
       continue;
     }
     const arr = Array.isArray(doc) ? doc : (doc.results || doc.submissions || doc.items || []);
+    if (Array.isArray(arr) && arr.length) {
+      const cls = classifyArray(arr);
+      if (cls.kind === 'per_submission') {
+        // ★CAP-BF-1：按条展开（云端 array[40] 形状）
+        const { rows: expanded, missingSlug } = expandSubmissionArray(arr, rel);
+        for (const row of expanded) pushRow(row);
+        if (missingSlug.length) {
+          expandMissing.push({ source: rel, indexes: missingSlug });
+          for (const idx of missingSlug) console.log('UNMAPPED_EXPAND source=' + rel + ' index=' + idx + ' reason=no_slug_field（既无 submission_id 也无 submission.id/slug）');
+        }
+        sources.push(rel);
+        continue;
+      }
+      // 单份 items 数组（无逐份标记）⇒ 保持既有语义：当作一份
+      pushRow({ slug: null, studentName: null, items: arr, totals: doc.totals || null, source: rel });
+      sources.push(rel);
+      continue;
+    }
     for (const entry of arr || []) {
       const inner = normalizeDoc(entry);
       if (!inner) continue;
@@ -145,7 +204,7 @@ export function loadDetailRows(src) {
       sources.push(rel);
     }
   }
-  return { rows, sources: [...new Set(sources)] };
+  return { rows, sources: [...new Set(sources)], expandMissing };
 }
 
 /** 由 items 生成 breakdown（与写入侧同口径：title≤80 / comment≤300 / 分数取源） */
@@ -234,8 +293,13 @@ async function main() {
   const plan = [];
   for (const row of loaded.rows) {
     let target = null; let via = null;
+    // ★CAP-BF-2：映射顺序 ① --map 显式（最高优先）② 源文档 studentName ③ **slug 作 realName 兜底**
+    //   ④ slug 作 username 兜底 ⑤ 数值 slug 兜底（平台手工映射）。前四步覆盖云端「文件名=学生姓名」的真实形态。
     if (row.slug && bySlug.has(String(row.slug))) { target = subById.get(bySlug.get(String(row.slug))) || null; via = 'explicit_map'; }
-    if (!target && row.studentName && byName.has(String(row.studentName).trim())) { target = byName.get(String(row.studentName).trim()); via = args.studentKey === 'username' ? 'username' : 'student_name'; }
+    const docName = row.studentName ? String(row.studentName).trim() : '';
+    if (!target && docName && byName.has(docName)) { target = byName.get(docName); via = args.studentKey === 'username' ? 'doc_username' : 'doc_student_name'; }
+    const slugKey = row.slug ? String(row.slug).trim() : '';
+    if (!target && slugKey && byName.has(slugKey)) { target = byName.get(slugKey); via = 'slug_as_realName_or_username'; }
     if (!target && row.slug) { // 兜底：slug 恰好等于提交 id（平台侧手工建的映射）
       const n = Number(String(row.slug).replace(/^s/, ''));
       if (Number.isFinite(n) && subById.has(n)) { target = subById.get(n); via = 'slug_as_id'; }

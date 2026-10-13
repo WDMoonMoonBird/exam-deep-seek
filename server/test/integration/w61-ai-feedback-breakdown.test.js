@@ -259,4 +259,94 @@ describe('W61 AI 评分依据（R2-B41）', () => {
     expect(view).toContain("kind === 'checker'");
     expect(view).toContain("kind === 'text'");
   }, 60000);
+
+  it('★W61-6 CAP-BF-1/2：数组归档按条展开（每条一 slug）+ slug 作姓名兜底 + 无 slug 条目记 UNMAPPED_EXPAND + --map 优先', async () => {
+    const mod = await import('../../scripts/backfill-ai-feedback.mjs');
+    const src = fs.mkdtempSync(path.join(os.tmpdir(), 'w61-arr-'));
+    cleanup.roots.push(src);
+    const items = [
+      { id: 'P01', title: '分项一', max_score: 1, score: 1, status: 'hit', reason: 'P01 | 证据: src/a.java' },
+      { id: 'P02', title: '分项二', max_score: 1, score: 0, status: 'miss', reason: 'P02 | 证据: src/b.java' },
+    ];
+    // 云端实测形状：array[40]，每条含 submission_id/items（这里 2 条有效 + 1 条无 slug 的条目）
+    fs.writeFileSync(path.join(src, 'grading-results.json'), JSON.stringify([
+      { submission_id: env.rows[0].realName, items, totals: { score: 1, max_score: 2 } },
+      { submission_id: env.rows[1].realName, items, totals: { score: 1, max_score: 2 } },
+      { items, totals: { score: 1, max_score: 2 } },
+    ]));
+    // ① 展开：3 条（2 有 slug + 1 无）⇒ 不再整包当一份
+    const loaded = mod.loadDetailRows(src);
+    expect(loaded.rows).toHaveLength(3);
+    expect(loaded.rows.map((r) => r.slug)).toEqual([env.rows[0].realName, env.rows[1].realName, null]);
+    expect(loaded.expandMissing).toEqual([{ source: 'grading-results.json', indexes: [2] }]);
+    // ② 脚本 dry-run：slug 作姓名兜底 ⇒ 2 条命中；无 slug 条目报 UNMAPPED_EXPAND
+    const run = (args) => spawnSync(process.execPath, [SCRIPT, '--from', src, ...args], { encoding: 'utf8', timeout: 120000, env: { ...process.env } });
+    const dry = run([]);
+    expect(dry.status).toBe(0);
+    expect(dry.stdout).toContain('DETAIL_ROWS=3');
+    expect(dry.stdout).toContain('UNMAPPED_EXPAND source=grading-results.json index=2 reason=no_slug_field');
+    expect((dry.stdout.match(/via=slug_as_realName_or_username/g) || []).length).toBe(2);
+    expect(dry.stdout).toContain('SCORE_UNCHANGED=yes');
+    // ③ --map 显式优先（两条都指向第二行 ⇒ via=explicit_map，不再走姓名兜底）
+    const mapFile = path.join(src, 'map2.json');
+    fs.writeFileSync(mapFile, JSON.stringify({ [env.rows[0].realName]: env.rows[1].id, [env.rows[1].realName]: env.rows[1].id }));
+    const withMap = run(['--map', mapFile]);
+    expect(withMap.status).toBe(0);
+    expect((withMap.stdout.match(/via=explicit_map/g) || []).length).toBe(2);
+    expect(withMap.stdout).not.toContain('via=slug_as_realName_or_username');
+  }, 120000);
+
+  it('★W61-7 CAP-BF-3：复用运行归档聚合逐份分项；build 路径逐字节保留；聚合确定 + 回填可直吃', async () => {
+    const { archiveRun, aggregateDetailResults } = await import('../../src/services/dshRunArchiver.js');
+    const jobId = 900000 + (Date.now() % 80000);
+    const runsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'w61-runs-'));
+    cleanup.roots.push(runsRoot);
+    const mkReuseRoot = () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'w61-reuse-'));
+      cleanup.roots.push(root);
+      fs.mkdirSync(path.join(root, 'out', 'grading-result'), { recursive: true });
+      fs.mkdirSync(path.join(root, 'out', 'measure'), { recursive: true });
+      for (const [name, slug] of [['学生甲', 's02'], ['学生乙', 's01']]) {
+        fs.writeFileSync(path.join(root, 'out', 'grading-result', slug + '.json'), JSON.stringify({
+          submission: { id: slug, student_name: name },
+          totals: { score: 1, max_score: 2 },
+          items: [{ id: 'P01', title: '分项一', max_score: 1, score: 1, status: 'hit', reason: 'P01 | 证据: src/a.java' }],
+        }));
+        fs.writeFileSync(path.join(root, 'out', 'measure', slug + '.json'), JSON.stringify({ submission: { id: slug }, totals: { score: 1 } }));
+      }
+      fs.writeFileSync(path.join(root, 'out', 'run-teardown.json'), JSON.stringify({ sessions_purged: true, source: 'worker' }));
+      fs.writeFileSync(path.join(root, 'out', 'device.stdout.log'), 'ASSIGNMENT_RESULT=N=2' + String.fromCharCode(10));
+      return root;
+    };
+    // ① 复用形状（**无** out/grading-results.json）⇒ 归档聚合出逐份分项
+    const root1 = mkReuseRoot();
+    const r1 = await archiveRun({ runRoot: root1, jobId, success: true, runsRoot, log: { log() {}, warn() {} } });
+    const aggPath = path.join(r1.dir, 'grading-results.json');
+    expect(fs.existsSync(aggPath)).toBe(true);
+    const agg = JSON.parse(fs.readFileSync(aggPath, 'utf8'));
+    expect(Array.isArray(agg)).toBe(true);
+    expect(agg.map((x) => x.submission_id)).toEqual(['s01', 's02']);            // 稳定排序
+    expect(agg[0].items[0].reason).toContain('证据: src/a.java');               // 逐份分项（含依据）真的进了归档
+    expect(String(agg[0].source)).toContain('out/grading-result/');
+    expect(agg[1].student_name).toBe('学生甲');
+    // ② 聚合确定性：同输入两份 run-root ⇒ 归档字节一致
+    const root2 = mkReuseRoot();
+    const r2 = await archiveRun({ runRoot: root2, jobId, success: true, runsRoot, log: { log() {}, warn() {} }, dirName: 'build-1-' + jobId });
+    expect(fs.readFileSync(path.join(r2.dir, 'grading-results.json'), 'utf8')).toBe(fs.readFileSync(aggPath, 'utf8'));
+    // ③ build 路径（device 已写 out/grading-results.json）⇒ 归档逐字节保留 device 原文（不覆盖、不改写）
+    const deviceDoc = JSON.stringify([{ submission_id: 'd1', items: [{ id: 'P01', score: 1, max_score: 1, reason: 'device | 证据: src/d.java' }] }]);
+    const root3 = mkReuseRoot();
+    fs.writeFileSync(path.join(root3, 'out', 'grading-results.json'), deviceDoc);
+    const r3 = await archiveRun({ runRoot: root3, jobId, success: true, runsRoot, log: { log() {}, warn() {} }, dirName: 'build-2-' + jobId });
+    expect(fs.readFileSync(path.join(r3.dir, 'grading-results.json'), 'utf8')).toBe(deviceDoc);
+    // ④ 纯函数直测 + 回填脚本可直吃归档（无需人工构造映射源）
+    expect(aggregateDetailResults(root1).map((x) => x.submission_id)).toEqual(['s01', 's02']);
+    const mapFile = path.join(runsRoot, 'map.json');
+    fs.writeFileSync(mapFile, JSON.stringify({ s01: env.rows[0].id, s02: env.rows[1].id }));
+    const dry = spawnSync(process.execPath, [SCRIPT, '--from', r1.dir, '--map', mapFile, '--json'], { encoding: 'utf8', timeout: 120000, env: { ...process.env } });
+    expect(dry.status).toBe(0);
+    expect(dry.stdout).toContain('DETAIL_ROWS=2');
+    expect((dry.stdout.match(/ROW sub=/g) || []).length).toBe(2);
+    expect(dry.stdout).toContain('SCORE_UNCHANGED=yes');
+  }, 180000);
 });
