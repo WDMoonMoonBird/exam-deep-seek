@@ -335,7 +335,7 @@ describe('reviewController B0 契约 · 实训题教师端 200 路径（Z2/Z3/Z4
 
   // ================= 守卫：逐字文案 + 无内容泄漏 =================
 
-  it('T-A5: 守卫三态逐字 —— 不存在 404/1004「提交不存在」、非实训题 400/1001「非实训题提交」、作业他师 403/1003「无权操作」', async () => {
+  it('T-A5: 守卫两态逐字 —— 不存在 404/1004「提交不存在」、非实训题 400/1001「非实训题提交」；R3-D5：同班他师 200（可见班级口径）', async () => {
     const nf = await get(tokenA, '/api/teacher/submissions/999999999/project');
     expect(nf.status).toBe(404);
     expect(nf.body).toEqual({ code: 1004, message: '提交不存在', data: null });
@@ -344,9 +344,11 @@ describe('reviewController B0 契约 · 实训题教师端 200 路径（Z2/Z3/Z4
     expect(notProj.status).toBe(400);
     expect(notProj.body).toEqual({ code: 1001, message: '非实训题提交', data: null });
 
-    const otherOwner = await get(tokenOther, '/api/teacher/submissions/' + ID().subStd + '/project');
-    expect(otherOwner.status).toBe(403);
-    expect(otherOwner.body).toEqual({ code: 1003, message: '无权操作', data: null });
+    // ★R3-D5（④）：可见性对齐「教师可见班级」—— teacherOther 可见 classA（只是非作业所属教师）⇒ 200；
+    //   原「仅作业所属教师可查看」的更严判定已移除（越权反例见 T-A6：不可见学生仍 403「无权访问该提交」）
+    const peer = await get(tokenOther, '/api/teacher/submissions/' + ID().subStd + '/project');
+    expect(peer.status).toBe(200);
+    expect(peer.body.code).toBe(0);
   });
 
   it('T-A6: 作业归本教师但学生不在可见班级 → 403/1003「无权访问该提交」且响应体零泄漏', async () => {
@@ -378,16 +380,28 @@ describe('reviewController B0 契约 · 实训题教师端 200 路径（Z2/Z3/Z4
     expect(db.reviewedAt).not.toBeNull();
   });
 
-  it('T-B2: 分值钳制 —— -5 → 0；10**9 → question.maxScore（100）', async () => {
-    const lo = await put(tokenA, '/api/teacher/submissions/' + ID().subB2 + '/project/review', { finalScore: -5, teacherFeedback: 'lo' });
-    expect(lo.status).toBe(200);
-    expect(lo.body.data.finalScore).toBe(0);
-    expect((await DB(ID().subB2)).finalScore).toBe(0);
+  // ★R3-D5（G2）：分值不再 Math.min/Math.max 静默夹取 —— 非法值一律 400 + 可读文案，且零写入
+  it('T-B2: 非法分值 —— -5 / 10**9 / 非数字 → 400 + 「分数不合法」（原钳制为 0 / 满分）', async () => {
+    const idLo = ID().subB2;
+    const before = await DB(idLo);
+
+    const lo = await put(tokenA, '/api/teacher/submissions/' + idLo + '/project/review', { finalScore: -5, teacherFeedback: 'lo' });
+    expect(lo.status).toBe(400);
+    expect(lo.body.code).toBe(1001);
+    expect(lo.body.message).toContain('分数不合法');
 
     const hi = await put(tokenA, '/api/teacher/submissions/' + ID().subB3 + '/project/review', { finalScore: 10 ** 9, teacherFeedback: 'hi' });
-    expect(hi.status).toBe(200);
-    expect(hi.body.data.finalScore).toBe(100);
-    expect((await DB(ID().subB3)).finalScore).toBe(100);
+    expect(hi.status).toBe(400);
+    expect(hi.body.message).toContain('分数不合法');
+
+    const nan = await put(tokenA, '/api/teacher/submissions/' + idLo + '/project/review', { finalScore: 'abc', teacherFeedback: 'nan' });
+    expect(nan.status).toBe(400);
+    expect(nan.body.message).toContain('分数不合法');
+
+    const after = await DB(idLo);
+    expect(after.status).toBe(before.status);
+    expect(after.finalScore).toBe(before.finalScore);
+    expect(after.teacherFeedback).toBe(before.teacherFeedback);
   });
 
   it('T-B3: 不传 finalScore → 保持原值（undefined 分支不下发 finalScore）', async () => {
@@ -418,13 +432,15 @@ describe('reviewController B0 契约 · 实训题教师端 200 路径（Z2/Z3/Z4
     expect((await DB(id)).teacherFeedback).toBe('');
   });
 
-  it('T-B6: 守卫逐字 + 零写入 —— 他师 403「无权操作」、不可见生 403「无权访问该提交」、非实训题 400、不存在 404', async () => {
+  it('T-B6: 守卫逐字 + 零写入 —— 不可见生 403「无权访问该提交」、非实训题 400、不存在 404；R3-D5：同班他师 200', async () => {
     const id = ID().subB5;
-    const before = await DB(id);
 
-    const otherOwner = await put(tokenOther, '/api/teacher/submissions/' + id + '/project/review', { finalScore: 1, teacherFeedback: 'HACK' });
-    expect(otherOwner.status).toBe(403);
-    expect(otherOwner.body).toEqual({ code: 1003, message: '无权操作', data: null });
+    // ★R3-D5（④）：teacherOther 可见 classA ⇒ 同班他师可审核（原「无权操作」403 已随可见性对齐移除）
+    const peer = await put(tokenOther, '/api/teacher/submissions/' + id + '/project/review', { finalScore: 1, teacherFeedback: 'PEER' });
+    expect(peer.status).toBe(200);
+    const afterPeer = await DB(id);
+    expect(afterPeer.finalScore).toBe(1);
+    expect(afterPeer.teacherFeedback).toBe('PEER');
 
     const hidden = await put(tokenA, '/api/teacher/submissions/' + ID().subHidden + '/project/review', { finalScore: 1, teacherFeedback: 'HACK' });
     expect(hidden.status).toBe(403);
@@ -438,9 +454,11 @@ describe('reviewController B0 契约 · 实训题教师端 200 路径（Z2/Z3/Z4
     expect(nf.status).toBe(404);
     expect(nf.body).toEqual({ code: 1004, message: '提交不存在', data: null });
 
+    // 零写入：只比对越权请求（hidden / 非实训题 / 不存在）——它们都未改动 subB5；
+    // 同班他师的合法审核写入（PEER）单独断言在上方
     const after = await DB(id);
-    expect(after.status).toBe(before.status);
-    expect(after.finalScore).toBe(before.finalScore);
-    expect(after.teacherFeedback).toBe(before.teacherFeedback);
+    expect(after.status).toBe('reviewed');        // peer 审核推进的状态（原状态 ai_graded）
+    expect(after.finalScore).toBe(1);
+    expect(after.teacherFeedback).toBe('PEER');
   });
 });

@@ -7,7 +7,7 @@
  *   - 安全红线：响应体不得出现 aiScore / aiFeedback 的【字段名】
  *     （字段级断言 + JSON 全文本扫描，而非「值为 null」断言）
  *   - 冻结契约 2b：GET /api/student/assignments/:id 改为显式白名单，
- *     published 整行（含 aiScore/aiFeedback）不再下发；practice 既有可见性不变
+ *     published 整行（含 aiScore/aiFeedback）不再下发；R3-D4（US-B5）后未发布一律不下发分数/评语（无 practice 例外）
  *
  * 数据自建自清（t2f_ 前缀），不依赖 setup seed，也不污染其它套件。
  */
@@ -203,12 +203,14 @@ describe('Batch1 · T2 学生作业列表字段契约与安全红线', () => {
     expect(row.submissions).toEqual([]);
   });
 
-  it('契约1: practice 模式 ai_graded → finalScore 可见（现有规则不变）', async () => {
+  // R3-D4（US-B5）：原「practice 模式 ai_graded 即可见分数」分支已随练习模式壳移除 ——
+  // 未发布一律不下发分数（练习等价形态 = 不限次 + 提交后可见答案 + **不计分**，见 US-B5 AC3）。
+  it('契约1: ai_graded 但未发布 → finalScore 仍为 null（US-B5：练习等价形态不计分）', async () => {
     const res = await getAs(PREFIX + 'stu_prac', '/api/student/assignments');
     expect(res.body.code).toBe(0);
     const row = res.body.data.list.find(a => a.id === aPractice.id);
     expect(row).toBeDefined();
-    expect(row.finalScore).toBe(33);
+    expect(row.finalScore).toBeNull();
   });
 
   it('安全红线: 列表响应体不得出现 aiScore / aiFeedback 字段名（字段级 + JSON 文本扫描）', async () => {
@@ -286,15 +288,17 @@ describe('Batch1 · T2 学生作业详情白名单（整行泄露修复）', () 
     expect(sub.bestScore).toBeNull();
   });
 
-  it('契约2b: 详情 practice ai_graded → 分数/评语按既有规则可见，仍无 aiScore / aiFeedback 字段名', async () => {
+  it('契约2b: 详情 ai_graded 未发布 → 分数/评语/最高分一律置空，且仍无 aiScore / aiFeedback 字段名', async () => {
     const res = await getAs(PREFIX + 'stu_prac', '/api/student/assignments/' + aPractice.id);
     expect(res.body.code).toBe(0);
     const text = JSON.stringify(res.body);
     expect(text).not.toContain('aiScore');
     expect(text).not.toContain('aiFeedback');
     const sub = res.body.data.submissions[0];
-    expect(sub.finalScore).toBe(33);         // practice：AI 分即学生可见分（原 aiScore 语义）
-    expect(sub.teacherFeedback).toBe(SECRET_AI); // practice：AI 评语即学生可见评语（原 aiFeedback 语义）
-    expect(sub.bestScore).toBe(33);
+    // R3-D4（US-B5）：不再有 practice 例外；未发布不下发任何分数/评语/AI 原文
+    expect(sub.finalScore).toBeNull();
+    expect(sub.teacherFeedback).toBeNull();
+    expect(sub.bestScore).toBeNull();
+    expect(text).not.toContain(SECRET_AI);
   });
 });

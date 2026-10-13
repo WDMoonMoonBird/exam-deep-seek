@@ -102,15 +102,20 @@ export class SubmissionUseCases {
   }
 
   /**
-   * 练习模式重新答题（等价 retryAssignment）：重置全部提交为草稿。
+   * 重新答题（等价 retryAssignment）：重置全部提交为草稿。
+   *
+   * ★R3-D4（US-B5）：门禁由**开关**驱动 —— 「允许重交 + 不限次」= 旧练习形态的等价能力。
+   *   限次作业禁止重置（否则等于发放额外次数、绕过次数上限）；不再读取 mode。
    * @returns {Promise<{message: string}>}
    * @throws {EntityNotFoundError} 作业不存在
-   * @throws {DomainError} code=LOCKED 或非练习模式
+   * @throws {DomainError} code=LOCKED，或作业不允许重交/已限次
    */
   async retry({ assignmentId, studentId }) {
     const assignment = await this._loadOwnedAssignment(assignmentId, studentId);
     if (assignment.locked) throw new DomainError('作业已被锁定', 'LOCKED');
-    if (assignment.mode !== 'practice') throw new DomainError('仅练习模式支持重新答题');
+    if (!assignment.allowResubmit || assignment.maxAttempts != null) {
+      throw new DomainError('该作业不支持重新答题（需允许重交且不限次）');
+    }
     await this.submissionRepo.resetByAssignment(assignmentId, studentId);
     return { message: '已重置' };
   }

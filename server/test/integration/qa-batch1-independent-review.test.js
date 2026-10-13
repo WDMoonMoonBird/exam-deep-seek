@@ -376,7 +376,7 @@ describe('Batch1 独立复核 · qa-api-review', () => {
 
   // ================= 1. 口径一致性 =================
 
-  it('R1: pending-summary 字段/类型/口径 = 硬编码手算值（practice 恒 0，rollup 优先序）', async () => {
+  it('R1: pending-summary 字段/类型/口径 = 硬编码手算值（R3-D4：练习形态不再特判）', async () => {
     const res = await get(tokenA, '/api/teacher/pending-summary');
     expect(res.status).toBe(200);
     expect(res.body.code).toBe(0);
@@ -384,16 +384,17 @@ describe('Batch1 独立复核 · qa-api-review', () => {
     expect(Object.keys(res.body.data).sort()).toEqual(['abnormal', 'aiPending', 'pendingReview', 'updatedAt']);
     // 可见范围只有 clsPub / clsPub2，逐 (作业 × 班级) 行手算：
     //   asgExam/clsPub        → aiPending 1（stuA：有 submitted 行）+ reviewPending 1（stuB，stuA 不重复计入）+ abnormal 1（stuE）
-    //   asgPractice/clsPub    → aiPending 1（stuB submitted），reviewPending 恒 0
+    //   asgPractice/clsPub    → aiPending 1（stuB submitted）+ reviewPending 1（stuA 的 ai_graded）
     //   asgShared/clsPub 与 clsPub2 各 1（同一学生按行各计一次）→ 2
     //   asgStuUnpub/clsPub    → reviewPending 1（stuS 的 ai_graded 未发布提交）
-    //   asgStuPub/asgStuEdge（published）与 asgStuPractice（practice ai_graded）→ 0
+    //   asgStuPub/asgStuEdge（published）→ 0；asgStuPractice（ai_graded 未发布）→ reviewPending 1
     //   asgNoSub / asgDraftOnly / asgMixedVis 的 clsPub 行 → 0；asgMixedVis 的 clsHidden 行不可见
-    expect(res.body.data).toMatchObject({ pendingReview: 4, aiPending: 2, abnormal: 1 });
+    // R3-D4（US-B5）：练习等价形态不再「恒 0」⇒ 总待审核 4 → 6
+    expect(res.body.data).toMatchObject({ pendingReview: 6, aiPending: 2, abnormal: 1 });
     expect(new Date(res.body.data.updatedAt).toString()).not.toBe('Invalid Date');
   });
 
-  it('R2: 与 review-summary 各行 reviewPending 之和严格相等（含 practice / rollup 边界）', async () => {
+  it('R2: 与 review-summary 各行 reviewPending 之和严格相等（含练习形态 / rollup 边界）', async () => {
     const rs = await get(tokenA, '/api/teacher/review-summary?schoolId=' + id.s1);
     expect(rs.body.code).toBe(0);
     const rows = rs.body.data;
@@ -403,7 +404,8 @@ describe('Batch1 独立复核 · qa-api-review', () => {
     const sum = rows.reduce((s, r) => s + r.reviewPending, 0);
     const ps = await get(tokenA, '/api/teacher/pending-summary');
     const psS1 = await get(tokenA, '/api/teacher/pending-summary?schoolId=' + id.s1);
-    expect(sum).toBe(4);   // asgExam 1 + asgStuUnpub 1 + asgShared 2
+    // R3-D4：asgExam 1 + asgPractice 1 + asgStuUnpub 1 + asgStuPractice 1 + asgShared 2 = 6
+    expect(sum).toBe(6);
     expect(ps.body.data.pendingReview).toBe(sum);
     expect(psS1.body.data.pendingReview).toBe(sum);
 
@@ -419,10 +421,10 @@ describe('Batch1 独立复核 · qa-api-review', () => {
     expect(examRow.abnormal).toBe(1);
 
     const practiceRow = row(id.asgPractice, id.clsPub);
-    expect(practiceRow.mode).toBe('practice');
+    expect(practiceRow.mode).toBe('practice');        // 字段保留：仅历史数据，不再驱动行为
     expect(practiceRow.aiPending).toBe(1);
-    expect(practiceRow.reviewPending).toBe(0);        // practice 恒 0
-    expect(practiceRow.aiCompleted).toBe(1);          // 反证：若未置 0，这里应为 0 且 pendingReview 会多 1
+    expect(practiceRow.reviewPending).toBe(1);        // R3-D4：不再恒 0（未发布对学生不可见 ⇒ 需审核）
+    expect(practiceRow.aiCompleted).toBe(0);          // 该字段保留但恒 0（新口径下 AI 完成 ≠ 无需审核）
 
     const sharedRows = rows.filter(r => r.assignmentId === id.asgShared);
     expect(sharedRows.map(r => r.classId).sort()).toEqual([id.clsPub, id.clsPub2].sort());
@@ -431,8 +433,8 @@ describe('Batch1 独立复核 · qa-api-review', () => {
 
   it('R3: classId 只在可见集合内收窄（不可见班级 → 全 0，而非报错或放行）', async () => {
     const pub = await get(tokenA, '/api/teacher/pending-summary?classId=' + id.clsPub);
-    // asgExam 1 + asgStuUnpub 1 + asgShared 1（clsPub 行）= 3
-    expect(pub.body.data).toMatchObject({ pendingReview: 3, aiPending: 2, abnormal: 1 });
+    // asgExam 1 + asgPractice 1 + asgStuUnpub 1 + asgStuPractice 1 + asgShared 1（clsPub 行）= 5
+    expect(pub.body.data).toMatchObject({ pendingReview: 5, aiPending: 2, abnormal: 1 });
     const pub2 = await get(tokenA, '/api/teacher/pending-summary?classId=' + id.clsPub2);
     expect(pub2.body.data).toMatchObject({ pendingReview: 1, aiPending: 0, abnormal: 0 });
     for (const cid of [id.clsHidden, id.clsOther, 99999999]) {
@@ -557,7 +559,7 @@ describe('Batch1 独立复核 · qa-api-review', () => {
     const byId = new Map(list.map(a => [a.id, a]));
     // asgExam：5 名学生；4 人非 draft（stuA/stuB/stuE/stuS）；待审核 1；最新 = T.t3（published 行）
     expect(byId.get(id.asgExam)).toMatchObject({ submissionCount: 4, expectedCount: 5, pendingReviewCount: 1, latestSubmittedAt: iso(D.t3) });
-    expect(byId.get(id.asgPractice)).toMatchObject({ submissionCount: 2, expectedCount: 5, pendingReviewCount: 0, latestSubmittedAt: iso(D.t5) });
+    expect(byId.get(id.asgPractice)).toMatchObject({ submissionCount: 2, expectedCount: 5, pendingReviewCount: 1, latestSubmittedAt: iso(D.t5) });
     // 跨班同生：分母 5 ∪ 2 = 6，分子去重 1，待审核按行 2
     expect(byId.get(id.asgShared)).toMatchObject({ submissionCount: 1, expectedCount: 6, pendingReviewCount: 2, latestSubmittedAt: iso(D.t6) });
     expect(byId.get(id.asgNoSub)).toMatchObject({ submissionCount: 0, expectedCount: 5, pendingReviewCount: 0, latestSubmittedAt: null });
@@ -626,12 +628,13 @@ describe('Batch1 独立复核 · qa-api-review', () => {
     // t4/R14：published 但教师未定案分（finalScore=null）→ 列表与 /student/scores 统一取 finalScore ?? aiScore = 55
     expect(edge.finalScore).toBe(55);
     const practice = byId.get(id.asgStuPractice);
-    expect(practice.finalScore).toBe(33);                // practice 既有规则：ai_graded 可见
-    // 未发布且非 practice 的 status 字段仍在（UI 需要），且不带任何分值
+    // R3-D4（US-B5）：练习等价形态不再提前放分 —— 未发布一律 null（不计分）
+    expect(practice.finalScore).toBeNull();
+    // 未发布的 status 字段仍在（UI 需要），且不带任何分值
     expect(pub.submissions.every(s => Object.keys(s).sort().join(',') === 'id,status')).toBe(true);
   });
 
-  it('R13: 学生详情白名单（published 不再整行下发；未发布非 practice → finalScore null）', async () => {
+  it('R13: 学生详情白名单（published 不再整行下发；未发布一律 finalScore/teacherFeedback null）', async () => {
     const unpub = await get(tokenStu, '/api/student/assignments/' + id.asgStuUnpub);
     expect(unpub.body.code).toBe(0);
     const keysU = collectKeys(unpub.body);
@@ -664,8 +667,10 @@ describe('Batch1 独立复核 · qa-api-review', () => {
 
     const practice = await get(tokenStu, '/api/student/assignments/' + id.asgStuPractice);
     const p = practice.body.data.submissions[0];
-    expect(p.finalScore).toBe(33);
-    expect(p.teacherFeedback).toBe(PRACTICE_AI_SECRET);
+    // R3-D4（US-B5）：练习等价形态未发布 ⇒ 分数/评语/AI 原文一律不下发
+    expect(p.finalScore).toBeNull();
+    expect(p.teacherFeedback).toBeNull();
+    expect(JSON.stringify(practice.body)).not.toContain(PRACTICE_AI_SECRET);
     expect(collectKeys(practice.body).has('aiScore')).toBe(false);
   });
 
@@ -673,9 +678,10 @@ describe('Batch1 独立复核 · qa-api-review', () => {
     const scores = await get(tokenStu, '/api/student/scores');
     expect(scores.body.code).toBe(0);
     const byA = new Map(scores.body.data.map(s => [s.assignmentId, s]));
-    expect(byA.has(id.asgStuUnpub)).toBe(false);              // exam 未发布不进成绩页
+    expect(byA.has(id.asgStuUnpub)).toBe(false);              // 未发布不进成绩页
     expect(byA.get(id.asgStuPub).totalScore).toBe(70);
-    expect(byA.get(id.asgStuPractice).totalScore).toBe(33);
+    // R3-D4（US-B5）：练习等价形态同样按「发布后可见」——未发布不进成绩页（原 practice 提前可见已移除）
+    expect(byA.has(id.asgStuPractice)).toBe(false);
     // t4/R14：已发布但 finalScore=null（aiScore=55）→ 列表与 /student/scores 统一取 finalScore ?? aiScore = 55
     expect(byA.get(id.asgStuEdge).totalScore).toBe(55);
     const list = (await get(tokenStu, '/api/student/assignments?pageSize=100')).body.data.list;

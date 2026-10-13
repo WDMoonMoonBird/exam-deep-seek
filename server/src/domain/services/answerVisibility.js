@@ -6,9 +6,8 @@
  *   - 'after_publish'（发布后可见）：仅 published 可见
  *   - 未配置 / 非法值 ⇒ 'after_publish'（安全默认，与历史数据既有行为一致：未发布不下发标准答案）
  *
- * ★历史兼容：需求落地前「练习模式且已评分」即可见答案（mode='practice' 旧分支）。
- *   该分支由调用方以 isPractice 传入并**继续生效**，避免历史作业行为变化（US-B1 AC3）；
- *   新建作业不再依赖 mode，而由本开关驱动（US-B5）。
+ * ★R3-D4（US-B5）：完全由开关驱动 —— 原先「练习模式且已评分即可见」的 mode 后门已移除；
+ *   历史作业（迁移列默认 after_publish）按 US-B1 AC3「发布后可见」口径读取，等价能力由开关复现。
  *
  * 领域层纯函数（无 import / 无 IO）。
  */
@@ -42,15 +41,12 @@ export function resolveAnswerVisibility(assignmentOrValue) {
 const GRADED_STATUSES = ['ai_graded', 'reviewed', 'published'];
 
 /**
- * 学生是否可以看到参考答案与解析。
- * @param {{answerVisibility?: string|null, status?: string|null, isPractice?: boolean}} input
- * @returns {boolean}
+ * 学生是否可以看到参考答案与解析（纯开关驱动，无 mode 分支）。
+ * @param {{answerVisibility?: string|null, status?: string|null}} input
+ * @returns {boolean} published 恒可见；immediate ⇒ 评分完成即可见；after_publish ⇒ 仅发布后
  */
-export function canSeeAnswerAndAnalysis({ answerVisibility, status, isPractice } = {}) {
+export function canSeeAnswerAndAnalysis({ answerVisibility, status } = {}) {
   if (status === 'published') return true;
-  const graded = GRADED_STATUSES.includes(status);
-  if (!graded) return false;
-  if (resolveAnswerVisibility(answerVisibility) === 'immediate') return true;
-  // 历史兼容：开关落地前 practice 作业「已评分即可见」的既有规则继续生效
-  return isPractice === true;
+  if (!GRADED_STATUSES.includes(status)) return false;
+  return resolveAnswerVisibility(answerVisibility) === 'immediate';
 }

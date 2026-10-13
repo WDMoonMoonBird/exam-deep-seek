@@ -4,13 +4,20 @@ import requireRole from '../middleware/role.js';
 import * as admin from '../controllers/adminController.js';
 // ★R2-B24b（t93 裁定）：管理员「批改记录」只读子路由（列表/详情/日志下载；挂在本文件既有鉴权链之下）
 import adminGradingRunsRoutes from '../interface/http/routes/admin.js';
+// ★R3-D5（G5 / US-A3 AC2）：管理员侧实训题重评/改分（任意班级；复用 infrastructure/review 的 ops）
+//   注：handler 落 infrastructure —— interface 层不得 import infrastructure（check-layers）；本文件按既有约定做组装
+import * as adminReviewIo from '../infrastructure/review/index.js';
 
 const router = Router();
 router.use(auth, requireRole('super_admin'));
 
-// 学校（只读，数据来自教育部）
 // ★R2-B24b（t93 裁定）：先挂子路由（继承上面 router.use(auth, requireRole('super_admin')) 的鉴权）
 router.use('/grading-runs', adminGradingRunsRoutes);
+
+// 实训题重评 / 改分（super_admin；契约与教师端同形，见 infrastructure/review/admin-project-review.js）
+// ★R3-D5：管理员不按「教师可见班级」收窄，可操作任意班级的实训提交
+router.post('/submissions/:id/project/regrade', adminReviewIo.adminRegradeProjectSubmission);
+router.put('/submissions/:id/project/review', adminReviewIo.adminReviewProjectSubmission);
 
 router.get('/schools', admin.getSchools);
 

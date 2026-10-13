@@ -3,7 +3,7 @@
  *
  * 覆盖验收标准：
  *  1. GET /api/teacher/pending-summary 字段齐全、类型正确（number / ISO string）；
- *  2. pending-summary.pendingReview 与 review-summary 各行 reviewPending 之和严格相等（含 practice 用例）；
+ *  2. pending-summary.pendingReview 与 review-summary 各行 reviewPending 之和严格相等（含练习形态用例；R3-D4 起不再特判）；
  *  3. 越权：教师 A 的 token 查不到教师 B 班级的任何数据（汇总 + 列表 + classId 筛选三条路径）；
  *  4. 不传 schoolId 时仍严格限于该教师可见范围（不得退化成全库计数）；
  *  5. 作业列表新增 expectedCount / pendingReviewCount / latestSubmittedAt，
@@ -165,7 +165,7 @@ describe('T1 · 教师端待审核汇总 + 作业列表扩展', () => {
     await mkSubmission(asgExam.id, sA3.id, q1.id, 'draft', null);                            // draft 不计
     await mkSubmission(asgExam.id, sA4.id, q1.id, 'ai_graded', T.t2, ABNORMAL_FEEDBACK);     // abnormal
 
-    // asgPractice（practice，classA）：1 待审核（恒 0）+ 1 评分中
+    // asgPractice（mode 字段保留但不再驱动行为，classA）：1 待审核 + 1 评分中
     const asgPractice = await mkAssignment(seed.teacherId, `${PREFIX}练习作业`, [clsA.id], { mode: 'practice', questionId: q1.id });
     await mkSubmission(asgPractice.id, sA1.id, q1.id, 'ai_graded', T.t4, '正常反馈');
     await mkSubmission(asgPractice.id, sA2.id, q1.id, 'submitted', T.t5);
@@ -212,12 +212,13 @@ describe('T1 · 教师端待审核汇总 + 作业列表扩展', () => {
     expect(new Date(d.updatedAt).getTime()).toBeLessThanOrEqual(Date.now() + 1000);
   });
 
-  it('P2: classId 只统计该班级，数值严格等于逐行 rollup（含 practice 恒 0）', async () => {
+  it('P2: classId 只统计该班级，数值严格等于逐行 rollup', async () => {
     const res = await r.get(`/api/teacher/pending-summary?schoolId=${ids.schoolId}&classId=${ids.classA}`);
     expect(res.body.code).toBe(0);
-    // classA 行：asgExam(aiPending1/reviewPending1/abnormal1) + asgPractice(aiPending1/reviewPending→0)
+    // classA 行：asgExam(aiPending1/reviewPending1/abnormal1) + asgPractice(aiPending1/reviewPending1)
     //          + asgShared(reviewPending1) + 三个无提交作业
-    expect(res.body.data).toMatchObject({ pendingReview: 2, aiPending: 2, abnormal: 1 });
+    // R3-D4（US-B5）：不再有「练习行恒 0」特判 —— 未发布对学生不可见，练习形态的 ai_graded 也要教师审核
+    expect(res.body.data).toMatchObject({ pendingReview: 3, aiPending: 2, abnormal: 1 });
 
     const resA2 = await r.get(`/api/teacher/pending-summary?schoolId=${ids.schoolId}&classId=${ids.classA2}`);
     expect(resA2.body.data).toMatchObject({ pendingReview: 1, aiPending: 0, abnormal: 0 });
@@ -236,15 +237,14 @@ describe('T1 · 教师端待审核汇总 + 作业列表扩展', () => {
     const psA = await r.get(`/api/teacher/pending-summary?schoolId=${ids.schoolId}&classId=${ids.classA}`);
     expect(psA.body.data.pendingReview).toBe(sumA);
 
-    // practice 行 reviewPending 恒为 0，且未把该生的 ai_graded 计进待审核
+    // R3-D4（US-B5）：练习等价形态不再特判 —— 该行的 ai_graded 同样计入待审核
     const practiceRow = rows.find(row => row.assignmentId === ids.asgPractice && row.classId === ids.classA);
     expect(practiceRow).toBeDefined();
-    expect(practiceRow.mode).toBe('practice');
-    expect(practiceRow.reviewPending).toBe(0);
+    expect(practiceRow.mode).toBe('practice');   // 字段保留（不再驱动行为）
+    expect(practiceRow.reviewPending).toBe(1);
     expect(practiceRow.aiPending).toBe(1);
-    // 若 practice 未被置 0，classA 作用域应多出 1 → 反向证明
     expect(psA.body.data.pendingReview).toBe(sumA);
-    expect(sumA).toBe(2);
+    expect(sumA).toBe(3);
   });
 
   it('P4: 越权——教师 A 查不到教师 B 班级的汇总数据', async () => {
@@ -320,11 +320,11 @@ describe('T1 · 教师端待审核汇总 + 作业列表扩展', () => {
     expect(exam.pendingReviewCount).toBe(1);
     expect(exam.latestSubmittedAt).toBe(T.t3);
 
-    // practice：待审核恒 0
+    // practice：不再特判（R3-D4 / US-B5）—— 该生的 ai_graded 计入待审核
     const practice = byId.get(ids.asgPractice);
     expect(practice.submissionCount).toBe(2);
     expect(practice.expectedCount).toBe(4);
-    expect(practice.pendingReviewCount).toBe(0);
+    expect(practice.pendingReviewCount).toBe(1);
     expect(practice.latestSubmittedAt).toBe(T.t5);
 
     // 无提交：分母照常，其余为 0 / null

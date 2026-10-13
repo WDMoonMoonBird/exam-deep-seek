@@ -189,12 +189,21 @@ describe('可扩展性：第二个提交仓储替身（替换 SubmissionReposito
     expect([...repo.subs.values()][0].status).toBe('draft');
   });
 
-  it('retry 不变：仅练习模式可重置，考试模式拒绝', async () => {
-    const repo = new SecondSubmissionRepository({ assignments: { 1: openAssignment, 2: { ...openAssignment, mode: 'practice' } } });
+  // R3-D4（US-B5）：retry 门禁由开关驱动（允许重交 + 不限次 = 旧练习形态的等价能力），不再看 mode
+  it('retry 开关化：允许重交+不限次可重置；不允许重交或已限次拒绝', async () => {
+    const repo = new SecondSubmissionRepository({
+      assignments: {
+        1: openAssignment,                                                              // allowResubmit=false
+        2: { ...openAssignment, allowResubmit: true, maxAttempts: null },               // = 旧练习形态
+        3: { ...openAssignment, allowResubmit: true, maxAttempts: 2 },                  // 限次 ⇒ 拒绝
+      },
+    });
     const alt = composeAlt({ submissionRepo: repo });
     await expect(alt.submissionUseCases.retry({ assignmentId: 1, studentId: 2 }))
-      .rejects.toMatchObject({ message: '仅练习模式支持重新答题' });
+      .rejects.toMatchObject({ message: '该作业不支持重新答题（需允许重交且不限次）' });
     await expect(alt.submissionUseCases.retry({ assignmentId: 2, studentId: 2 })).resolves.toEqual({ message: '已重置' });
+    await expect(alt.submissionUseCases.retry({ assignmentId: 3, studentId: 2 }))
+      .rejects.toMatchObject({ message: '该作业不支持重新答题（需允许重交且不限次）' });
   });
 });
 

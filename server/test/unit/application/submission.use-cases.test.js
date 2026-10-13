@@ -266,16 +266,22 @@ describe('SubmissionUseCases.saveDraft（等价 saveDraft）', () => {
   });
 });
 
-describe('SubmissionUseCases.retry（等价 retryAssignment）', () => {
-  it('非练习模式 → DomainError', async () => {
+describe('SubmissionUseCases.retry（等价 retryAssignment；R3-D4 起由开关驱动）', () => {
+  it('不允许重交 → DomainError（不再看 mode）', async () => {
     const uc = new SubmissionUseCases({ submissionRepo: makeRepo() });
-    await expect(uc.retry({ assignmentId: 1, studentId: 2 })).rejects.toThrow('仅练习模式支持重新答题');
+    await expect(uc.retry({ assignmentId: 1, studentId: 2 })).rejects.toThrow('该作业不支持重新答题（需允许重交且不限次）');
   });
-  it('练习模式 → 重置提交', async () => {
+  it('允许重交但限次 → DomainError（防止重置绕过次数上限）', async () => {
+    const uc = new SubmissionUseCases({
+      submissionRepo: makeRepo({ findAssignmentContext: async () => ({ ...assignment, allowResubmit: true, maxAttempts: 2 }) }),
+    });
+    await expect(uc.retry({ assignmentId: 1, studentId: 2 })).rejects.toThrow('该作业不支持重新答题（需允许重交且不限次）');
+  });
+  it('允许重交 + 不限次（= 旧练习形态等价能力）→ 重置提交', async () => {
     let reset = null;
     const uc = new SubmissionUseCases({
       submissionRepo: makeRepo({
-        findAssignmentContext: async () => ({ ...assignment, mode: 'practice' }),
+        findAssignmentContext: async () => ({ ...assignment, allowResubmit: true, maxAttempts: null }),
         resetByAssignment: async (a, s) => { reset = { a, s }; return { count: 1 }; },
       }),
     });
@@ -301,7 +307,7 @@ describe('SubmissionUseCases.retry（等价 retryAssignment）', () => {
     const boom = new Error('db down');
     const uc = new SubmissionUseCases({
       submissionRepo: makeRepo({
-        findAssignmentContext: async () => ({ ...assignment, mode: 'practice' }),
+        findAssignmentContext: async () => ({ ...assignment, allowResubmit: true, maxAttempts: null }),
         resetByAssignment: async () => { throw boom; },
       }),
     });

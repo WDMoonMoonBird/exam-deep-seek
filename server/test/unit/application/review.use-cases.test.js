@@ -300,14 +300,35 @@ describe('ReviewUseCases.review（等价 reviewSubmission）', () => {
     await uc.review({ submissionId: 2, teacherFeedback: null });
     expect(updateData.teacherFeedback).toBeNull();
   });
-  it('不校验提交存在：直接 update，无 findById/findScoreContext（与 regrade/manualAdjust 不一致，记录为契约观察）', async () => {
-    let updated = false;
+  // ★R3-D5 契约变更：review 现在会读取提交上下文 —— G2 需要题目满分做范围校验、G3 需要当前状态决定
+  //   「published 保持 published」；不再像改动前那样「只 update、不查询」。提交不存在时仍不新增 404 语义
+  //   （findScoreContext → null ⇒ 状态按默认 reviewed 落库，错误仍由仓储 update 自然抛出）。
+  it('R3-D5：review 会读取提交上下文（findScoreContext）—— 满分范围校验 + published 保持', async () => {
+    let looked = 0;
+    let updated = null;
     const uc = new ReviewUseCases({
-      submissionRepo: { update: async () => { updated = true; return {}; } }, // 仅 update，无查询方法
+      submissionRepo: {
+        findScoreContext: async () => { looked += 1; return { status: 'published', question: { type: 'code', maxScore: 100 } }; },
+        update: async (id, data) => { updated = { id, ...data }; return updated; },
+      },
+      aiGateway: { grade: async () => ({}) },
+    });
+    await uc.review({ submissionId: 999, finalScore: 90 });
+    expect(looked).toBe(1);
+    expect(updated).toMatchObject({ status: 'published', finalScore: 90 });   // G3：published 不被降级
+  });
+
+  it('R3-D5：提交不存在（findScoreContext → null）⇒ 状态按默认 reviewed 落库（不新增 404 语义）', async () => {
+    let updated = null;
+    const uc = new ReviewUseCases({
+      submissionRepo: {
+        findScoreContext: async () => null,
+        update: async (id, data) => { updated = { id, ...data }; return updated; },
+      },
       aiGateway: { grade: async () => ({}) },
     });
     await uc.review({ submissionId: 999 });
-    expect(updated).toBe(true);
+    expect(updated).toMatchObject({ status: 'reviewed' });
   });
   it('仓储 update 抛错 → 异常原样传播', async () => {
     const boom = new Error('db down');

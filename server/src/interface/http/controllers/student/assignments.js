@@ -78,7 +78,6 @@ export const getAssignments = async (req, res) => {
     ]);
 
     const list = rawList.map((a) => {
-      const isPractice = a.mode === 'practice';
       const subs = a.submissions || [];
       const realSubs = subs.filter((s) => s.status !== 'draft'); // draft 不算已交/已答
 
@@ -91,10 +90,9 @@ export const getAssignments = async (req, res) => {
         }
       }
 
-      // 得分可见性（与 /student/assignments/:id、/student/scores 同口径）：
-      // exam 模式仅 published 可见；practice 模式 ai_graded/reviewed 亦可见（现有规则不变）。
-      const scoreVisible = realSubs.filter((s) =>
-        s.status === 'published' || (isPractice && (s.status === 'ai_graded' || s.status === 'reviewed')));
+      // 得分可见性（与 /student/assignments/:id、/student/scores 同口径，R3-D4 / US-B5）：
+      // 仅 published 可见 —— 不再有「练习模式已评分即可见」的 mode 分支（练习等价形态不计分）。
+      const scoreVisible = realSubs.filter((s) => s.status === 'published');
       // R14/R3-D1：取值口径与 /student/scores 的 totalScore 完全一致 = 「计入分」
       //   = finalScore（教师分，权威）?? 按作业计分口径的机器分（best ⇒ bestScore / last ⇒ 最新 aiScore）
       // 未配置口径的历史作业 ⇒ 'last'，与 R14 的 finalScore ?? aiScore 逐字等价。
@@ -149,18 +147,14 @@ export const getAssignmentDetail = async (req, res) => {
     // 查已有提交（同 handler 内的等价单行形态，为守住 GodFile ≤800 门禁折行）
     const submissions = await prisma.submission.findMany({ where: { assignmentId: +req.params.id, studentId: req.user.id } });
 
-    // 未发布的提交不返回评分/评语，但练习模式例外。
-    // 旧实现 published 分支直接 return s（整行下发，含 aiScore/aiFeedback）——已改为白名单裁剪。
-    const isPractice = assignment.mode === 'practice';
-    const safeSubmissions = submissions.map((s) => toStudentSubmissionView(s, isPractice, assignment.scorePolicy));
+    // 未发布的提交不返回评分/评语（R3-D4 / US-B5：不再有练习模式例外；旧实现 published 分支曾整行下发）。
+    const safeSubmissions = submissions.map((s) => toStudentSubmissionView(s, assignment.scorePolicy));
 
-    // R3-D1（US-B2）：是否下发标准答案/解析 —— 由可见性开关驱动
-    //   'immediate' 评分完成即可见 / 'after_publish' 仅发布后可见（默认）；
-    //   历史作业（列默认 'after_publish'）与 practice 旧规则（已评分即可见）均保持原行为。
+    // R3-D1（US-B2）：是否下发标准答案/解析 —— 完全由可见性开关驱动
+    //   'immediate' 评分完成即可见 / 'after_publish'（含历史作业列默认）仅发布后可见。
     const canSeeAnswers = safeSubmissions.some((s) => canSeeAnswerAndAnalysis({
       answerVisibility: assignment.answerVisibility,
       status: s.status,
-      isPractice,
     }));
 
     // strip 敏感字段：未出分时隐藏参考答案

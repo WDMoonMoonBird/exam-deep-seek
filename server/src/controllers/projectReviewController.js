@@ -9,19 +9,18 @@
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
 import { standardDir, submissionDir, hasStandardPackage } from '../utils/projectPaths.js';
-import { toTeacherView, parseProjectAnswer, serializeProjectAnswer } from '../domain/services/project-view.js';
+import { toTeacherView, parseProjectAnswer } from '../domain/services/project-view.js';
 import { enqueueProjectGrade } from '../services/projectGrading.js';
 import { PROJECT_ROLE, OPEN_PROJECT_ROLE, buildProjectGradePrompt, buildOpenProjectGradePrompt } from '../infrastructure/ai/deepseek/index.js';
 import { buildFileTree, filterProjectFiles } from '../services/projectContextBuilder.js';
 import { buildTree, isIgnored } from '../utils/fileTree.js';
 // t6：复用 reviewController 的统一归属校验助手（教师可见班级范围），避免同一防线两处实现漂移
 import { isStudentVisibleToTeacher } from '../infrastructure/review/scope.js';
+import { regradeProjectSubmissionCore } from '../infrastructure/review/project-review-ops.js';
 import { MAX_TEXT_BYTES } from '../utils/projectArchive.js';
 import fs from 'fs';
 import path from 'path';
 import { loadAssignmentSnapshot, resolveSnapshot } from '../services/assignmentSnapshot.js';
-import { decideStale } from '../services/assignmentSnapshot.js';
-import { textSha256, standardPackSha256 } from '../utils/snapshotHash.js';
 
 // ===================== 文件收集（复用 fileTree 的忽略规则） =====================
 
@@ -174,73 +173,13 @@ export const getProjectReview = async (req, res) => {
  */
 export const regradeProjectSubmission = async (req, res) => {
   try {
-    const id = +req.params.id;
-    const sub = await prisma.submission.findUnique({
-      where: { id },
-      include: { question: { select: { id: true, type: true, scoringRubric: true, material: true, rubricItems: true } } },
+    // 行为全部下沉到 project-review-ops（教师端与管理员端同一实现；可见性=教师可见班级）
+    const r = await regradeProjectSubmissionCore({
+      submissionId: +req.params.id,
+      confirm: String(req.query?.confirm ?? '') === '1',
+      actorId: req.user?.id,
     });
-    if (!sub) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
-    if (sub.question?.type !== 'project') {
-      return res.status(400).json({ code: 1001, message: '非实训题提交', data: null });
-    }
-    // t6：写操作前置归属校验——不可见提交一律 403，且不产生任何写入
-    if (!(await isStudentVisibleToTeacher(req.user.id, sub.studentId))) {
-      return res.status(403).json({ code: 1003, message: '无权访问该提交', data: null });
-    }
-
-    // 重评幂等——教师重评已触发（grading.state=pending 且 prevStatus 有值）时拒绝重复触发
-    const curEnv = parseProjectAnswer(sub.answer);
-    if (curEnv.grading?.state === 'pending' && curEnv.grading?.prevStatus) {
-      return res.status(400).json({ code: 1001, message: '评分进行中，请稍候再试', data: null });
-    }
-
-    // W3（R2-B2）：重评前 stale 判定 —— 本次评分依据的标准（哈希）与当前活值不一致时，
-    // 返回可判定错误并要求教师显式确认（?confirm=1 放行并留痕）；历史成绩不因此重算。
-    const snapRow = await loadAssignmentSnapshot(prisma, sub.assignmentId, sub.questionId);
-    const std = resolveSnapshot(snapRow, sub.question);
-    const stale = decideStale({
-      storedRubricHash: curEnv.grading?.rubricHash,
-      storedStandardHash: curEnv.grading?.standardHash,
-      currentRubricHash: textSha256(std.rubric),
-      currentStandardHash: std.standardHash || standardPackSha256(sub.questionId),
-    });
-    if (stale.stale && String(req.query?.confirm ?? '') !== '1') {
-      logger.warn({ submissionId: id, reasons: stale.reasons }, '重评被拦：评分标准已变化（stale）');
-      return res.status(409).json({
-        code: 1010,
-        message: '该题评分标准已在评分后发生变化，重新评分会使用新标准（历史成绩不可比）。确认重评请加 ?confirm=1（将记录审计日志）。',
-        data: { requiresConfirmation: true, code: 'RUBRIC_STALE_REQUIRES_CONFIRMATION', stale_reason: stale.reasons },
-      });
-    }
-    if (stale.stale) {
-      logger.warn({ submissionId: id, teacherId: req.user?.id, reasons: stale.reasons, confirm: true }, '重评放行（confirm=1）：标准已变，留痕');
-    }
-
-    // 重置版本信封的评分任务态，记录重评前状态（Worker 完成后恢复）
-    const env = parseProjectAnswer(sub.answer);
-    env.grading = {
-      state: 'pending',
-      version: env.currentVersion,
-      startedAt: null,
-      finishedAt: null,
-      error: null,
-      prevStatus: sub.status,
-    };
-
-    await prisma.submission.update({
-      where: { id },
-      data: {
-        aiScore: null,
-        aiFeedback: null,
-        answer: serializeProjectAnswer(env),
-      },
-    });
-
-    // 异步投递（fire-and-forget，R5）
-    enqueueProjectGrade(id);
-
-    logger.info({ submissionId: id }, '实训题已重新触发评分');
-    res.json({ code: 0, message: '已重新触发评分', data: null });
+    res.status(r.status).json(r.body);
   } catch (err) {
     logger.error({ err }, '实训题重评失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });

@@ -5,6 +5,7 @@
  */
 
 import { DomainError, EntityNotFoundError } from '../../domain/errors.js';
+import { checkScoreRange, checkScoreSyntax, statusAfterReview } from '../../domain/services/finalScore.js';
 
 export class ReviewUseCases {
   /**
@@ -40,7 +41,10 @@ export class ReviewUseCases {
       scoringCriteria: sq.scoringCriteria || null,
     });
 
-    await this.submissionRepo.update(sub.id, { aiScore: score, aiFeedback: feedback, status: 'ai_graded' });
+    // R3-D5（G3）：已发布的提交重评后**保持 published**（不得打回 ai_graded 把学生端分数藏起来）
+    await this.submissionRepo.update(sub.id, {
+      aiScore: score, aiFeedback: feedback, status: statusAfterReview(sub.status) === 'published' ? 'published' : 'ai_graded',
+    });
     return { aiScore: score, aiFeedback: feedback };
   }
 
@@ -52,28 +56,27 @@ export class ReviewUseCases {
    * @throws {EntityNotFoundError} 提交不存在
    */
   async manualAdjust({ submissionId, finalScore }) {
-    // 分值必须为有限非负数，拒绝负数/NaN/字符串注入
-    const scoreNum = Number(finalScore);
-    if (!Number.isFinite(scoreNum) || scoreNum < 0) {
-      throw new DomainError('分数不合法：必须是有限非负数', 'INVALID_SCORE');
-    }
-    finalScore = scoreNum;
+    // R3-D5（G2）：先做语法校验（不依赖题目上下文）—— 负数/NaN/小数/字符串一律可读文案拒绝
+    const syntax = checkScoreSyntax(finalScore);
+    if (!syntax.ok) throw new DomainError(syntax.message, 'INVALID_SCORE');
+
     const sub = await this.submissionRepo.findScoreContext(submissionId);
     if (!sub) throw new EntityNotFoundError('提交不存在');
 
+    // 再按题目满分做范围校验（超范围同样 400，不再静默夹取）
+    const ranged = checkScoreRange(syntax.value, sub.question?.maxScore);
+    if (!ranged.ok) throw new DomainError(ranged.message, 'INVALID_SCORE');
+    finalScore = ranged.value;
+
     const data = { finalScore: +finalScore };
 
-    if (sub.status === 'ai_graded') {
+    // R3-D5（G3）：仅 ai_graded / submitted 需要推进状态；published 已是学生可见态（保持不动）
+    if (sub.status === 'ai_graded' || sub.status === 'submitted') {
       data.status = 'reviewed';
       data.reviewedAt = new Date();
-      if (sub.question?.type !== 'project' && !sub.teacherFeedback) {
+      if (sub.status === 'ai_graded' && sub.question?.type !== 'project' && !sub.teacherFeedback) {
         data.teacherFeedback = sub.aiFeedback || '';
       }
-    }
-
-    if (sub.status === 'submitted') {
-      data.status = 'reviewed';
-      data.reviewedAt = new Date();
     }
 
     const updated = await this.submissionRepo.update(submissionId, data);
@@ -85,8 +88,23 @@ export class ReviewUseCases {
    * @param {{submissionId: number, finalScore?: number, teacherFeedback?: string}} cmd
    */
   async review({ submissionId, finalScore, teacherFeedback }) {
-    const data = { status: 'reviewed', reviewedAt: new Date() };
-    if (finalScore !== undefined) data.finalScore = finalScore;
+    const hasScore = !(finalScore === undefined || finalScore === null || finalScore === '');
+    let score = null;
+    if (hasScore) {
+      // R3-D5（G2）：传了分值就必须合法（NaN/小数/超范围 → 可读文案 + 400，不再 500）
+      const syntax = checkScoreSyntax(finalScore);
+      if (!syntax.ok) throw new DomainError(syntax.message, 'INVALID_SCORE');
+      score = syntax.value;
+    }
+    const sub = await this.submissionRepo.findScoreContext(submissionId);
+    if (hasScore) {
+      const ranged = checkScoreRange(score, sub?.question?.maxScore);
+      if (!ranged.ok) throw new DomainError(ranged.message, 'INVALID_SCORE');
+      score = ranged.value;
+    }
+    // R3-D5（G3）：状态机 —— published 保持 published（学生端即时可见新分），其余 reviewed
+    const data = { status: statusAfterReview(sub?.status), reviewedAt: new Date() };
+    if (hasScore) data.finalScore = score;
     if (teacherFeedback !== undefined) data.teacherFeedback = teacherFeedback;
     await this.submissionRepo.update(submissionId, data);
   }

@@ -1,6 +1,7 @@
 /**
- * rc-batch-guard-contract.test.js — reviewController 拆分（step 8）B0 契约护航：
- * batch-review / batch-publish 的**练习模式 400 分支**（Z5/Z6）与 publishScores 的**空入参 400**（Z12）。
+ * rc-batch-guard-contract.test.js — reviewController 契约护航：
+ * publishScores 的**空入参 400**（Z12）；★R3-D4（US-B5）后 batch-review/batch-publish 的**练习模式 400
+ * 分支（Z5/Z6）已被移除**（mode 不再驱动行为），T-D1/T-D2 改为「练习形态正常审核/发布」正例。
  *
  * 背景（docs/split/reviewController-plan.md §5.2）：
  *   - Z5  batchReview(:331) 的 '练习模式无需审核' 400 —— 全仓 batch-review 请求体的 assignmentId
@@ -180,7 +181,9 @@ describe('reviewController B0 契约 · 批量端点练习模式 400 与发布�
 
   afterAll(async () => { await purge(); delete global.__rcb0b; }, 60000);
 
-  it('T-D1: batch-review 练习模式 → 400/1001「练习模式无需审核」逐字，且 submission 零写入、零 $transaction', async () => {
+  // ★R3-D4（US-B5）：原「练习模式无需审核/无需发布」两个 400 分支已随练习模式壳移除 ——
+  //   未发布一律对学生不可见，练习等价形态同样必须经教师审核/发布，故这里改为正例断言。
+  it('T-D1: batch-review 练习形态作业 → 200 正常审核（原「练习模式无需审核」400 已移除）', async () => {
     const id = ID();
     const before = await DB(id.subs.reviewPractice);
     expect(before.status).toBe('ai_graded');
@@ -190,17 +193,17 @@ describe('reviewController B0 契约 · 批量端点练习模式 400 与发布�
     const res = await post(token, '/api/teacher/submissions/batch-review', {
       schoolId: id.schoolId, classId: id.classAId, assignmentId: id.asgReviewPracticeId,
     });
-    expect(res.status).toBe(400);
-    expect(res.body).toEqual({ code: 1001, message: '练习模式无需审核', data: null });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ code: 0, message: '已审核 1 名学生', data: { count: 1 } });
 
     const after = await DB(id.subs.reviewPractice);
-    expect(after.status).toBe(before.status);
-    expect(after.finalScore).toBe(before.finalScore);
-    expect(after.teacherFeedback).toBe(before.teacherFeedback);
-    expect(after.reviewedAt).toBeNull();
+    expect(after.status).toBe('reviewed');
+    expect(after.finalScore).toBe(before.aiScore);   // 批量审核 = 以 AI 分为定案分
+    expect(after.teacherFeedback).toBe('P_AI');
+    expect(after.reviewedAt).not.toBeNull();
   });
 
-  it('T-D2: batch-publish 练习模式 → 400/1001「练习模式无需发布」逐字，且 submission 零写入', async () => {
+  it('T-D2: batch-publish 练习形态作业 → 200 正常发布（原「练习模式无需发布」400 已移除）', async () => {
     const id = ID();
     const before = await DB(id.subs.publishPractice);
     expect(before.status).toBe('reviewed');
@@ -208,11 +211,11 @@ describe('reviewController B0 契约 · 批量端点练习模式 400 与发布�
     const res = await post(token, '/api/teacher/submissions/batch-publish', {
       schoolId: id.schoolId, classId: id.classAId, assignmentId: id.asgPublishPracticeId,
     });
-    expect(res.status).toBe(400);
-    expect(res.body).toEqual({ code: 1001, message: '练习模式无需发布', data: null });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ code: 0, message: '已发布 1 名学生', data: { count: 1 } });
 
     const after = await DB(id.subs.publishPractice);
-    expect(after.status).toBe('reviewed');
+    expect(after.status).toBe('published');
     expect(after.finalScore).toBe(before.finalScore);
     expect(after.teacherFeedback).toBe(before.teacherFeedback);
   });

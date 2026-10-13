@@ -80,10 +80,15 @@ describe('R3-D1 answerVisibility：提交后立即 / 发布后可见', () => {
     expect(canSeeAnswerAndAnalysis({ answerVisibility: 'immediate', status: 'submitted' })).toBe(false);
   });
 
-  it('历史兼容：未配置可见性的 practice 作业「已评分即可见」不变', () => {
-    expect(canSeeAnswerAndAnalysis({ status: 'ai_graded', isPractice: true })).toBe(true);
+  it('R3-D4（US-B5）：不再有 mode/isPractice 后门 —— 未配置可见性一律仅发布后可见', () => {
+    expect(canSeeAnswerAndAnalysis({ status: 'ai_graded' })).toBe(false);
+    // isPractice 参数已失效（调用方若仍传，也不改变口径）
+    expect(canSeeAnswerAndAnalysis({ status: 'ai_graded', isPractice: true })).toBe(false);
+    expect(canSeeAnswerAndAnalysis({ status: 'published', isPractice: true })).toBe(true);
     expect(canSeeAnswerAndAnalysis({ status: 'submitted', isPractice: true })).toBe(false);
-    expect(canSeeAnswerAndAnalysis({ answerVisibility: 'after_publish', status: 'reviewed', isPractice: true })).toBe(true);
+    expect(canSeeAnswerAndAnalysis({ answerVisibility: 'after_publish', status: 'reviewed', isPractice: true })).toBe(false);
+    // 练习等价形态要用开关复现（不限次 + 提交后可见答案），而不是靠 mode：
+    expect(canSeeAnswerAndAnalysis({ answerVisibility: 'immediate', status: 'ai_graded' })).toBe(true);
   });
 });
 

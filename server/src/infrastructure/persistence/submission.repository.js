@@ -23,7 +23,8 @@ export class SubmissionRepository {
   findScoreContext(id) {
     return this.prisma.submission.findUnique({
       where: { id },
-      select: { status: true, aiScore: true, aiFeedback: true, teacherFeedback: true, question: { select: { type: true } } },
+      // R3-D5（G2）：范围校验需要题目满分（type 仍用于实训题「AI 评语不透传」规则）
+      select: { status: true, aiScore: true, aiFeedback: true, teacherFeedback: true, question: { select: { type: true, maxScore: true } } },
     });
   }
 

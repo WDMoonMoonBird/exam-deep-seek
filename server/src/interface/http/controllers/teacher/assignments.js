@@ -21,7 +21,7 @@ import { resolveAssignmentSwitches } from '../../../../domain/services/assignmen
 //   2) 该生在此作业下存在 status === 'submitted'  → aiPending++
 //      否则存在 aiFeedback === ABNORMAL_FEEDBACK   → abnormal++
 //      否则存在 status === 'ai_graded'             → reviewPending++
-//   3) mode === 'practice' 的行 reviewPending 恒为 0（practice 的「待审核」语义是 AI 已完成）。
+//   3) R3-D4（US-B5）：不再按 mode 特判 —— 未发布一律对学生不可见，所有行都要经审核/发布。
 // 改动这里必须同步 reviewController.getReviewSummary，否则侧栏徽标数字与审核页对不上。
 function rollupRow(byStudent, roster) {
   let aiPending = 0;
@@ -42,9 +42,9 @@ function rollupRow(byStudent, roster) {
  * 只投影必要列（assignmentId/studentId/status/aiFeedback）+ 一次 IN 查询后内存 rollup，
  * 不调用 review-summary 全量接口、不拉 submission 全表。
  *
- * @param {Array<{assignmentId:number, mode:string|null, roster:number[]}>} rows
+ * @param {Array<{assignmentId:number, roster:number[]}>} rows
  * @returns {Promise<Map<number, {aiPending:number, reviewPending:number, abnormal:number}>>}
- *          practice 行对 reviewPending 的贡献恒为 0；roster 为空的行贡献 0。
+ *          roster 为空的行贡献 0（R3-D4：不再按 mode 特判）。
  */
 async function rollupPendingByAssignment(rows) {
   const result = new Map();
@@ -83,7 +83,7 @@ async function rollupPendingByAssignment(rows) {
     const acc = result.get(row.assignmentId) || { aiPending: 0, reviewPending: 0, abnormal: 0 };
     acc.aiPending += r.aiPending;
     acc.abnormal += r.abnormal;
-    acc.reviewPending += row.mode === 'practice' ? 0 : r.reviewPending;
+    acc.reviewPending += r.reviewPending;
     result.set(row.assignmentId, acc);
   }
   return result;
@@ -148,7 +148,7 @@ export const getPendingSummary = async (req, res) => {
         for (const ac of c.assignmentClasses) {
           const a = ac.assignment;
           if (!a || a.deletedAt) continue; // 软删作业不参与统计（同 review-summary）
-          rows.push({ assignmentId: a.id, mode: a.mode, roster });
+          rows.push({ assignmentId: a.id, roster });
         }
       }
 
@@ -266,7 +266,7 @@ export const getAssignments = async (req, res) => {
         for (const ac of a.assignmentClasses) {
           const roster = rosterByClass.get(ac.classId) || [];
           for (const sid of roster) expectedStudents.add(sid);
-          if (visibleClassSet.has(ac.classId)) rollupRows.push({ assignmentId: a.id, mode: a.mode, roster });
+          if (visibleClassSet.has(ac.classId)) rollupRows.push({ assignmentId: a.id, roster });
         }
         expectedCountMap.set(a.id, expectedStudents.size);
       }
@@ -313,7 +313,8 @@ export const createAssignment = async (req, res) => {
   try {
     // R3-D1（US-B1）：三开关入参 ②计分口径 scorePolicy ③答案可见性 answerVisibility
     //（①允许重交/次数上限 = 既有 allowResubmit/maxAttempts，本次只做题型默认值归一化，零新增列）
-    const { title, description, startTime, endTime, allowResubmit, questionIds, classIds, mode, maxAttempts, scorePolicy, answerVisibility, confirmWithoutStandardPackage } = req.body;
+    // R3-D4（US-B5）：mode **不再是入参**（建作业一律写 'exam'，字段仅作历史数据保留、不驱动行为）
+    const { title, description, startTime, endTime, allowResubmit, questionIds, classIds, maxAttempts, scorePolicy, answerVisibility, confirmWithoutStandardPackage } = req.body;
     if (!title || !startTime || !endTime || !questionIds?.length || !classIds?.length) {
       return res.status(400).json({ code: 1001, message: '参数错误', data: null });
     }
@@ -372,9 +373,10 @@ export const createAssignment = async (req, res) => {
         description,
         startTime: new Date(startTime),
         endTime: new Date(endTime),
-        mode: mode || 'exam',
-        // practice 形态沿用既有强制开重交（US-B5 前保持等价），其余按三开关走
-        allowResubmit: mode === 'practice' ? true : sw.allowResubmit,
+        // R3-D4（US-B5 AC2）：不再写入 practice；行为一律由三开关驱动（练习等价形态 =
+        // 允许重交 + 不限次 + 提交后可见答案，由教师显式配置或题型默认值给出）
+        mode: 'exam',
+        allowResubmit: sw.allowResubmit,
         maxAttempts: sw.maxAttempts,
         scorePolicy: sw.scorePolicy,
         answerVisibility: sw.answerVisibility,

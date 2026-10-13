@@ -10,14 +10,12 @@ import { pickCountedScore } from '../../../../domain/services/scorePolicy.js';
 
 export const getScores = async (req, res) => {
   try {
-    // 查已发布 + 练习模式已评分
+    // 查**已出分**的提交：仅 published（R3-D4 / US-B5：移除「练习模式已评分即可见」分支，
+    // 与 /student/assignments、/student/assignments/:id 同口径 —— 未发布一律不出现在成绩页）
     const submissions = await prisma.submission.findMany({
       where: {
         studentId: req.user.id,
-        OR: [
-          { status: 'published' },
-          { status: { in: ['ai_graded', 'reviewed'] }, assignment: { mode: 'practice' } },
-        ],
+        status: 'published',
       },
       include: {
         question: { select: { id: true, title: true, maxScore: true } },
