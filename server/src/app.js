@@ -7,7 +7,6 @@ import bcrypt from 'bcryptjs';
 import path from 'path';
 import fs from 'fs';   // ★R2-B61（P1-6）：错误页存在性检查
 import { fileURLToPath } from 'url';
-import { randomBytes } from 'crypto';
 import logger from './utils/logger.js';
 import prisma from './utils/prisma.js';
 import { initSocket, notifyGraded } from './infrastructure/notifier/socket-server.js';
@@ -21,6 +20,7 @@ import projectRoutes from './routes/projects.js';
 import auth from './middleware/auth.js';
 import requireRole from './middleware/role.js';
 import projectAssetGuard from './middleware/projectAssetGuard.js';
+import { cspMiddleware } from './middleware/csp.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -29,19 +29,21 @@ const PORT = process.env.PORT || 3000;
 // ---- 组合根：依赖装配集中在 infrastructure/bootstrap/compose.js，结果挂 app.locals ----
 Object.assign(app.locals, compose({ prisma, logger }));
 
-// 未配置 JWT_SECRET 时启动期生成随机密钥（重启即全员重登），
-// 杜绝硬编码兜底密钥被伪造身份；配置了 JWT_SECRET 则保持稳定
+// ★R2-B69（WAVE4）：**删除**历史上「未配置 JWT_SECRET 则启动期生成随机密钥」的兜底段。
+//   它已由 config/jwtSecret.js 的启动期断言取代且**不可达**（C47 实测）：ESM 先求值被导入模块，
+//   middleware/auth.js 在模块加载期调用 getJwtSecret() ⇒ 缺/弱/短密钥当场抛错，进程直接退出，
+//   永远不会走到这里生成随机值。删除后仍保证「缺密钥 ⇒ 快速失败」，且**不再写入 process.env**（零副作用）。
 if (!process.env.JWT_SECRET) {
-  process.env.JWT_SECRET = randomBytes(32).toString('hex');
-  logger.warn('JWT_SECRET 未配置，已生成随机密钥（重启后所有登录将失效）；建议在 server/.env 中配置固定 JWT_SECRET');
+  throw new Error('JWT_SECRET 未配置：拒绝启动（不再生成随机密钥；请在 server/.env 配置 ≥32 字符随机密钥）');
 }
 
 // 关键配置校验
 if (!process.env.DEEPSEEK_API_KEY) logger.warn('DEEPSEEK_API_KEY 未配置，AI 评分将不可用');
-if (!process.env.JWT_SECRET) logger.warn('JWT_SECRET 未配置，使用默认密钥不安全');
 
 // 安全中间件
-app.use(helmet({ contentSecurityPolicy: false })); // CSP 由 Vite 处理
+// 其余安全头交给 helmet；CSP 单独由 middleware/csp.js 承担（CSP_MODE=off|report-only|enforce，默认 report-only）
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(cspMiddleware());
 app.use(cors({
   origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : [/^http:\/\/localhost:\d+$/],
   credentials: true,
