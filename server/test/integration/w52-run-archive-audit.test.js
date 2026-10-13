@@ -100,6 +100,8 @@ describe('W52 运行归档 + 落库 + 审计', () => {
       'results:not_result': 0,
       'results:parse_error': 0,
     });
+    // ★R2-B40：口径不变量 —— skipped_artifacts === Σ skipped_kinds
+    expect(summary.skipped_artifacts).toBe(Object.values(summary.skipped_kinds).reduce((a, b) => a + b, 0));
     expect(res.pruned).toBe(true);
     expect(fs.existsSync(root)).toBe(false);
     expect(logs.join('\n')).toMatch(/RUN_ARCHIVED dir=.* pruned_run_root=yes/);
@@ -215,6 +217,8 @@ describe('W52b 剪枝健壮化 + 口径一致（R2-B34）', () => {
     fs.writeFileSync(path.join(root, 'out', 'diagnostics', 'measurable.json'), JSON.stringify({ submissions: [{ slug: 's01' }] }));
     const s = buildEvidenceSummary(root);
     expect(s.skipped_artifacts).toBe(2);                            // 口径：文件数、范围：out/measure 顶层
+    expect(s.skipped_kinds['measure:entry']).toBe(2);               // ★R2-B40：分类计数与总数同源
+    expect(s.skipped_artifacts).toBe(Object.values(s.skipped_kinds).reduce((a, b) => a + b, 0));
     expect(s.n).toBe(1);
     expect(s.submissions.filter((x) => x.parseError).length).toBe(0);
     expect(s.submissions.some((x) => /coverage|matrix/.test(String(x.slug)))).toBe(false);
@@ -315,5 +319,53 @@ describe('W52c 日志全量下载 / 行窗口（R2-B38）', () => {
     const badDir = fakeRes();
     await getGradingRunLog({ params: { id: 'job-../etc' }, query: { kind: 'stdout' } }, badDir);
     expect(badDir.statusCode).toBe(400);
+  }, 60000);
+});
+
+/**
+ * W52d（R2-B40 / F-T7-1）：旧布局 `out/results/*.model.json` 兜底路径的**可达性**与口径边界。
+ * 背景：守卫曾写成 `items.size === 0`（本作用域无 items 绑定）⇒ ReferenceError 被空 catch 吞掉 ⇒ 整段死代码：
+ *   ①仅含旧布局的运行拿不到 submissions；②`results:non_json|not_result|parse_error` 三键恒 0 不可达。
+ * 本套件断言修复后：旧布局真被扫描、三键**各 ≥1**（可达性），且新布局优先级与统计口径不变。
+ */
+describe('W52d 旧布局兜底可达性（R2-B40 / F-T7-1）', () => {
+  const sumKinds = (s) => Object.values(s.skipped_kinds || {}).reduce((a, b) => a + b, 0);
+
+  it('★W52d-1 仅旧布局（out/results）⇒ submissions 含 s01，且 results:* 三键各 ≥1（可达性）', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'w52d-old-'));
+    const dir = path.join(root, 'out', 'results');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 's01.model.json'), JSON.stringify({ totals: { score: 88 }, items: [1, 2] }));   // 唯一结果
+    fs.writeFileSync(path.join(dir, 'README.md'), 'not json');                                                    // results:non_json
+    fs.writeFileSync(path.join(dir, 'noise.json'), JSON.stringify({ note: 'no result shape' }));                   // results:not_result
+    fs.writeFileSync(path.join(dir, 'broken.json'), '{ not json');                                                // results:parse_error
+    const s = buildEvidenceSummary(root);
+    expect(s.submissions.map((x) => x.slug)).toContain('s01');             // ★死代码修复 ⇒ 旧布局真被扫描
+    expect(s.submissions.find((x) => x.slug === 's01').score).toBe(88);
+    expect(s.skipped_kinds['results:non_json']).toBeGreaterThanOrEqual(1); // ★三键可达（各 ≥1）
+    expect(s.skipped_kinds['results:not_result']).toBeGreaterThanOrEqual(1);
+    expect(s.skipped_kinds['results:parse_error']).toBeGreaterThanOrEqual(1);
+    expect(s.skipped_artifacts).toBe(sumKinds(s));                         // 口径：总数 = Σ 分类
+    expect(s.submissions.filter((x) => x.parseError).length).toBe(0);      // 坏 json 绝不产占位条目
+    fs.rmSync(root, { recursive: true, force: true });
+  }, 60000);
+
+  it('★W52d-2 新布局优先（口径未变）：grading-result 有条目时**不**扫旧布局，results:* 保持 0', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'w52d-prec-'));
+    fs.mkdirSync(path.join(root, 'out', 'grading-result'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'out', 'results'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'out', 'measure'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'out', 'grading-result', 's01.json'), JSON.stringify({ totals: { score: 61 }, items: [1] }));
+    fs.writeFileSync(path.join(root, 'out', 'results', 's99.model.json'), JSON.stringify({ totals: { score: 99 } }));   // 旧布局不得被采用
+    fs.writeFileSync(path.join(root, 'out', 'results', 'README.md'), 'not json');
+    fs.writeFileSync(path.join(root, 'out', 'measure', 'coverage-s01.json'), JSON.stringify({ coverage: {} }));         // 干扰产物 → measure:entry
+    const s = buildEvidenceSummary(root);
+    expect(s.submissions.map((x) => x.slug)).toEqual(['s01']);            // 只有新布局的 s01
+    expect(s.skipped_kinds['results:non_json']).toBe(0);                  // 旧布局整段未被扫描
+    expect(s.skipped_kinds['results:not_result']).toBe(0);
+    expect(s.skipped_kinds['results:parse_error']).toBe(0);
+    expect(s.skipped_kinds['measure:entry']).toBe(1);                     // 干扰产物口径未变
+    expect(s.skipped_artifacts).toBe(sumKinds(s));
+    fs.rmSync(root, { recursive: true, force: true });
   }, 60000);
 });
