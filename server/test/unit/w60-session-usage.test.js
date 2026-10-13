@@ -86,6 +86,16 @@ describe('W60 会话用量抽取（R2-B36）', () => {
     expect(priceModelKey('DeepSeek-Flash', t)).toBe('deepseek-flash');
     expect(priceModelKey('deepseek-v4-pro', t)).toBe('deepseek-v4-pro');
     expect(priceModelKey('gpt-x', t)).toBeNull();
+    // ★O1（R2-B39）：读取路径也必须**拒绝负值**（库里的坏配置/直改不得让费用算成负）⇒ 回落默认档
+    const neg = resolvePriceTable({ models: { 'deepseek-flash': { match: ['deepseek-flash'], idle: { cache_hit: -1, cache_miss: -5, output: -9 }, peak: { cache_hit: -0.04, cache_miss: -2, output: -8 } } } });
+    expect(neg.models['deepseek-flash'].idle).toEqual({ cache_hit: 0.02, cache_miss: 1, output: 4 });
+    expect(neg.models['deepseek-flash'].peak).toEqual({ cache_hit: 0.04, cache_miss: 2, output: 8 });
+    const negUnknown = resolvePriceTable({ models: { 'my-model': { match: ['my-model'], idle: { cache_hit: -1, cache_miss: 1, output: 2 } } } });
+    expect(negUnknown.models['my-model'].idle).toEqual({ cache_hit: 0, cache_miss: 1, output: 2 }); // 未知型号：负 ⇒ 0（绝不透传负值）
+    expect(negUnknown.models['deepseek-v4-pro'].idle.cache_hit).toBe(0.15);
+    // 负值不得影响计费结果
+    const negCost = computeCost({ totals: { cache_read_tokens: 0, uncached_input_tokens: 1_000_000, output_tokens: 0 }, model: 'deepseek-flash', at: new Date('2026-10-14T14:00:00Z'), table: neg });
+    expect(negCost.cost_total).toBeGreaterThan(0);
   });
 
   it('W60-2 ★命中率与费用：单档正确 + 跨时段两档求和（peak+idle）', () => {
@@ -174,9 +184,38 @@ describe('W60 会话用量抽取（R2-B36）', () => {
     expect(cap.usage.tools).toBeNull();
     expect(cap.usage.tools_source).toBe('unavailable');
     expect(cap.usage.calls).toBeNull(); // 逐次分桶不可得：如实 null
+    // ★O3（R2-B39）：无模型会话 ⇒ 档位=na（不再报 peak/idle）
+    expect(cap.usage.price_tier).toBe('na');
+    expect(cap.usage.cost.tier).toBe('na');
     const sum = summarizeUsageForEvidence(cap.usage);
     expect(sum.no_model_session).toBe(true);
     expect(sum.cost_total).toBe(0);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('W60-8 ★顶层聚合 llm_ms/tool_ms 与会话级一致（F-T5-1 回归锁：改回假 0 必失败）', async () => {
+    const root = tmp();
+    writeProjcache(root, [
+      { file: 'session-aaaaaaaa-2222-3333-4444-555555555555', createdAt: Date.now() - 2000, lastPromptAt: Date.now() - 1000, turns: 1, steps: 2, llmMs: 1000, toolMs: 600, totals: { uncachedInputTokens: 5, outputTokens: 6, cacheReadTokens: 7, cacheWriteTokens: 0 } },
+      { file: 'session-bbbbbbbb-2222-3333-4444-555555555555', createdAt: Date.now() - 1000, lastPromptAt: Date.now(), turns: 2, steps: 3, llmMs: 11345, toolMs: 78, totals: { uncachedInputTokens: 8, outputTokens: 9, cacheReadTokens: 10, cacheWriteTokens: 0 } },
+    ]);
+    const cap = captureSessionUsage({ runRoot: root, log: { log() {} } });
+    expect(cap.ok).toBe(true);
+    const u = cap.usage;
+    // 会话级（源 sessionStats）逐会话正确
+    expect(u.sessions.map((s) => s.session_stats.llm_ms)).toEqual([1000, 11345]);
+    expect(u.sessions.map((s) => s.session_stats.tool_ms)).toEqual([600, 78]);
+    // ★顶层聚合 = 会话级求和（此前恒 0 —— 假 0 回归锁）
+    expect(u.totals.llm_ms).toBe(12345);
+    expect(u.totals.tool_ms).toBe(678);
+    expect(u.totals.turns).toBe(3);
+    expect(u.totals.model_calls).toBe(5);
+    // 落库映射（审计面 usage_json）同样带正确聚合值
+    const { runUsageRowFromUsage } = await import('../../src/services/dshRunUsageStore.js');
+    const row = runUsageRowFromUsage(u);
+    const persisted = JSON.parse(row.usage_json);
+    expect(Number(persisted.totals.llm_ms)).toBe(12345);
+    expect(Number(persisted.totals.tool_ms)).toBe(678);
     fs.rmSync(root, { recursive: true, force: true });
   });
 

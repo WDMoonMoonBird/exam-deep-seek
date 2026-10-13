@@ -111,6 +111,11 @@ describe('W60 运行用量取证与落库（R2-B36）', () => {
     expect(u.totals.cache_write_tokens).toBe(SRC_TOTALS.cacheWriteTokens);
     expect(u.totals.model_calls).toBe(46);
     expect(u.totals.cache_hit_rate).toBeCloseTo(SRC_TOTALS.cacheReadTokens / (SRC_TOTALS.cacheReadTokens + SRC_TOTALS.uncachedInputTokens), 6);
+    // ★F-T5-1（R2-B39 回归锁）：顶层聚合 llm_ms/tool_ms 必须与会话级（源 sessionStats）一致 —— 改回假 0 必失败
+    expect(u.totals.llm_ms).toBe(190223);
+    expect(u.totals.tool_ms).toBe(4670);
+    expect(u.sessions[0].session_stats.llm_ms).toBe(190223);
+    expect(u.sessions[0].llm_ms).toBe(190223);
     // ② 干扰产物不被读取（金额/份数不受它们影响）
     const expectCost = computeCost({ totals: {
       cache_read_tokens: SRC_TOTALS.cacheReadTokens, uncached_input_tokens: SRC_TOTALS.uncachedInputTokens,
@@ -143,6 +148,11 @@ describe('W60 运行用量取证与落库（R2-B36）', () => {
     expect(back.no_model_session).toBe(false);
     expect(back.tools).toHaveLength(3);
     expect(back.job_id).toBe(987654321);
+    // ★F-T5-1：审计面（usage_json）里也不得再落假 0
+    const rawRow = await prisma.$queryRawUnsafe('SELECT usage_json FROM grading_run_usage WHERE run_ref = ?', runRef);
+    const persistedUsage = typeof rawRow[0].usage_json === 'string' ? JSON.parse(rawRow[0].usage_json) : rawRow[0].usage_json;
+    expect(Number(persistedUsage.totals.llm_ms)).toBe(190223);
+    expect(Number(persistedUsage.totals.tool_ms)).toBe(4670);
     // ⑥ UPSERT 幂等：同 run_ref 再落一次 ⇒ 仍 1 行且值更新
     const u2 = { ...u, totals: { ...u.totals, output_tokens: 1 }, no_model_session: false };
     await persistRunUsage({ prisma, runRef, jobId: 987654321, usage: u2, log: { log() {} } });
@@ -204,6 +214,9 @@ describe('W60 运行用量取证与落库（R2-B36）', () => {
     expect(cap.usage.tools).toBeNull();
     expect(cap.usage.tools_source).toBe('unavailable');
     expect(cap.usage.cost.cost_total).toBe(0);
+    // ★O3（R2-B39）：无模型会话 ⇒ 档位如实 na（不给 peak/idle 这类无意义值）
+    expect(cap.usage.price_tier).toBe('na');
+    expect(cap.usage.cost.tier).toBe('na');
     const runRef = TAG + ':build:1';
     runRefs.push(runRef);
     await persistRunUsage({ prisma, runRef, jobId: null, usage: cap.usage, log: { log() {} } });

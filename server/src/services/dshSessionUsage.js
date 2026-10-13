@@ -64,14 +64,17 @@ export function resolvePriceTable(raw = null) {
   const srcModels = cfg.models && typeof cfg.models === 'object' ? cfg.models : base.models;
   for (const [key, def] of Object.entries({ ...base.models, ...srcModels })) {
     const fallback = base.models[key] || { match: [key], peak: { cache_hit: 0, cache_miss: 0, output: 0 }, idle: { cache_hit: 0, cache_miss: 0, output: 0 } };
+    // ★O1（R2-B39）：负值一律**拒绝**（回落默认档）——价格负数会让费用算成负、审计不可用；
+    //   读取路径也要拦（写路径 validateLlmPrices 已有校验，但库里的值可能被直改/坏配置）。
     const pick = (tier) => {
       const t = (def && def[tier]) || {};
       const f = fallback[tier] || {};
-      return {
-        cache_hit: num(t.cache_hit) === null ? f.cache_hit : num(t.cache_hit),
-        cache_miss: num(t.cache_miss) === null ? f.cache_miss : num(t.cache_miss),
-        output: num(t.output) === null ? f.output : num(t.output),
+      const pickOne = (k) => {
+        const v = num(t[k]);
+        if (v === null || v < 0) return f[k];
+        return v;
       };
+      return { cache_hit: pickOne('cache_hit'), cache_miss: pickOne('cache_miss'), output: pickOne('output') };
     };
     models[key] = { match: Array.isArray(def && def.match) && def.match.length ? def.match.map(String) : fallback.match, peak: pick('peak'), idle: pick('idle') };
   }
@@ -427,6 +430,10 @@ export function captureSessionUsage({ runRoot, priceTable = null, now = new Date
     turns: s.turns,
     totals: s.totals,
     last_buckets: s.last_buckets,
+    // ★F-T5-1（R2-B39 修复）：顶层也要保留 llm_ms/tool_ms —— foldSessions() 累加的是这两个字段，
+    //   此前只放进 session_stats ⇒ 顶层聚合恒 0（假 0；usage_json/归档审计失真）。
+    llm_ms: s.llm_ms || 0,
+    tool_ms: s.tool_ms || 0,
     session_stats: { llm_ms: s.llm_ms, tool_ms: s.tool_ms, decode_tokens: s.decode_tokens, ttft_ms: s.ttft_ms, last_step: s.last_step },
     created_at: s.created_at ? new Date(s.created_at).toISOString() : null,
     last_prompt_at: s.last_prompt_at ? new Date(s.last_prompt_at).toISOString() : null,
@@ -465,7 +472,8 @@ export function captureSessionUsage({ runRoot, priceTable = null, now = new Date
   const model = modelFromLog;
   const noModelSession = !sessions.some((s) => s.model_calls > 0) && folded.tokenTotals.output_tokens === 0 && folded.tokenTotals.cache_read_tokens === 0 && folded.tokenTotals.uncached_input_tokens === 0;
   const cost = noModelSession
-    ? { ok: true, cost_total: 0, currency: table.currency, tier: priceTierAt(refAt, table), per_call: null, model_key: null, model: null, units: null, breakdown: { input_hit: 0, input_miss: 0, output: 0 }, price_version: table.price_version }
+    // ★O3（R2-B39）：无模型会话 ⇒ 没有「调用时刻」可言，档位如实写 na（不再给 peak/idle 这类无意义值）
+    ? { ok: true, cost_total: 0, currency: table.currency, tier: 'na', per_call: null, model_key: null, model: null, units: null, breakdown: { input_hit: 0, input_miss: 0, output: 0 }, price_version: table.price_version }
     : computeCost({ totals: folded.tokenTotals, model, table, at: refAt });
   const usage = {
     schema: SESSION_USAGE_SCHEMA,
@@ -496,6 +504,8 @@ export function captureSessionUsage({ runRoot, priceTable = null, now = new Date
     cost: {
       currency: cost.currency,
       cost_total: cost.cost_total,
+      // ★O3（R2-B39）：费用块自带档位（peak/idle/na）—— 审计面不必回看顶层字段才能判断口径
+      tier: cost.tier,
       model_key: cost.model_key || null,
       breakdown: cost.breakdown,
       per_call: cost.per_call,

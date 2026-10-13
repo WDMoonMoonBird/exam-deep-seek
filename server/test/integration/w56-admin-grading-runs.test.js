@@ -65,10 +65,11 @@ describe('W56 管理员批改记录（只读接口语义）', () => {
     await listGradingRuns({ query: { page: '1', pageSize: '10' } }, res);
     expect(res.statusCode).toBe(200);
     const d = res.body.data;
-    expect(d.items.length).toBe(3);
-    const types = d.items.map((x) => x.type).sort();
-    expect(types).toEqual(['build', 'worker', 'worker']);
-    const build = d.items.find((x) => x.type === 'build');
+    // ★O2（R2-B39）：共享测试库可能残留其它运行的 job_runs 行 ⇒ 不再断言「恰好 3 条/空=0」，
+    //   改为「至少含本用例的三个归档」+ 按 id 断言（单跑不假红）。
+    expect(d.items.length).toBeGreaterThanOrEqual(3);
+    expect(d.items.map((x) => x.archive)).toEqual(expect.arrayContaining(['4', '5', 'build-9-20261013T001500Z']));
+    const build = d.items.find((x) => x.type === 'build' && x.archive === 'build-9-20261013T001500Z');
     expect(build.source).toBe('build');
     expect(build.sessions_purged).toBe(true);
     const notPurged = d.items.find((x) => x.type === 'worker' && x.archive === '5');
@@ -76,10 +77,13 @@ describe('W56 管理员批改记录（只读接口语义）', () => {
     expect(d.source.archives_root).toBe(ROOT);
     const res2 = fakeRes();
     await listGradingRuns({ query: { sessions_purged: 'no' } }, res2);
-    expect(res2.body.data.items.map((x) => x.archive)).toEqual(['5']);
+    expect(res2.body.data.items.map((x) => x.archive)).toContain('5');
+    expect(res2.body.data.items.every((x) => x.sessions_purged === false)).toBe(true);
     const res3 = fakeRes();
     await listGradingRuns({ query: { type: 'build' } }, res3);
-    expect(res3.body.data.items.length).toBe(1);
+    expect(res3.body.data.items.length).toBeGreaterThanOrEqual(1);
+    expect(res3.body.data.items.map((x) => x.archive)).toContain('build-9-20261013T001500Z');
+    expect(res3.body.data.items.every((x) => x.type === 'build')).toBe(true);
   });
 
   it('★W56-2 详情：teardown_json 全量 + 逐份摘要 + 日志尾部（≤200 行）；缺日志不 500', async () => {
@@ -123,15 +127,19 @@ describe('W56 管理员批改记录（只读接口语义）', () => {
     expect(safeArchiveDir('ok-1_2.name')).toBe(path.join(path.resolve(ROOT), 'ok-1_2.name'));
   });
 
-  it('W56-5 空数据：归档根不存在/为空 ⇒ 列表 200 + items=[]（不 500）', async () => {
+  it('W56-5 空数据：归档根不存在/为空 ⇒ 列表 200 且不贡献任何条目（不 500）', async () => {
     const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'w56-empty-'));
     const old = process.env[RUNS_ROOT_ENV];
     process.env[RUNS_ROOT_ENV] = empty;
     const res = fakeRes();
     await listGradingRuns({ query: {} }, res);
     expect(res.statusCode).toBe(200);
-    expect(res.body.data.items).toEqual([]);
-    expect(res.body.data.total).toBe(0);
+    // ★O2（R2-B39）：契约是「空归档根不贡献条目 + 不 500」；共享库可能残留他人 job_runs 行 ⇒ 不用 items=[] 断言
+    expect(res.body.data.source.archives_root).toBe(empty);
+    expect(res.body.data.items.some((x) => x.type === 'build')).toBe(false);
+    expect(res.body.data.items.map((x) => x.archive)).not.toContain('4');
+    expect(res.body.data.items.map((x) => x.archive)).not.toContain('5');
+    expect(res.body.data.total).toBeGreaterThanOrEqual(res.body.data.items.length);
     process.env[RUNS_ROOT_ENV] = old;
     fs.rmSync(empty, { recursive: true, force: true });
   });
