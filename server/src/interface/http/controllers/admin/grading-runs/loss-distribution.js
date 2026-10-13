@@ -6,7 +6,7 @@
  *          classId 可选，用于把分布收敛到某个班。
  */
 import prisma from '../../../../../utils/prisma.js';
-import { loadClassLossDistribution } from '../../../../../services/classLossDistribution.js';
+import { loadClassLossDistribution } from '../../../../../application/queries/classLossDistribution.js';
 
 export const getLossDistribution = async (req, res) => {
   try {

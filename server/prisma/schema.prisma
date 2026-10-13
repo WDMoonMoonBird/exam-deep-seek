@@ -19,6 +19,9 @@ model User {
   lastSchoolId Int?             @map("last_school_id") @db.UnsignedInt
   createdAt    DateTime         @default(now()) @map("created_at")
   deletedAt    DateTime?        @map("deleted_at")
+  // ★R2-B67（WAVE2）：密码**最近一次设置/重置**的时间（nullable：历史行未写过 ⇒ 不参与失效判定）。
+  // 语义 = 该口令的生效时刻；鉴权中间件用它比对 JWT iat ⇒ 改密/重置后**所有旧令牌**在下一次请求即 401。
+  passwordChangedAt DateTime?   @map("password_changed_at")
 
   // 关系
   questions            Question[]         @relation("TeacherQuestions")

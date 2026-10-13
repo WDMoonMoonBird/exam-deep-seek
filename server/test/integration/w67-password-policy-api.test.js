@@ -35,6 +35,15 @@ afterAll(async () => { __resetPasswordGuard(); await prisma.user.deleteMany({ wh
 
 const changePwd = (body) => authReq(token).put('/api/auth/password', body);
 
+/** ★R2-B67（WAVE2·安全）：改密成功 ⇒ 本人**所有旧令牌**立即失效（新规则）⇒ 套件内必须重新登录后再继续。
+ *  这不是把断言放宽：失效本身由 w72 用例正向断言，这里只是让 w67 的后续步骤改用新令牌。 */
+async function relogin(password) {
+  const res = await request().post('/api/auth/login').send({ username: U, password });
+  if (!res.body || !res.body.data || !res.body.data.token) throw new Error('改密后重新登录失败：' + JSON.stringify(res.body));
+  token = res.body.data.token;
+  return token;
+}
+
 describe('W67-1 强度校验三条（逐条正反例 + 明确中文文案）', () => {
   test('7 位 ⇒ 400「新密码至少 8 位」', async () => {
     const res = await changePwd({ oldPassword: P0, newPassword: 'Ab1cdef' });
@@ -59,12 +68,22 @@ describe('W67-1 强度校验三条（逐条正反例 + 明确中文文案）', (
   });
 
   test('合法新密码 ⇒ 200；随后改回（同样合法）⇒ 200；响应不回显密码', async () => {
+    const oldToken = token;                                                   // ★改密前捕获：用于验证「旧令牌立即失效」
+    // ★跨秒再改密：失效判定是**秒级**且用严格小于（同秒签发的令牌视为"新令牌"，见 auth.js 注释的 ≤1s 窗口）；
+    //   否则本用例会测到窗口内行为（旧令牌仍在 1 秒内可用），断言会假红。
+    await new Promise((r) => setTimeout(r, 1100));
     const ok = await changePwd({ oldPassword: P0, newPassword: P1 });
     expect(ok.status).toBe(200);
     expect(ok.body.message).toBe('密码修改成功');
     expect(JSON.stringify(ok.body)).not.toContain(P1);
+    // ★R2-B67 新规则：改密后旧令牌立即 401（code 1002）
+    const stale = await authReq(oldToken).put('/api/auth/password', { oldPassword: P0, newPassword: P1 });
+    expect(stale.status).toBe(401);
+    expect(stale.body.code).toBe(1002);
+    token = await relogin(P1);
     const back = await changePwd({ oldPassword: P1, newPassword: P0 });
     expect(back.status).toBe(200);
+    token = await relogin(P0);
   });
 });
 
@@ -76,7 +95,9 @@ describe('W67-2 强度失败不计入错误次数（不会被自己的输入错�
     }
     const ok = await changePwd({ oldPassword: P0, newPassword: P1 });
     expect(ok.status).toBe(200);
+    token = await relogin(P1);                                                // ★改密即失效 ⇒ 换新令牌
     expect((await changePwd({ oldPassword: P1, newPassword: P0 })).status).toBe(200);
+    token = await relogin(P0);
   });
 });
 
@@ -113,7 +134,9 @@ describe('W67-4 成功一次即清零', () => {
   test('3 次错误 ⇒ 正确密码改密成功 ⇒ 再错 4 次仍只到 400（计数已清零，不提前锁）', async () => {
     for (let i = 0; i < 3; i += 1) await changePwd({ oldPassword: 'wrong-old-pwd', newPassword: P1 });
     expect((await changePwd({ oldPassword: P0, newPassword: P1 })).status).toBe(200);
+    token = await relogin(P1);                                                // ★改密即失效 ⇒ 换新令牌
     expect((await changePwd({ oldPassword: P1, newPassword: P0 })).status).toBe(200);
+    token = await relogin(P0);
     for (let i = 0; i < 4; i += 1) {
       const res = await changePwd({ oldPassword: 'wrong-old-pwd', newPassword: P1 });
       expect(res.status).toBe(400);

@@ -9,7 +9,7 @@
  */
 import prisma from '../../../../utils/prisma.js';
 import { resolveVisibleClassScope } from '../review/class-scope.js';
-import { loadClassLossDistribution } from '../../../../services/classLossDistribution.js';
+import { loadClassLossDistribution } from '../../../../application/queries/classLossDistribution.js';
 
 export const getAssignmentLossDistribution = async (req, res) => {
   try {

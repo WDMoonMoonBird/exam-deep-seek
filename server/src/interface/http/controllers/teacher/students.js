@@ -111,6 +111,7 @@ export const updateStudent = async (req, res) => {
 
       data.username = fullNew;
       data.password = bcrypt.hashSync(newUsername.includes('@') ? newUsername.split('@')[0] : newUsername, 10);
+      data.passwordChangedAt = new Date(); // ★R2-B67：改学号即改密 ⇒ 旧令牌失效
     }
 
     // 如果姓名从"(待补全)"变为真实姓名，重置密码
@@ -118,6 +119,7 @@ export const updateStudent = async (req, res) => {
       const sid = (data.username || student.username).split('@')[0];
       if (!sid.startsWith('tmp_')) {
         data.password = bcrypt.hashSync(sid, 10);
+        data.passwordChangedAt = new Date(); // ★R2-B67：补全姓名即重置密码 ⇒ 旧令牌失效
       }
     }
 
@@ -172,7 +174,8 @@ export const resetStudentPassword = async (req, res) => {
     }
 
     const newPassword = bcrypt.hashSync(sid, 10);
-    await prisma.user.update({ where: { id: +id }, data: { password: newPassword } });
+    // ★R2-B67：设密路径③——教师重置学生密码
+    await prisma.user.update({ where: { id: +id }, data: { password: newPassword, passwordChangedAt: new Date() } });
     logger.info({ studentId: id }, '学生密码已重置');
     res.json({ code: 0, message: `密码已重置为学号（${sid}）`, data: null });
   } catch (err) {
@@ -201,6 +204,7 @@ export const addStudent = async (req, res) => {
     const student = await prisma.user.create({
       data: {
         username: fullUsername, realName, password: bcrypt.hashSync(username, 10), role: 'student',
+        passwordChangedAt: new Date(), // ★R2-B67：设密路径④——建号初始口令
         studentClasses: { create: { classId: +classId } },
       },
       select: { id: true, username: true, realName: true, role: true, createdAt: true },
@@ -248,6 +252,7 @@ export const batchAddStudents = async (req, res) => {
               username: fullUsername,
               realName: name,
               password: bcrypt.hashSync('', 10), // 空密码hash，无法登录
+              passwordChangedAt: new Date(), // ★R2-B67：建号即设密（占位口令）
               role: 'student',
             },
           });
@@ -266,6 +271,7 @@ export const batchAddStudents = async (req, res) => {
               username: fullUsername,
               realName: '(待补全)',
               password: bcrypt.hashSync('', 10), // 空密码hash，无法登录
+              passwordChangedAt: new Date(), // ★R2-B67：建号即设密（占位口令）
               role: 'student',
             },
           });
@@ -287,6 +293,7 @@ export const batchAddStudents = async (req, res) => {
             username: fullUsername,
             realName: name,
             password: bcrypt.hashSync(sid, 10),
+            passwordChangedAt: new Date(), // ★R2-B67：建号初始口令
             role: 'student',
           },
         });

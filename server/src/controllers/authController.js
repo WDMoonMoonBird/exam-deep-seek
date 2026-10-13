@@ -179,7 +179,8 @@ export const changePassword = async (req, res) => {
 
     // ④ 落库 + 成功清零
     const hashed = bcrypt.hashSync(newPassword, 10);
-    await prisma.user.update({ where: { id: userId }, data: { password: hashed } });
+    // ★R2-B67：设密路径①——自助改密：同时写 password_changed_at ⇒ 本用户所有旧令牌立即失效
+    await prisma.user.update({ where: { id: userId }, data: { password: hashed, passwordChangedAt: new Date() } });
     clearOldPasswordFailures(userId);
 
     logger.info({ userId }, '密码修改成功');

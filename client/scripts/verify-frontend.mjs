@@ -614,7 +614,7 @@ for (const [label, routePath] of [
 
 // ⑭ 按班看失分项分布（★R2-B68 WAVE3）：后端聚合口径（可执行）+ 页面入口/空态/错误态契约
 const B68_REPO = path.join(CLIENT, '..');
-const b68SvcPath = path.join(B68_REPO, 'server', 'src', 'services', 'classLossDistribution.js');
+const b68SvcPath = path.join(B68_REPO, 'server', 'src', 'application', 'queries', 'classLossDistribution.js');
 const b68SvcTxt = read(b68SvcPath) || '';
 const b68Mod = await import(b68SvcPath);
 const b68Subs = [

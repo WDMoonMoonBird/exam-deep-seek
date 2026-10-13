@@ -165,6 +165,7 @@ export const createTeacher = async (req, res) => {
     const teacher = await prisma.user.create({
       data: {
         username, realName, password: bcrypt.hashSync(username, 10), role: 'teacher',
+        passwordChangedAt: new Date(), // ★R2-B67：设密路径④——建号初始口令
         teacherSchools: schoolIds?.length ? { create: schoolIds.map(sid => ({ schoolId: +sid })) } : undefined,
       },
       select: { id: true, username: true, realName: true, role: true, createdAt: true },
@@ -212,7 +213,8 @@ export const resetTeacherPassword = async (req, res) => {
     if (!teacher) return res.status(404).json({ code: 1004, message: '教师不存在', data: null });
 
     const newPassword = bcrypt.hashSync(teacher.username, 10);
-    await prisma.user.update({ where: { id: +id }, data: { password: newPassword } });
+    // ★R2-B67：设密路径②——管理员重置教师密码
+    await prisma.user.update({ where: { id: +id }, data: { password: newPassword, passwordChangedAt: new Date() } });
     logger.info({ teacherId: id }, '教师密码已重置');
     res.json({ code: 0, message: `密码已重置为工号（${teacher.username}）`, data: null });
   } catch (err) {
@@ -285,6 +287,7 @@ export const createStudent = async (req, res) => {
         username: fullUsername,
         realName,
         password: bcrypt.hashSync(username, 10),
+        passwordChangedAt: new Date(), // ★R2-B67：设密路径④——建号初始口令
         role: 'student',
         studentClasses: classIds?.length
           ? { create: classIds.map((cid) => ({ classId: +cid })) }
