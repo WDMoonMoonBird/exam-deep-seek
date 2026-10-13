@@ -117,6 +117,8 @@
         hint="建议定期更换"
       >
         <a-form layout="vertical" :model="pwdForm" size="small" class="pwd-form">
+          <!-- ★R2-B58：规则提示与后端一致（后端仍权威；此处仅为提交前提示） -->
+          <p class="pwd-rule-hint">{{ PASSWORD_RULE_TEXT }}</p>
           <a-form-item label="原密码"><a-input-password v-model:value="pwdForm.oldPassword" /></a-form-item>
           <a-form-item label="新密码"><a-input-password v-model:value="pwdForm.newPassword" /></a-form-item>
           <a-form-item label="确认新密码"><a-input-password v-model:value="pwdForm.confirmPassword" /></a-form-item>
@@ -152,6 +154,8 @@ import { message } from 'ant-design-vue';
 import { useConfirm } from '../../composables/useConfirm.js';
 import { useTheme } from '../../composables/useTheme.js';
 import ThemeToggle from '../../components/ThemeToggle.vue';
+import { errorCopyOf } from '../../composables/errorCopy.js';               // ★R2-B55 口径：UI 固定友好 + 原始错误只进 console
+import { PASSWORD_RULE_TEXT, localPasswordIssue } from '../../composables/passwordPolicy.js';   // ★R2-B58：改密码规则（与后端同口径）
 import ErrorBoundary from '../../components/ErrorBoundary.vue';   // ★R2-B52：错误边界（绝不白屏）
 import ProfileCard from '../../components/ProfileCard.vue';
 import { QuestionCircleOutlined, UserOutlined, NodeIndexOutlined, UserSwitchOutlined, PoweroffOutlined, AppstoreOutlined, IdcardOutlined, DatabaseOutlined, FileTextOutlined, SafetyCertificateOutlined, TeamOutlined, BookOutlined, BulbOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined, LineChartOutlined } from '@ant-design/icons-vue';
@@ -269,15 +273,16 @@ function resetPwdForm() {
   pwdForm.confirmPassword = '';
 }
 async function changePassword() {
-  if (!pwdForm.oldPassword || !pwdForm.newPassword) return message.warn('请填写密码');
-  if (pwdForm.newPassword !== pwdForm.confirmPassword) return message.warn('两次新密码不一致');
+  // ★R2-B58：提交前本地拦截（文案与后端逐字一致：至少 8 位 / 含字母与数字 / 不得与原密码相同 / 两次一致）
+  const issue = localPasswordIssue(pwdForm);
+  if (issue) return message.warn(issue);
   changingPwd.value = true;
   try {
     await request.put('/auth/password', { oldPassword: pwdForm.oldPassword, newPassword: pwdForm.newPassword });
     message.success('密码修改成功');
     resetPwdForm();
   } catch (e) {
-    message.error(e?.response?.data?.message || '修改失败');
+    message.error(errorCopyOf(e, { tag: 'teacher/Layout.vue 修改密码', action: '修改' }));
   } finally { changingPwd.value = false; }
 }
 

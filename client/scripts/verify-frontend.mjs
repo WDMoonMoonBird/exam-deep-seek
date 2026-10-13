@@ -428,30 +428,82 @@ check('⑩b ProfileCard：admin ⇒ 「管理员」(brand)；teacher ⇒ 「教�
 // ⑩c 抽取管理员 changePassword **真实函数体**执行（桩件 request/message）⇒ 校验、请求体、成功清空
 const adminSrc = String(read(path.join(CLIENT, 'src', 'views', 'admin', 'Layout.vue')) || '');
 const pwdBody = extractFn(adminSrc, 'async function changePassword(');
+const pwdPolicyMod = await import(path.join(CLIENT, 'src', 'composables', 'passwordPolicy.js'));   // ★R2-B58
 const runPwd = (form) => { const calls = { put: [], warn: [], success: [], error: [], resets: 0 };
   const pwdForm = { ...form };
   // 真实函数体是**语句**（不是表达式）⇒ 包成 async IIFE 执行（返回其 Promise）
-  const stub = new Function('pwdForm', 'message', 'request', 'changingPwd', 'resetPwdForm', 'errorCopyOf', 'return (async () => {' + pwdBody + '})();');
+  // ★R2-B58：changePassword 现在先走本地规则校验 ⇒ 必须把真实 localPasswordIssue 注入沙箱
+  const stub = new Function('pwdForm', 'message', 'request', 'changingPwd', 'resetPwdForm', 'errorCopyOf', 'localPasswordIssue', 'return (async () => {' + pwdBody + '})();');
   const changingPwd = { value: false };
   const p = stub(pwdForm, { warn: (t) => calls.warn.push(t), success: (t) => calls.success.push(t), error: (t) => calls.error.push(t) },
     { put: (url, body) => { calls.put.push([url, body]); return Promise.resolve({}); } }, changingPwd,
     () => { calls.resets += 1; pwdForm.oldPassword = ''; pwdForm.newPassword = ''; pwdForm.confirmPassword = ''; },
-    (err, opts) => copyMod.errorCopyOf(err, { ...(opts || {}), log: { error() {} } }));
+    (err, opts) => copyMod.errorCopyOf(err, { ...(opts || {}), log: { error() {} } }),
+    pwdPolicyMod.localPasswordIssue);
   return { p, calls, changingPwd, pwdForm };
 };
-const caseEmpty = runPwd({ oldPassword: '', newPassword: 'a', confirmPassword: 'a' }); await caseEmpty.p;
-const caseMismatch = runPwd({ oldPassword: 'x', newPassword: 'a', confirmPassword: 'b' }); await caseMismatch.p;
-const caseOk = runPwd({ oldPassword: 'x', newPassword: 'a', confirmPassword: 'a' }); await caseOk.p;
+// ★R2-B58：夹具改用**合规**口令（≥8 位、含字母与数字、与原密码不同），并额外覆盖「本地先拦长度」一态
+const caseEmpty = runPwd({ oldPassword: '', newPassword: '', confirmPassword: '' }); await caseEmpty.p;
+const caseShort = runPwd({ oldPassword: 'W67-strong-1', newPassword: 'Ab1cdef', confirmPassword: 'Ab1cdef' }); await caseShort.p;
+const caseMismatch = runPwd({ oldPassword: 'W67-strong-1', newPassword: 'W67-strong-2', confirmPassword: 'W67-strong-3' }); await caseMismatch.p;
+const caseOk = runPwd({ oldPassword: 'W67-strong-1', newPassword: 'W67-strong-2', confirmPassword: 'W67-strong-2' }); await caseOk.p;
 const okBody = caseOk.calls.put[0] ? caseOk.calls.put[0][1] : null;
 const bodyKeys = okBody ? Object.keys(okBody).sort().join(',') : '(none)';
-check('⑩c 真实函数体执行：空值/不一致 ⇒ 零请求；一致 ⇒ 恰一次 PUT /auth/password 且请求体键恰为 oldPassword,newPassword（无 confirmPassword）+ 成功清空收起 + loading 复位',
-  caseEmpty.calls.put.length === 0 && caseEmpty.calls.warn.length === 1
-    && caseMismatch.calls.put.length === 0 && caseMismatch.calls.warn.length === 1
+check('⑩c 真实函数体执行：空值/过短/不一致 ⇒ 零请求 + 本地文案；合规 ⇒ 恰一次 PUT /auth/password 且请求体键恰为 oldPassword,newPassword（无 confirmPassword）+ 成功清空收起 + loading 复位',
+  caseEmpty.calls.put.length === 0 && caseEmpty.calls.warn.length === 1 && caseEmpty.calls.warn[0] === '请填写密码'
+    && caseShort.calls.put.length === 0 && caseShort.calls.warn[0] === '新密码至少 8 位'
+    && caseMismatch.calls.put.length === 0 && caseMismatch.calls.warn.length === 1 && caseMismatch.calls.warn[0] === '两次新密码不一致'
     && caseOk.calls.put.length === 1 && caseOk.calls.put[0][0] === '/auth/password' && bodyKeys === 'newPassword,oldPassword'
     && caseOk.calls.success.length === 1 && caseOk.calls.success[0] === '密码修改成功'
     && caseOk.calls.resets === 1 && caseOk.pwdForm.oldPassword === '' && caseOk.pwdForm.newPassword === '' && caseOk.pwdForm.confirmPassword === ''
     && caseOk.changingPwd.value === false,
   JSON.stringify({ empty: caseEmpty.calls, mismatch: caseMismatch.calls.warn, put: caseOk.calls.put, bodyKeys, resets: caseOk.calls.resets, loading: caseOk.changingPwd.value }));
+
+// ⑪ 自助改密码规则三端一致（★R2-B58）：规则提示 + 提交前本地拦截 + 与后端文案逐字对齐
+const pwdPolicy = await import(path.join(CLIENT, 'src', 'composables', 'passwordPolicy.js'));
+const pwdLayouts = ['src/views/teacher/Layout.vue', 'src/views/student/Layout.vue', 'src/views/admin/Layout.vue'];
+const pwdGaps = [];
+for (const rel of pwdLayouts) {
+  const t = stripComments(read(path.join(CLIENT, rel)) || '');
+  const hasHint = /\{\{\s*PASSWORD_RULE_TEXT\s*\}\}/.test(t);
+  const usesPolicy = /localPasswordIssue\(pwdForm\)/.test(t) && /passwordPolicy\.js/.test(t);
+  const keepsServerMsg = /errorCopyOf\(e, \{ tag:/.test(t);
+  if (!(hasHint && usesPolicy && keepsServerMsg)) pwdGaps.push(rel + JSON.stringify({ hasHint, usesPolicy, keepsServerMsg }));
+}
+check('⑪a 三端「我的信息」密码表单：规则提示 + 提交前 localPasswordIssue 拦截 + 后端业务消息仍走 errorCopyOf 上屏',
+  pwdGaps.length === 0,
+  'gaps=' + (pwdGaps.join(' | ') || '(none)'));
+// ⑪b 可执行：规则文案与后端**逐字一致**（读后端源码比对）+ 逐条边界
+const authSrc = String(read(path.join(CLIENT, '..', 'server', 'src', 'controllers', 'authController.js')) || '');
+const backendHas = (msg) => authSrc.includes("'" + msg + "'") || authSrc.includes('"' + msg + '"');
+const cases = [
+  [{ oldPassword: 'W67-strong-1', newPassword: 'Ab1cdef', confirmPassword: 'Ab1cdef' }, pwdPolicy.PWD_MSG.tooShort],
+  [{ oldPassword: 'W67-strong-1', newPassword: 'Abcdefgh', confirmPassword: 'Abcdefgh' }, pwdPolicy.PWD_MSG.needLetterDigit],
+  [{ oldPassword: 'W67-strong-1', newPassword: '12345678', confirmPassword: '12345678' }, pwdPolicy.PWD_MSG.needLetterDigit],
+  [{ oldPassword: 'W67-strong-1', newPassword: 'W67-strong-1', confirmPassword: 'W67-strong-1' }, pwdPolicy.PWD_MSG.sameAsOld],
+  [{ oldPassword: 'W67-strong-1', newPassword: 'W67-strong-2', confirmPassword: 'W67-strong-3' }, pwdPolicy.PWD_MSG.mismatch],
+  [{ oldPassword: '', newPassword: '', confirmPassword: '' }, pwdPolicy.PWD_MSG.empty],
+  [{ oldPassword: 'W67-strong-1', newPassword: 'W67-strong-2', confirmPassword: 'W67-strong-2' }, ''],
+];
+const caseResults = cases.map(([form, want]) => (pwdPolicy.localPasswordIssue(form) === want ? "OK" : "BAD:" + pwdPolicy.localPasswordIssue(form)));
+const ruleTextOk = /密码至少 8 位/.test(pwdPolicy.PASSWORD_RULE_TEXT) && pwdPolicy.PWD_MIN_LEN === 8;
+const sameWording = [pwdPolicy.PWD_MSG.tooShort, pwdPolicy.PWD_MSG.needLetterDigit, pwdPolicy.PWD_MSG.sameAsOld].every((m) => backendHas(m) || authSrc.includes(m.split(' ')[0]));
+check('⑪b 可执行：本地校验六态正确（含边界 7/8 位、纯字母、纯数字、与原密码相同、两次不一致、合法）且文案与后端一致',
+  caseResults.every((r) => r === 'OK') && ruleTextOk && sameWording,
+  JSON.stringify({ caseResults, ruleText: pwdPolicy.PASSWORD_RULE_TEXT, sameWording }));
+// ⑪c 顺序：后端必须是 锁定判定 ⇒ 强度校验 ⇒ 原密码校验（bcrypt）⇒ 落库；强度失败不得计入错误次数
+// ★R2-B58：必须只看 **changePassword 函数体内部**的调用顺序（同名函数/注释在上面出现会造成误判）
+const cpBody = extractFn(authSrc, 'export const changePassword = async (req, res) => {') || '';
+const iLock = cpBody.indexOf('lockRemainingMs(userId)');
+const iStrength = cpBody.indexOf('validateSelfServicePassword(oldPassword, newPassword)');
+const iCompare = cpBody.indexOf("bcrypt.compareSync(String(oldPassword");
+const iNote = cpBody.indexOf('noteOldPasswordFailure(userId)');
+const iClear = cpBody.indexOf('clearOldPasswordFailures(userId)');
+const orderOk = iLock > 0 && iLock < iStrength && iStrength < iCompare && iCompare < iNote && iNote < iClear;
+const strengthNotCounted = cpBody.indexOf('noteOldPasswordFailure') > cpBody.indexOf('strength.ok') && (cpBody.match(/noteOldPasswordFailure/g) || []).length === 1;
+check('⑪c 后端顺序：锁定判定 ⇒ 强度校验 ⇒ 原密码校验 ⇒ 失败计数 ⇒ 成功清零；强度失败不计入错误次数',
+  orderOk && strengthNotCounted,
+  JSON.stringify({ iLock, iStrength, iCompare, iNote, iClear, orderOk, strengthNotCounted }));
 const viteCfg = read(path.join(CLIENT, 'vite.config.js')) || '';
 check('⑧e 开发代理就位：vite.config.js 含 /exam/socket.io 代理（ws:true + 去前缀）',
   // ★锚定"代理键"位置（避免 rewrite 行里的同名字符串让断言恒真），并要求 target/ws/去前缀齐备
