@@ -6,7 +6,7 @@
  */
 import { jest } from '@jest/globals';
 
-jest.unstable_mockModule('../../../src/socket.js', () => ({
+jest.unstable_mockModule('../../../src/infrastructure/notifier/socket-server.js', () => ({
   notifyGraded: jest.fn(),
 }));
 

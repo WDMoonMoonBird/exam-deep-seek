@@ -20,7 +20,7 @@
  * 存储读写走**原始 SQL**（不依赖 Prisma Client 模型生成——本仓库的既有约定，见 dshGradingAnchor.js）。
  */
 import crypto from 'crypto';
-import { dirSha256 } from '../utils/snapshotHash.js';
+import { dirSha256 } from '../../../utils/snapshotHash.js';
 import { buildAssignmentDescription } from './dshRulerContentKey.js';
 
 /** 装置口径：按 ignore 复算目录摘要（与 validate.py dir_sha256 同算法） */

@@ -25,8 +25,8 @@
  * 三条静态边界与「后续对齐 sidecar」的待办：见 KNOWN_ISSUES.md「P2 已知限制」。
  */
 
-import logger from '../utils/logger.js';
-import { gradeProject } from '../infrastructure/ai/deepseek/index.js';
+import logger from '../../utils/logger.js';
+import { gradeProject } from './deepseek/index.js';
 
 /** TrustJudge sidecar 基址（FastAPI，仅监听 127.0.0.1） */
 const SIDECAR_URL = 'http://127.0.0.1:8901';

@@ -10,7 +10,7 @@
  *     （保证「同 (作业, 尺子) 至多一条活动行」的活动键语义不被破坏）。
  * 安全：更新语句带 `status='running' AND updated_at < 阈值` 条件 ⇒ 正在跑的真实 job（updated_at 新）**绝不可能**被误伤。
  */
-import logger from '../utils/logger.js';
+import logger from '../../../utils/logger.js';
 
 /** 默认阈值：15 分钟（env DSH_WORKER_STALE_RUNNING_MS 可覆盖） */
 export const DEFAULT_STALE_RUNNING_MS = 15 * 60 * 1000;

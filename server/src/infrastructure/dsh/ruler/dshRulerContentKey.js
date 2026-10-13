@@ -29,8 +29,8 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { zipDirectory } from '../../execution/deterministic-zip.js';
-import { dirSha256 } from '../utils/snapshotHash.js';
-import { standardDir, UPLOADS_ROOT } from '../utils/projectPaths.js';
+import { dirSha256 } from '../../../utils/snapshotHash.js';
+import { standardDir, UPLOADS_ROOT } from '../../../utils/projectPaths.js';
 
 /** 规范化的三段拼接口径版本（改口径必须换 key ⇒ 由记录与测试锁定） */
 export const RULER_CONTENT_KEY_SCHEMA = 'ruler-content-key/1';

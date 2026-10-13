@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { buildTree, isIgnored } from './fileTree.js';
+import { buildTree, isIgnored } from '../../utils/fileTree.js';
 
 /**
  * projectFiles.js — 实训题文件读写共享工具（T03/T04 共用）

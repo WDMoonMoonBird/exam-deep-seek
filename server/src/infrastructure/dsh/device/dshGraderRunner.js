@@ -8,12 +8,12 @@
  *  - 运行结束由调用方对 run-root 做 "sk" 前缀形态扫描（本模块自身不落盘）。
  */
 import { spawn } from 'node:child_process';
-import logger from '../utils/logger.js';
+import logger from '../../../utils/logger.js';
 import {
   getApiKey,
   getConcurrencyWithKey,
   getDshGradingConcurrencyWithKey,
-} from '../infrastructure/ai/deepseek/config.js';
+} from '../../ai/deepseek/config.js';
 
 export const CRED_ENV_KEY = 'DEEPSEEK_API_KEY';
 export const RUN_ROOT_ENV_KEY = 'GRADER_RUN_ROOT';

@@ -14,7 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(__dirname, '../../..');
 const LIB = path.join(REPO, 'scripts/dsh-grader/lib.sh');
 const RUN = path.join(REPO, 'scripts/dsh-grader/run.sh');
-const ARCHIVER = path.join(REPO, 'server/src/services/dshRunArchiver.js');
+const ARCHIVER = path.join(REPO, 'server/src/infrastructure/dsh/runs/dshRunArchiver.js');
 const WORKER = path.join(REPO, 'server/src/infrastructure/dsh/worker/run-once.js');
 
 function bash(script) {

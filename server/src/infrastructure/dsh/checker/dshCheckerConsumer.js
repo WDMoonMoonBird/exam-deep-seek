@@ -11,8 +11,8 @@
 import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'node:child_process';
-import logger from '../utils/logger.js';
-import { listMeasureResults, loadGradingResultIndex, normalizeDetailDoc } from '../infrastructure/dsh/checker/measure-results.js';   // ★R2-B65 破环：产物只读叶子（原在本文件 + dshSummarySession）
+import logger from '../../../utils/logger.js';
+import { listMeasureResults, loadGradingResultIndex, normalizeDetailDoc } from './measure-results.js';   // ★R2-B65 破环：产物只读叶子（原在本文件 + dshSummarySession）
 // ★R2-B65：下列两个名称的**实现**已下沉到 measure-results.js，此处原样再导出 ⇒ 对外 API 逐字不变。
 export { listMeasureResults, loadGradingResultIndex, normalizeDetailDoc };
 

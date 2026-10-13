@@ -13,9 +13,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import logger from '../utils/logger.js';
+import logger from '../../../utils/logger.js';
 import { computeCost } from '../usage/dshSessionUsage.js';
-import { SUMMARIES_REL, SUMMARIES_SCHEMA, listMeasureResults, loadSummaries, parseSummariesDoc } from '../infrastructure/dsh/checker/measure-results.js';
+import { SUMMARIES_REL, SUMMARIES_SCHEMA, listMeasureResults, loadSummaries, parseSummariesDoc } from './measure-results.js';
 
 // ★R2-B65 破环：产物只读逻辑（SUMMARIES_REL / SUMMARIES_SCHEMA / parseSummariesDoc / loadSummaries）
 //   已下沉到 infrastructure/dsh/checker/measure-results.js，此处**原样再导出** ⇒ 对外 API 逐字不变。
@@ -156,7 +156,7 @@ export async function bumpCachedSummaryHit(prisma, summaryKey) {
 
 /** 默认模型调用（平台配置：DB → ENV；测试注入 callModel ⇒ 零真实调用） */
 export async function defaultCallModel({ system, user, model, maxTokens = 2000, fetchImpl = fetch, timeoutMs = 120000 }) {
-  const cfg = await import('../infrastructure/ai/deepseek/config.js');
+  const cfg = await import('../../ai/deepseek/config.js');
   const baseUrl = String(await cfg.getBaseUrl()).replace(/\/+$/u, '');
   const apiKey = await cfg.getApiKey();
   const useModel = model || (await cfg.getModel());
