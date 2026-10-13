@@ -88,11 +88,15 @@
             <a-layout-content class="content" id="main-content" ref="mainRef">
                 <!-- B3-1 ⑤ 页面 H1：镜像当前页真实标题（页内标题元素 → 侧栏菜单名兜底；非通用词），视觉隐藏 -->
                 <h1 v-if="pageTitle" class="visually-hidden">{{ pageTitle }}</h1>
-                <router-view v-slot="{ Component }">
-                    <transition name="tab-fade" mode="out-in">
-                        <component :is="Component" />
-                    </transition>
-                </router-view>
+                <!-- ★R2-B52：错误边界必须在 <transition> **之外**（transition 的 out-in 在"进入组件解析失败"时会卡在 out ⇒ 永久空白）；
+                     同时去掉 mode="out-in"：默认模式允许进出重叠一瞬，但不会因解析失败而整块空白（取舍见 R2-B52 记录） -->
+                <ErrorBoundary>
+                    <router-view v-slot="{ Component }">
+                        <transition name="tab-fade">
+                            <component :is="Component" />
+                        </transition>
+                    </router-view>
+                </ErrorBoundary>
             </a-layout-content>
         </a-layout>
     </a-layout>
@@ -146,6 +150,7 @@ import { message } from 'ant-design-vue';
 import { useConfirm } from '../../composables/useConfirm.js';
 import { useTheme } from '../../composables/useTheme.js';
 import ThemeToggle from '../../components/ThemeToggle.vue';
+import ErrorBoundary from '../../components/ErrorBoundary.vue';   // ★R2-B52：错误边界（绝不白屏）
 import ProfileCard from '../../components/ProfileCard.vue';
 import { QuestionCircleOutlined, UserOutlined, NodeIndexOutlined, UserSwitchOutlined, PoweroffOutlined, AppstoreOutlined, IdcardOutlined, DatabaseOutlined, FileTextOutlined, SafetyCertificateOutlined, TeamOutlined, BookOutlined, BulbOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined, LineChartOutlined } from '@ant-design/icons-vue';
 

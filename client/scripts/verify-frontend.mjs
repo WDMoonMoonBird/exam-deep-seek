@@ -135,6 +135,90 @@ check('⑥c 依赖路由参数的页必须从 useRoute 取且有重入处理（w
   missing.route.length === 0,
   '不合规=' + (missing.route.join(',') || '(none)'));
 
+// ⑦ 错误自愈与错误边界（★R2-B52）：懒加载 chunk 失败 ⇒ reload-once（防循环）+ 错误边界在 transition 之外 + 全局错误不静默
+//   —— 用**注入桩件**跑纯逻辑（不真实发起网络、不导航），再校验两处 Layout/main.js 的接线契约。
+const recovery = await import(path.join(CLIENT, 'src', 'components', 'errorRecovery.js'));
+const mkStorage = () => {
+  const map = new Map();
+  return { getItem: (k) => (map.has(k) ? map.get(k) : null), setItem: (k, v) => map.set(k, String(v)), removeItem: (k) => map.delete(k), _map: map };
+};
+let reloadCalls = 0;
+const spyReload = () => { reloadCalls += 1; };
+const bus = { notices: [] };
+const notify = (t) => bus.notices.push(String(t));
+const storage = mkStorage();
+const chunkErr = () => new Error('Failed to fetch dynamically imported module: /exam/assets/ReviewClass-abc123.js');
+// ① 首次 chunk 失败 ⇒ 恰一次 reload + 写防循环键
+reloadCalls = 0; bus.notices.length = 0;
+const r1 = recovery.handleRouterError(chunkErr(), { fullPath: '/teacher/review/class/9' }, { storage, reload: spyReload, notify });
+check('⑦a chunk 失败 ⇒ reload 恰一次 + 写入 chunk-reload:fullPath 防循环键',
+  r1.reloaded === true && r1.reason === 'reload_once' && reloadCalls === 1 && storage.getItem(recovery.reloadKeyOf('/teacher/review/class/9')) !== null,
+  JSON.stringify({ ...r1, reloadCalls, key: recovery.reloadKeyOf('/teacher/review/class/9') }));
+// ② 同路径第二次失败 ⇒ 不再 reload，转为可见错误（不循环刷新）
+reloadCalls = 0; bus.notices.length = 0;
+const r2 = recovery.handleRouterError(chunkErr(), { fullPath: '/teacher/review/class/9' }, { storage, reload: spyReload, notify });
+check('⑦b 同路径第二次失败 ⇒ 不再 reload（防循环）且给出可见提示（错误 UI 而非空白）',
+  r2.reloaded === false && r2.reason === 'already_reloaded' && reloadCalls === 0 && bus.notices.length === 1,
+  JSON.stringify({ ...r2, reloadCalls, notices: bus.notices.slice(0, 1) }));
+// ③ 后续导航到**另一个路由**仍可正常渲染（=用户症状核心：不得被上一次失败卡死）
+reloadCalls = 0;
+const r3 = recovery.handleRouterError(chunkErr(), { fullPath: '/teacher/students' }, { storage, reload: spyReload, notify });
+const boundaryOk = recovery.boundaryState(chunkErr(), '/teacher/review/class/9');
+const ebTxt = read(path.join(CLIENT, 'src', 'components', 'ErrorBoundary.vue')) || '';
+const resetsOnNav = /watch\(resetOf, \(\) => \{ state\.value = null; \}\)/.test(ebTxt);
+check('⑦c 后续导航不被卡死：新路由有自己的自愈预算（不被上一路径标记抑制）+ 边界随路由变化复位',
+  r3.reloaded === true && reloadCalls === 1 && resetsOnNav && boundaryOk.failed === true,
+  JSON.stringify({ r3, reloadCalls, resetsOnNav }));
+// ④ 正常路径（非 chunk 错误）⇒ 不刷新页面、不写键（无多余 reload）
+reloadCalls = 0;
+const before = storage._map.size;
+const r4 = recovery.handleRouterError(new Error('普通业务异常'), { fullPath: '/teacher/teams' }, { storage, reload: spyReload, notify });
+check('⑦d 非 chunk 错误 ⇒ 零 reload、不写防循环键（正常路径无多余刷新）',
+  r4.handled === false && reloadCalls === 0 && storage._map.size === before,
+  JSON.stringify({ ...r4, reloadCalls, keys: storage._map.size }));
+// ⑤ 四类 chunk 措辞都要识别（跨浏览器/打包器）
+const patterns = ['Failed to fetch dynamically imported module: /a.js', 'Importing a module script failed.', 'Loading chunk 12 failed.', 'error loading dynamically imported module'];
+const allChunk = patterns.every((m) => recovery.isChunkLoadError(new Error(m)) === true);
+check('⑦e 四类动态导入失败措辞全部识别为可自愈（且普通错误不误判）',
+  allChunk && recovery.isChunkLoadError(new Error('题目保存失败')) === false,
+  'patterns=' + patterns.length + ' allChunk=' + allChunk);
+// ⑥ 接线契约：错误边界在 transition **之外** + 去掉 out-in + main.js 在 mount 前安装 + 全局 handler 齐备
+const layoutTeacher = read(path.join(CLIENT, 'src', 'views', 'teacher', 'Layout.vue')) || '';
+const layoutAdmin = read(path.join(CLIENT, 'src', 'views', 'admin', 'Layout.vue')) || '';
+const mainJs = read(path.join(CLIENT, 'src', 'main.js')) || '';
+// 作用域限定在 router-view 那一块（Layout 里还有其它 <transition>，例如移动端抽屉 ⇒ 不能按全文首/末位判断）
+const routerViewScope = (txt) => {
+  const rv = txt.indexOf('<router-view');
+  if (rv < 0) return null;
+  const rvEnd = txt.indexOf('</router-view>', rv);
+  const b = txt.lastIndexOf('<ErrorBoundary>', rv);
+  const bEnd = txt.indexOf('</ErrorBoundary>', rv);
+  const t = txt.indexOf('<transition', rv);
+  const tEnd = txt.indexOf('</transition>', rv);
+  return { rv, rvEnd, b, bEnd, t, tEnd, inner: txt.slice(rv, rvEnd < 0 ? rv + 400 : rvEnd) };
+};
+const boundaryOutside = (txt) => {
+  const s = routerViewScope(txt);
+  if (!s) return false;
+  return s.b >= 0 && s.b < s.rv && s.bEnd > s.rvEnd && s.t > s.b && s.t > s.rv && s.tEnd > s.t && s.tEnd < s.bEnd;
+};
+check('⑦f 两处 Layout：ErrorBoundary 包住 router-view 且位于 transition 之外（不会被 out-in 卡住）',
+  boundaryOutside(layoutTeacher) && boundaryOutside(layoutAdmin),
+  'teacher=' + boundaryOutside(layoutTeacher) + ' admin=' + boundaryOutside(layoutAdmin));
+const outIn = /mode="out-in"/;
+const scopeTeacher = routerViewScope(layoutTeacher);
+const scopeAdmin = routerViewScope(layoutAdmin);
+const routerOutIn = (scope) => !!scope && outIn.test(scope.inner);
+check('⑦g 两处 Layout 的 router-view 过渡均已去掉 mode=out-in（消除「进入组件解析失败即永久空白」的过渡死锁类）',
+  !routerOutIn(scopeTeacher) && !routerOutIn(scopeAdmin),
+  'teacherRouterOutIn=' + routerOutIn(scopeTeacher) + ' adminRouterOutIn=' + routerOutIn(scopeAdmin));
+const recSrc = read(path.join(CLIENT, 'src', 'components', 'errorRecovery.js')) || '';
+check('⑦h main.js 在 mount 之前安装错误自愈；模块含 app.config.errorHandler + unhandledrejection + chunk-reload 键（不静默）',
+  /installErrorRecovery\(/.test(mainJs) && mainJs.indexOf('installErrorRecovery(') < mainJs.indexOf("app.mount('#app')")
+    && /app\.config\.errorHandler/.test(recSrc) && /unhandledrejection/.test(recSrc) && /chunk-reload:/.test(recSrc)
+    && /onErrorCaptured/.test(read(path.join(CLIENT, 'src', 'components', 'ErrorBoundary.vue')) || ''),
+  'installedBeforeMount=' + (mainJs.indexOf('installErrorRecovery(') < mainJs.indexOf("app.mount('#app')")));
+
 for (const [label, routePath] of [
   ['⑤a 项目题复审路由', 'review/project/:submissionId'],
   ['⑤b 通用复审路由', 'review/:id'],

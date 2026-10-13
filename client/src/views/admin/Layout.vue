@@ -56,9 +56,12 @@
       <a-layout-content class="content" id="main-content" ref="mainRef">
         <!-- B3-1 ⑤ 页面 H1：镜像当前页真实标题（页内标题元素 → 侧栏菜单名兜底），视觉隐藏 -->
         <h1 v-if="pageTitle" class="visually-hidden">{{ pageTitle }}</h1>
-        <router-view v-slot="{ Component }">
-          <transition name="tab-fade" mode="out-in"><component :is="Component" /></transition>
-        </router-view>
+        <!-- ★R2-B52：错误边界在 transition 之外 + 去掉 out-in（避免"进入组件解析失败"时卡在 out ⇒ 整块空白） -->
+        <ErrorBoundary>
+          <router-view v-slot="{ Component }">
+            <transition name="tab-fade"><component :is="Component" /></transition>
+          </router-view>
+        </ErrorBoundary>
       </a-layout-content>
     </a-layout>
   </a-layout>
@@ -72,6 +75,7 @@ import { BankOutlined, AppstoreOutlined, TeamOutlined, IdcardOutlined, Dashboard
 import { useConfirm } from '../../composables/useConfirm.js';
 import { useTheme } from '../../composables/useTheme.js';
 import ThemeToggle from '../../components/ThemeToggle.vue';
+import ErrorBoundary from '../../components/ErrorBoundary.vue';   // ★R2-B52：错误边界（绝不白屏）
 
 const router = useRouter(); const route = useRoute(); const userStore = useUserStore();
 const { confirm } = useConfirm();
