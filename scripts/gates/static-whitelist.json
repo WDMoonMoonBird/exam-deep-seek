@@ -1,0 +1,21 @@
+{
+  "note": "静态展示豁免名单（R2-B63）。口径：教师手册等【纯静态、无数据交互】页面不计 GodFile 判据（用户 2026-10-11 裁定，见 docs/plan/2026-10-11-godfile-split-plan.md §范围裁剪）。豁免不是口头声明：arch-metrics 会逐文件（含子树与未来新增 section）做 I/O 反滥用守卫，白名单内出现 axios / @/api / 数据类 composable / socketConfig·createTeacherSocket / child_process（**含经 composable·store 间接取数**）⇒ 门禁 FAIL「声明为静态，却含 I/O」。每条必须写清理由。",
+  "entries": [
+    {
+      "path": "client/src/views/Doc.vue",
+      "reason": "教师使用手册（纯静态内容页：模板说明文字 + 本地演示数据，无接口、无数据依赖；此前 1106 行即用户裁定保留，现 1220 行）"
+    },
+    {
+      "path": "client/src/views/DocDemoPreview.vue",
+      "reason": "手册演示预览壳（只 import vue 的 computed，渲染手册演示区块，无接口调用）"
+    },
+    {
+      "path": "client/src/views/Landing.vue",
+      "reason": "官网落地页（展示为主：只读本地登录态 pinia store 与主题开关，store 本身无 I/O，守卫已自动核实）"
+    },
+    {
+      "path": "client/src/components/manual/**",
+      "reason": "手册 section / 演示场景子树（scenes/*.js 为演示数据常量，sections/*.vue 只组合本地组件；未来新增 section 自动纳入本条目，同样受 I/O 守卫约束）"
+    }
+  ]
+}

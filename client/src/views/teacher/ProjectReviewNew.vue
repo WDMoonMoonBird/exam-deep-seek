@@ -231,33 +231,42 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import { message } from 'ant-design-vue';
+import { computed } from 'vue';
+import { useRouter } from 'vue-router';
 import { FileTextOutlined, FolderOutlined } from '@ant-design/icons-vue';
-import loader from '@monaco-editor/loader';
-import { applyMonacoCompat } from '../../infrastructure/monaco/legacyLoaderCompat';
-import { useMonacoTheme } from '../../composables/useMonacoTheme.js';
-import { useMonacoKeyboardA11y } from '../../composables/useMonacoKeyboardA11y.js';
-import { errorCopyOf } from '../../composables/errorCopy.js';   // ★R2-B57：UI 文案统一出口（服务端业务文案优先、原始错误只进 console）
 import { getClassWithColor } from 'file-icons-js';
 import 'file-icons-js/css/style.css';
-import { getProjectReview, saveProjectReview, regradeProjectSubmission } from '../../api/projects.js';
 import { parseCheckerFeedback } from '../../composables/review/parseCheckerFeedback.js';
-import request from '../../api/request.js';
-import { getLanguage } from '../../domain/fileLang.js';
 import StatusTag from '../../components/StatusTag.vue';
-
-const route = useRoute();
-const router = useRouter();
-/** ★R2-B47：路由参数在**请求时**读取（computed ⇒ 重入/换 id 不会再用旧值；防呆 ⑥c） */
-const submissionId = computed(() => +route.params.submissionId);
-const loadingDetail = ref(false);
-const loadError = ref('');
+import { useProjectReviewPage } from '../../composables/projectReviewNew/useProjectReviewPage.js';
+import { useProjectReviewGrading } from '../../composables/projectReviewNew/useProjectReviewGrading.js';
+import { useReviewLayout } from '../../composables/projectReviewNew/useReviewLayout.js';
 
 /**
- * ★R2-B47（U-1）：返回落点**确定性** + 兜底。
- * 旧实现裸 `$router.back()`：无站内历史（直接打开/新标签页/刷新后）时什么都不做 ⇒ 留在原地像"白屏"。
+ * ★R2-B64 / t4：本页 script 446 行 → composables/projectReviewNew/*（data/轮询在 page，评分动作在 grading，
+ * 布局在 layout，Monaco 在 workspace，纯函数在 pure）。函数体逐字搬移，行为不变；
+ * 模板绑定的名字与拆分前逐一相同 ⇒ <template> 与 <style> 零改动。
+ */
+const {
+  submissionId, submission, aiResult, question, student, displayNo,
+  status, statusTone, statusText, locked, loaded, loadError,
+  aiScore, maxScore, gradingState, finalScore, teacherFeedback, hasStandardFiles, fetchData,
+  regrading, startPolling,
+  activeTree, editorContainerRef, fileTreeData, openTabs, activePath, defaultExpandedKeys, fading,
+  onTreeSelect, onTreeDblclick, switchTab, closeTab,
+} = useProjectReviewPage();
+
+const { saving, promptModalOpen, promptLoading, promptData, onApprove, onRegrade, showPrompt, quoteAiComment } =
+  useProjectReviewGrading({ submissionId, submission, aiResult, finalScore, teacherFeedback, regrading, gradingState, startPolling });
+
+const { narrow, panelOpen, collapsed } = useReviewLayout();
+
+const router = useRouter();
+/**
+ * ★R2-B47（U-1）：返回落点**确定性** + 兜底。（源 :258-268 逐字未动）
+ * 留在 SFC 的原因：server/test/integration/w64-teacher-review-blank.test.js 的 ★W64-3 会从本 SFC **抽取该函数体**
+ * 在 sandbox（注入 router）里执行 ⇒ 迁出即破坏该源码契约断言（行为断言本身不变）。
+ * 旧实现裸 `$router.back()`：无站内历史（直接打开/新标签页/刷新后）时什么都不做 ⇒ 留在原地像“白屏”。
  * 现在：上一跳仍在复审流内 ⇒ back()（保留来路，含 query 里的 assignmentId）；否则显式回「评分审核」列表。
  */
 function goBack() {
@@ -267,416 +276,10 @@ function goBack() {
   else router.push('/teacher/review');
 }
 
-const loaded = ref(false);
-const submission = ref({});
-const question = ref({});
-const student = ref({});
-const version = ref(0);
-const aiResult = ref(null);
-/** ★R2-B46：总评视图（复用同一解析器 parseCheckerFeedback，**不改其语义**；无 summary ⇒ null ⇒ 本页行为与改动前一致） */
+/** ★R2-B46：总评视图（留在本页：verify-frontend ⑤ 断言本路由组件必须消费 parseCheckerFeedback；解析语义未改） */
 const fbView = computed(() => (aiResult.value && typeof aiResult.value === 'object' ? parseCheckerFeedback(JSON.stringify(aiResult.value)) : null));
 const hasSummary = computed(() => !!(fbView.value && fbView.value.kind === 'checker' && fbView.value.summary));
-const aiScore = computed(() => submission.value.aiScore ?? null);
-const maxScore = ref(100);
-const gradingState = ref('none');
-const gradingError = ref('');
-const finalScore = ref(null);
-const teacherFeedback = ref('');
-const collapsed = ref(false);
-
-/** Workbench 壳：<1200px 时右栏评分面板抽屉化（纯布局，不改任何交互与请求） */
-const narrow = ref(false);
-const panelOpen = ref(false);
-let shellMq = null;
-function onShellMq(e) { narrow.value = e.matches; if (!e.matches) panelOpen.value = false; }
-
-/** a-tag 配色 → StatusTag tone（与 statusColor 一一对应，状态判断未改） */
-const STATUS_TONE = { blue: 'brand', green: 'success', orange: 'warning', red: 'danger', default: 'neutral' };
-const statusTone = computed(() => STATUS_TONE[statusColor.value] || 'neutral');
-const saving = ref(false);
-const regrading = ref(false);
-const status = computed(() => submission.value.status || '');
-const locked = computed(() => status.value === 'published');
-const standardFiles = reactive({ tree: [], contents: {} });
-const studentFiles = reactive({ tree: [], contents: {} });
-/** 有无标准答案包（tree 与 contents 均空 = 开放性题目）：无包不渲染「标准答案包」tab，不改变有包时的三栏布局 */
-const hasStandardFiles = computed(() => (standardFiles.tree?.length || 0) > 0
-  || Object.keys(standardFiles.contents || {}).length > 0);
-
-// ===== IDE 状态（复用 ProjectQuestionEdit.vue） =====
-
-const activeTree = ref('student'); // 'student' | 'standard'
-const editorContainerRef = ref(null);
-/** 编辑器主题跟随应用主题：ensureTheme() 在 create 之前按当前令牌定义并返回主题名 */
-const { ensureTheme } = useMonacoTheme();
-/** 键盘可达性（QA T5-A5 同类缺陷补齐）：Tab/Shift+Tab 可离开编辑器 + 聚焦元素可读名称 */
-const { attach: attachKeyboardA11y } = useMonacoKeyboardA11y();
-// 双数据源各自的 IDE 状态（切换源不丢选中/打开的文件）
-// 必须 reactive：computed setter 写普通对象不会触发响应
-const sourceState = reactive({
-  student: { openTabs: [], activePath: '', expandedKeys: [] },
-  standard: { openTabs: [], activePath: '', expandedKeys: [] },
-});
-// 内容缓存按源隔离（键含源前缀，与 Monaco model 隔离方式一致）
-const fileContents = { student: new Map(), standard: new Map() };
-const fileTreeData = ref([]);
-// 当前源状态代理：模板与逻辑读写当前源，互不干扰
-const curState = computed(() => sourceState[activeTree.value]);
-const openTabs = computed({
-  get: () => curState.value.openTabs,
-  set: (v) => { curState.value.openTabs = v; },
-});
-const activePath = computed({
-  get: () => curState.value.activePath,
-  set: (v) => { curState.value.activePath = v; },
-});
-const defaultExpandedKeys = computed({
-  get: () => curState.value.expandedKeys,
-  set: (v) => { curState.value.expandedKeys = v; },
-});
-// 内容切换动效（CSS animation 重放：先移除类再添加，不重建 Monaco 容器）
-const fading = ref(true);
-
-let monaco = null;
-let editor = null;
-let models = {};
-let keyboardA11y = null;
-
-// ===== 顶栏展示 =====
-
-const statusColor = computed(() => {
-  const s = submission.value.status;
-  if (s === 'published') return 'green';
-  if (s === 'reviewed') return 'blue';
-  if (s === 'ai_graded') return 'green';
-  if (s === 'submitted') return 'orange';
-  return 'default';
-});
-const statusText = computed(() => {
-  const s = submission.value.status;
-  return { submitted: '待评分', ai_graded: 'AI 已评分', reviewed: '已审核', published: '已发布' }[s] || s || '未知';
-});
-const displayNo = computed(() => {
-  const no = student.value.username || '';
-  const at = no.lastIndexOf('@');
-  return at > 0 ? no.substring(0, at) : no;
-});
-
-// ===== Monaco =====
-
-async function initMonaco() {
-  if (monaco) return;
-  // 旧浏览器（:where() 不可用即 Chrome < 88，或可选链不可用即 Chrome < 80）：
-  // Monaco 0.55+ 产物无法解析，降级 0.24.0（判定与版本口径以 domain/browserCompat.js 为准）
-  // Monaco 运行时本地化（R-1，说明见 components/CodeEditor.vue 同段注释）：vs/ 指向本站资产；
-  // 放在 applyMonacoCompat 之前 → 旧内核仍切既有兼容版路径。
-  loader.config({ paths: { vs: import.meta.env.BASE_URL + 'monaco/vs' } });
-  applyMonacoCompat(loader);
-  monaco = await loader.init();
-  editor = monaco.editor.create(editorContainerRef.value, {
-    value: '', language: 'plaintext', readOnly: true,
-    theme: ensureTheme(monaco),
-    minimap: { enabled: true, maxColumn: 80 }, automaticLayout: true,
-    fontSize: 13, fontFamily: 'MonacoDSH, monospace', lineNumbers: 'on', scrollBeyondLastLine: false,
-    tabSize: 4, renderWhitespace: 'selection', smoothScrolling: true, cursorBlinking: 'smooth',
-  });
-  // 键盘逃逸（Tab / Shift+Tab）+ 聚焦元素可读名称；本实例是只读代码预览，缩进等写操作
-  // 由 Monaco 的 writable 前置条件禁用（名称里已注明「内容只读 / 缩进不生效」）
-  keyboardA11y = attachKeyboardA11y(editor, editorContainerRef.value, { readOnly: true });
-}
-
-/**
- * 按「数据源 + 相对路径」隔离 model：
- * 学生提交与标准答案包可能存在同名相对路径，URI 与缓存 key 均加源前缀，避免互相串味。
- */
-function getOrCreateModel(path, language) {
-  if (!monaco) return null;
-  const cacheKey = `${activeTree.value}:${path}`;
-  if (models[cacheKey]) return models[cacheKey];
-  const uri = monaco.Uri.parse(`file:///${activeTree.value}/${path}`);
-  const existing = monaco.editor.getModel(uri);
-  if (existing) { models[cacheKey] = existing; return existing; }
-  const newModel = monaco.editor.createModel((fileContents[activeTree.value]?.get(path)) || '', language || 'plaintext', uri);
-  models[cacheKey] = newModel;
-  return newModel;
-}
-
-function switchTab(path) {
-  if (!editor || !monaco) return;
-  activePath.value = path;
-  const model = getOrCreateModel(path, getLanguage(path));
-  if (model) editor.setModel(model);
-}
-
-function closeTab(path) {
-  openTabs.value = openTabs.value.filter(t => t.path !== path);
-  if (activePath.value === path) {
-    if (openTabs.value.length) switchTab(openTabs.value[openTabs.value.length - 1].path);
-    else { activePath.value = ''; if (editor) editor.setModel(null); }
-  }
-}
-
-function openFile(path, name, language) {
-  if (!openTabs.value.find(t => t.path === path)) openTabs.value.push({ path, name, language });
-  switchTab(path);
-}
-
-function onTreeSelect(keys) {
-  if (!keys.length) return;
-  const find = (nodes) => {
-    for (const n of nodes) {
-      if (n.path === keys[0] && n.type === 'file') return n;
-      if (n.children) { const r = find(n.children); if (r) return r; }
-    }
-    return null;
-  };
-  const node = find(fileTreeData.value);
-  if (node && node.type === 'file') openFile(node.path, node.name, node.language);
-}
-
-function onTreeDblclick(keys) {
-  if (!keys.length) return;
-  if (!openTabs.value.find(t => t.path === keys[0])) onTreeSelect(keys);
-}
-
-// ===== 数据源装载 =====
-
-/** 收集全部目录节点 path，用于「全展开」（切源后仍生效） */
-function collectDirKeys(nodes, acc = []) {
-  for (const n of nodes || []) {
-    if (n.type === 'directory') acc.push(n.path);
-    if (n.children?.length) collectDirKeys(n.children, acc);
-  }
-  return acc;
-}
-
-/** 切换数据源：重灌树与内容缓存；保留各源 openTabs/选中状态，切回即恢复 */
-function applySource(key) {
-  const source = key === 'standard' ? standardFiles : studentFiles;
-  // 只重建当前源的内容缓存，另一源不受影响
-  fileContents[key] = new Map(Object.entries(source.contents || {}));
-  fileTreeData.value = source.tree || [];
-  // 展开目录按源恢复：首访（无记录）才全展开兜底，之后保留用户折叠状态
-  const st = sourceState[key];
-  if (!st.expandedKeys || st.expandedKeys.length === 0) {
-    st.expandedKeys = collectDirKeys(source.tree || []);
-  }
-  defaultExpandedKeys.value = st.expandedKeys;
-  // 恢复该源上次打开的文件（内容缓存已就位；Monaco 未就绪时安全跳过）
-  if (st.activePath) {
-    nextTick(() => switchTab(st.activePath));
-  } else if (editor) {
-    editor.setModel(null);
-  }
-}
-
-watch(activeTree, (key) => { applySource(key); });
-
-// 编辑器内容切换动效：切换文件/切源时重放淡入（不重建 Monaco DOM）
-watch([activePath, activeTree], () => {
-  fading.value = false;
-  nextTick(() => { fading.value = true; });
-});
-
-function findFirstFile(nodes) {
-  for (const n of nodes || []) {
-    if (n.type === 'file') return n;
-    if (n.children?.length) {
-      const f = findFirstFile(n.children);
-      if (f) return f;
-    }
-  }
-  return null;
-}
-
-// ===== 评分面板交互 =====
-
-/** 一键引用 AI 评语到教师评语框（可删改后再审核） */
-function quoteAiComment() {
-  const text = aiResult.value?.overallComment;
-  if (!text) return;
-  teacherFeedback.value = teacherFeedback.value
-    ? teacherFeedback.value + '\n\n【AI 评语】' + text
-    : text;
-  message.success('已引用 AI 评语，可编辑后审核');
-}
-
-/** 审核通过（R4：放分唯一开关，状态 reviewed 后学生端才可见分数） */
-async function onApprove() {
-  if (finalScore.value == null) {
-    message.warning('请填写最终分数');
-    return;
-  }
-  saving.value = true;
-  try {
-    await saveProjectReview(submissionId.value, {
-      finalScore: finalScore.value,
-      teacherFeedback: teacherFeedback.value,
-    });
-    submission.value = {
-      ...submission.value,
-      status: 'reviewed',
-      finalScore: finalScore.value,
-      teacherFeedback: teacherFeedback.value,
-    };
-    message.success('审核通过，学生已可见成绩');
-  } catch (e) {
-    message.error(errorCopyOf(e, { tag: 'ProjectReviewNew.vue 保存人工评分', action: '保存' }));
-  } finally {
-    saving.value = false;
-  }
-}
-
-// ===== AI 提示词查看（该次评分的实际提示词，含学生源码） =====
-const promptModalOpen = ref(false);
-const promptLoading = ref(false);
-const promptData = ref(null);
-
-async function showPrompt() {
-  promptModalOpen.value = true;
-  promptLoading.value = true;
-  promptData.value = null;
-  try {
-    const r = await request.get('/teacher/submissions/' + submissionId.value + '/project/prompt');
-    promptData.value = r.data;
-  } catch (e) {
-    message.error(errorCopyOf(e, { tag: 'ProjectReviewNew.vue 获取提示词', action: '获取提示词' }));
-  } finally {
-    promptLoading.value = false;
-  }
-}
-
-/** 重新评分（与编程题对齐）：任意状态可触发；
- * 请求期间（含后台评分期间）按钮保持 loading 防连点，评分完成后恢复，可无限次点击 */
-async function onRegrade() {
-  if (regrading.value) return; // 防连点
-  regrading.value = true;
-  try {
-    await regradeProjectSubmission(submissionId.value);
-    gradingState.value = 'pending';
-    message.success('已重新触发评分，完成后自动刷新');
-    startPolling();
-  } catch (e) {
-    regrading.value = false; // 接口失败立即恢复
-    message.error(errorCopyOf(e, { tag: 'ProjectReviewNew.vue 重新评分', action: '重评' }));
-  }
-  // 成功时保持 loading，直到轮询到评分完成/失败/超时才恢复
-}
-
-// ===== 重评轮询：评分完成后自动刷新，无需手动刷新 =====
-
-let pollTimer = null;
-let pollCount = 0;
-const POLL_INTERVAL = 5000; // 5s
-const POLL_MAX = 72;        // 最长 6 分钟
-
-function startPolling() {
-  stopPolling();
-  pollCount = 0;
-  pollTimer = setInterval(async () => {
-    pollCount += 1;
-    if (pollCount > POLL_MAX) {
-      stopPolling();
-      regrading.value = false; // 超时恢复按钮
-      message.warning('重新评分等待超时，请手动刷新查看');
-      return;
-    }
-    try {
-      const r = await getProjectReview(submissionId.value);
-      const gs = r.data.submission?.grading?.state || 'none';
-      if (gs !== 'pending') {
-        stopPolling();
-        applyReviewData(r.data);
-        regrading.value = false; // 评分完成，恢复按钮（可再次点击）
-        if (gs === 'failed') {
-          message.error('重新评分失败：' + (r.data.submission?.grading?.error || '未知错误'));
-        } else {
-          message.success('重新评分完成');
-        }
-      }
-    } catch { /* 单次轮询失败忽略，下轮继续 */ }
-  }, POLL_INTERVAL);
-}
-
-function stopPolling() {
-  if (pollTimer) {
-    clearInterval(pollTimer);
-    pollTimer = null;
-  }
-}
-
-/** 应用审核数据（fetchData 与重评轮询共用；不重建 Monaco） */
-function applyReviewData(d) {
-  submission.value = d.submission || {};
-  question.value = d.question || {};
-  student.value = d.student || {};
-  version.value = d.version || 0;
-  maxScore.value = d.question?.maxScore ?? 100;
-  aiResult.value = d.aiResult || null;
-  gradingState.value = d.submission?.grading?.state || 'none';
-  gradingError.value = d.submission?.grading?.error || '';
-  finalScore.value = d.submission?.finalScore ?? d.submission?.aiScore ?? null;
-  teacherFeedback.value = d.submission?.teacherFeedback || '';
-  standardFiles.tree = d.standardFiles?.tree || [];
-  standardFiles.contents = d.standardFiles?.contents || {};
-  // 无标准包（开放性题目）：不逗留在已隐藏的「标准答案包」数据源，回落到学生提交
-  if (!hasStandardFiles.value && activeTree.value === 'standard') activeTree.value = 'student';
-  studentFiles.tree = d.studentFiles?.tree || [];
-  studentFiles.contents = d.studentFiles?.contents || {};
-  loaded.value = true;
-}
-
-/** ★R2-B47（U-1）：路由参数变化（同组件复用/换提交）⇒ 重建数据 */
-watch(() => route.params.submissionId, () => { loaded.value = false; fetchData(); });
-
-async function fetchData() {
-  loadingDetail.value = true;
-  loadError.value = '';
-  try {
-    const r = await getProjectReview(submissionId.value);
-    applyReviewData(r.data);
-
-    // 默认数据源 = 学生提交（activeTree 初值 'student'）
-    applySource(activeTree.value);
-
-    // 等 DOM 就绪再挂 Monaco
-    await nextTick();
-    await new Promise(res => setTimeout(res, 300));
-    if (editorContainerRef.value) await initMonaco();
-
-    // 第一眼看到学生答案：自动打开第一个文件
-    const first = findFirstFile(studentFiles.tree);
-    if (first) openFile(first.path, first.name);
-  } catch (e) {
-    // ★R2-B47（U-1）：错态可读 + 重试入口（不再只有一条 message 后停在空白）
-    loadError.value = errorCopyOf(e, { tag: 'ProjectReviewNew.vue 加载复审数据', action: '加载' });
-    message.error('加载失败：' + loadError.value);
-  } finally {
-    loadingDetail.value = false;     // ★任何路径必复位 loading（防呆 ⑥a）
-  }
-}
-
-onMounted(() => {
-  fetchData();
-  shellMq = window.matchMedia('(max-width: 1199px)');
-  narrow.value = shellMq.matches;
-  if (shellMq.addEventListener) shellMq.addEventListener('change', onShellMq);
-  else shellMq.addListener(onShellMq);
-});
-
-onBeforeUnmount(() => {
-  if (shellMq) {
-    if (shellMq.removeEventListener) shellMq.removeEventListener('change', onShellMq);
-    else shellMq.removeListener(onShellMq);
-  }
-  stopPolling();
-  keyboardA11y?.dispose();
-  Object.values(models).forEach(m => m.dispose());
-  models = {};
-  editor?.dispose();
-});
 </script>
-
 <style scoped>
 .pr-page { display:flex; flex-direction:column; height:calc(100vh - 52px); margin:-28px -48px -40px; background:var(--bg-surface); }
 .pr-top { display:flex; align-items:center; gap:12px; padding:10px 20px; background:var(--bg-surface); border-bottom:1px solid var(--border-subtle); flex-shrink:0; }
