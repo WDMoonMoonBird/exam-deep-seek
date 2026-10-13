@@ -42,6 +42,8 @@
           </div>
           <template #overlay>
             <a-menu @click="handleMenu">
+              <!-- ★R2-B56：与教师端一致的「我的信息」入口（图标/文案逐字对齐） -->
+              <a-menu-item key="profile"><UserOutlined /> 我的信息</a-menu-item>
               <a-sub-menu key="theme" title="主题">
                 <template #icon><BulbOutlined /></template>
                 <a-menu-item key="theme-light">浅色{{ themeMode === 'light' ? ' ✓' : '' }}</a-menu-item>
@@ -68,16 +70,41 @@
       </a-layout-content>
     </a-layout>
   </a-layout>
+
+    <!-- ★R2-B56：我的信息（与教师端同形态：520 宽 / destroyOnClose / 关闭时重置密码表单） -->
+    <a-modal v-model:open="showProfile" :width="520" :footer="null" :destroyOnClose="true" title="我的信息" @cancel="resetPwdForm">
+      <ProfileCard
+        v-model:open="pwdOpen"
+        :name="user?.realName || user?.username || ''"
+        role="admin"
+        id-label="账号"
+        :id-value="user?.username || ''"
+        unit-label="所属单位"
+        :unit-value="userStore.currentSchool?.name || ''"
+        hint="建议定期更换"
+      >
+        <a-form layout="vertical" :model="pwdForm" size="small" class="pwd-form">
+          <a-form-item label="原密码"><a-input-password v-model:value="pwdForm.oldPassword" /></a-form-item>
+          <a-form-item label="新密码"><a-input-password v-model:value="pwdForm.newPassword" /></a-form-item>
+          <a-form-item label="确认新密码"><a-input-password v-model:value="pwdForm.confirmPassword" /></a-form-item>
+          <a-button type="primary" :loading="changingPwd" block @click="changePassword">确认修改</a-button>
+        </a-form>
+      </ProfileCard>
+    </a-modal>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUpdated, nextTick } from 'vue';
+import { ref, reactive, computed, watch, onMounted, onUpdated, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useUserStore } from '../../stores/user.js';
-import { BankOutlined, AppstoreOutlined, TeamOutlined, IdcardOutlined, DashboardOutlined, RobotOutlined, BulbOutlined, HistoryOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined } from '@ant-design/icons-vue';
+import { BankOutlined, AppstoreOutlined, TeamOutlined, IdcardOutlined, DashboardOutlined, RobotOutlined, BulbOutlined, HistoryOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined, UserOutlined } from '@ant-design/icons-vue';
 import { useConfirm } from '../../composables/useConfirm.js';
 import { useTheme } from '../../composables/useTheme.js';
 import ThemeToggle from '../../components/ThemeToggle.vue';
+import ProfileCard from '../../components/ProfileCard.vue';   // ★R2-B56：我的信息（与教师端同形态）
+import request from '../../api/request.js';
+import { message } from 'ant-design-vue';
+import { errorCopyOf } from '../../composables/errorCopy.js';   // ★R2-B55 口径：UI 固定友好 + 原始错误只进 console
 import ErrorBoundary from '../../components/ErrorBoundary.vue';   // ★R2-B52：错误边界（绝不白屏）
 
 const router = useRouter(); const route = useRoute(); const userStore = useUserStore();
@@ -153,7 +180,38 @@ function onMenuClick ({ key }) {
   if (window.innerWidth < 992) collapsed.value = true;
 }
 
+/**
+ * ★R2-B56：我的信息 + 修改密码（管理员端与教师端同形态）。
+ *   管理员无学校/班级 ⇒ 资料区相应字段传空串，ProfileCard 自动隐藏该行（**不显示 undefined**）。
+ *   错误文案遵循 R2-B55 口径：服务端业务文案（response.data.message，如「原密码错误」）可上屏；
+ *   其它异常用固定友好文案，原始错误只进 console（errorCopyOf 内部完成）。
+ */
+const showProfile = ref(false);
+const pwdOpen = ref(false);   // 「修改密码」安全区是否展开
+const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' });
+const changingPwd = ref(false);
+
+function resetPwdForm() {
+  pwdOpen.value = false;
+  pwdForm.oldPassword = '';
+  pwdForm.newPassword = '';
+  pwdForm.confirmPassword = '';
+}
+async function changePassword() {
+  if (!pwdForm.oldPassword || !pwdForm.newPassword) return message.warn('请填写密码');
+  if (pwdForm.newPassword !== pwdForm.confirmPassword) return message.warn('两次新密码不一致');
+  changingPwd.value = true;
+  try {
+    await request.put('/auth/password', { oldPassword: pwdForm.oldPassword, newPassword: pwdForm.newPassword });
+    message.success('密码修改成功');
+    resetPwdForm();   // ★成功后清空表单并收起安全区（密码不留在内存/表单里）
+  } catch (e) {
+    message.error(errorCopyOf(e, { tag: 'admin/Layout.vue 修改密码', action: '修改' }));
+  } finally { changingPwd.value = false; }
+}
+
 function handleMenu({ key }) {
+  if (key === 'profile') { showProfile.value = true; return; }
   if (key === 'theme-light') { setMode('light'); return; }
   if (key === 'theme-dark') { setMode('dark'); return; }
   if (key === 'theme-system') { setMode('system'); return; }

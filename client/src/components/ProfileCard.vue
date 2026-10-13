@@ -80,7 +80,7 @@
  *
  * 结构：名片区（头像 + 姓名 + 角色徽标）/ 资料区（两列「标签在上」）/ 安全区（折叠 + 密码表单插槽）。
  * 契约：
- *   props  name / role('teacher'|'student') / idLabel / idValue / unitLabel / unitValue / school / classes[] / hint
+ *   props  name / role('teacher'|'student'|'admin') / idLabel / idValue / unitLabel / unitValue / school / classes[] / hint
  *          open（v-model:open，控制安全区展开，父组件 resetPwdForm 时收起）
  *   slot   默认插槽 = 密码表单（沿用各页原有表单与请求逻辑，本组件不碰请求）
  * 说明：名片区**不放**单位/班级/学校 —— 下方资料区已有同样信息，且长校名会把名片撑破或被迫省略。
@@ -108,8 +108,9 @@ const open = computed({
   set: (v) => emit('update:open', v),
 });
 
-const roleText = computed(() => (props.role === 'student' ? '学生' : '教师'));
-const roleTone = computed(() => (props.role === 'student' ? 'accent' : 'brand'));
+// ★R2-B56：role 增加 admin ⇒ 文案「管理员」；teacher/student 两分支返回值**逐字不变**
+const roleText = computed(() => (props.role === 'student' ? '学生' : (props.role === 'admin' ? '管理员' : '教师')));
+const roleTone = computed(() => (props.role === 'student' ? 'accent' : 'brand'));   // ★R2-B56：admin 与 teacher 同色调（brand）
 const initial = computed(() => (props.name || props.idValue || '?').charAt(0));
 
 /* ---------- 折叠动效（高度动画，内容多高都准） ---------- */
