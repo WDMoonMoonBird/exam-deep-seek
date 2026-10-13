@@ -51,9 +51,6 @@ export const batchReview = async (req, res) => {
       return res.status(403).json({ code: 1003, message: '无权操作该班级', data: null });
     }
 
-    const assignment = await prisma.assignment.findUnique({ where: { id: +assignmentId }, select: { mode: true } });
-    if (assignment?.mode === 'practice') return res.status(400).json({ code: 1001, message: '练习模式无需审核', data: null });
-
     const classStudents = await prisma.studentClass.findMany({ where: { classId: cid }, select: { studentId: true } });
     const studentIds = classStudents.map(cs => cs.studentId);
 
@@ -104,9 +101,6 @@ export const batchPublish = async (req, res) => {
     if (!Number.isInteger(cid) || !visibleClassIds.includes(cid)) {
       return res.status(403).json({ code: 1003, message: '无权操作该班级', data: null });
     }
-
-    const assignment = await prisma.assignment.findUnique({ where: { id: +assignmentId }, select: { mode: true } });
-    if (assignment?.mode === 'practice') return res.status(400).json({ code: 1001, message: '练习模式无需发布', data: null });
 
     const classStudents = await prisma.studentClass.findMany({ where: { classId: cid }, select: { studentId: true } });
     const studentIds = classStudents.map(cs => cs.studentId);

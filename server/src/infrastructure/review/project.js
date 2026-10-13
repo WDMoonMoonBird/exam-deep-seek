@@ -13,6 +13,7 @@ import { submissionDir, standardDir, ROOT } from '../../utils/projectPaths.js';
 import { readProjectTree } from '../storage/project-files.js';
 import { isStudentVisibleToTeacher } from './scope.js';
 import { loadAssignmentSnapshot, resolveSnapshot } from '../../services/assignmentSnapshot.js';
+import { reviewProjectSubmissionCore } from './project-review-ops.js';
 
 // ===================== 实训题（体系C）教师审核 =====================
 
@@ -55,9 +56,9 @@ export const getProjectReview = async (req, res) => {
 
     // W2（R2-B2）：教师复核视图与评分同源（snapshot ?? live）
     const std = resolveSnapshot(await loadAssignmentSnapshot(prisma, sub.assignmentId, sub.questionId), sub.question);
-    // R6：仅作业所属教师可查看实训提交（作业/班级/学校归属校验）
-    if (sub.assignment.teacherId !== req.user.id) return res.status(403).json({ code: 1003, message: '无权操作', data: null });
-    // t4：再收敛到该教师的可见班级范围（与其它按 id 直取的入口一致）
+    // R3-D5（④）：可见性口径与其它按 id 直取的教师端入口统一为「教师可见班级」
+    //（直连班级 ∪ 团队班级）—— 原先额外的「仅作业所属教师」判定比可见班级更严（同团队教师被 403），已移除；
+    //   越权教师（不可见班级/跨校）仍在此 403，且不返回任何提交内容。
     if (!(await isStudentVisibleToTeacher(req.user.id, sub.studentId))) {
       return res.status(403).json({ code: 1003, message: '无权访问该提交', data: null });
     }
@@ -105,39 +106,13 @@ export const getProjectReview = async (req, res) => {
  */
 export const reviewProjectSubmission = async (req, res) => {
   try {
-    const id = +req.params.id;
     const { finalScore, teacherFeedback } = req.body;
-
-    const sub = await prisma.submission.findUnique({
-      where: { id },
-      include: {
-        question: { select: { type: true, maxScore: true } },
-        assignment: { select: { teacherId: true } },
-      },
+    // 行为全部下沉到 project-review-ops（教师端与管理员端同一实现）：
+    //   可见性=教师可见班级（越权 403 零写入）· G2 非法分值 400 可读文案 · G3 published 保持 published
+    const r = await reviewProjectSubmissionCore({
+      submissionId: +req.params.id, finalScore, teacherFeedback, actorId: req.user.id,
     });
-    if (!sub) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
-    if (sub.question.type !== 'project') return res.status(400).json({ code: 1001, message: '非实训题提交', data: null });
-    // R6：仅作业所属教师可审核实训提交
-    if (sub.assignment.teacherId !== req.user.id) return res.status(403).json({ code: 1003, message: '无权操作', data: null });
-    // t4：越权校验前置——不可见班级的提交一律 403，且不产生任何写入
-    if (!(await isStudentVisibleToTeacher(req.user.id, sub.studentId))) {
-      return res.status(403).json({ code: 1003, message: '无权访问该提交', data: null });
-    }
-
-    const data = { status: 'reviewed', reviewedAt: new Date() };
-    if (finalScore !== undefined) {
-      const max = sub.question.maxScore || 100;
-      data.finalScore = Math.max(0, Math.min(max, Number(finalScore)));
-    }
-    // R3：教师评语以显式传入为准；未传则保留已有（初始为空），绝不取 AI 评语
-    data.teacherFeedback = teacherFeedback !== undefined ? String(teacherFeedback || '') : (sub.teacherFeedback || '');
-
-    const updated = await prisma.submission.update({ where: { id }, data });
-    res.json({
-      code: 0,
-      message: '审核成功',
-      data: { id, status: updated.status, finalScore: updated.finalScore, teacherFeedback: updated.teacherFeedback },
-    });
+    res.status(r.status).json(r.body);
   } catch (err) {
     logger.error({ err }, '实训题审核失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });

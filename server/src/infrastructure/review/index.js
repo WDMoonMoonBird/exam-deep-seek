@@ -8,4 +8,6 @@
 export { isStudentVisibleToTeacher } from './scope.js';
 export { getSubmissionDetail, regradeSubmission, updateScore, reviewSubmission } from './submission.js';
 export { getProjectReview, reviewProjectSubmission } from './project.js';
+// R3-D5（G5）：管理员侧实训题重评/改分（super_admin；任意班级，不按教师可见班级收窄）
+export { adminRegradeProjectSubmission, adminReviewProjectSubmission } from './admin-project-review.js';
 export { getQuestionPromptPreview, getSubmissionPrompt } from './prompts.js';

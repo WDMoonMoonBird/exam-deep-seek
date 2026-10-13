@@ -7,6 +7,18 @@
 import prisma from '../../utils/prisma.js';
 import logger from '../../utils/logger.js';
 import { loadVisibleSubmission, sendScopeError } from './scope.js';
+import { DomainError } from '../../domain/errors.js';
+
+/**
+ * R3-D5（G2）：领域校验错误（如分值非法 INVALID_SCORE）映射为 **400 + 可读文案**，
+ * 不再落到 500「服务器内部错误」；错误码沿用既有 1001（参数/业务校验失败）。
+ */
+function sendDomainError(res, err) {
+  if (!(err instanceof DomainError)) return false;
+  const status = err.code === 'LOCKED' ? 403 : 400;
+  res.status(status).json({ code: status === 403 ? 1003 : 1001, message: err.message, data: null });
+  return true;
+}
 
 export const getSubmissionDetail = async (req, res) => {
   try {
@@ -83,6 +95,7 @@ export const updateScore = async (req, res) => {
     if (err.name === 'EntityNotFoundError') {
       return res.status(404).json({ code: 1004, message: err.message, data: null });
     }
+    if (sendDomainError(res, err)) return;
     logger.error({ err }, '修改分数失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
   }
@@ -98,6 +111,10 @@ export const reviewSubmission = async (req, res) => {
     await req.app.locals.reviewUseCases.review({ submissionId: +req.params.id, finalScore, teacherFeedback });
     res.json({ code: 0, message: '审核成功', data: null });
   } catch (err) {
+    if (err.name === 'EntityNotFoundError') {
+      return res.status(404).json({ code: 1004, message: err.message, data: null });
+    }
+    if (sendDomainError(res, err)) return;
     logger.error({ err }, '审核提交失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
   }

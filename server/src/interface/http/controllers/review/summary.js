@@ -58,7 +58,8 @@ export const getReviewSummary = async (req, res) => {
           else if (items.some(i => i.feedback === ABNORMAL_FEEDBACK)) abnormal++;
           else if (items.some(i => i.status === 'ai_graded')) reviewPending++;
         }
-        const isPractice = a.mode === 'practice';
+        // R3-D4（US-B5）：不再有「练习模式行无需审核」特判 —— 未发布一律对学生不可见，
+        // 所有作业都必须经教师审核/发布，故 reviewPending 按实际 rollup 计数、aiCompleted 恒 0。
         const allAiDone = submittedStudents > 0 && aiPending === 0;
         const allReviewed = submittedStudents > 0 && aiPending === 0 && reviewPending === 0 && abnormal === 0;
         rows.push({
@@ -66,8 +67,8 @@ export const getReviewSummary = async (req, res) => {
           startTime: a.startTime, endTime: a.endTime,
           mode: a.mode || 'exam', locked: a.locked,
           totalStudents, submittedCount: submittedStudents,
-          aiPending, reviewPending: isPractice ? 0 : reviewPending, abnormal,
-          aiCompleted: isPractice ? reviewPending : 0,
+          aiPending, reviewPending, abnormal,
+          aiCompleted: 0,   // 保留字段（前端兼容）：新口径下「AI 完成」不再等价于「无需审核」
           _count: { assignmentQuestions: a._count?.assignmentQuestions ?? 0 },
           allAiDone, allReviewed,
         });
