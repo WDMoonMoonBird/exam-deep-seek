@@ -69,7 +69,26 @@
 3. 500 的「错误编号」是否有后端现成字段可用（没有的话我生成一个前端 uuid 并随请求带上，便于对日志）
 4. 是否要我一并把「离线页」「维护中（503）」也纳入同一次实现（同一个组件，各加 1 行路由）
 
-## 方案 C：小机器人家族（**采用**，路线 1 的成果）
+## 采用：tarampampam/error-pages 的 ghost 模板（用户指定）
+
+- 上游：https://github.com/tarampampam/error-pages · 模板 `templates/html/ghost.tpl.html`（**单文件 9.7KB**）
+- **授权 MIT**（Copyright (c) tarampampam）→ 可商用，**需保留版权与许可声明**（组件头部注释 + 本目录 NOTICE）
+- 特点：幽灵造型（幽灵主体 `--color-ghost`，眼嘴用背景色挖空）+ `出错了 <code>` + 描述 + 首页链接；
+  **无外链字体/CDN**（仅内联 SVG）、`prefers-color-scheme` 自动深浅色、可选的「请求详情」表（Host/URI/Request ID 等，**默认关闭**）；
+  429/5xx 类页面自带 `<meta http-equiv="refresh" content="30">` 自动重试；上游覆盖全部 HTTP 错误码，并支持 15+ 语言。
+- 中文文案由我们自拟（见 `ghost/*.html`：404 页面不存在 / 403 没有访问权限 / 500 服务暂时不可用 / 503 正在维护）。
+
+### 与本站的两层落地
+| 层 | 用什么 | 状态码 | 需要谁配合 |
+|---|---|---|---|
+| **L1 服务器层** | 上游本来的用法：静态错误页 + nginx `error_page`（或 Express 兜底） | **真 4xx/5xx** | 后端/运维（`server/src/app.js` 或部署机 nginx） |
+| **L2 SPA 内** | 复刻同一视觉的 `ErrorPage.vue`（未知前端路由 / 角色不符 / 会话过期 / 接口 5xx） | 前端路由，HTTP 仍是 200 | 前端（我） |
+
+注意：本站生产是「Express 托管 `client/dist` + SPA fallback」，**任何未知路径都会返回 index.html 且状态码 200** —— 所以「真 404」必须落在 L1（服务器识别非资源路径后 `res.status(404).sendFile(404.html)` 或 nginx `error_page`）。
+
+参考渲染：`ghost/overview-light.png`、`ghost/overview-dark.png`；可直接打开的静态页 `ghost/{404,403,500,503}.html`。
+
+## 方案 C：小机器人家族（备选，未采用）（**采用**，路线 1 的成果）
 
 一个固定角色 + 每页换一个「处境」的插画系统，替代外部 Lottie 素材。
 
