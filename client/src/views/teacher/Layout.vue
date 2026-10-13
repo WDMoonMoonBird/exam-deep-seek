@@ -91,10 +91,12 @@
                 <!-- ★R2-B52：错误边界必须在 <transition> **之外**（transition 的 out-in 在"进入组件解析失败"时会卡在 out ⇒ 永久空白）；
                      同时去掉 mode="out-in"：默认模式允许进出重叠一瞬，但不会因解析失败而整块空白（取舍见 R2-B52 记录） -->
                 <ErrorBoundary>
-                    <router-view v-slot="{ Component }">
-                        <transition name="tab-fade">
+                    <!-- ★R2-B54：不再用 <transition> 包路由组件（消除 out-in 空白 + parentNode 竞态）；页面内动画照旧。
+                         v-slot 内再包 **keyed** ErrorBoundary（reset-key=路由）⇒ 页面自身抛错也进边界 UI 且随路由复位。 -->
+                    <router-view v-slot="{ Component, route }">
+                        <ErrorBoundary :reset-key="route.fullPath">
                             <component :is="Component" />
-                        </transition>
+                        </ErrorBoundary>
                     </router-view>
                 </ErrorBoundary>
             </a-layout-content>

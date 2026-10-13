@@ -47,9 +47,14 @@
       <a-layout-content class="content" id="main-content" ref="mainRef">
         <!-- B3-1 ⑤ 页面 H1：镜像当前页真实标题（页内标题元素 → 侧栏菜单名兜底），视觉隐藏 -->
         <h1 v-if="pageTitle" class="visually-hidden">{{ pageTitle }}</h1>
-        <router-view v-slot="{ Component }">
-          <transition name="tab-fade" mode="out-in"><component :is="Component" /></transition>
-        </router-view>
+        <!-- ★R2-B54：路由过渡移除（同教师/管理端）+ 错误边界在 router-view 之外 ⇒ 任何渲染错误可见、绝不白屏 -->
+        <ErrorBoundary>
+          <router-view v-slot="{ Component, route }">
+            <ErrorBoundary :reset-key="route.fullPath">
+              <component :is="Component" />
+            </ErrorBoundary>
+          </router-view>
+        </ErrorBoundary>
       </a-layout-content>
     </a-layout>
 
@@ -85,6 +90,7 @@ import { useUserStore } from '../../stores/user.js';
 import { message } from 'ant-design-vue';
 import { useConfirm } from '../../composables/useConfirm.js';
 import { useTheme } from '../../composables/useTheme.js';
+import ErrorBoundary from '../../components/ErrorBoundary.vue';   // ★R2-B54：错误边界（在 router-view 之外）
 import ThemeToggle from '../../components/ThemeToggle.vue';
 import ProfileCard from '../../components/ProfileCard.vue';
 import request from '../../api/request.js';

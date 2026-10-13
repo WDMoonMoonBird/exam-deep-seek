@@ -111,6 +111,13 @@ import ListPage from '../../components/ListPage.vue';
 import StatusTag from '../../components/StatusTag.vue';
 import { formatDate } from '../../domain/format.js';
 
+/** ★R2-B54：UI 文案固定友好；原始错误只进 console（⑨e 会抽取本函数体执行断言） */
+function friendlyLoadError(err) {
+  // eslint-disable-next-line no-console
+  console.error('[R2-B54] Review.vue 数据加载失败（原始错误只进 console，不进 UI）', err);
+  return '数据加载失败，请重试';
+}
+
 /** 短日期（MM-DD）：仅供表格次行压缩宽度使用；完整日期仍走 formatDate */
 const fmtMD = (v) => { const s = formatDate(v); return s ? s.slice(5) : ''; };
 
@@ -151,7 +158,7 @@ async function loadClasses() {
     classes.value = r.data || [];
   } catch (e) {
     classes.value = [];
-    loadError.value = (e && e.response && e.response.data && e.response.data.message) || (e && e.message) || '加载班级失败';
+    loadError.value = friendlyLoadError(e);
   }
 }
 
@@ -167,9 +174,9 @@ async function fetch() {
     const r = await request.get('/teacher/review-summary', { params });
     list.value = (r.data || []).map(item => ({ ...item, key: `${item.assignmentId}-${item.classId}` }));
   } catch (e) {
-    // ★U-1：失败 ⇒ 清空 + 错态（可读原因），而不是"停在 loading / 空白"
+    // ★U-1：失败 ⇒ 清空 + 错态，而不是"停在 loading / 空白"；★R2-B54：UI 只放固定友好文案（原始错误进 console）
     list.value = [];
-    loadError.value = (e && e.response && e.response.data && e.response.data.message) || (e && e.message) || '加载失败';
+    loadError.value = friendlyLoadError(e);
   } finally {
     loading.value = false;     // ★任何路径必复位
   }

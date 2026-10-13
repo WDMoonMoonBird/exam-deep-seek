@@ -58,8 +58,11 @@
         <h1 v-if="pageTitle" class="visually-hidden">{{ pageTitle }}</h1>
         <!-- ★R2-B52：错误边界在 transition 之外 + 去掉 out-in（避免"进入组件解析失败"时卡在 out ⇒ 整块空白） -->
         <ErrorBoundary>
-          <router-view v-slot="{ Component }">
-            <transition name="tab-fade"><component :is="Component" /></transition>
+          <!-- ★R2-B54：不再用 <transition> 包路由组件；v-slot 内为 **keyed** ErrorBoundary（页面自身抛错也进边界 UI） -->
+          <router-view v-slot="{ Component, route }">
+            <ErrorBoundary :reset-key="route.fullPath">
+              <component :is="Component" />
+            </ErrorBoundary>
           </router-view>
         </ErrorBoundary>
       </a-layout-content>

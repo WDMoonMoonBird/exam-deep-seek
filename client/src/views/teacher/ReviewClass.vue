@@ -110,6 +110,13 @@ import ListPage from '../../components/ListPage.vue';
 import StatusTag from '../../components/StatusTag.vue';
 import { useConfirm } from '../../composables/useConfirm.js';
 
+/** ★R2-B54：UI 文案固定友好；原始错误只进 console（⑨e 会抽取本函数体执行断言） */
+function friendlyLoadError(err) {
+  // eslint-disable-next-line no-console
+  console.error('[R2-B54] ReviewClass.vue 数据加载失败（原始错误只进 console，不进 UI）', err);
+  return '数据加载失败，请重试';
+}
+
 /** 命令式确认框（Wave 2 构件 useConfirm）：替代原 antd 命令式调用，行为等价 */
 const { confirm } = useConfirm();
 
@@ -256,10 +263,10 @@ async function fetch() {
       }
     }
   } catch (e) {
-    // ★U-1：请求失败 ⇒ 清空 + 进入**错态**（保留可读原因），绝不停在"加载中/空白"
+    // ★U-1：请求失败 ⇒ 清空 + 进入**错态**，绝不停在"加载中/空白"；★R2-B54：UI 只放固定友好文案（原始错误进 console）
     list.value = [];
     pagination.total = 0;
-    loadError.value = (e && e.response && e.response.data && e.response.data.message) || (e && e.message) || '加载失败';
+    loadError.value = friendlyLoadError(e);
   } finally {
     loading.value = false;     // ★任何路径都必须复位 loading（旧代码在请求之后裸置；抛错则永不复位 ⇒ 白屏）
   }

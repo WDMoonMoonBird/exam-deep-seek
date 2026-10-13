@@ -179,6 +179,16 @@
 <script setup>
 import { ref, reactive, watch, computed, onMounted } from 'vue';
 import { message } from 'ant-design-vue';
+
+/**
+ * ★R2-B54：面向用户的错误文案**固定友好**；原始错误只进 console（带组件信息），**绝不进 UI 字符串**。
+ * 形态固定（无入参依赖除 err 外）⇒ verify-frontend ⑨e 会**抽取本函数体执行**做断言（父组件/挂载态无关）。
+ */
+function friendlyLoadError(err) {
+  // eslint-disable-next-line no-console
+  console.error('[R2-B54] Students.vue 数据加载失败（原始错误只进 console，不进 UI）', err);
+  return '数据加载失败，请重试';
+}
 import { InboxOutlined, CheckCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons-vue';
 import * as XLSX from 'xlsx';
 import request from '../../api/request.js';
@@ -298,10 +308,10 @@ async function fetch() {
     list.value = rows.map(enrichStudent);
     total.value = Array.isArray(d) ? rows.length : Number((d && d.total) || 0);
   } catch (e) {
-    // ★U-1：失败 ⇒ 清空 + 错态（可读原因），绝不停在 loading/空白
+    // ★U-1：失败 ⇒ 清空 + 错态，绝不停在 loading/空白；★R2-B54：UI 只放**固定友好文案**，原始错误进 console
     list.value = [];
     total.value = 0;
-    loadError.value = (e && e.response && e.response.data && e.response.data.message) || (e && e.message) || '加载失败';
+    loadError.value = friendlyLoadError(e);
   } finally {
     loading.value = false;     // ★任何路径必复位
   }

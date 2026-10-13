@@ -4,7 +4,8 @@
     <slot />
   </template>
   <div v-else class="eb-wrap" role="alert" aria-live="assertive">
-    <a-result status="warning" :title="state.title" :sub-title="state.message">
+    <!-- ★R2-B54：界面**只显示固定友好文案**（原始 err.message 只进 console，绝不上屏） -->
+    <a-result status="warning" :title="state.title" :sub-title="friendlyText">
       <template #extra>
         <a-button type="primary" @click="onRetry">重试</a-button>
         <a-button @click="onReload">刷新页面</a-button>
@@ -15,7 +16,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onErrorCaptured } from 'vue';
+import { ref, watch, computed, onErrorCaptured } from 'vue';
 import { useRoute } from 'vue-router';
 import { boundaryState, clearChunkReloadMark, isChunkLoadError } from './errorRecovery.js';
 
@@ -27,6 +28,11 @@ const props = defineProps({
 const route = useRoute();
 const state = ref(null);
 const resetOf = () => props.resetKey || (route && route.fullPath) || '';
+
+/** ★R2-B54：面向用户的固定文案（chunk 类与其它渲染错误各一句；原始错误只在 console） */
+const friendlyText = computed(() => (state.value && state.value.chunk
+  ? '页面资源加载失败（可能是应用刚更新、缓存过期）。可点「重试」或刷新页面。'
+  : '页面渲染出错，请点「重试」；若仍失败请刷新页面。'));
 
 onErrorCaptured((err) => {
   state.value = boundaryState(err, resetOf());

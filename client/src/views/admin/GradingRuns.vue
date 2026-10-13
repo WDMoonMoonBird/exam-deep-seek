@@ -599,7 +599,9 @@ async function openDetail(record) {
     if (!data || !data.run) detailError.value = '该运行没有可展示的详情（归档缺失或已被清理）';
     else detail.value = data;
   } catch (err) {
-    detailError.value = '读取详情失败：' + (err && err.message ? err.message : String(err));
+    // ★R2-B54：UI 只放固定友好文案；原始错误进 console（不得透出到界面）
+    console.error('[R2-B54] admin/GradingRuns.vue 读取运行详情失败', err);
+    detailError.value = '读取详情失败，请重试';
   } finally {
     detailLoading.value = false;
   }
@@ -615,7 +617,8 @@ async function loadLog(kind) {
     if (String(text).indexOf('# 日志缺失') === 0) logMissing.value = (String(text).match(/reason=([^\s]+)/) || [])[1] || 'missing';
     else logText.value = String(text).slice(-8000);
   } catch (err) {
-    logMissing.value = 'request_failed:' + (err && err.message ? err.message : String(err));
+    console.error('[R2-B54] admin/GradingRuns.vue 读取日志失败', err);
+    logMissing.value = '日志暂不可得，请稍后重试';
   }
 }
 
@@ -640,7 +643,8 @@ async function downloadLog(kind) {
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   } catch (err) {
-    logMissing.value = 'download_failed:' + (err && err.message ? err.message : String(err));
+    console.error('[R2-B54] admin/GradingRuns.vue 下载日志失败', err);
+    logMissing.value = '日志下载失败，请稍后重试';
   } finally {
     logDownloading.value = false;
   }

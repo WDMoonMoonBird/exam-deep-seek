@@ -2,11 +2,19 @@
   <StyleProvider :hash-priority="legacyMode ? 'high' : 'low'"
                  :transformers="legacyMode ? [legacyLogicalPropertiesTransformer] : []">
     <a-config-provider :theme="theme" :locale="zhCN">
-      <router-view v-slot="{ Component, route }">
-        <transition :name="route.meta.transition || 'page-fade'" mode="out-in">
-          <component :is="Component" />
-        </transition>
-      </router-view>
+      <!-- ★R2-B54：移除顶层**路由过渡**（原 <transition :name="route.meta.transition||'page-fade'" mode="out-in">）——
+           路由过渡是外观收益，却带来两类硬故障：①mode="out-in" 在"进入组件解析失败"时停 out ⇒ 整块空白；
+           ②导航/异步组件中途过渡操作已移除节点 ⇒ 「Cannot read properties of null (reading 'parentNode')」竞态。
+           元素级动画（tab-fade/page-fade 等 CSS 类）不受影响；错误边界仍位于 router-view **之外**。 -->
+      <ErrorBoundary>
+        <!-- ★R2-B54（C40-O2）：路由页**自身**抛错也要进边界 UI ⇒ 在 v-slot 内再包一层 **keyed** ErrorBoundary
+             （reset-key=当前路由 ⇒ 换路由自动复位，不会一直停在错误页；此处同样**不得**加 transition） -->
+        <router-view v-slot="{ Component, route }">
+          <ErrorBoundary :reset-key="route.fullPath">
+            <component :is="Component" />
+          </ErrorBoundary>
+        </router-view>
+      </ErrorBoundary>
     </a-config-provider>
   </StyleProvider>
 </template>
@@ -18,6 +26,7 @@
 // Empty / Select「No Data」…）。es 版的默认导出就是 locale 对象，与仓库其余 antd locale 导入
 // （views/teacher/Assignments.vue 的 dateLocale）保持一致。
 import { computed } from 'vue';
+import ErrorBoundary from './components/ErrorBoundary.vue';   // ★R2-B54：顶层错误边界（在 router-view 之外）
 import zhCN from 'ant-design-vue/es/locale/zh_CN';
 import { StyleProvider, legacyLogicalPropertiesTransformer } from 'ant-design-vue';
 import { isLegacyBrowser } from './domain/browserCompat';
