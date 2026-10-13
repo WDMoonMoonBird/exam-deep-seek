@@ -53,6 +53,12 @@
 
     <!-- 学生模式的操作区仍留在页头右上（教师模式的操作区已并入上面的 .meta-row） -->
     <template v-if="!isTeacher" #actions>
+      <!-- R2-CAP（学生端可见性修复）：此前「题目描述 / 评分标准」两个入口被放在 isTeacher 分支的
+           .meta-actions 里 ⇒ 学生模式整块不渲染，学生看不到题面与评分标准；而两个模态框早已支持
+           学生只读（readonly-desc / readonly-rubric），且数据由 student 接口的 question.material /
+           question.scoringRubric 提供（见 useLoadQuestion 学生分支）⇒ 此处为学生补齐入口。 -->
+      <a-button @click="openDescModal">题目描述</a-button>
+      <a-button @click="openRubricModal">评分标准</a-button>
       <a-button type="primary" :disabled="!hasUploaded || submitting || (isStudent && studentSubmission && studentSubmission.status !== 'draft')" :loading="submitting" @click="handleSubmit">
         {{ submitting ? '提交中...' : '提交答案' }}
       </a-button>
