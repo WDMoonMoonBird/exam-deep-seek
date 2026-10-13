@@ -3,7 +3,11 @@
  *
  * 铁律：学生视图必须「显式字段拷贝」，禁止 {...submission} 再 delete 的黑名单写法。
  * 新增敏感列时黑名单会静默泄漏，白名单则编译期即可发现缺失字段。
+ *
+ * R3-D7（t14 / F1）：学生视图的分数与 /student/assignments、/student/scores 完全同口径 ——
+ *   仅 published 下发；已发布时取「计入分」（finalScore 优先，教师未给分时按作业计分口径取机器分）。
  */
+import { pickCountedScore } from './scorePolicy.js';
 
 const EMPTY_ENVELOPE = { kind: 'project', currentVersion: 0, history: [], grading: { state: 'none', version: 0, attempts: 0, error: null, prevStatus: null, ruleVersionHash: null } };
 
@@ -42,20 +46,39 @@ export function serializeProjectAnswer(envelope) {
   return JSON.stringify(envelope);
 }
 
-/** 学生是否可见分数：仅 reviewed / published（兼容编程题批量发布链路，D3） */
+/**
+ * 学生是否可见分数/评语：**仅 published**。
+ * R3-D7（t14 / F1）：原为 reviewed || published（D3 时代实训题「审核即可见」），与 t5 收敛后的
+ * 「未发布一律不下发」（/student/assignments、/student/scores）不一致 ⇒ 统一为发布后可见（US-B6 AC3）。
+ */
 export function canStudentSeeScore(status) {
-  return status === 'reviewed' || status === 'published';
+  return status === 'published';
 }
 
 /**
  * 学生视图白名单。
  * - ai_graded 对学生映射为 submitted（R3：status 值本身也是泄漏，会暴露「AI 已打分」）
  * - 绝不返回 aiScore / aiFeedback / grading / referenceAnswer / 物理路径
+ * - R3-D7（F1）：published ⇒ score = **计入分**（finalScore 优先；教师未给分时按 scorePolicy 取
+ *   best⇒bestScore / last⇒最新 aiScore），与作业详情/列表/成绩页一致；
+ *   未发布（reviewed / ai_graded / submitted）⇒ score/feedback 一律 null（绝不回退 AI 原始分）。
+ *
+ * @param {object} submission
+ * @param {object} [_question]
+ * @param {string|null} [scorePolicy] 作业计分口径（'best'|'last'；缺省 ⇒ 'last'，与后端默认一致）
  */
-export function toStudentView(submission, _question) {
+export function toStudentView(submission, _question, scorePolicy) {
   const env = parseProjectAnswer(submission.answer);
   const status = submission.status === 'ai_graded' ? 'submitted' : submission.status;
-  const showScore = canStudentSeeScore(submission.status);
+  const published = canStudentSeeScore(submission.status);
+  const score = published
+    ? pickCountedScore({
+      scorePolicy,
+      finalScore: submission.finalScore,
+      aiScore: submission.aiScore,
+      bestScore: submission.bestScore,
+    })
+    : null;
   return {
     id: submission.id,
     questionId: submission.questionId,
@@ -63,9 +86,9 @@ export function toStudentView(submission, _question) {
     status,
     submittedAt: submission.submittedAt || null,
     version: env.currentVersion,
-    // D3：审核通过但教师未给分时显示 null（—），绝不回退到 AI 原始分
-    score: showScore ? (submission.finalScore ?? null) : null,
-    feedback: showScore ? (submission.teacherFeedback ?? null) : null,
+    // R3-D7：已发布 ⇒ 计入分（教师分优先；未给分按口径取机器分）；未发布 ⇒ null
+    score,
+    feedback: published ? (submission.teacherFeedback ?? null) : null,
     // 仅 submitted 态暴露后台评分进度；ai_graded 对学生映射为 submitted，
     // 但此时已在后台完成，无需展示进度。grading.failed 时前端提示"评分异常，稍候"。
     // parseProjectAnswer 会把缺省 grading 补成 'none'，

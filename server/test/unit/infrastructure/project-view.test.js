@@ -48,9 +48,11 @@ describe('serializeProjectAnswer — 序列化', () => {
 });
 
 describe('canStudentSeeScore — 可见性', () => {
-  it('仅 reviewed / published 可见', () => {
-    expect(canStudentSeeScore('reviewed')).toBe(true);
+  // ★R3-D7（t14 / F1）：由 reviewed || published 收敛为**仅 published** ——
+  //   与 /student/assignments、/student/assignments/:id、/student/scores 完全同口径（US-B6 AC3：未发布不下发）
+  it('仅 published 可见（reviewed 也不再下发）', () => {
     expect(canStudentSeeScore('published')).toBe(true);
+    expect(canStudentSeeScore('reviewed')).toBe(false);
     expect(canStudentSeeScore('ai_graded')).toBe(false);
     expect(canStudentSeeScore('submitted')).toBe(false);
     expect(canStudentSeeScore('draft')).toBe(false);
@@ -80,16 +82,48 @@ describe('toStudentView — 学生视图白名单', () => {
     expect(v.gradingState).toBeNull(); // ai_graded 映射 submitted 后不展示进度
   });
 
-  it('已审核（reviewed）→ 展示教师最终分与评语', () => {
+  it('未发布（reviewed）→ score/feedback 一律 null（R3-D7：发布后可见，教师分也不提前下发）', () => {
     const v = toStudentView({ ...submission, status: 'reviewed' }, null);
-    expect(v.score).toBe(88);
-    expect(v.feedback).toBe('很好');
+    expect(v.score).toBeNull();
+    expect(v.feedback).toBeNull();
   });
 
   it('审核通过但未给分 → score 显示 null（—），不回退 AI 原始分', () => {
     const v = toStudentView({ ...submission, status: 'reviewed', finalScore: null, teacherFeedback: null }, null);
     expect(v.score).toBeNull();
     expect(v.feedback).toBeNull();
+  });
+
+  // —— R3-D7（F1）：published 时的「计入分」与学生其它路径同口径 ——
+  it('published + 口径 best + 教师未给分 → 计入分取 bestScore（原实现返回 null）', () => {
+    const v = toStudentView(
+      { ...submission, status: 'published', finalScore: null, teacherFeedback: null, aiScore: 78, bestScore: 91 },
+      null, 'best',
+    );
+    expect(v.score).toBe(91);
+    expect(v.feedback).toBeNull();
+  });
+
+  it('published + 口径 last + 教师未给分 → 取最新 aiScore（不回落 bestScore）', () => {
+    const v = toStudentView(
+      { ...submission, status: 'published', finalScore: null, aiScore: 78, bestScore: 91 },
+      null, 'last',
+    );
+    expect(v.score).toBe(78);
+  });
+
+  it('published + 教师已给分 → 教师分优先（不被机器分覆盖）', () => {
+    const v = toStudentView(
+      { ...submission, status: 'published', finalScore: 88, aiScore: 78, bestScore: 91 },
+      null, 'best',
+    );
+    expect(v.score).toBe(88);
+    expect(v.feedback).toBe('很好');
+  });
+
+  it('published + 未传口径（历史调用）→ 默认 last，与后端默认一致', () => {
+    const v = toStudentView({ ...submission, status: 'published', finalScore: null, aiScore: 64, bestScore: 90 }, null);
+    expect(v.score).toBe(64);
   });
 
   it('submitted 态 → gradingState 暴露后台进度', () => {

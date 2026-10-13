@@ -28,7 +28,8 @@ export async function assertStudentInAssignment(assignmentId, studentId) {
 
   const assignment = await prisma.assignment.findFirst({
     where: { id: assignmentId },
-    select: { id: true, title: true, locked: true, mode: true, startTime: true, endTime: true, allowResubmit: true, maxAttempts: true },
+    // R3-D7（t14）：一并取计分口径 —— 学生视图的「计入分」与学生其它路径同口径（best⇒bestScore / last⇒最新 aiScore）
+    select: { id: true, title: true, locked: true, mode: true, startTime: true, endTime: true, allowResubmit: true, maxAttempts: true, scorePolicy: true },
   });
   if (!assignment) return { ok: false, code: 1004, message: '作业不存在' };
   if (assignment.locked) return { ok: false, code: 1003, message: '作业已被锁定' };
@@ -119,7 +120,8 @@ export const getProjectQuestion = async (req, res) => {
 
     if (submission) {
       // R2/R3/R4/R6：所有对外字段一律经 toStudentView 白名单裁剪
-      studentView = toStudentView(submission, question);
+      // R3-D7（F1）：传入作业计分口径 ⇒ published 时下发「计入分」，与作业详情/列表/成绩页一致
+      studentView = toStudentView(submission, question, guard.assignment.scorePolicy);
 
       const envelope = parseProjectAnswer(submission.answer);
       if (submission.status !== 'draft' && envelope.currentVersion > 0) {

@@ -171,7 +171,8 @@ export async function submitProjectCore(req, res) {
           code: 0,
           message: '提交成功',
           data: {
-            submission: toStudentView(saved, question),
+            // R3-D7（F1）：同口径传入计分口径（新提交未发布 ⇒ score 仍为 null）
+            submission: toStudentView(saved, question, guard.assignment.scorePolicy),
             files: { tree: buildTreeSafe(versionDir), contents: readVersionContents(versionDir) },
             version,
             status: 'submitted',
