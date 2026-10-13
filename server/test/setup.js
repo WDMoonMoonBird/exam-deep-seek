@@ -99,8 +99,11 @@ export async function cleanupOrphanGradingRows(prisma, log = console) {
   const jobs = await del('DELETE FROM grading_jobs WHERE assignment_id NOT IN (SELECT id FROM assignments)');
   const checkers = await del('DELETE FROM grading_checkers WHERE assignment_id NOT IN (SELECT id FROM assignments)');
   const anchors = await del('DELETE FROM grading_assignment_anchors WHERE assignment_id NOT IN (SELECT id FROM assignments)');
-  if (jobs || checkers || anchors) log.log('ORPHAN_GRADING_CLEANUP jobs=' + jobs + ' checkers=' + checkers + ' anchors=' + anchors);
-  return { jobs, checkers, anchors };
+  // ★R2-B35：绑定表按「assignment 是否仍存在」判孤儿。grading_rulers 是**按内容指纹的全局资产**
+  //   （跨班/跨教师共享，命中即零 LLM）⇒ **不随绑定消失而删**，否则会连带毁掉仍被其他作业复用的尺子。
+  const bindings = await del('DELETE FROM assignment_question_rulers WHERE assignment_id NOT IN (SELECT id FROM assignments)');
+  if (jobs || checkers || anchors || bindings) log.log('ORPHAN_GRADING_CLEANUP jobs=' + jobs + ' checkers=' + checkers + ' anchors=' + anchors + ' bindings=' + bindings);
+  return { jobs, checkers, anchors, bindings };
 }
 
 export async function seedTestData() {

@@ -31,6 +31,14 @@ import { PrismaClient } from '@prisma/client';
 import { runDshGrader } from '../src/services/dshGraderRunner.js';
 import { consumeChecker, consumeMeasureResults } from '../src/services/dshCheckerConsumer.js';
 import { persistAnchor } from '../src/services/dshGradingAnchor.js';
+import { absolutizeDeviceArgs, withReuseCheckerArgs } from '../src/services/dshGradingJobWorker.js';
+import { findRulerByContentKey, resolvePollMs, resolveWaitMs, rulerStoreAvailable } from '../src/services/dshRulerStore.js';
+import {
+  bindResolvedRuler, completeClaimedRuler, failClaimedRuler, resolveAssignmentContent, resolveRulerForAssignment,
+  writeRulerCheckerFiles,
+} from '../src/services/dshRulerAssignment.js';
+import { captureSessionUsage, summarizeUsageForEvidence } from '../src/services/dshSessionUsage.js';
+import { loadLlmPrices, persistRunUsage } from '../src/services/dshRunUsageStore.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '..');
@@ -38,7 +46,7 @@ const REPO = path.resolve(SERVER, '..');
 const TEST_DB = 'exam_system_test';
 
 export function parseArgs(argv) {
-  const o = { assignmentId: null, workdir: '', limit: 2, device: 'bash', deviceArgs: null, deviceExtraArgs: [], stubEnv: {}, timeoutMs: 1800000, dryRun: false, forceChecker: false, dbUrl: '', allowDb: '', allowProd: false, runRoot: '' };
+  const o = { assignmentId: null, workdir: '', limit: 2, device: 'bash', deviceArgs: null, deviceExtraArgs: [], stubEnv: {}, timeoutMs: 1800000, dryRun: false, forceChecker: false, dbUrl: '', allowDb: '', allowProd: false, runRoot: '', rulerWaitMs: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--assignment') o.assignmentId = Number(argv[++i]);
@@ -53,6 +61,7 @@ export function parseArgs(argv) {
     else if (a === '--dry-run') o.dryRun = true;
     else if (a === '--force-checker') o.forceChecker = true;
     else if (a === '--run-root') o.runRoot = String(argv[++i] || ''); // R2-B8②：复用已有产物入库（跳过装置）
+    else if (a === '--ruler-wait-ms') o.rulerWaitMs = Number(argv[++i]); // R2-B35：等待同内容造尺完成的超时（缺省 env DSH_RULER_WAIT_MS）
     else if (a === '--db-url') o.dbUrl = String(argv[++i] || '');
     else if (a === '--allow-db') o.allowDb = String(argv[++i] || '');
     else if (a === '--allow-prod') o.allowProd = true;
@@ -131,10 +140,44 @@ export async function readPlatformLlmConfig(prisma, env = process.env) {
   return { model, baseUrl };
 }
 
-/** 消费 + 打印 SUMMARY（装置路径与 --run-root 复用路径共用，保证 SUMMARY 口径一致） */
-async function consumeAndSummarize({ prisma, runRoot, assignmentId, questionId, modelCalls, device }) {
+/**
+ * ★R2-B36：**销毁会话之前**抽取本次运行的用量（tokens/缓存命中/工具/费用）并落库。
+ * 取证时机 = 装置跑完、teardown 删除 home/sessions 之前；run_ref = build:<assignmentId>:<run-root 目录名>。
+ * fail-soft：任何失败只留痕，绝不影响造尺/入库结论。
+ */
+async function captureUsageForRun({ prisma, runRoot, assignmentId, log = console }) {
+  try {
+    const prices = await loadLlmPrices({ prisma }).catch(() => ({ table: null, source: 'default' }));
+    const cap = captureSessionUsage({ runRoot, priceTable: prices.table, log });
+    if (!cap || !cap.ok || !cap.usage) {
+      console.log('RUN_USAGE_PERSISTED=no run_ref=(none) reason=' + ((cap && cap.reason) || 'unknown'));
+      return null;
+    }
+    const runRef = 'build:' + assignmentId + ':' + path.basename(String(runRoot));
+    const persisted = await persistRunUsage({ prisma, runRef, jobId: null, usage: cap.usage, log });
+    return { runRef, persisted: persisted.ok, usage: summarizeUsageForEvidence(cap.usage) };
+  } catch (err) {
+    console.log('RUN_USAGE_PERSISTED=no run_ref=(none) reason=' + String(err && err.message).slice(0, 160));
+    return null;
+  }
+}
+
+/** 装置输出尾巴（失败留痕用；脱敏 + 截断） */
+function errorTailOf(res) {
+  const pick = (t) => String(t || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean).slice(-2).join(' | ');
+  const tail = pick(res && res.stderr) || pick(res && res.stdout);
+  return tail.replace(/sk-[A-Za-z0-9_-]{6,}/g, '[redacted:sk-***]').slice(0, 300);
+}
+
+/** 消费 + 打印 SUMMARY（装置路径与 --run-root 复用路径共用，保证 SUMMARY 口径一致）
+ *  ★R2-B35：rulerPlan 非空时，造尺完成后写 ready + 首次绑定（内容指纹尺子）。 */
+async function consumeAndSummarize({ prisma, runRoot, assignmentId, questionId, modelCalls, device, rulerPlan = null, persistAnchorRow = true }) {
   const stored = await consumeChecker({ prisma, runRoot, assignmentId, questionId, repoRoot: REPO });
   if (!stored.ok) {
+    // ★R2-B35：本次是「内容首次出现、由本脚本造尺」⇒ 造尺失败要让等待者看到 failed（不产出分数）
+    if (rulerPlan && rulerPlan.mode === 'build') {
+      await failClaimedRuler({ prisma, contentKey: rulerPlan.contentKey, reason: 'checker_not_consumed:' + stored.reason });
+    }
     console.log('RESULT=CHECKER_NOT_CONSUMED reason=' + stored.reason + ' violations=' + JSON.stringify(stored.violations || []));
     console.log('SUMMARY_BEGIN');
     console.log('ASSIGNMENT=' + assignmentId);
@@ -146,9 +189,45 @@ async function consumeAndSummarize({ prisma, runRoot, assignmentId, questionId, 
     console.log('SUMMARY_END');
     return 1;
   }
-  // ★R2-B14①：入库时持久化作业锚点（供后续复用回填）
-  const anchorSaved = await persistAnchor({ prisma, assignmentId, checkerId: stored.checkerId, runRoot });
-  console.log('ANCHOR_PERSISTED=' + (anchorSaved.persisted ? 'yes' : 'no') + (anchorSaved.persisted ? ' frozen_sha256=' + (anchorSaved.frozenSha256 || 'na') + ' ANCHOR_RAW_PERSISTED=' + (anchorSaved.rawBytes > 0 ? 'yes bytes=' + anchorSaved.rawBytes + ' sha256=' + anchorSaved.rawSha256 : 'no') : ' reason=' + anchorSaved.reason));
+  // ★R2-B35：造尺一次 ⇒ 置 ready（checker_id/frozen_sha256/原始字节）+ 首次绑定（内容指纹尺子）
+  if (rulerPlan && rulerPlan.mode === 'build') {
+    const { readAnchorFromRunRoot } = await import('../src/services/dshGradingAnchor.js');
+    const info = readAnchorFromRunRoot(runRoot);
+    await completeClaimedRuler({
+      prisma, contentKey: rulerPlan.contentKey, checkerId: stored.checkerId,
+      frozenSha256: info.frozenSha256 || null, checkerRaw: info.checkerRaw || null, model: null, sourceRunId: null,
+    });
+    const ruler = await findRulerByContentKey(prisma, rulerPlan.contentKey);
+    const b = await bindResolvedRuler({ prisma, assignmentId, questionId: rulerPlan.questionId != null ? rulerPlan.questionId : questionId, ruler, contentKey: rulerPlan.contentKey });
+    console.log('RULER_BOUND=' + (b.ok ? 'yes' : 'no') + ' content_key=' + rulerPlan.contentKey + ' ruler_id=' + (ruler ? ruler.id : 'na') + (b.ok ? '' : ' reason=' + b.reason));
+    if (!b.ok) return 1; // fail-closed：绑定不一致 ⇒ 不产出分数（绝不静默换尺）
+  }
+  // ★R2-B35：--run-root 已有产物 ⇒ 就地登记内容指纹尺子（零 LLM；已有同内容尺子且 checker_id 不同则只留痕不覆盖）
+  if (rulerPlan && rulerPlan.mode === 'ingest') {
+    const existingRuler = await findRulerByContentKey(prisma, rulerPlan.contentKey);
+    if (existingRuler && existingRuler.status === 'ready' && existingRuler.checkerId && existingRuler.checkerId !== stored.checkerId) {
+      console.log('RULER_INGEST_SKIPPED=yes reason=existing_ruler_differs content_key=' + rulerPlan.contentKey
+        + ' existing_checker_id=' + existingRuler.checkerId + ' disk_checker_id=' + stored.checkerId + '（绝不覆盖已 ready 的同内容尺子）');
+    } else {
+      const { readAnchorFromRunRoot } = await import('../src/services/dshGradingAnchor.js');
+      const info = readAnchorFromRunRoot(runRoot);
+      await completeClaimedRuler({
+        prisma, contentKey: rulerPlan.contentKey, checkerId: stored.checkerId,
+        frozenSha256: info.frozenSha256 || null, checkerRaw: info.checkerRaw || null, model: null, sourceRunId: null,
+      });
+      const ruler = await findRulerByContentKey(prisma, rulerPlan.contentKey);
+      const b = await bindResolvedRuler({ prisma, assignmentId, questionId: rulerPlan.questionId != null ? rulerPlan.questionId : questionId, ruler, contentKey: rulerPlan.contentKey });
+      console.log('RULER_INGESTED=' + (b.ok ? 'yes' : 'no') + ' content_key=' + rulerPlan.contentKey + ' ruler_id=' + (ruler ? ruler.id : 'na') + (b.ok ? '' : ' reason=' + b.reason));
+      if (!b.ok) return 1;
+    }
+  }
+  // ★R2-B14①：入库时持久化作业锚点（供后续复用回填）。
+  // ★R2-B35：**造尺路径保持既有行为**（不新增锚点行——既有 R2-B10/B16 测试按「复用前本作业无锚点行」钉住该行为）；
+  //   锚点行由「复用命中」路径补建（worker）与 --run-root 复用路径持久化（本条默认 true）。
+  if (persistAnchorRow) {
+    const anchorSaved = await persistAnchor({ prisma, assignmentId, checkerId: stored.checkerId, runRoot });
+    console.log('ANCHOR_PERSISTED=' + (anchorSaved.persisted ? 'yes' : 'no') + (anchorSaved.persisted ? ' frozen_sha256=' + (anchorSaved.frozenSha256 || 'na') + ' ANCHOR_RAW_PERSISTED=' + (anchorSaved.rawBytes > 0 ? 'yes bytes=' + anchorSaved.rawBytes + ' sha256=' + anchorSaved.rawSha256 : 'no') : ' reason=' + anchorSaved.reason));
+  }
 
   const consumed = await consumeMeasureResults({ prisma, runRoot, assignmentId });
   const needsRerun = consumed.skipped.filter((r) => r.status === 'needs_rerun').length;
@@ -226,13 +305,57 @@ async function main() {
   }
   try {
     if (!assignment) { console.log('RESULT=ASSIGNMENT_NOT_FOUND assignment=' + opts.assignmentId); return 1; }
-    const links = await prisma.assignmentQuestion.findMany({ where: { assignmentId: opts.assignmentId }, select: { questionId: true } });
-    const questionId = links.length ? links[0].questionId : null;
+    // ★R2-B35：内容指纹（发布快照 + 标准包 zip + rubric + 题目描述）——题目取 type='project' 那道（与 r2b20 同口径，不用 links[0]）
+    let contentRes = { ok: false, reason: 'not_evaluated' };
+    try {
+      contentRes = await resolveAssignmentContent({ prisma, assignmentId: opts.assignmentId });
+    } catch (err) {
+      contentRes = { ok: false, reason: 'content_query_error:' + String(err && err.message).slice(0, 120) };
+    }
+    const contentKey = contentRes.ok ? contentRes.contentKey : null;
+    let questionId = contentRes.ok ? contentRes.questionId : null;
+    if (contentKey) {
+      console.log('RULER_CONTENT_KEY=' + contentKey + ' standard_source=' + contentRes.standardSource + ' question=' + questionId);
+    } else {
+      const links = await prisma.assignmentQuestion.findMany({ where: { assignmentId: opts.assignmentId }, select: { questionId: true } });
+      questionId = links.length ? links[0].questionId : null;
+      console.log('RULER_CONTENT=unresolved reason=' + contentRes.reason + '（本作业不参与内容化复用，回落按作业路径）');
+    }
 
     // R2-B8①：解析平台配置的模型/端点（system_configs → env → 不提供⇒装置侧保持默认）
     const platform = await readPlatformLlmConfig(prisma);
     console.log('PLATFORM_MODEL=' + (platform.model || '(unset:device-default)'));
     console.log('PLATFORM_BASE_URL=' + (platform.baseUrl || '(unset:device-default)'));
+
+    // ★R2-B35：内容指纹尺子解析（ready ⇒ 零 LLM 复用；building ⇒ 等待；无 ⇒ 抢占后由本次造尺一次）
+    let rulerPlan = null;
+    if (contentKey && !opts.runRoot && (await rulerStoreAvailable(prisma))) {
+      const rr = await resolveRulerForAssignment({
+        prisma, assignmentId: opts.assignmentId, questionId, mode: 'build',
+        pollIntervalMs: resolvePollMs(),
+        waitTimeoutMs: Number.isFinite(opts.rulerWaitMs) ? Math.max(0, opts.rulerWaitMs) : resolveWaitMs(),
+        log: console, jobTag: 'build_script',
+      });
+      if (rr.ok && rr.status === 'claimed_here') {
+        rulerPlan = { mode: 'build', contentKey, questionId };
+        console.log('RULER_ACTION=claim_build content_key=' + contentKey + '（本次由装置造尺一次）');
+      } else if (rr.ok) {
+        rulerPlan = { mode: 'reuse', contentKey, questionId, ruler: rr.ruler, via: rr.status };
+        console.log('RULER_ACTION=' + rr.status + ' content_key=' + contentKey + ' checker_id=' + ((rr.ruler && rr.ruler.checkerId) || '(none)') + ' zero_llm=yes');
+        if (opts.forceChecker) console.log('RULER_FORCE_IGNORED=yes reason=content_key_reuse（重新造尺属下一期；绝不覆盖已绑定的历史分数）');
+      } else {
+        console.log('RESULT=RULER_UNAVAILABLE reason=' + rr.reason + ' status=' + (rr.status || 'na') + ' content_key=' + contentKey + (rr.contentKey ? '' : ''));
+        console.log('SUMMARY_BEGIN');
+        console.log('ASSIGNMENT=' + opts.assignmentId);
+        console.log('CHECKER_ID=(none)');
+        console.log('CONSUMED=0');
+        console.log('WRITTEN=0');
+        console.log('NEEDS_RERUN=0');
+        console.log('MODEL_CALLS=0');
+        console.log('SUMMARY_END');
+        return 1; // fail-closed：内容尺子不可用 ⇒ 不跑装置、不产出分数
+      }
+    }
 
     // R2-B8②：--run-root 复用已有产物（跳过装置）；先校验产物存在，绝不静默成功
     if (opts.runRoot) {
@@ -252,8 +375,50 @@ async function main() {
       }
       console.log('RUN_ROOT=' + rr + ' (复用已有产物，未启动装置)');
       console.log('DSH_HOME=(reuse: 未创建隔离 home)');
-      const kept = await consumeAndSummarize({ prisma, runRoot: rr, assignmentId: opts.assignmentId, questionId, modelCalls: 0 });
+      // ★R2-B35：--run-root 是「已有尺子产物入库」路径 ⇒ 顺带登记内容指纹尺子（零 LLM，不重复造尺）
+      const ingestPlan = contentKey ? { mode: 'ingest', contentKey, questionId } : null;
+      // ★R2-B36：该 run-root 若保留着会话现场（失败保留/keep-scene），同样在入库时抽取用量
+      const usageIngest = await captureUsageForRun({ prisma, runRoot: rr, assignmentId: opts.assignmentId });
+      console.log('RUN_USAGE_CAPTURED=' + (usageIngest && usageIngest.usage ? JSON.stringify(usageIngest.usage) : 'no'));
+      const kept = await consumeAndSummarize({ prisma, runRoot: rr, assignmentId: opts.assignmentId, questionId, modelCalls: 0, rulerPlan: ingestPlan });
       return kept;
+    }
+
+    // ★R2-B35：内容命中 ⇒ 跳过造尺，直接以 measure-only-reuse 拉起装置（零 LLM）
+    if (rulerPlan && rulerPlan.mode === 'reuse') {
+      fs.mkdirSync(workdir, { recursive: true });
+      fs.mkdirSync(home, { recursive: true });
+      console.log('RUN_ROOT=' + workdir);
+      console.log('DSH_HOME=' + home);
+      const placed = writeRulerCheckerFiles({ runRoot: workdir, ruler: rulerPlan.ruler });
+      if (!placed.ok) {
+        console.log('RESULT=RULER_RAW_UNAVAILABLE reason=' + placed.reason + ' content_key=' + contentKey);
+        return 1;
+      }
+      const reuseArgs = absolutizeDeviceArgs(withReuseCheckerArgs(resolveDeviceArgs(opts, { limit: opts.limit, workdir }), placed.frozenPath), REPO);
+      console.log('STAGE=device command=' + opts.device + ' args=' + JSON.stringify(reuseArgs) + ' mode=measure-only-reuse(零 LLM)');
+      const res = await runDshGrader({
+        command: opts.device,
+        args: reuseArgs,
+        runRoot: workdir,
+        cwd: REPO,
+        timeoutMs: opts.timeoutMs,
+        extraEnv: {
+          DSH_HOME: home,
+          ...(platform.model ? { DEEPSEEK_MODEL: platform.model } : {}),
+          ...(platform.baseUrl ? { DEEPSEEK_BASE_URL: platform.baseUrl } : {}),
+          ...opts.stubEnv,
+        },
+      });
+      deviceRan = true;
+      const dev = parseDeviceSummary(res.stdout);
+      console.log('DEVICE exit=' + res.exitCode + ' timed_out=' + res.timedOut + ' stdout_len=' + String(res.stdout || '').length + ' reuse_byte_exact=' + (placed.byteExact ? 'yes' : 'no'));
+      // ★R2-B36：销毁前抽取用量（复用路径=零 LLM 运行 ⇒ no_model_session=yes，如实 0 token）
+      const usageReuse = await captureUsageForRun({ prisma, runRoot: workdir, assignmentId: opts.assignmentId });
+      console.log('RULER_REUSE_USAGE=' + JSON.stringify(usageReuse ? usageReuse.usage : null));
+      const rcReuse = await consumeAndSummarize({ prisma, runRoot: workdir, assignmentId: opts.assignmentId, questionId, modelCalls: 0, rulerPlan });
+      console.log('KEPT_RUN_ROOT=' + workdir + ' KEPT_DSH_HOME=' + home + '（现场保留，未清理）');
+      return Number(dev.runExit) === 0 ? rcReuse : 1;
     }
 
     const existing = await prisma.gradingChecker.findFirst({ where: { assignmentId: opts.assignmentId, status: 'ready' }, orderBy: { id: 'desc' }, select: { checkerId: true } });
@@ -296,32 +461,19 @@ async function main() {
     const dev = parseDeviceSummary(res.stdout);
     console.log('DEVICE exit=' + res.exitCode + ' timed_out=' + res.timedOut + ' stdout_len=' + String(res.stdout || '').length);
 
-    const stored = await consumeChecker({ prisma, runRoot: workdir, assignmentId: opts.assignmentId, questionId, repoRoot: REPO });
-    if (!stored.ok) {
-      console.log('RESULT=CHECKER_NOT_CONSUMED reason=' + stored.reason + ' violations=' + JSON.stringify(stored.violations || []));
-      console.log('SUMMARY_BEGIN');
-      console.log('ASSIGNMENT=' + opts.assignmentId);
-      console.log('CHECKER_ID=(none)');
-      console.log('CONSUMED=0');
-      console.log('WRITTEN=0');
-      console.log('NEEDS_RERUN=0');
-      console.log('MODEL_CALLS=' + (dev.modelCalls == null ? 0 : dev.modelCalls));
-      console.log('SUMMARY_END');
-      return Number(res.exitCode) === 5 || Number(res.exitCode) === 6 ? 1 : 1;
+    // ★R2-B36：销毁前抽取用量（造尺运行 ⇒ 有模型会话；金额按 system_configs.llm_prices 分档）
+    const usageBuild = await captureUsageForRun({ prisma, runRoot: workdir, assignmentId: opts.assignmentId });
+    console.log('RUN_USAGE_CAPTURED=' + (usageBuild && usageBuild.usage ? JSON.stringify(usageBuild.usage) : 'no'));
+    // ★R2-B35：造尺失败要让等待者看到 failed（不产出分数；可重试）；成功则统一收尾（ready + 绑定 + 锚点 + SUMMARY）
+    if (rulerPlan && rulerPlan.mode === 'build' && Number(res.exitCode) !== 0) {
+      await failClaimedRuler({ prisma, contentKey: rulerPlan.contentKey, reason: 'device_exit_' + res.exitCode + ':' + (errorTailOf(res) || 'na') });
     }
-    const consumed = await consumeMeasureResults({ prisma, runRoot: workdir, assignmentId: opts.assignmentId });
-    const needsRerun = consumed.skipped.filter((r) => r.status === 'needs_rerun').length;
-
-    console.log('SUMMARY_BEGIN');
-    console.log('ASSIGNMENT=' + opts.assignmentId);
-    console.log('CHECKER_ID=' + stored.checkerId);
-    console.log('CONSUMED=' + consumed.rows.length);
-    console.log('WRITTEN=' + consumed.written);
-    console.log('NEEDS_RERUN=' + needsRerun);
-    console.log('MODEL_CALLS=' + (dev.modelCalls == null ? 0 : dev.modelCalls));
-    console.log('SUMMARY_END');
-    console.log('KEPT_RUN_ROOT=' + workdir + ' KEPT_DSH_HOME=' + home + '（现场保留，未清理）');
-    return 0;
+    const rc = await consumeAndSummarize({
+      prisma, runRoot: workdir, assignmentId: opts.assignmentId, questionId,
+      modelCalls: dev.modelCalls == null ? 0 : dev.modelCalls, rulerPlan,
+      persistAnchorRow: false, // ★造尺路径保持既有行为（锚点行由复用命中/--run-root 路径补建）
+    });
+    return rc;
   } catch (err) {
     console.log('RESULT=FAILED stage=' + (deviceRan ? 'consume' : 'device') + ' reason=' + (err && err.message));
     return 1;

@@ -10,11 +10,14 @@
 import fs from 'fs';
 import path from 'path';
 import logger from '../utils/logger.js';
+import { captureSessionUsage, summarizeUsageForEvidence, USAGE_REL_PATH } from './dshSessionUsage.js';
 
 export const RUNS_ROOT_ENV = 'DSH_GRADER_RUNS_ROOT';
 export const DEFAULT_RUNS_ROOT = '/srv/grader/runs';
 export const TEARDOWN_NAME = 'run-teardown.json';
 export const EVIDENCE_SUMMARY_NAME = 'evidence-summary.json';
+/** ★R2-B36：会话用量取证产物名（<run-root>/out/session-usage.json ⇒ 归档同名） */
+export const USAGE_NAME = 'session-usage.json';
 export const MAX_TAIL_BYTES = 64 * 1024;
 
 export function resolveRunsRoot(env = process.env) {
@@ -361,6 +364,15 @@ export function purgeRunRootSessions({ runRoot, exitCode = 0, purge = true, keep
   }
   const homeExistsBefore = fs.existsSync(home) ? 'yes' : 'no';
   const before = sessionStats(runRoot);
+  // ★R2-B36：**取证阶段**（销毁会话之前）抽取用量 ⇒ <run-root>/out/session-usage.json（随 run-root 归档）。
+  //   幂等：worker/造尺脚本已在销毁前抽取过（用 DB 价目表算费）则直接复用文件，不重算。
+  let usageSummary = null;
+  try {
+    const cap = captureSessionUsage({ runRoot, log });
+    if (cap && cap.usage) usageSummary = summarizeUsageForEvidence(cap.usage);
+  } catch (err) {
+    log.log('SESSION_USAGE=failed reason=' + String(err && err.message).slice(0, 160));
+  }
   let credentialsRemoved = 'yes';
   const credPath = path.join(home, '.credentials.yaml');
   if (fs.existsSync(credPath)) {
@@ -401,6 +413,8 @@ export function purgeRunRootSessions({ runRoot, exitCode = 0, purge = true, keep
     home_policy: 'sessions+credentials',
     purge_policy: 'purge_home=' + (purge ? 1 : 0) + ' keep_days=' + keepDays + ' exit=' + exitCode,
     keep_scene: keepScene,
+    // ★R2-B36：用量摘要（tokens/缓存命中/费用/工具调用；零 LLM 运行 no_model_session=yes 且全 0）
+    usage: usageSummary,
     failed: failed === null ? 0 : Number(failed) || 0,   // ★R2-B31：无法评分份数（与 measured/unmeasurable 并列，页面显示用）
     source: source,          // ★R2-B31：批改 source=worker；造尺 source=build（字段与批改完全一致）
     ts: new Date().toISOString(),
@@ -469,6 +483,8 @@ export async function archiveRun({ runRoot, jobId, success, runsRoot = DEFAULT_R
     result.bytes += Buffer.byteLength(text);
   };
   copy(path.join('out', TEARDOWN_NAME), TEARDOWN_NAME);
+  // ★R2-B36：会话用量取证产物（销毁前抽取）随归档落地 ⇒ 事后可逐项复核 tokens/费用/工具调用
+  copy(USAGE_REL_PATH, USAGE_NAME);
   // ★R2-B31（云上实测修正）：把比较性/结果产物一并归档，便于事后审计（存在才复制）
   copy(path.join('out', 'assignment', 'comparability.json'), 'comparability.json');
   copy(path.join('out', 'grading-results.json'), 'grading-results.json');

@@ -14,6 +14,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { SUBMISSIONS_ROOT, UPLOADS_ROOT, standardDir } from '../src/utils/projectPaths.js';
 import { readZipEntries, zipDirectory } from '../src/services/deterministicZip.js';
+import { resolveSnapshot } from '../src/services/assignmentSnapshot.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -124,6 +125,17 @@ async function exportMaterialsInner({ prisma, assignmentId, outDir, uploadsRoot 
   if (projects.length !== 1) return { ok: false, reason: 'project_question_not_unique:' + projects.length };
   const question = projects[0];
 
+  // ★R2-B35：物料与**发布冻结快照**同源（snapshot ?? live）——内容指纹 content_key 由快照推导（assignmentSnapshot.resolveSnapshot 同口径）；
+  //   导出若取活值，改题后会出现「同一 content_key 对应两种物料」⇒ 复用命中却 stale/needs_rerun（同内容两把尺/两物料）。
+  let link = null;
+  try {
+    link = await prisma.assignmentQuestion.findUnique({
+      where: { assignmentId_questionId: { assignmentId: Number(assignmentId), questionId: Number(question.id) } },
+      select: { rubricSnapshot: true, materialSnapshot: true, standardHash: true, snapshotOrigin: true },
+    });
+  } catch { link = null; }
+  const snapshot = resolveSnapshot(link, question);
+
   const stdDir = reroot(standardDir(question.id), uploadsRoot);
   if (!fs.existsSync(stdDir) || countFiles(stdDir) === 0) return { ok: false, reason: 'standard_package_missing:' + stdDir };
 
@@ -139,9 +151,9 @@ async function exportMaterialsInner({ prisma, assignmentId, outDir, uploadsRoot 
   fs.mkdirSync(outDir, { recursive: true });
   const standardZip = zipDirectory(stdDir);
   fs.writeFileSync(path.join(outDir, DEVICE_NAMES.standard), standardZip);
-  const rubricBuf = Buffer.from(String(question.scoringRubric || ''), 'utf8');
+  const rubricBuf = Buffer.from(String(snapshot.rubric ?? ''), 'utf8');
   fs.writeFileSync(path.join(outDir, DEVICE_NAMES.rubric), rubricBuf);
-  const assignmentBuf = Buffer.from(buildAssignmentMd({ title: question.title, material: question.material }), 'utf8');
+  const assignmentBuf = Buffer.from(buildAssignmentMd({ title: question.title, material: snapshot.material }), 'utf8');
   fs.writeFileSync(path.join(outDir, DEVICE_NAMES.assignment), assignmentBuf);
 
   const used = new Set(Object.values(DEVICE_NAMES));
@@ -171,6 +183,8 @@ async function exportMaterialsInner({ prisma, assignmentId, outDir, uploadsRoot 
     source: { uploads_root: uploadsRoot ? path.resolve(uploadsRoot) : UPLOADS_ROOT, standard_dir: stdDir },
     standard: { file: DEVICE_NAMES.standard, sha256: sha256(standardZip), bytes: standardZip.length, entries: readZipEntries(standardZip).map((e) => e.name) },
     rubric: { file: DEVICE_NAMES.rubric, sha256: sha256(rubricBuf), chars: rubricBuf.length },
+    // ★R2-B35：物料来源（发布冻结快照 vs 活值）——内容指纹口径须与此一致（snapshot ?? live）
+    snapshot: { from_snapshot: snapshot.fromSnapshot, origin: snapshot.origin || null, standard_hash: snapshot.standardHash || null, rubric_sha256: snapshot.rubricSha256 || null },
     assignment_doc: { file: DEVICE_NAMES.assignment, sha256: sha256(assignmentBuf), chars: assignmentBuf.length },
     n_submissions: items.length,
     submissions: items,

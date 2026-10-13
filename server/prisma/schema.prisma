@@ -527,11 +527,15 @@ model GradingJob {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
+  /// R2-B35：本次批改使用的内容指纹（复用命中统计/审计；由迁移 20261013090000 添加）
+  contentKey   String?  @map("content_key") @db.Char(64)
+
   // R2-B12②：原「状态入键」唯一约束已由活动键方案替代：
   //   活动态（pending/running）每 (assignment, checker) 至多一行、终态可多行共存。
   //   实现见迁移 20261012030000_r2b12_grading_jobs_active_key（生成列 active_key + UNIQUE）。
   //   注意：生成列未写进本 schema（Prisma 无法表达 GENERATED ALWAYS AS）⇒ 该列由原始 SQL 迁移管理。
   @@index([assignmentId])
+  @@index([contentKey])
   @@map("grading_jobs")
 }
 
@@ -554,6 +558,74 @@ model GradingAssignmentAnchor {
 
   @@unique([assignmentId, checkerId])
   @@map("grading_assignment_anchors")
+}
+
+/// R2-B35：内容指纹 → 尺子（全局唯一）。同 content_key 默认跨班/跨教师复用；命中即零 LLM。
+/// 解析流程与并发去重见 server/src/services/dshRulerStore.js（原始 SQL 读写，不依赖 Client 生成）。
+/// BCNF：唯一非平凡 FD = content_key → 其余属性（候选键即 content_key）⇒ 满足 BCNF。
+model GradingRuler {
+  id                BigInt   @id @default(autoincrement())
+  contentKey        String   @unique @map("content_key") @db.Char(64)
+  status            String   @default("building") @db.VarChar(20)
+  checkerId         String?  @map("checker_id") @db.VarChar(80)
+  standardSha256    String?  @map("standard_sha256") @db.VarChar(80)
+  rubricSha256      String?  @map("rubric_sha256") @db.VarChar(80)
+  descriptionSha256 String?  @map("description_sha256") @db.VarChar(80)
+  model             String?  @db.VarChar(64)
+  sourceRunId       BigInt?  @map("source_run_id")
+  frozenSha256      String?  @map("frozen_sha256") @db.VarChar(96)
+  /// 尺子原始字节（复用落位必须逐字节一致；沿用既有锚点机制）
+  checkerRaw        Bytes?   @map("checker_raw")
+  /// status=failed 时的原因留痕（可重试）
+  lastError         String?  @map("last_error") @db.Text
+  createdAt         DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  @@index([checkerId])
+  @@index([status])
+  @@map("grading_rulers")
+}
+
+/// R2-B36：每次运行的使用量/费用/工具调用（取证阶段抽取；读写走原始 SQL，见 src/services/dshRunUsageStore.js）。
+/// BCNF：唯一非平凡 FD = run_ref → 其余属性（候选键即 run_ref）⇒ 满足 BCNF。
+model GradingRunUsage {
+  id                 BigInt   @id @default(autoincrement())
+  runRef             String   @unique @map("run_ref") @db.VarChar(160)
+  jobId              BigInt?  @map("job_id")
+  model              String?  @db.VarChar(64)
+  modelCalls         Int      @default(0) @map("model_calls")
+  uncachedInputTokens BigInt  @default(0) @map("uncached_input_tokens")
+  outputTokens       BigInt   @default(0) @map("output_tokens")
+  cacheReadTokens    BigInt   @default(0) @map("cache_read_tokens")
+  cacheWriteTokens   BigInt   @default(0) @map("cache_write_tokens")
+  cacheHitRate       Decimal? @map("cache_hit_rate") @db.Decimal(9, 6)
+  costTotal          Decimal? @map("cost_total") @db.Decimal(18, 6)
+  costCurrency       String?  @map("cost_currency") @db.VarChar(8)
+  priceVersion       String?  @map("price_version") @db.VarChar(64)
+  priceTier          String?  @map("price_tier") @db.VarChar(16)
+  noModelSession     Boolean  @default(false) @map("no_model_session")
+  toolsJson          Json?    @map("tools_json")
+  sessionsJson       Json?    @map("sessions_json")
+  usageJson          Json?    @map("usage_json")
+  createdAt          DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  @@index([jobId])
+  @@map("grading_run_usage")
+}
+
+/// R2-B35：作业-题目 → 当时所用尺子（历史分数不可变的锚）。
+/// BCNF：唯一非平凡 FD = (assignment_id, question_id) → 其余属性 ⇒ 该对即候选键。
+model AssignmentQuestionRuler {
+  id           BigInt   @id @default(autoincrement())
+  assignmentId Int      @map("assignment_id") @db.UnsignedInt
+  questionId   Int      @map("question_id") @db.UnsignedInt
+  rulerId      BigInt   @map("ruler_id")
+  boundAt      DateTime @default(now()) @map("bound_at") @db.DateTime(3)
+
+  @@unique([assignmentId, questionId])
+  @@index([rulerId])
+  @@map("assignment_question_rulers")
 }
 
 /// R2-B23：每次运行的摘要（job_id 唯一）——归档目录、计数、会话销毁证据

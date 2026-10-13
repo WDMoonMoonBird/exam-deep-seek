@@ -14,7 +14,14 @@ import fs from 'fs';
 import path from 'path';
 import { runDshGrader } from './dshGraderRunner.js';
 import { consumeChecker, consumeMeasureResults, resolveCheckerPath } from './dshCheckerConsumer.js';
-import { materializeAnchor, persistAnchor } from './dshGradingAnchor.js';
+import { loadAnchor, materializeAnchor, persistAnchor, readAnchorFromRunRoot } from './dshGradingAnchor.js';
+import { findRulerByContentKey, resolvePollMs, resolveWaitMs, setJobContentKey } from './dshRulerStore.js';
+import { captureSessionUsage, summarizeUsageForEvidence } from './dshSessionUsage.js';
+import { loadLlmPrices, persistRunUsage } from './dshRunUsageStore.js';
+import {
+  bindResolvedRuler, completeClaimedRuler, failClaimedRuler, resolveAssignmentContent,
+  resolveRulerForAssignment, writeRulerCheckerFiles,
+} from './dshRulerAssignment.js';
 import { archiveRun, collectRunCountInputs, finalizeRunRoot, persistJobRun, purgeRunRootSessions, resolveRunCounts, resolveRunsRoot, tailText } from './dshRunArchiver.js';
 import { formatMaterialsMissing, formatMaterialsResolved, resolveMaterialsForAssignment, withMaterialsArgs } from './dshMaterialsResolver.js';
 
@@ -35,6 +42,21 @@ export function readTeardownEvidence(runRoot) {
 export async function runOnce(args = {}) {
   const res = await runOnceInner(args);
   if (!res || !res.consumed || !res.jobId || !res.runRoot) return res;
+  // ★R2-B36：**销毁会话之前**抽取用量（tokens/缓存命中/工具/费用）⇒ out/session-usage.json + 落库 grading_run_usage。
+  //   必须在 finalizeRunRoot（teardown 会删 home/sessions）之前；失败 fail-soft（绝不改 job 终态）。
+  try {
+    const prices = await loadLlmPrices({ prisma: args.prisma }).catch(() => ({ table: null, source: 'default' }));
+    const cap = captureSessionUsage({ runRoot: res.runRoot, priceTable: prices.table, log: console });
+    if (cap && cap.usage) {
+      res.usage = summarizeUsageForEvidence(cap.usage);
+      const persisted = await persistRunUsage({ prisma: args.prisma, runRef: 'job:' + res.jobId, jobId: res.jobId, usage: cap.usage, log: console });
+      res.usagePersisted = persisted.ok;
+    } else {
+      console.log('RUN_USAGE_PERSISTED=no job=' + res.jobId + ' reason=' + ((cap && cap.reason) || 'unknown'));
+    }
+  } catch (err) {
+    console.log('RUN_USAGE_PERSISTED=no job=' + res.jobId + ' reason=' + String(err && err.message).slice(0, 160));
+  }
   try {
     const success = res.status === JOB_STATUS.done;
     // ★R2-B27（路线 2）：**先 teardown**（销毁会话+凭据；失败保留现场）⇒ 再归档 ⇒ 成功时清理 run-root
@@ -300,24 +322,88 @@ async function runOnceInner({
       readyChecker = null;
       logger.warn({ jobId: job.id, err: err && err.message }, 'R2-B10：查询 ready 尺子失败 ⇒ 视为无尺子');
     }
-    if (reuseChecker) {
-      if (!readyChecker) {
+
+    // ★R2-B35：内容指纹尺子解析（ready ⇒ 零 LLM 复用；building ⇒ 等待；无 ⇒ 抢占后由本次装置流程造尺一次 + 首次绑定）
+    //   假 prisma / 迁移未落地 / 无发布快照 ⇒ 一律回落旧路径（不改变既有行为）
+    let rulerPlan = null;
+    let jobCheckerId = job.checkerId;
+    try {
+      const contentRes = await resolveAssignmentContent({ prisma, assignmentId: job.assignmentId });
+      if (contentRes.ok) {
+        await setJobContentKey({ prisma, jobId: job.id, contentKey: contentRes.contentKey });
+        const rr = await resolveRulerForAssignment({
+          prisma, assignmentId: job.assignmentId, questionId: contentRes.questionId,
+          mode: reuseChecker ? 'reuse' : 'build',
+          pollIntervalMs: resolvePollMs(), waitTimeoutMs: resolveWaitMs(),
+          log: console, jobTag: 'job=' + job.id,
+        });
+        if (rr.ok && rr.status === 'claimed_here') {
+          rulerPlan = { mode: 'build', contentKey: rr.contentKey, questionId: rr.questionId };
+          console.log('RULER_RESOLVE=claimed_here content_key=' + rr.contentKey + ' job=' + job.id + '（本次装置流程造尺一次）');
+        } else if (rr.ok) {
+          rulerPlan = { mode: 'reuse', contentKey: rr.contentKey, ruler: rr.ruler, zeroLlm: rr.zeroLlm, via: rr.status };
+          console.log('RULER_RESOLVE=' + rr.status + ' content_key=' + rr.contentKey + ' checker_id=' + ((rr.ruler && rr.ruler.checkerId) || '(none)') + ' job=' + job.id);
+        } else if (rr.failClosed) {
+          console.log('RULER_RESOLVE=fail_closed reason=' + rr.reason + ' content_key=' + rr.contentKey + ' job=' + job.id);
+          console.log('CHECKER_REUSE=none checker_id=(none) reason=ruler_' + rr.reason + ' job=' + job.id);
+          await finishJob({ prisma, jobId: job.id, status: JOB_STATUS.needsRerun, error: 'ruler_' + rr.reason });
+          logger.warn({ jobId: job.id, reason: rr.reason }, 'R2-B35：内容尺子不可用 ⇒ fail-closed needs_rerun（不跑装置、不产出分数）');
+          return { consumed: true, jobId: job.id, runRoot, status: JOB_STATUS.needsRerun, reason: 'ruler_' + rr.reason, reuse: { applied: false, reason: 'ruler_' + rr.reason } };
+        } else {
+          console.log('RULER_RESOLVE=legacy reason=' + rr.reason + ' job=' + job.id);
+        }
+      } else {
+        console.log('RULER_CONTENT=unresolved reason=' + contentRes.reason + ' job=' + job.id);
+      }
+    } catch (err) {
+      rulerPlan = null;
+      console.log('RULER_RESOLVE=error reason=' + String(err && err.message).slice(0, 160) + ' job=' + job.id);
+    }
+
+    if (reuseChecker || (rulerPlan && rulerPlan.mode === 'reuse')) {
+      if (rulerPlan && rulerPlan.mode === 'reuse') {
+        // ★内容命中：尺子原始字节**逐字节**落位（不重序列化 ⇒ 装置 frozen_intact 预检不会被误判篡改）
+        const ruler = rulerPlan.ruler || null;
+        const placed = writeRulerCheckerFiles({ runRoot, ruler });
+        if (!placed.ok) {
+          console.log('CHECKER_REUSE=none checker_id=(none) reason=' + placed.reason + ' job=' + job.id);
+          await finishJob({ prisma, jobId: job.id, status: JOB_STATUS.needsRerun, error: 'ruler_' + placed.reason });
+          return { consumed: true, jobId: job.id, runRoot, status: JOB_STATUS.needsRerun, reason: 'ruler_' + placed.reason, reuse: { applied: false, reason: placed.reason } };
+        }
+        // ★不变量：grading_jobs.checker_id == grading_rulers.checker_id == 锚点行.checker_id（不一致会让装置 frozen 预检找不到锚点）
+        if (ruler.checkerId && String(ruler.checkerId) !== String(jobCheckerId)) {
+          try {
+            await prisma.$executeRawUnsafe('UPDATE grading_jobs SET checker_id = ? WHERE id = ?', ruler.checkerId, job.id);
+            console.log('RULER_JOB_CHECKER_ALIGNED job=' + job.id + ' from=' + (jobCheckerId || '(none)') + ' to=' + ruler.checkerId);
+            jobCheckerId = ruler.checkerId;
+          } catch (err) {
+            console.log('RULER_JOB_CHECKER_ALIGN_FAILED job=' + job.id + ' reason=' + String(err && err.message).slice(0, 160));
+            await finishJob({ prisma, jobId: job.id, status: JOB_STATUS.needsRerun, error: 'ruler_job_checker_align_failed' });
+            return { consumed: true, jobId: job.id, runRoot, status: JOB_STATUS.needsRerun, reason: 'ruler_job_checker_align_failed', reuse: { applied: false, reason: 'checker_align_failed' } };
+          }
+        }
+        runArgs = withReuseCheckerArgs(deviceArgs, placed.frozenPath);
+        reuse = { applied: true, checkerId: ruler.checkerId, mode: REUSE_CHECKER_MODE, frozenPath: placed.frozenPath, via: 'ruler_content_key', contentKey: rulerPlan.contentKey, byteExact: placed.byteExact };
+        console.log('CHECKER_REUSE=applied checker_id=' + (ruler.checkerId || '(none)') + ' mode=' + REUSE_CHECKER_MODE + ' frozen=' + placed.frozenPath + ' via=ruler_content_key bytes=' + placed.bytes + ' byte_exact=' + (placed.byteExact ? 'yes' : 'no') + ' job=' + job.id);
+        logger.info({ jobId: job.id, checkerId: ruler.checkerId, contentKey: rulerPlan.contentKey }, 'R2-B35：内容指纹命中 ⇒ 复用尺子（零模型调用）');
+      } else if (!readyChecker) {
         console.log('CHECKER_REUSE=none checker_id=(none) reason=no_ready_checker_for_assignment job=' + job.id);
         await finishJob({ prisma, jobId: job.id, status: JOB_STATUS.needsRerun, error: 'no_ready_checker_for_assignment' });
         logger.warn({ jobId: job.id, assignmentId: job.assignmentId }, 'R2-B10：该作业无 ready 尺子 ⇒ fail-closed 标 needs_rerun（不跑装置、零成本）');
         return { consumed: true, jobId: job.id, runRoot, status: JOB_STATUS.needsRerun, reason: 'no_ready_checker', reuse: { applied: false, reason: 'no_ready_checker_for_assignment' } };
+      } else {
+        const frozenPath = placeCheckerFiles({ runRoot, checkerJson: readyChecker.checkerJson });
+        runArgs = withReuseCheckerArgs(deviceArgs, frozenPath);
+        reuse = { applied: true, checkerId: readyChecker.checkerId, mode: REUSE_CHECKER_MODE, frozenPath };
+        console.log('CHECKER_REUSE=applied checker_id=' + readyChecker.checkerId + ' mode=' + REUSE_CHECKER_MODE + ' frozen=' + frozenPath + ' job=' + job.id);
+        logger.info({ jobId: job.id, checkerId: readyChecker.checkerId, mode: REUSE_CHECKER_MODE }, 'R2-B10：复用已入库尺子（零模型调用）');
       }
-      const frozenPath = placeCheckerFiles({ runRoot, checkerJson: readyChecker.checkerJson });
-      runArgs = withReuseCheckerArgs(deviceArgs, frozenPath);
-      reuse = { applied: true, checkerId: readyChecker.checkerId, mode: REUSE_CHECKER_MODE, frozenPath };
-      console.log('CHECKER_REUSE=applied checker_id=' + readyChecker.checkerId + ' mode=' + REUSE_CHECKER_MODE + ' frozen=' + frozenPath + ' job=' + job.id);
-      logger.info({ jobId: job.id, checkerId: readyChecker.checkerId, mode: REUSE_CHECKER_MODE }, 'R2-B10：复用已入库尺子（零模型调用）');
     } else if (readyChecker) {
       console.log('HINT=ready_checker_exists_consider_--reuse-checker checker_id=' + readyChecker.checkerId + ' job=' + job.id);
     }
 
     // ★R2-B14②：复用拉起装置前回填作业锚点（恢复装置 frozen_intact 预检与 ASSIGNMENT_FROZEN_SHA256）
-    const anchor = await materializeAnchor({ prisma, assignmentId: job.assignmentId, checkerId: job.checkerId, runRoot });
+    const anchor = await materializeAnchor({ prisma, assignmentId: job.assignmentId, checkerId: jobCheckerId, runRoot });
     console.log(anchor.materialized
       ? 'ANCHOR_MATERIALIZED=yes target=' + anchor.target + ' frozen_sha256=' + (anchor.frozenSha256 || 'na') + ' bytes=' + anchor.bytes + ' written_sha256=' + anchor.sha256 + ' sha_matches_anchor=' + (anchor.shaMatchesAnchor ? 'yes' : 'no') + ' n_submissions=' + anchor.nSubmissions
       : 'ANCHOR_MATERIALIZED=no reason=' + anchor.reason + '（历史数据：明确记录并继续，不静默装成功）');
@@ -359,9 +445,29 @@ async function runOnceInner({
     const tailSuffix = tail ? ' :: ' + tail : '';
     console.log('DEVICE_LOGS stdout=' + deviceLogs.stdout + ' stderr=' + deviceLogs.stderr + (tail ? ' tail=' + JSON.stringify(tail) : ''));
 
+    // ★R2-B35：内容命中复用 ⇒ 为该作业补锚点行（**用本作业自己的名单**：device 刚产出的 materials-manifest；
+    //   绝不把别的作业/班级的名单搬过来——否则消费侧 slug 映射会写到错的学生上）
+    if (reuse && reuse.via === 'ruler_content_key') {
+      try {
+        const existingAnchor = await loadAnchor({ prisma, assignmentId: job.assignmentId, checkerId: jobCheckerId });
+        if (existingAnchor) {
+          console.log('ANCHOR_ROW_PRESENT=yes checker_id=' + jobCheckerId + ' n_submissions=' + existingAnchor.nSubmissions);
+        } else {
+          const saved = await persistAnchor({ prisma, assignmentId: job.assignmentId, checkerId: jobCheckerId, runRoot });
+          console.log('ANCHOR_ROW_BACKFILLED=' + (saved.persisted ? 'yes' : 'no')
+            + (saved.persisted ? ' checker_id=' + jobCheckerId + ' frozen_sha256=' + (saved.frozenSha256 || 'na') + ' n_submissions=' + saved.nSubmissions + ' checker_raw_bytes=' + saved.rawBytes : ' reason=' + saved.reason));
+        }
+      } catch (err) {
+        console.log('ANCHOR_ROW_BACKFILL_FAILED reason=' + String(err && err.message).slice(0, 160));
+      }
+    }
+
     const base = { consumed: true, jobId: job.id, runRoot, exitCode: res.exitCode, timedOut: !!res.timedOut, reuse, deviceLogs };
 
     if (res.timedOut) {
+      if (rulerPlan && rulerPlan.mode === 'build') {
+        await failClaimedRuler({ prisma, contentKey: rulerPlan.contentKey, reason: 'timeout:attempt=' + job.attempts + (job.attempts < maxAttempts ? ':retryable' : ':exhausted') });
+      }
       const retryable = job.attempts < maxAttempts;
       await finishJob({
         prisma, jobId: job.id,
@@ -372,27 +478,59 @@ async function runOnceInner({
       return { ...base, status: retryable ? JOB_STATUS.pending : JOB_STATUS.failed, reason: 'timeout', retryable };
     }
 
+    // ★R2-B35：本 worker 拥有造尺权却拿不到可用尺子 ⇒ 让等待者立刻 fail-closed（不产出分数、可重试）
+    const rulerBuildFailed = async (reason) => {
+      if (rulerPlan && rulerPlan.mode === 'build') {
+        await failClaimedRuler({ prisma, contentKey: rulerPlan.contentKey, reason });
+      }
+    };
+
     const checkerPath = resolveCheckerPath(runRoot);
     if (!checkerPath) {
+      await rulerBuildFailed('artifacts_missing:exit=' + res.exitCode + tailSuffix);
       await finishJob({ prisma, jobId: job.id, status: JOB_STATUS.needsRerun, error: 'artifacts_missing:exit=' + res.exitCode + tailSuffix });
       return { ...base, status: JOB_STATUS.needsRerun, reason: 'artifacts_missing' };
     }
     if (Number(res.exitCode) === 5 || Number(res.exitCode) === 6) {
+      await rulerBuildFailed('device_exit_' + res.exitCode + tailSuffix);
       await finishJob({ prisma, jobId: job.id, status: JOB_STATUS.needsRerun, error: 'device_exit_' + res.exitCode + tailSuffix });
       return { ...base, status: JOB_STATUS.needsRerun, reason: 'device_exit_' + res.exitCode };
     }
     if (Number(res.exitCode) !== 0) {
+      await rulerBuildFailed('device_exit_' + res.exitCode + tailSuffix);
       await finishJob({ prisma, jobId: job.id, status: JOB_STATUS.needsRerun, error: 'device_exit_' + res.exitCode + tailSuffix });
       return { ...base, status: JOB_STATUS.needsRerun, reason: 'device_exit_' + res.exitCode };
     }
 
     const stored = await consumeChecker({ prisma, runRoot, assignmentId: job.assignmentId, repoRoot });
     if (!stored.ok) {
+      // ★R2-B35：本次是「内容首次出现、由本 worker 造尺」⇒ 造尺失败要让等待者看到 failed（不产出分数）
+      await rulerBuildFailed('checker_invalid:' + stored.reason);
       await finishJob({ prisma, jobId: job.id, status: JOB_STATUS.needsRerun, error: 'checker_invalid:' + stored.reason });
       return { ...base, status: JOB_STATUS.needsRerun, reason: 'checker_invalid:' + stored.reason };
     }
+    // ★R2-B35：造尺一次 ⇒ 置 ready（写 checker_id/frozen_sha256/原始字节）+ 首次绑定（内容指纹尺子）
+    if (rulerPlan && rulerPlan.mode === 'build') {
+      const anchorInfo = readAnchorFromRunRoot(runRoot);
+      await completeClaimedRuler({
+        prisma, contentKey: rulerPlan.contentKey, checkerId: stored.checkerId,
+        frozenSha256: anchorInfo.frozenSha256 || null, checkerRaw: anchorInfo.checkerRaw || null,
+        model: null, sourceRunId: job.id,
+      });
+      const builtRuler = await findRulerByContentKey(prisma, rulerPlan.contentKey);
+      jobCheckerId = stored.checkerId;
+      const b = await bindResolvedRuler({
+        prisma, assignmentId: job.assignmentId, questionId: rulerPlan.questionId,
+        ruler: builtRuler, contentKey: rulerPlan.contentKey,
+      });
+      if (!b.ok) {
+        console.log('RULER_RESOLVE=bind_conflict content_key=' + rulerPlan.contentKey + ' job=' + job.id + ' reason=' + b.reason);
+        await finishJob({ prisma, jobId: job.id, status: JOB_STATUS.needsRerun, error: 'ruler_bind_conflict' });
+        return { ...base, status: JOB_STATUS.needsRerun, reason: 'ruler_bind_conflict' };
+      }
+    }
     // ★R2-B14①：入库时持久化作业锚点（供后续复用回填；upsert 幂等）
-    const anchorSaved = await persistAnchor({ prisma, assignmentId: job.assignmentId, checkerId: job.checkerId, runRoot });
+    const anchorSaved = await persistAnchor({ prisma, assignmentId: job.assignmentId, checkerId: jobCheckerId, runRoot });
     console.log('ANCHOR_PERSISTED=' + (anchorSaved.persisted ? 'yes' : 'no') + (anchorSaved.persisted ? ' frozen_sha256=' + (anchorSaved.frozenSha256 || 'na') + ' n_submissions=' + anchorSaved.nSubmissions + ' ANCHOR_RAW_PERSISTED=' + (anchorSaved.rawBytes > 0 ? 'yes bytes=' + anchorSaved.rawBytes + ' sha256=' + anchorSaved.rawSha256 : 'no') : ' reason=' + anchorSaved.reason));
 
     const consumed = await consumeMeasureResults({ prisma, runRoot, assignmentId: job.assignmentId });

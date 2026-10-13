@@ -393,6 +393,8 @@ export const getMonitor = async (_req, res) => {
 
 // ===================== AI 配置管理 =====================
 import { clearConfigCache } from '../infrastructure/ai/deepseek/index.js';
+// ★R2-B36：价目表（system_configs.llm_prices）——官方默认值 + 高峰/空闲两档，管理员可读写（本文件已挂在 /api/admin/settings 鉴权之后）
+import { loadLlmPrices, saveLlmPrices } from '../services/dshRunUsageStore.js';
 
 export const getSettings = async (_req, res) => {
   try {
@@ -415,10 +417,16 @@ export const getSettings = async (_req, res) => {
     // 推荐并发：核数×8，最小1，最大128
     const recommended = Math.max(1, Math.min(cpus * 8, 128));
 
+    // ★R2-B36：价目表（有效表 = 官网默认值 + DB 覆盖；缺省/坏配置都返回可用表）
+    const prices = await loadLlmPrices({ prisma });
+
     res.json({
       code: 0,
       data: {
         deepseek_api_key: maskedKey,
+        llm_prices: prices.table,
+        llm_prices_source: prices.source,
+        llm_prices_invalid_reason: prices.invalid_reason || null,
         deepseek_model: map.deepseek_model || process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash',
         deepseek_base_url: map.deepseek_base_url || process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
         ai_concurrency: +map.ai_concurrency || 16,
@@ -437,7 +445,20 @@ export const getSettings = async (_req, res) => {
 
 export const updateSettings = async (req, res) => {
   try {
-    const { deepseek_api_key, deepseek_model, deepseek_base_url, ai_concurrency, dsh_grading_concurrency } = req.body;
+    const { deepseek_api_key, deepseek_model, deepseek_base_url, ai_concurrency, dsh_grading_concurrency, llm_prices } = req.body;
+
+    // ★R2-B36：价目表写接口（校验失败**不改库**并返回可判定 reason）
+    if (llm_prices !== undefined) {
+      let payload = llm_prices;
+      if (typeof payload === 'string') { try { payload = JSON.parse(payload); } catch { return res.status(400).json({ code: 1010, message: 'llm_prices 不是合法 JSON', data: { reason: 'not_json' } }); } }
+      const saved = await saveLlmPrices({ prisma, prices: payload });
+      if (!saved.ok) {
+        logger.warn({ reason: saved.reason }, 'R2-B36：价目表校验失败（未写库）');
+        return res.status(400).json({ code: 1010, message: '价目表格式不合法（未保存）', data: { reason: saved.reason } });
+      }
+      logger.info({ price_version: saved.saved && saved.saved.effective_from }, 'R2-B36：价目表已更新');
+      return res.json({ code: 0, message: '价目表已保存，即时生效', data: { llm_prices: saved.saved } });
+    }
 
     const items = [];
     if (deepseek_api_key !== undefined && deepseek_api_key !== '') {
