@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import prisma from '../../src/utils/prisma.js';
 import { DEVICE_NAMES, EXPORT_MANIFEST_NAME, exportMaterials } from '../../scripts/r2b20-export-materials.mjs';
-import { readZipEntries } from '../../src/services/deterministicZip.js';
+import { readZipEntries } from '../../src/infrastructure/execution/deterministic-zip.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '../..');

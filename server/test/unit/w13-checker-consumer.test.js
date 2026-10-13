@@ -12,7 +12,7 @@ import {
   decideScoreWrite,
   parseValidateOutput,
   resolveCheckerPath,
-} from '../../src/services/dshCheckerConsumer.js';
+} from '../../src/infrastructure/dsh/checker/dshCheckerConsumer.js';
 
 const tmpRoot = () => fs.mkdtempSync(path.join(os.tmpdir(), 'w13-runroot-'));
 

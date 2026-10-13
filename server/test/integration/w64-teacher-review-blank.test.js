@@ -29,6 +29,12 @@ function extractFunction(source, header) {
   throw new Error('unbalanced braces for ' + header);
 }
 
+/** ★R2-B65（t6）：用真实函数体建一个**同步**可执行体（有返回值；与 buildRunner 同口径：不改一字） */
+function buildFunctionRunner(body, name) {
+  // eslint-disable-next-line no-new-func
+  return new Function('sandbox', 'err', 'with (sandbox) { return (function ' + name + '(err) {' + body + '})(err); }');
+}
+
 /** 用真实函数体建一个可执行体（sandbox 内的名字即页面里的名字） */
 function buildRunner(body) {
   // eslint-disable-next-line no-new-func
@@ -60,15 +66,24 @@ describe('W64 U-1「返回后空白」根因复现（R2-B47）', () => {
   it('★W64-1 ReviewClass.fetch：请求失败 ⇒ loading 必复位 + 错态可读（旧实现停在 loading ⇒ 空白）', async () => {
     const src = readSfc('ReviewClass.vue');
     const body = extractFunction(src, 'async function fetch(');
+    // ★R2-B65（t6 修复）：fetch 体现已改为 `loadError.value = friendlyLoadError(e)`（R2-B54：原始错误只进 console、不上屏）。
+    //   sandbox 注入**同一 SFC 里真实的 friendlyLoadError 函数体**（与 fetch 同一种抽取方式，不改一字），不用手写替身。
+    const friendlyRunner = buildFunctionRunner(extractFunction(src, 'function friendlyLoadError('), 'friendlyLoadError');
+    const runFriendly = (err) => friendlyRunner({ console: { error: () => {} } }, err);
     // ① 失败路径
-    const fail = makeSandbox({ request: { get: async () => { const e = new Error('boom'); e.response = { status: 500, data: { message: '服务器内部错误' } }; throw e; } } });
+    const fail = makeSandbox({
+      friendlyLoadError: runFriendly,
+      request: { get: async () => { const e = new Error('boom'); e.response = { status: 500, data: { message: '服务器内部错误' } }; throw e; } },
+    });
     // 让请求"挂起"也行：这里直接抛错，等价于 4xx/5xx/网络失败
     await buildRunner(body)(fail);
     expect(fail.loading.value).toBe(false);        // ★关键：旧代码此处置 true ⇒ 页面永久 loading/空白
     expect(fail.list.value).toEqual([]);
-    expect(fail.loadError.value).toContain('服务器内部错误');
+    expect(fail.loadError.value).toBe('数据加载失败，请重试');    // ★R2-B54 口径：错态可读（固定友好文案）
+    expect(fail.loadError.value).not.toContain('服务器内部错误');      // ★原始错误只进 console，不上屏（不泄漏内部信息）
     // ② 成功路径
     const ok = makeSandbox({
+      friendlyLoadError: runFriendly,
       request: { get: async () => ({ data: { list: [{ id: 1, studentName: '张三', assignmentTitle: 'T', className: 'C' }], total: 3 } }) },
     });
     await buildRunner(body)(ok);

@@ -4,7 +4,6 @@
  * ★测试禁止真实调用模型：一律注入假 callModel（可计数），并断言"命中缓存 ⇒ 零调用"。
  * 仅测试库；自建 run-root 与行，afterAll 清理。
  */
-import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,8 +12,8 @@ import prisma from '../../src/utils/prisma.js';
 import {
   SUMMARIES_REL, SUMMARIES_SCHEMA, SUMMARY_PROMPT_VERSION, buildSummariesDoc, parseSummariesDoc, loadSummaries,
   contentKeyOf, resultDigestOf, summaryKeyOf, extractSummaryFacts, buildSummaryPrompt, runSummarySession,
-} from '../../src/services/dshSummarySession.js';
-import { buildWriteback, listMeasureResults, consumeMeasureResults } from '../../src/services/dshCheckerConsumer.js';
+} from '../../src/infrastructure/dsh/checker/dshSummarySession.js';
+import { buildWriteback, listMeasureResults, consumeMeasureResults } from '../../src/infrastructure/dsh/checker/dshCheckerConsumer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(__dirname, '..', '..', '..');
@@ -82,7 +81,7 @@ describe('W65 会话内总评（R2-B48）', () => {
     expect(rt.doc.schema).toBe(SUMMARIES_SCHEMA);
     expect(Object.keys(rt.doc.summaries)).toEqual([env.slug]);
     expect(loadSummaries(root).bySlug.get(env.slug).cache_hit).toBe(false);
-    // 形状同构：解析器只依赖 summary.text/facts/truncated ⇒ 前端零改动（W65-6 另有 diff 断言）
+    // 形状同构：解析器只依赖 summary.text/facts/truncated ⇒ 前端零改动（W65-6 另有「两页消费同一解析器」静态断言）
     const withTrunc = buildSummariesDoc({ entries: { s1: { text: 't', truncated: true, facts: { failed_count: 13 } }, s2: { facts: {} } } });
     const p2 = parseSummariesDoc(JSON.stringify(withTrunc));
     expect(p2.ok).toBe(true);
@@ -213,14 +212,18 @@ describe('W65 会话内总评（R2-B48）', () => {
     cleanup.cacheKeys.push(summaryKeyOf(contentKeyOf({ standardHash: 'sha256:' + '2'.repeat(64) }), resultDigestOf(ITEMS)));
   }, 120000);
 
-  it('★W65-6 前端零改动：解析器与两个教师页 diff 为空；新形状可被同一解析器解析', async () => {
-    const paths = [
-      'client/src/composables/review/parseCheckerFeedback.js',
-      'client/src/views/teacher/ReviewDetail.vue',
-      'client/src/views/teacher/ProjectReviewNew.vue',
-    ];
-    const r = spawnSync('git', ['diff', '--quiet', 'HEAD', '--', ...paths], { cwd: REPO, encoding: 'utf8' });
-    expect(r.status).toBe(0);                                            // ★零改动（无 diff）
+  it('★W65-6 前端零改动：两页仍消费同一共享解析器（静态契约，不再用 git diff 表达）；新形状可被同一解析器解析', async () => {
+    // ★R2-B65（t6 修复）：原断言用 `git diff --quiet HEAD -- 三文件` 表达"前端零改动"⇒ 把**工作区是否已提交**当契约：
+    //   任何改动这三处的批次在**未提交**时必红、提交后自愈（fe-engineer/队长两次实测）。这里改为**等义的静态契约**：
+    //   两页必须仍消费**同一**共享解析器（composables/review/parseCheckerFeedback.js），且不得各自内联复制解析实现。
+    const parserRel = 'client/src/composables/review/parseCheckerFeedback.js';
+    expect(fs.existsSync(path.resolve(REPO, parserRel))).toBe(true);              // 唯一真值源存在
+    for (const rel of ['client/src/views/teacher/ReviewDetail.vue', 'client/src/views/teacher/ProjectReviewNew.vue']) {
+      const pageSrc = fs.readFileSync(path.resolve(REPO, rel), 'utf8');
+      expect(pageSrc).toContain("from '../../composables/review/parseCheckerFeedback.js'");  // 同一模块（非各自副本）
+      expect(pageSrc).toMatch(/parseCheckerFeedback\(/);                                     // 确实消费该解析器
+      expect(pageSrc).not.toMatch(/function\s+parseCheckerFeedback(Text)?\s*\(/);            // 不得内联实现
+    }
     const mod = await import('../../../client/src/composables/review/parseCheckerFeedback.js');
     const parse = mod.parseCheckerFeedbackText || mod.parseCheckerFeedback;
     const parsed = parse(JSON.stringify({

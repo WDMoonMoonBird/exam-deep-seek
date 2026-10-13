@@ -105,7 +105,7 @@ async function listProjectsFromDb(assignmentId, prisma) {
     },
     orderBy: { id: 'asc' },
   });
-  const { parseProjectAnswer } = await import('../src/utils/projectView.js');
+  const { parseProjectAnswer } = await import('../src/domain/services/project-view.js');
   const { standardDir, submissionDir } = await import('../src/utils/projectPaths.js');
   const out = [];
   for (const s of subs) {

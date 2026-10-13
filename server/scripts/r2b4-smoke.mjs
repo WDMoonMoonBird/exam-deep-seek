@@ -11,7 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { PrismaClient } from '@prisma/client';
-import { runOnce, createGate } from '../src/services/dshGradingJobWorker.js';
+import { runOnce, createGate } from '../src/infrastructure/dsh/worker/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '..');

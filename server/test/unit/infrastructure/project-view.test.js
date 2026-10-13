@@ -5,7 +5,7 @@
 import {
   parseProjectAnswer, serializeProjectAnswer,
   canStudentSeeScore, toStudentView, toTeacherView,
-} from '../../../src/utils/projectView.js';
+} from '../../../src/domain/services/project-view.js';
 
 describe('parseProjectAnswer — answer JSON 解析', () => {
   it('null/undefined → 空信封', () => {

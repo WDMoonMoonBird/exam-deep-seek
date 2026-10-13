@@ -12,7 +12,7 @@ import {
   createGate,
   finishJob,
   runOnce,
-} from '../../src/services/dshGradingJobWorker.js';
+} from '../../src/infrastructure/dsh/worker/index.js';
 
 /** 极简假 prisma：只实现 worker 用到的四个方法 */
 function fakePrisma({ initialJobs = [], affectedByClaim = 1 } = {}) {

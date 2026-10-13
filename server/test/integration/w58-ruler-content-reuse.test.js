@@ -16,12 +16,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import prisma from '../../src/utils/prisma.js';
-import { sha256Hex, standardDirDigest, UPLOADS_ROOT_ENV, rubricContentSha256 } from '../../src/services/dshRulerContentKey.js';
+import { sha256Hex, standardDirDigest, UPLOADS_ROOT_ENV, rubricContentSha256 } from '../../src/infrastructure/dsh/ruler/dshRulerContentKey.js';
 import {
   bindResolvedRuler, completeClaimedRuler, failClaimedRuler, loadBoundRuler, resolveAssignmentContent,
   resolveRulerForAssignment,
-} from '../../src/services/dshRulerAssignment.js';
-import { findRulerByContentKey } from '../../src/services/dshRulerStore.js';
+} from '../../src/infrastructure/dsh/ruler/dshRulerAssignment.js';
+import { findRulerByContentKey } from '../../src/infrastructure/dsh/ruler/dshRulerStore.js';
 
 const TAG = 'w58-ruler-' + Date.now();
 const uploadsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'w58-ruler-uploads-'));

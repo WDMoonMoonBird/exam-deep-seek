@@ -6,8 +6,8 @@
  */
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
-import { resolveRulerForAssignment } from '../services/dshRulerAssignment.js';
-import { setJobContentKey } from '../services/dshRulerStore.js';
+import { resolveRulerForAssignment } from '../infrastructure/dsh/ruler/dshRulerAssignment.js';
+import { setJobContentKey } from '../infrastructure/dsh/ruler/dshRulerStore.js';
 
 /** 活动态（占用「活动键」的状态）：每 (assignment, checker) 至多一行 */
 export const ACTIVE_JOB_STATUSES = ['pending', 'running'];

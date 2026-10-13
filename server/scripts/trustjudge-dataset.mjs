@@ -32,7 +32,7 @@ import {
   estimateTokens,
   BUDGET_TOKENS,
 } from '../src/services/projectContextBuilder.js';
-import { parseProjectAnswer } from '../src/utils/projectView.js';
+import { parseProjectAnswer } from '../src/domain/services/project-view.js';
 import { isIgnored } from '../src/utils/fileTree.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

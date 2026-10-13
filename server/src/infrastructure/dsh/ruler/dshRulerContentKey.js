@@ -28,7 +28,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { zipDirectory } from './deterministicZip.js';
+import { zipDirectory } from '../../execution/deterministic-zip.js';
 import { dirSha256 } from '../utils/snapshotHash.js';
 import { standardDir, UPLOADS_ROOT } from '../utils/projectPaths.js';
 

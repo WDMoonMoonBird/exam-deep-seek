@@ -15,7 +15,7 @@ const REPO = path.resolve(__dirname, '../../..');
 const LIB = path.join(REPO, 'scripts/dsh-grader/lib.sh');
 const RUN = path.join(REPO, 'scripts/dsh-grader/run.sh');
 const ARCHIVER = path.join(REPO, 'server/src/services/dshRunArchiver.js');
-const WORKER = path.join(REPO, 'server/src/services/dshGradingJobWorker.js');
+const WORKER = path.join(REPO, 'server/src/infrastructure/dsh/worker/run-once.js');
 
 function bash(script) {
   return spawnSync('bash', ['-c', script], { encoding: 'utf8', cwd: REPO, env: { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: os.tmpdir() } });

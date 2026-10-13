@@ -5,7 +5,13 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { getGradingRun, getGradingRunLog, listGradingRuns, maskSecrets, safeArchiveDir } from '../../src/controllers/adminGradingRunsController.js';
+import { getGradingRun, getGradingRunLog, listGradingRuns } from '../../src/interface/http/controllers/admin/grading-runs/index.js';
+import { maskSecrets, safeArchiveDir } from '../../src/infrastructure/dsh/runs/archive-fs.js';
+import { createDshRunsReadModel } from '../../src/infrastructure/dsh/runs/read-model.js';
+import { setDshRunsReadModel } from '../../src/interface/http/controllers/admin/grading-runs/deps.js';
+
+// ★R2-B65：本套用 handler 直调（无 req.app）⇒ 显式注入读模型；生产由组合根 compose() 挂 app.locals.dshRuns（同源实现）
+setDshRunsReadModel(createDshRunsReadModel());
 
 const RUNS_ROOT_ENV = 'DSH_GRADER_RUNS_ROOT';
 const OLD_ROOT = process.env[RUNS_ROOT_ENV];
@@ -145,7 +151,17 @@ describe('W56 管理员批改记录（只读接口语义）', () => {
   });
 
   it('★W56-6 只读结构守卫：控制器无任何写路径；路由只有 GET', () => {
-    const ctrl = fs.readFileSync(path.resolve(process.cwd(), 'src/controllers/adminGradingRunsController.js'), 'utf8');
+    // ★R2-B65：控制器已按分层拆分为多文件（interface 三 handler + infrastructure 读模型/归档只读层），
+    //   断言口径不变（无写路径 + 有 $queryRawUnsafe），改为对**拆分后的文件集合**求并集。
+    const ctrlFiles = [
+      ['src', 'interface', 'http', 'controllers', 'admin', 'grading-runs', 'list.js'],
+      ['src', 'interface', 'http', 'controllers', 'admin', 'grading-runs', 'detail.js'],
+      ['src', 'interface', 'http', 'controllers', 'admin', 'grading-runs', 'log.js'],
+      ['src', 'interface', 'http', 'controllers', 'admin', 'grading-runs', 'deps.js'],
+      ['src', 'infrastructure', 'dsh', 'runs', 'read-model.js'],
+      ['src', 'infrastructure', 'dsh', 'runs', 'archive-fs.js'],
+    ];
+    const ctrl = ctrlFiles.map((seg) => fs.readFileSync(path.resolve(process.cwd(), ...seg), 'utf8')).join('\n');
     // 只禁「数据库写/文件写」，不禁 Map/Set 的 .delete（避免误伤 byJob.delete）
     for (const bad of ['$executeRawUnsafe', '$executeRaw(', 'prisma.assignment.create', '.upsert(', 'fs.writeFileSync', 'fs.rmSync', 'fs.mkdirSync', 'fs.appendFileSync']) {
       expect(ctrl.includes(bad)).toBe(false);

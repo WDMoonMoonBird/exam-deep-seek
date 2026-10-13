@@ -4,7 +4,7 @@
  */
 import prisma from '../../src/utils/prisma.js';
 import { triggerAssignmentGrading, ACTIVE_JOB_STATUSES } from '../../src/controllers/assignmentGradingController.js';
-import { finishJob, runOnce } from '../../src/services/dshGradingJobWorker.js';
+import { finishJob, runOnce } from '../../src/infrastructure/dsh/worker/index.js';
 
 const tag = 'w34-activekey-' + Date.now();
 let assignmentId = null;

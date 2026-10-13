@@ -2,8 +2,8 @@
  * W17（R2-B5）：常驻循环的纯语义 —— 空闲退避、失败退避与上限、优雅退出（可打断睡眠）、DB 级闸的 SQL 形态。
  * 不触库、不起服务。
  */
-import { EXIT, nextBackoff, parseWorkerConfig, runWorkerLoop, sleepInterruptible } from '../../src/services/dshGradingWorkerRuntime.js';
-import { buildClaimSql } from '../../src/services/dshGradingJobWorker.js';
+import { EXIT, nextBackoff, parseWorkerConfig, runWorkerLoop, sleepInterruptible } from '../../src/infrastructure/dsh/worker/dshGradingWorkerRuntime.js';
+import { buildClaimSql } from '../../src/infrastructure/dsh/worker/index.js';
 
 describe('W17 配置与退避', () => {
   it('W17-1 parseWorkerConfig：默认值可被环境覆盖（空闲/上限/失败/次数/DB 闸）', () => {

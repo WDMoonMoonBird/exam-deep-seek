@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEVICE_NAMES, assertExportAuthorized, buildAssignmentMd, resolveStudentZipName } from '../../scripts/r2b20-export-materials.mjs';
-import { buildZip, readZipEntries, zipDirectory } from '../../src/services/deterministicZip.js';
+import { buildZip, readZipEntries, zipDirectory } from '../../src/infrastructure/execution/deterministic-zip.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(__dirname, '../../..');

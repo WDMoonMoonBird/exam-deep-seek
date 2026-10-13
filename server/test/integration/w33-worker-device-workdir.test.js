@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import prisma from '../../src/utils/prisma.js';
-import { runOnce, withWorkdirArg } from '../../src/services/dshGradingJobWorker.js';
+import { runOnce, withWorkdirArg } from '../../src/infrastructure/dsh/worker/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '../..');

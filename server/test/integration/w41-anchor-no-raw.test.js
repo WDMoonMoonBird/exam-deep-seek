@@ -8,8 +8,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import prisma from '../../src/utils/prisma.js';
-import { ASSIGNMENT_MANIFEST_REL, CHECKER_FROZEN_REL, CHECKER_JSON_REL, loadAnchor, materializeAnchor } from '../../src/services/dshGradingAnchor.js';
-import { consumeMeasureResults, deriveSlugMapFromRunRoot } from '../../src/services/dshCheckerConsumer.js';
+import { ASSIGNMENT_MANIFEST_REL, CHECKER_FROZEN_REL, CHECKER_JSON_REL, loadAnchor, materializeAnchor } from '../../src/infrastructure/dsh/runs/dshGradingAnchor.js';
+import { consumeMeasureResults, deriveSlugMapFromRunRoot } from '../../src/infrastructure/dsh/checker/dshCheckerConsumer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '../..');

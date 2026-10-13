@@ -13,7 +13,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { SUBMISSIONS_ROOT, UPLOADS_ROOT, standardDir } from '../src/utils/projectPaths.js';
-import { readZipEntries, zipDirectory } from '../src/services/deterministicZip.js';
+import { readZipEntries, zipDirectory } from '../src/infrastructure/execution/deterministic-zip.js';
 import { resolveSnapshot } from '../src/services/assignmentSnapshot.js';
 
 const __filename = fileURLToPath(import.meta.url);

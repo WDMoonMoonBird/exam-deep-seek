@@ -7,8 +7,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import prisma from '../../src/utils/prisma.js';
-import { DEFAULT_STALE_RUNNING_MS, RECLAIM_REASON_CONFLICT, RECLAIM_REASON_FAILED, RECLAIM_REASON_PENDING, formatReclaimSummary, reclaimStaleRunning, resolveStaleMs } from '../../src/services/dshStaleJobReclaimer.js';
-import { runOnce } from '../../src/services/dshGradingJobWorker.js';
+import { DEFAULT_STALE_RUNNING_MS, RECLAIM_REASON_CONFLICT, RECLAIM_REASON_FAILED, RECLAIM_REASON_PENDING, formatReclaimSummary, reclaimStaleRunning, resolveStaleMs } from '../../src/infrastructure/dsh/worker/dshStaleJobReclaimer.js';
+import { runOnce } from '../../src/infrastructure/dsh/worker/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '../..');

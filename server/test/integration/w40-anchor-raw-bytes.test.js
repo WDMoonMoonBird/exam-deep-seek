@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import prisma from '../../src/utils/prisma.js';
-import { ASSIGNMENT_MANIFEST_REL, CHECKER_FROZEN_REL, CHECKER_JSON_REL, loadAnchor, materializeAnchor, persistAnchor, readAnchorFromRunRoot } from '../../src/services/dshGradingAnchor.js';
+import { ASSIGNMENT_MANIFEST_REL, CHECKER_FROZEN_REL, CHECKER_JSON_REL, loadAnchor, materializeAnchor, persistAnchor, readAnchorFromRunRoot } from '../../src/infrastructure/dsh/runs/dshGradingAnchor.js';
 
 const tag = 'w40-raw-' + Date.now();
 let assignmentId = null;

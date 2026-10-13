@@ -14,7 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import prisma from '../../src/utils/prisma.js';
-import { buildWriteback, consumeMeasureResults, loadGradingResultIndex, normalizeDetailDoc } from '../../src/services/dshCheckerConsumer.js';
+import { buildWriteback, consumeMeasureResults, loadGradingResultIndex, normalizeDetailDoc } from '../../src/infrastructure/dsh/checker/dshCheckerConsumer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '../..');
@@ -297,7 +297,7 @@ describe('W61 AI 评分依据（R2-B41）', () => {
   }, 120000);
 
   it('★W61-7 CAP-BF-3：复用运行归档聚合逐份分项；build 路径逐字节保留；聚合确定 + 回填可直吃', async () => {
-    const { archiveRun, aggregateDetailResults } = await import('../../src/services/dshRunArchiver.js');
+    const { archiveRun, aggregateDetailResults } = await import('../../src/infrastructure/dsh/runs/dshRunArchiver.js');
     const jobId = 900000 + (Date.now() % 80000);
     const runsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'w61-runs-'));
     cleanup.roots.push(runsRoot);

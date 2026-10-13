@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import prisma from '../../src/utils/prisma.js';
-import { consumeChecker, consumeMeasureResults } from '../../src/services/dshCheckerConsumer.js';
+import { consumeChecker, consumeMeasureResults } from '../../src/infrastructure/dsh/checker/dshCheckerConsumer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '../..');

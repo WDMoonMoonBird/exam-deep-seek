@@ -8,9 +8,9 @@ import fs from 'fs';
 import path from 'path';
 import prisma from '../../utils/prisma.js';
 import logger from '../../utils/logger.js';
-import { parseProjectAnswer, toTeacherView } from '../../utils/projectView.js';
+import { parseProjectAnswer, toTeacherView } from '../../domain/services/project-view.js';
 import { submissionDir, standardDir, ROOT } from '../../utils/projectPaths.js';
-import { readProjectTree } from '../../utils/projectFiles.js';
+import { readProjectTree } from '../storage/project-files.js';
 import { isStudentVisibleToTeacher } from './scope.js';
 import { loadAssignmentSnapshot, resolveSnapshot } from '../../services/assignmentSnapshot.js';
 

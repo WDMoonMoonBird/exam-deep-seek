@@ -150,7 +150,22 @@ function main() {
   process.exit(out.verdict === 'PASS' ? 0 : 1);
 }
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(import.meta.filename);
-if (isMain) {
+/**
+ * 是否作为入口直接执行（★B70-F2）：两侧都取 realpath ⇒ 经**符号链接路径**（macOS /tmp、容器 bind mount、
+ * 任何用符号链接拼写的绝对路径）调用也必须判为 main。旧实现用 path.resolve 比较字面路径，符号链接下判 false
+ * ⇒ fail-open：rc=0 且 stdout 0 字节（门禁根本没跑，比红更危险）。
+ */
+function isMainModule() {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return fs.realpathSync(path.resolve(entry)) === fs.realpathSync(import.meta.filename);
+  } catch {
+    // realpath 不可得（入口路径异常）时退化为字面比较：只有确实同路径才执行，仍 fail-closed
+    return path.resolve(entry) === path.resolve(import.meta.filename);
+  }
+}
+
+if (isMainModule()) {
   try { main(); } catch (e) { console.error('门禁执行错误：' + e.message); process.exit(2); }
 }

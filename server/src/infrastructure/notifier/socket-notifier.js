@@ -4,7 +4,7 @@
  * 未来可替换为事件总线订阅方式而不影响调用方。
  */
 
-import { notifyGraded as emitGraded } from '../../socket.js';
+import { notifyGraded as emitGraded } from './socket-server.js';
 
 export class SocketNotifier {
   async notifyGraded(schoolId, payload) {

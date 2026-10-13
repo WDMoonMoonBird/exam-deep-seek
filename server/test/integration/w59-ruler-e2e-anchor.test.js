@@ -10,9 +10,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import prisma from '../../src/utils/prisma.js';
-import { sha256Hex, standardDirDigest, UPLOADS_ROOT_ENV, rubricContentSha256 } from '../../src/services/dshRulerContentKey.js';
-import { completeClaimedRuler, resolveAssignmentContent, resolveRulerForAssignment } from '../../src/services/dshRulerAssignment.js';
-import { findRulerByContentKey } from '../../src/services/dshRulerStore.js';
+import { sha256Hex, standardDirDigest, UPLOADS_ROOT_ENV, rubricContentSha256 } from '../../src/infrastructure/dsh/ruler/dshRulerContentKey.js';
+import { completeClaimedRuler, resolveAssignmentContent, resolveRulerForAssignment } from '../../src/infrastructure/dsh/ruler/dshRulerAssignment.js';
+import { findRulerByContentKey } from '../../src/infrastructure/dsh/ruler/dshRulerStore.js';
 import { exportMaterials } from '../../scripts/r2b20-export-materials.mjs';
 import { authReq, getTestData, loginAsTeacher } from './helpers.js';
 
@@ -311,7 +311,7 @@ describe('W59 尺子内容化端到端（老锚点/worker/r2b7/HTTP/导出）', 
     await deleteRulers([c.contentKey]);
     const r0 = await resolveRulerForAssignment({ prisma, assignmentId: a, questionId: c.questionId, mode: 'build', log: mkLog() });
     expect(r0.status).toBe('claimed_here');
-    const { failClaimedRuler } = await import('../../src/services/dshRulerAssignment.js');
+    const { failClaimedRuler } = await import('../../src/infrastructure/dsh/ruler/dshRulerAssignment.js');
     await failClaimedRuler({ prisma, contentKey: c.contentKey, reason: '夹具：装置造尺失败' });
     const job = await prisma.gradingJob.create({ data: { assignmentId: a, checkerId: 'probe-fail-' + TAG, status: 'pending' } });
     cleanup.jobIds.push(job.id);
@@ -372,7 +372,7 @@ describe('W59 尺子内容化端到端（老锚点/worker/r2b7/HTTP/导出）', 
     // 造尺失败的尺子 ⇒ 409 RULER_FAILED（fail-closed）
     const r3 = await resolveRulerForAssignment({ prisma, assignmentId: a3, questionId: c3.questionId, mode: 'build', log: mkLog() });
     expect(r3.status).toBe('claimed_here');
-    const { failClaimedRuler } = await import('../../src/services/dshRulerAssignment.js');
+    const { failClaimedRuler } = await import('../../src/infrastructure/dsh/ruler/dshRulerAssignment.js');
     await failClaimedRuler({ prisma, contentKey: c3.contentKey, reason: 'HTTP 夹具失败' });
     const failed = await r.post('/api/teacher/assignments/' + a3 + '/grade');
     expect(failed.status).toBe(409);
@@ -399,8 +399,8 @@ describe('W59 尺子内容化端到端（老锚点/worker/r2b7/HTTP/导出）', 
   }, 120000);
 
   it('★W59-8 O1/O2（R2-B38）：无锚点原始字节时**重序列化登记**必须与 frozen_sha256 对账；失败原因前缀归一', async () => {
-    const { registerRulerFromLocalChecker } = await import('../../src/services/dshRulerAssignment.js');
-    const { composeFailedReason } = await import('../../src/services/dshRulerStore.js');
+    const { registerRulerFromLocalChecker } = await import('../../src/infrastructure/dsh/ruler/dshRulerAssignment.js');
+    const { composeFailedReason } = await import('../../src/infrastructure/dsh/ruler/dshRulerStore.js');
     // ── O2：前缀归一（w58 场景逐字不变；嵌套前缀被剥掉，不再产生 ruler_failed:ruler_failed:…）
     expect(composeFailedReason('装置造尺失败(夹具)')).toBe('ruler_failed:装置造尺失败(夹具)');
     expect(composeFailedReason('ruler_failed:嵌套')).toBe('ruler_failed:嵌套');

@@ -6,8 +6,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import prisma from '../../src/utils/prisma.js';
 import { cleanupOrphanGradingRows } from '../setup.js';
-import { buildClaimSql, runOnce } from '../../src/services/dshGradingJobWorker.js';
-import { DEFAULT_CLOCK_TOLERANCE_MS, RECLAIM_REASON_CLOCK_AHEAD, RECLAIM_REASON_CLOCK_AHEAD_CONFLICT, RECLAIM_REASON_CLOCK_AHEAD_EXHAUSTED, formatReclaimSummary, reclaimStaleRunning, resolveClockToleranceMs, toleranceSeconds } from '../../src/services/dshStaleJobReclaimer.js';
+import { buildClaimSql, runOnce } from '../../src/infrastructure/dsh/worker/index.js';
+import { DEFAULT_CLOCK_TOLERANCE_MS, RECLAIM_REASON_CLOCK_AHEAD, RECLAIM_REASON_CLOCK_AHEAD_CONFLICT, RECLAIM_REASON_CLOCK_AHEAD_EXHAUSTED, formatReclaimSummary, reclaimStaleRunning, resolveClockToleranceMs, toleranceSeconds } from '../../src/infrastructure/dsh/worker/dshStaleJobReclaimer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '../..');

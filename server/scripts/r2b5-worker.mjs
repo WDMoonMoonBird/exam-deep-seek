@@ -16,11 +16,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PrismaClient } from '@prisma/client';
-import { runOnce } from '../src/services/dshGradingJobWorker.js';
-import { EXIT, parseWorkerConfig, runWorkerLoop } from '../src/services/dshGradingWorkerRuntime.js';
-import { describeLlmConfig, llmEnv, readPlatformLlmConfig } from '../src/services/dshPlatformLlmConfig.js';
-import { checkTimeoutVsStale, formatReclaimSummary, reclaimStaleRunning, resolveClockToleranceMs, resolveStaleMs } from '../src/services/dshStaleJobReclaimer.js';
-import { MATERIALS_ROOT_ENV, formatMaterialsRoot } from '../src/services/dshMaterialsResolver.js';
+import { runOnce } from '../src/infrastructure/dsh/worker/index.js';
+import { EXIT, parseWorkerConfig, runWorkerLoop } from '../src/infrastructure/dsh/worker/dshGradingWorkerRuntime.js';
+import { describeLlmConfig, llmEnv, readPlatformLlmConfig } from '../src/infrastructure/dsh/config/dshPlatformLlmConfig.js';
+import { checkTimeoutVsStale, formatReclaimSummary, reclaimStaleRunning, resolveClockToleranceMs, resolveStaleMs } from '../src/infrastructure/dsh/worker/dshStaleJobReclaimer.js';
+import { MATERIALS_ROOT_ENV, formatMaterialsRoot } from '../src/infrastructure/dsh/materials/dshMaterialsResolver.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '..');

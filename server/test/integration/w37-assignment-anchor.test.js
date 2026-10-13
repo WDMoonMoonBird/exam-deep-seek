@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import prisma from '../../src/utils/prisma.js';
-import { ASSIGNMENT_MANIFEST_REL, loadAnchor, materializeAnchor, persistAnchor, readAnchorFromRunRoot } from '../../src/services/dshGradingAnchor.js';
+import { ASSIGNMENT_MANIFEST_REL, loadAnchor, materializeAnchor, persistAnchor, readAnchorFromRunRoot } from '../../src/infrastructure/dsh/runs/dshGradingAnchor.js';
 
 const tag = 'w37-anchor-' + Date.now();
 let assignmentId = null;

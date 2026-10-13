@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { start, stop } from './services/gradingWorker.js';
+import { start, stop } from './infrastructure/worker/grading-worker.js';
 
 process.on('SIGINT', () => {
   stop();

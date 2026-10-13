@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { shapeUsageBlock, shapeSummarySession, usageListFields, costSplit } from '../../src/controllers/adminGradingRunsController.js';
+import { shapeUsageBlock, shapeSummarySession, usageListFields, costSplit } from '../../src/infrastructure/dsh/runs/read-model.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT = path.resolve(__dirname, '..', '..', '..', 'client');
@@ -105,7 +105,7 @@ describe('W66 监测呈现侧：判据 / 评语分账（R2-B49）', () => {
       expect(txt).toContain(s);
     }
     // 口径注释落在服务端（单一真值源）
-    const ctrl = fs.readFileSync(path.resolve(__dirname, '..', '..', 'src', 'controllers', 'adminGradingRunsController.js'), 'utf8');
+    const ctrl = fs.readFileSync(path.resolve(__dirname, '..', '..', 'src', 'infrastructure', 'dsh', 'runs', 'read-model.js'), 'utf8');
     expect(ctrl).toContain('尺子零 LLM；评语（总评）按需生成、单独计量、可关');
     expect(ctrl).toContain('summary_session');
   }, 60000);

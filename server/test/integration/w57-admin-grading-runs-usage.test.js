@@ -3,7 +3,7 @@
  *
  * 覆盖：①鉴权与只读（未登录 401/403；非 GET 无路由）；②列表增列 cost_total/cost_currency/cache_hit_rate/no_model_session；
  * ③详情三块 usage/meta/tools 字段齐备（meta 含老师/班级全量/作业名+ID/标准工程包短 sha+文件名+可折叠 manifest/题目描述/评分标准快照）；
- * ④零 LLM ⇒ no_model_session=true（页面文案「本次无模型会话（零 token）」在 §源码契约 断言）；
+ * ④零 LLM ⇒ no_model_session=true（页面文案「本次运行无模型会话…token 全 0」在 §源码契约 断言）；
  * ⑤空数据/表缺失 ⇒ 200 且 usage=null + reason（不 500、不显示假 0）；⑥前端 BASE_URL 铁律（无裸根路径）。
  * 仅测试库；归档根用临时目录（DSH_GRADER_RUNS_ROOT）；探针自清理。
  */
@@ -242,7 +242,7 @@ describe('W57-U 批改记录：用量/元信息/工具调用（R2-B37）', () =>
     expect(d.read_only).toBe(true);
   }, 120000);
 
-  it('W57-U4 ★零 LLM：usage 全 0 + no_model_session=true（列表与详情一致）；页面文案「本次无模型会话（零 token）」存在', async () => {
+  it('W57-U4 ★零 LLM：usage 全 0 + no_model_session=true（列表与详情一致）；页面文案「本次运行无模型会话…token 全 0」存在', async () => {
     const admin = authReq(token);
     const res = await admin.get('/api/admin/grading-runs/job-' + jobIdZero);
     const d = res.body.data;
@@ -256,7 +256,8 @@ describe('W57-U 批改记录：用量/元信息/工具调用（R2-B37）', () =>
     expect(d.run.no_model_session).toBe(true);
     // 页面文案（源码契约：零 LLM 语义必须可见）
     const page = fs.readFileSync(CLIENT_PAGE, 'utf8');
-    expect(page).toContain('本次无模型会话（零 token）');
+    expect(page).toContain('本次运行无模型会话');            // ★R2-B65（t6 修复）：页面实际零 LLM 文案（原文案字符串不存在，HEAD 即红）
+    expect(page).toContain('token 全 0');                 // ★零 LLM 口径：token 全 0 + 不伪造费用
   }, 120000);
 
   it('W57-U5 ★空数据语义：无用例行（旧运行）⇒ 200 + usage=null + reason；列表同列为 null（不显示假 0）', async () => {
@@ -316,7 +317,8 @@ describe('W57-U 批改记录：用量/元信息/工具调用（R2-B37）', () =>
     expect(page).toContain('用量');
     expect(page).toContain('元信息');
     expect(page).toContain('工具调用');
-    expect(page).toContain('本次无模型会话（零 token）');
+    expect(page).toContain('本次运行无模型会话');            // ★R2-B65（t6 修复）：页面实际零 LLM 文案（原文案字符串不存在，HEAD 即红）
+    expect(page).toContain('token 全 0');                 // ★零 LLM 口径：token 全 0 + 不伪造费用
     // ★队长追加：列表与详情中文化（中文标签为主；英文原键保留在 tooltip/小字里）
     for (const zh of ['批改运行', '造尺运行', '装置退出码', '已量尺', '不可量', '无法评分', '未写分', '已写分',
       '销毁范围', '会话是否销毁', '会话文件数（前 → 后）', '会话字节数', '凭据是否删除', '隔离目录是否保留',

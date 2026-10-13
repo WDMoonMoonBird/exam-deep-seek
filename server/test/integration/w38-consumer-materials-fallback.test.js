@@ -8,7 +8,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import prisma from '../../src/utils/prisma.js';
-import { consumeMeasureResults, deriveSlugMapFromRunRoot } from '../../src/services/dshCheckerConsumer.js';
+import { consumeMeasureResults, deriveSlugMapFromRunRoot } from '../../src/infrastructure/dsh/checker/dshCheckerConsumer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '../..');

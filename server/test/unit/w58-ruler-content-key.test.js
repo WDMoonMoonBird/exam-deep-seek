@@ -20,11 +20,11 @@ import {
   buildAssignmentDescription, canonicalContentKeyInput, computeContentKey, CONTENT_KEY_LEN,
   explainContentKey, normalizeRulerText, resolveStandardPackageDir, resolveStandardPackageSha256,
   resolveUploadsRoot, rubricContentSha256, sha256Hex, standardDirDigest,
-} from '../../src/services/dshRulerContentKey.js';
-import { resolveAssignmentContent, resolveRulerForAssignment } from '../../src/services/dshRulerAssignment.js';
-import { RULER_TAG, normalizeRulerRow, resolvePollMs, resolveWaitMs } from '../../src/services/dshRulerStore.js';
+} from '../../src/infrastructure/dsh/ruler/dshRulerContentKey.js';
+import { resolveAssignmentContent, resolveRulerForAssignment } from '../../src/infrastructure/dsh/ruler/dshRulerAssignment.js';
+import { RULER_TAG, normalizeRulerRow, resolvePollMs, resolveWaitMs } from '../../src/infrastructure/dsh/ruler/dshRulerStore.js';
 import { buildAssignmentMd } from '../../scripts/r2b20-export-materials.mjs';
-import { zipDirectory } from '../../src/services/deterministicZip.js';
+import { zipDirectory } from '../../src/infrastructure/execution/deterministic-zip.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(__dirname, '../../..');

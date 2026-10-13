@@ -2,7 +2,7 @@
  * W11（R2-B2）：快照写值/读路径（snapshot ?? live）与两条纯决策表（W1 冻结判定、W3 stale 判定）。
  */
 import { buildPublishSnapshot, decideStale, resolveSnapshot, SNAPSHOT_ORIGIN_PUBLISH } from '../../src/services/assignmentSnapshot.js';
-import { RUBRIC_FROZEN_CODE, classifyRubricFreeze } from '../../src/services/rubricFreeze.js';
+import { RUBRIC_FROZEN_CODE, classifyRubricFreeze } from '../../src/domain/services/rubric-freeze.js';
 import { textSha256 } from '../../src/utils/snapshotHash.js';
 
 const past = new Date(Date.now() - 3600_000).toISOString();

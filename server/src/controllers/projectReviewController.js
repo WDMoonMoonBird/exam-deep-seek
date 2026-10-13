@@ -9,7 +9,7 @@
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
 import { standardDir, submissionDir, hasStandardPackage } from '../utils/projectPaths.js';
-import { toTeacherView, parseProjectAnswer, serializeProjectAnswer } from '../utils/projectView.js';
+import { toTeacherView, parseProjectAnswer, serializeProjectAnswer } from '../domain/services/project-view.js';
 import { enqueueProjectGrade } from '../services/projectGrading.js';
 import { PROJECT_ROLE, OPEN_PROJECT_ROLE, buildProjectGradePrompt, buildOpenProjectGradePrompt } from '../infrastructure/ai/deepseek/index.js';
 import { buildFileTree, filterProjectFiles } from '../services/projectContextBuilder.js';

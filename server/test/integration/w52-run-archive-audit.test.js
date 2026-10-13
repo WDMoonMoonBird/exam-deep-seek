@@ -8,8 +8,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import prisma from '../../src/utils/prisma.js';
-import { archiveRun, buildEvidenceSummary, persistJobRun, resolveRunsRoot, tailText } from '../../src/services/dshRunArchiver.js';
-import { getGradingRunLog } from '../../src/controllers/adminGradingRunsController.js';
+import { archiveRun, buildEvidenceSummary, persistJobRun, resolveRunsRoot, tailText } from '../../src/infrastructure/dsh/runs/dshRunArchiver.js';
+import { getGradingRunLog } from '../../src/interface/http/controllers/admin/grading-runs/index.js';
+import { createDshRunsReadModel } from '../../src/infrastructure/dsh/runs/read-model.js';
+import { setDshRunsReadModel } from '../../src/interface/http/controllers/admin/grading-runs/deps.js';
+
+// ★R2-B65：handler 直调（无 req.app）⇒ 显式注入读模型（组合根在 app.js 经 compose() 注入，同源实现）
+setDshRunsReadModel(createDshRunsReadModel());
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '../..');

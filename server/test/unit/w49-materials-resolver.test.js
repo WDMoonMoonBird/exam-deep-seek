@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { MATERIALS_ROOT_ENV, formatMaterialsMissing, formatMaterialsRoot, formatMaterialsResolved, resolveMaterialsForAssignment, withMaterialsArgs } from '../../src/services/dshMaterialsResolver.js';
+import { MATERIALS_ROOT_ENV, formatMaterialsMissing, formatMaterialsRoot, formatMaterialsResolved, resolveMaterialsForAssignment, withMaterialsArgs } from '../../src/infrastructure/dsh/materials/dshMaterialsResolver.js';
 import { normalizeExportError } from '../../scripts/r2b20-export-materials.mjs';
 
 describe('W49 物料解析与错误归一', () => {

@@ -10,7 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { gradeProject } from '../src/infrastructure/ai/deepseek/index.js';
-import { gradeProjectTrustJudge } from '../src/services/trustJudgeGrader.js';
+import { gradeProjectTrustJudge } from '../src/infrastructure/ai/trust-judge-grader.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);

@@ -10,7 +10,7 @@
 import fs from 'fs';
 import path from 'path';
 import logger from '../utils/logger.js';
-import { captureSessionUsage, summarizeUsageForEvidence, USAGE_REL_PATH } from './dshSessionUsage.js';
+import { captureSessionUsage, summarizeUsageForEvidence, USAGE_REL_PATH } from '../usage/dshSessionUsage.js';
 
 export const RUNS_ROOT_ENV = 'DSH_GRADER_RUNS_ROOT';
 export const DEFAULT_RUNS_ROOT = '/srv/grader/runs';

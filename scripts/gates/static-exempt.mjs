@@ -138,8 +138,15 @@ export function extractImports(view) {
   const out = [];
   for (let i = 0; i < lines.length; i++) {
     if (!/^\s*(?:import|export)\b/.test(lines[i])) continue;
+    // ① 副作用式单行：import 'x';
     const side = /^\s*import\s*(['"])([^'"]+)\1\s*;?\s*$/.exec(lines[i]);
     if (side) { out.push({ spec: side[2], line: i + 1 }); continue; }
+    // ② ★B70-F1：单行优先 —— 本行就含 from '…' 时立即取用，**不推进 i**。
+    //    旧实现无条件从 i+1 起拼接再整段匹配 from：单行在第 i 行已命中却 push j+1 行号并 i=j，
+    //    把**下一条 import 整条吞掉**（行号同时偏移）⇒ 取数 import 落在被跳过位置的数据页可被静默豁免。
+    const oneLine = /^\s*(?:import|export)\b[^\n]*?\bfrom\s*(['"])([^'"\n]+)\1/.exec(lines[i]);
+    if (oneLine) { out.push({ spec: oneLine[2], line: i + 1 }); continue; }
+    // ③ 仅当本行没有 from（如 `import {` 换行的多行 import）才向后拼接；命中后连同被消费的行一起跳过
     let text = lines[i];
     for (let j = i + 1; j <= Math.min(i + 30, lines.length - 1); j++) {
       text += '\n' + lines[j];

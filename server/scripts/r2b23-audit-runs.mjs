@@ -12,7 +12,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { DEFAULT_RUNS_ROOT, RUNS_ROOT_ENV, TEARDOWN_NAME } from '../src/services/dshRunArchiver.js';
+import { DEFAULT_RUNS_ROOT, RUNS_ROOT_ENV, TEARDOWN_NAME } from '../src/infrastructure/dsh/runs/dshRunArchiver.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const SERVER = path.resolve(path.dirname(__filename), '..');

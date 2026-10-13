@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PrismaClient } from '@prisma/client';
-import { RERUNNABLE, buildRerunMarker, rerunJobs } from '../src/services/dshGradingRerun.js';
+import { RERUNNABLE, buildRerunMarker, rerunJobs } from '../src/infrastructure/dsh/worker/dshGradingRerun.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '..');

@@ -12,7 +12,7 @@ import logger from '../../../../utils/logger.js';
 import { resolveSubQuestionScores } from '../../../../utils/scoring.js';
 import { UPLOADS_ROOT, PROJECTS_ROOT, STANDARDS_ROOT } from '../../../../utils/projectPaths.js';
 import crypto from 'node:crypto';
-import { classifyRubricFreeze } from '../../../../services/rubricFreeze.js';
+import { classifyRubricFreeze } from '../../../../domain/services/rubric-freeze.js';
 
 // ===================== 题库管理 =====================
 

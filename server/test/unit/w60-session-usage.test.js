@@ -13,8 +13,8 @@ import {
   DEFAULT_LLM_PRICES, captureSessionUsage, cacheHitRate, computeCost, extractToolsFromLogText,
   normalizeTotals, priceModelKey, priceTierAt, readProjcacheSessions, readSessionLogText, referenceTimeOf,
   resolvePriceTable, summarizeUsageForEvidence,
-} from '../../src/services/dshSessionUsage.js';
-import { validateLlmPrices } from '../../src/services/dshRunUsageStore.js';
+} from '../../src/infrastructure/dsh/usage/dshSessionUsage.js';
+import { validateLlmPrices } from '../../src/infrastructure/dsh/usage/dshRunUsageStore.js';
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'w60-'));
 const NL = String.fromCharCode(10);
@@ -211,7 +211,7 @@ describe('W60 会话用量抽取（R2-B36）', () => {
     expect(u.totals.turns).toBe(3);
     expect(u.totals.model_calls).toBe(5);
     // 落库映射（审计面 usage_json）同样带正确聚合值
-    const { runUsageRowFromUsage } = await import('../../src/services/dshRunUsageStore.js');
+    const { runUsageRowFromUsage } = await import('../../src/infrastructure/dsh/usage/dshRunUsageStore.js');
     const row = runUsageRowFromUsage(u);
     const persisted = JSON.parse(row.usage_json);
     expect(Number(persisted.totals.llm_ms)).toBe(12345);

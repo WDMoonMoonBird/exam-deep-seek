@@ -28,7 +28,7 @@ import {
   getConcurrency,
 } from '../infrastructure/ai/deepseek/index.js';
 import { runRules } from '../infrastructure/rule/index.js';
-import { gradeProjectTrustJudge } from './trustJudgeGrader.js';
+import { gradeProjectTrustJudge } from '../infrastructure/ai/trust-judge-grader.js';
 import {
   buildFileTree,
   filterProjectFiles,
@@ -40,7 +40,7 @@ import {
 } from './projectContextBuilder.js';
 import { ABNORMAL_FEEDBACK } from '../constants.js';
 import { standardDir, submissionDir, hasStandardPackage } from '../utils/projectPaths.js';
-import { parseProjectAnswer, serializeProjectAnswer } from '../utils/projectView.js';
+import { parseProjectAnswer, serializeProjectAnswer } from '../domain/services/project-view.js';
 import { MAX_TEXT_BYTES } from '../utils/projectArchive.js';
 import { isIgnored } from '../utils/fileTree.js';
 import { loadAssignmentSnapshot, resolveSnapshot } from './assignmentSnapshot.js';

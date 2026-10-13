@@ -11,7 +11,7 @@ jest.unstable_mockModule('../../../src/socket.js', () => ({
 }));
 
 const { SocketNotifier } = await import('../../../src/infrastructure/notifier/socket-notifier.js');
-const { notifyGraded } = await import('../../../src/socket.js');
+const { notifyGraded } = await import('../../../src/infrastructure/notifier/socket-server.js');
 
 beforeEach(() => {
   notifyGraded.mockClear();

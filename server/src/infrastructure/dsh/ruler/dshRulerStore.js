@@ -51,7 +51,7 @@ export const RULER_TAG = {
 /**
  * ★O2（R2-B38，in-scope 部分）：失败原因**前缀归一** —— 绝不把已带 `ruler_` 家族前缀的 last_error 再包一层
  * （历史数据/重试链里会出现 `ruler_failed:ruler_failed:…`，让 last_error 与日志难以判读）。
- * ★注意：worker 侧 `'ruler_' + reason`（=> `ruler_ruler_failed:…`）需改 `server/src/services/dshGradingJobWorker.js`，
+ * ★注意：worker 侧 `'ruler_' + reason`（=> `ruler_ruler_failed:…`）需改 `server/src/infrastructure/dsh/worker/run-once.js`，
  *   该文件**不在本批 inScope** ⇒ 已在 R2-B38 记录 §8 记档并给出单行修法；本函数只保证本层不产生嵌套前缀。
  */
 export function composeFailedReason(lastError) {

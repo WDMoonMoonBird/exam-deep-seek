@@ -79,6 +79,21 @@ function maskDbUrl(url) {
   return String(url).replace(/(:\/\/[^:/?#]+):[^@]*@/, '$1:***@');
 }
 
+// ★R2-B65（t6 修复）：SEED_CONTENTION_RE **必须先于顶层 await seedTestData() 求值**。
+//   原先它声明在文件末尾（:316），而顶层 await 在 :89 —— 一旦 seed 抛出争用错误触发重试分支，
+//   就会命中 TDZ：ReferenceError: Cannot access 'SEED_CONTENTION_RE' before initialization，
+//   表现为「整批套件 failed to run」（真实 DB 争用被掩盖成 ReferenceError）。故上移到所有顶层 await 之前。
+/**
+ * ★R2-B38（t6）flake 隔离：seed 重试包装（**跨进程并发争用**自愈）。
+ *
+ * 背景（t3/t4 实测）：多个 jest 进程同时跑时，seedTestData() 的「先删后插」会撞上
+ * `Foreign key constraint violated: class_id` / `Duplicate entry` / 死锁 ⇒ 表现为
+ * 「套件失败但 0 例失败」（beforeAll 抛错），让同一 verify 命令的退出码随机变红。
+ * 口径：**只对明确的 DB 争用签名重试**（带抖动退避，最多 5 次，留痕 SEED_RETRY）；
+ *   其它错误（护栏拒绝、连接断开、SQL 语法等）一律原样抛出，绝不掩盖真实缺陷。
+ */
+const SEED_CONTENTION_RE = /Foreign key constraint|Cannot add or update a child row|Duplicate entry|Deadlock|Lock wait timeout|ER_LOCK_DEADLOCK|ER_LOCK_WAIT_TIMEOUT/i;
+
 // 护栏：任何破坏性行为之前先校验数据源安全
 assertSafeToWipe();
 
@@ -304,16 +319,6 @@ async function seedTestDataOnce(log = console) {
 }
 
 
-/**
- * ★R2-B38（t6）flake 隔离：seed 重试包装（**跨进程并发争用**自愈）。
- *
- * 背景（t3/t4 实测）：多个 jest 进程同时跑时，seedTestData() 的「先删后插」会撞上
- * `Foreign key constraint violated: class_id` / `Duplicate entry` / 死锁 ⇒ 表现为
- * 「套件失败但 0 例失败」（beforeAll 抛错），让同一 verify 命令的退出码随机变红。
- * 口径：**只对明确的 DB 争用签名重试**（带抖动退避，最多 5 次，留痕 SEED_RETRY）；
- *   其它错误（护栏拒绝、连接断开、SQL 语法等）一律原样抛出，绝不掩盖真实缺陷。
- */
-const SEED_CONTENTION_RE = /Foreign key constraint|Cannot add or update a child row|Duplicate entry|Deadlock|Lock wait timeout|ER_LOCK_DEADLOCK|ER_LOCK_WAIT_TIMEOUT/i;
 
 export async function seedTestData({ attempts = 5, log = console } = {}) {
   let lastErr = null;

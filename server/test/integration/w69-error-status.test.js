@@ -66,7 +66,7 @@ describe('W69-2 上传超限 ⇒ 413 + code1403（学生/教师两条路径同�
   });
 
   test('学生侧同口径（源码断言）：LIMIT_FILE_SIZE 分支 ⇒ 413 + code1403，不再回落 400「文件过大（超过 50MB 上限）」', () => {
-    const src = fs.readFileSync(path.resolve(process.cwd(), 'src/controllers/studentController.js'), 'utf8');
+    const src = fs.readFileSync(path.resolve(process.cwd(), 'src/interface/http/controllers/student/project-submit.js'), 'utf8');
     expect(src).toContain("uploadErr.code === 'LIMIT_FILE_SIZE'");
     expect(src).toContain("res.status(413).json({ code: 1403, message: '文件超过大小限制', data: null })");
     expect(src).not.toContain('文件过大（超过 50MB 上限）');

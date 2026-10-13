@@ -19,9 +19,9 @@ import { fileURLToPath } from 'node:url';
 import prisma from '../../src/utils/prisma.js';
 import {
   captureSessionUsage, computeCost, summarizeUsageForEvidence, USAGE_REL_PATH,
-} from '../../src/services/dshSessionUsage.js';
-import { loadLlmPrices, loadRunUsage, persistRunUsage, LLM_PRICES_KEY } from '../../src/services/dshRunUsageStore.js';
-import { archiveRun, purgeRunRootSessions, USAGE_NAME } from '../../src/services/dshRunArchiver.js';
+} from '../../src/infrastructure/dsh/usage/dshSessionUsage.js';
+import { loadLlmPrices, loadRunUsage, persistRunUsage, LLM_PRICES_KEY } from '../../src/infrastructure/dsh/usage/dshRunUsageStore.js';
+import { archiveRun, purgeRunRootSessions, USAGE_NAME } from '../../src/infrastructure/dsh/runs/dshRunArchiver.js';
 import { authReq, request } from './helpers.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

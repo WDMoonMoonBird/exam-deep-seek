@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import auth from '../middleware/auth.js';
 import requireRole from '../middleware/role.js';
-import * as student from '../controllers/studentController.js';
+import * as student from '../interface/http/controllers/student/index.js';
 
 const router = Router();
 router.use(auth, requireRole('student'));

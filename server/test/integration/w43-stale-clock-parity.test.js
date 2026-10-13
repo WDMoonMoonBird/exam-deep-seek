@@ -7,8 +7,8 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import prisma from '../../src/utils/prisma.js';
-import { buildClaimSql } from '../../src/services/dshGradingJobWorker.js';
-import { STALE_CLOCK_SQL, WRITER_CLOCK_SQL, buildStaleSelectSql, buildStaleUpdateSql, checkTimeoutVsStale, reclaimStaleRunning, staleSeconds } from '../../src/services/dshStaleJobReclaimer.js';
+import { buildClaimSql } from '../../src/infrastructure/dsh/worker/index.js';
+import { STALE_CLOCK_SQL, WRITER_CLOCK_SQL, buildStaleSelectSql, buildStaleUpdateSql, checkTimeoutVsStale, reclaimStaleRunning, staleSeconds } from '../../src/infrastructure/dsh/worker/dshStaleJobReclaimer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WORKER = path.resolve(__dirname, '../../scripts/r2b5-worker.mjs');

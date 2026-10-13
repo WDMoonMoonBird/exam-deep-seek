@@ -14,6 +14,7 @@ import { DeepSeekGateway } from '../ai/deepseek-gateway.js';
 import { InMemoryEventBus } from '../events/in-memory-event-bus.js';
 import { SocketNotifier } from '../notifier/socket-notifier.js';
 import { InMemoryRateLimiter } from '../rate-limit/in-memory-rate-limiter.js';
+import { createDshRunsReadModel } from '../dsh/runs/read-model.js';
 
 /**
  * @param {object} deps
@@ -36,5 +37,7 @@ export function compose({ prisma, logger }) {
     eventBus,
     socketNotifier,
     rateLimiter,
+    // ★R2-B65：管理员「批改记录」只读读模型（interface 层经 req.app.locals.dshRuns 取用，禁止直接 import infrastructure）
+    dshRuns: createDshRunsReadModel({ prisma, logger }),
   };
 }

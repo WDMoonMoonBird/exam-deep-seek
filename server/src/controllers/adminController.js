@@ -394,7 +394,7 @@ export const getMonitor = async (_req, res) => {
 // ===================== AI 配置管理 =====================
 import { clearConfigCache } from '../infrastructure/ai/deepseek/index.js';
 // ★R2-B36：价目表（system_configs.llm_prices）——官方默认值 + 高峰/空闲两档，管理员可读写（本文件已挂在 /api/admin/settings 鉴权之后）
-import { loadLlmPrices, saveLlmPrices } from '../services/dshRunUsageStore.js';
+import { loadLlmPrices, saveLlmPrices } from '../infrastructure/dsh/usage/dshRunUsageStore.js';
 
 export const getSettings = async (_req, res) => {
   try {

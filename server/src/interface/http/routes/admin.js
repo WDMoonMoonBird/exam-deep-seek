@@ -8,7 +8,7 @@
  * ★只读：只有 GET；无任何写路径。
  */
 import express from 'express';
-import { getGradingRun, getGradingRunLog, listGradingRuns } from '../../../controllers/adminGradingRunsController.js';
+import { getGradingRun, getGradingRunLog, listGradingRuns } from '../controllers/admin/grading-runs/index.js';
 
 const router = express.Router();
 

@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { finalizeBuildRunRoot, finalizeRunRoot, sessionStats } from '../../src/services/dshRunArchiver.js';
+import { finalizeBuildRunRoot, finalizeRunRoot, sessionStats } from '../../src/infrastructure/dsh/runs/dshRunArchiver.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '../..');
@@ -79,7 +79,7 @@ describe('W55 造尺路径 run-root 生命周期（R2-B31）', () => {
   }, 60000);
 
   it('★★W55-4 两路径共用同一 helper（结构守卫）：worker 调 finalizeRunRoot；造尺动态导入 finalizeBuildRunRoot；造尺不自行实现会话销毁', async () => {
-    const worker = fs.readFileSync(path.join(SERVER, 'src/services/dshGradingJobWorker.js'), 'utf8');
+    const worker = fs.readFileSync(path.join(SERVER, 'src/infrastructure/dsh/worker/run-once.js'), 'utf8');
     const build = fs.readFileSync(path.join(SERVER, 'scripts/r2b7-build-checker.mjs'), 'utf8');
     const archiver = fs.readFileSync(path.join(SERVER, 'src/services/dshRunArchiver.js'), 'utf8');
     expect(worker.includes('await finalizeRunRoot({')).toBe(true);

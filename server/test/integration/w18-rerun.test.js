@@ -3,7 +3,7 @@
  * 仅测试库；自建探针行并在 afterAll 清理。
  */
 import prisma from '../../src/utils/prisma.js';
-import { RERUNNABLE, buildRerunMarker, rerunJobs } from '../../src/services/dshGradingRerun.js';
+import { RERUNNABLE, buildRerunMarker, rerunJobs } from '../../src/infrastructure/dsh/worker/dshGradingRerun.js';
 
 const tag = 'w18-rerun-' + Date.now();
 let assignmentId = null;

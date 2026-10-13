@@ -1,5 +1,5 @@
 import prisma from './src/utils/prisma.js';
-import { parseProjectAnswer, serializeProjectAnswer } from './src/utils/projectView.js';
+import { parseProjectAnswer, serializeProjectAnswer } from './src/domain/services/project-view.js';
 import { enqueueProjectGrade, refreshConcurrency } from './src/services/projectGrading.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));

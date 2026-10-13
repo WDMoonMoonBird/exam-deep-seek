@@ -14,10 +14,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import logger from '../utils/logger.js';
-import { computeCost } from './dshSessionUsage.js';
+import { computeCost } from '../usage/dshSessionUsage.js';
+import { SUMMARIES_REL, SUMMARIES_SCHEMA, listMeasureResults, loadSummaries, parseSummariesDoc } from '../infrastructure/dsh/checker/measure-results.js';
 
-export const SUMMARIES_REL = path.join('out', 'summaries.json');
-export const SUMMARIES_SCHEMA = 'summaries/1';
+// ★R2-B65 破环：产物只读逻辑（SUMMARIES_REL / SUMMARIES_SCHEMA / parseSummariesDoc / loadSummaries）
+//   已下沉到 infrastructure/dsh/checker/measure-results.js，此处**原样再导出** ⇒ 对外 API 逐字不变。
+export { SUMMARIES_REL, SUMMARIES_SCHEMA, parseSummariesDoc, loadSummaries };
 export const SUMMARY_PROMPT_VERSION = 'ai-summary/1';
 export const SUMMARY_MODES = ['off', 'cached', 'always'];
 export const FAILED_ITEMS_MAX = 12;
@@ -113,30 +115,6 @@ export function buildSummariesDoc({ assignmentId = null, mode = 'cached', entrie
     note: 'R2-B48：本文件由平台第二会话产出；**不写入 check.py 结果文档**（不污染 canonical_sha256/stale）。',
     summaries: entries,
   };
-}
-
-/** 解析（严格形状校验；坏 JSON/错版本 ⇒ ok:false） */
-export function parseSummariesDoc(text) {
-  let doc = null;
-  try { doc = JSON.parse(String(text || '')); } catch { return { ok: false, reason: 'bad_json', doc: null }; }
-  if (!doc || typeof doc !== 'object') return { ok: false, reason: 'not_object', doc: null };
-  if (doc.schema !== SUMMARIES_SCHEMA) return { ok: false, reason: 'schema_mismatch:' + doc.schema, doc: null };
-  const sm = doc.summaries && typeof doc.summaries === 'object' ? doc.summaries : {};
-  const entries = {};
-  for (const [slug, s] of Object.entries(sm)) {
-    if (!s || typeof s !== 'object' || !s.text) continue;                       // 缺正文 ⇒ 丢弃（降级）
-    entries[String(slug)] = s;
-  }
-  return { ok: true, reason: null, doc: { ...doc, summaries: entries } };
-}
-
-/** 读 run-root 的产品（不存在/坏文件 ⇒ 空表：调用方据此降级） */
-export function loadSummaries(runRoot) {
-  const p = path.join(runRoot, SUMMARIES_REL);
-  if (!fs.existsSync(p)) return { ok: false, reason: 'summaries_missing', bySlug: new Map(), path: p };
-  const parsed = parseSummariesDoc(fs.readFileSync(p, 'utf8'));
-  if (!parsed.ok) return { ok: false, reason: parsed.reason, bySlug: new Map(), path: p };
-  return { ok: true, reason: null, bySlug: new Map(Object.entries(parsed.doc.summaries)), path: p, doc: parsed.doc };
 }
 
 function writeJsonAtomic(file, text) {
@@ -238,7 +216,7 @@ export async function runSummarySession({
   const result = { ok: true, mode: useMode, written: 0, generated: 0, cache_hits: 0, failed: 0, stopped: false, cost: 0, reason: null, entries: {}, tokens: { prompt: 0, completion: 0, reasoning: 0 }, model: null };
   if (useMode === 'off') { result.reason = 'mode_off'; return result; }
   try {
-    const { listMeasureResults } = await import('./dshCheckerConsumer.js');
+    // ★R2-B65 破环：改为静态依赖只读叶子模块（原先动态 import dshCheckerConsumer.js 构成唯一 SCC）
     const rows = listMeasureResults(runRoot);
     if (rows.length === 0) { result.reason = 'no_results'; return result; }
 

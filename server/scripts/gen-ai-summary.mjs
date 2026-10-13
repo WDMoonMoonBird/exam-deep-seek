@@ -27,7 +27,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import prisma from '../src/utils/prisma.js';
-import { computeCost, priceModelKey, resolvePriceTable } from '../src/services/dshSessionUsage.js';
+import { computeCost, priceModelKey, resolvePriceTable } from '../src/infrastructure/dsh/usage/dshSessionUsage.js';
 
 const NL = String.fromCharCode(10);
 export const PROMPT_VERSION = 'ai-summary/1';

@@ -11,7 +11,7 @@ import {
   buildGraderEnv,
   describeConcurrencyKeys,
   runDshGrader,
-} from '../../src/services/dshGraderRunner.js';
+} from '../../src/infrastructure/dsh/device/dshGraderRunner.js';
 
 const FAKE_KEY = 'UNIT_TEST_KEY_1234567890'; // 刻意不含 "sk" 前缀
 

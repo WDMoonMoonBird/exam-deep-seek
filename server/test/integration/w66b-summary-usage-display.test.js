@@ -9,9 +9,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import prisma from '../../src/utils/prisma.js';
-import { recordSummaryUsage } from '../../src/services/dshSummarySession.js';
-import { shapeUsageBlock, shapeSummarySession } from '../../src/controllers/adminGradingRunsController.js';
-import { archiveRun } from '../../src/services/dshRunArchiver.js';
+import { recordSummaryUsage } from '../../src/infrastructure/dsh/checker/dshSummarySession.js';
+import { shapeUsageBlock, shapeSummarySession } from '../../src/infrastructure/dsh/runs/read-model.js';
+import { archiveRun } from '../../src/infrastructure/dsh/runs/dshRunArchiver.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -115,7 +115,7 @@ describe('W66b R2-B50：三态字段落库（F1）+ 归档含 summaries.json（F
     expect(doc2.summary_session).toMatchObject({ cache_hits: 0, generated: 3, cache_hit: false });
   }, 120000);
   it('★W66b-5（T32-O1）归档候选白名单契约：只保留平铺 summaries.json（不再含恒 inert 的 out/summaries.json 候选）', () => {
-    const ctrl = fs.readFileSync(path.resolve(__dirname, '..', '..', 'src', 'controllers', 'adminGradingRunsController.js'), 'utf8');
+    const ctrl = fs.readFileSync(path.resolve(__dirname, '..', '..', 'src', 'infrastructure', 'dsh', 'runs', 'read-model.js'), 'utf8');
     expect(ctrl).toContain("for (const rel of ['summaries.json'])");                  // ★唯一候选（白名单只放行不含 '/' 的文件名）
     expect(ctrl).not.toContain("for (const rel of ['out/summaries.json'");           // 无效候选已删除
     expect(ctrl).toContain('文件名白名单按设计拒绝');                                    // 选择与理由留痕（记录 §2 同口径）

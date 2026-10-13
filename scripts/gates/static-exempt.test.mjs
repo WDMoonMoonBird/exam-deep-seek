@@ -23,6 +23,7 @@ import path from 'node:path';
 import cp from 'node:child_process';
 import {
   DEFAULT_WHITELIST_REL, analyzeStaticExemption, collectSourceFiles, createIoAnalyzer, directIoRefs,
+  extractImports, importView,
 } from './static-exempt.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
@@ -196,6 +197,61 @@ try {
   check(JSON.stringify(se.staleEntries) === JSON.stringify(['client/src/views/DoesNotExist.vue']) && (se.exemptedFiles || []).length === 0,
     '未命中任何文件的条目只记 stale、**不产生豁免**（路径写错不会静默放行）',
     'stale=' + JSON.stringify(se.staleEntries) + ' exempt=' + JSON.stringify(se.exemptedFiles));
+  // ───────────────────────── ⑦ B70-F1：import 抽取完整性（隔条跳过回归） ─────────────────────────
+  section('⑦ B70-F1：连续单行 import 抽取完整 + I/O 任意位置必红（PageA/PageB/PageC 回归）');
+  const fixtureDir = path.join(fakeRoot, 'client/src/views/teacher');
+  fs.mkdirSync(fixtureDir, { recursive: true });
+  const sfc = (imports) => '<template><div/></template>' + '\n<script setup>\n' + imports.join('\n') + '\n</' + 'script>\n';
+  const writeFixture = (rel, imports) => { fs.writeFileSync(path.join(fakeRoot, rel), sfc(imports)); return rel; };
+
+  // ① 抽取完整性：4 条连续单行 import ⇒ 恰好 4 条（含 I/O 在第 2 条；旧实现只抽到 vue / ./helper.js）
+  const four = [
+    "import { ref } from 'vue';",
+    "import request from '../../api/request.js';",
+    "import { computed } from 'vue';",
+    "import { helper } from './helper.js';",
+  ];
+  const fourRel = writeFixture('client/src/views/teacher/FourImports.vue', four);
+  const fourAbs = path.join(fakeRoot, fourRel);
+  const gotSpecs = extractImports(importView(fs.readFileSync(fourAbs, 'utf8'), fourAbs));
+  check(gotSpecs.length === 4 && JSON.stringify(gotSpecs.map((x) => x.spec)) === JSON.stringify(['vue', '../../api/request.js', 'vue', './helper.js'])
+    && gotSpecs[1].line === 4, '4 条连续单行 import ⇒ 抽到 4 条（说明符 + 行号正确；I/O 在第 2 条、行号=4）', JSON.stringify(gotSpecs));
+  // 多行 import（本行无 from）+ 后续单行 import 不能被吞
+  const mixed = ['<script setup>', 'import {', '  ref,', '} from ' + "'vue'" + ';', "import request from '../../api/request.js';", '</' + 'script>'].join('\n');
+  const mixedOut = extractImports(importView(mixed, '/tmp/Mixed.vue'));
+  check(mixedOut.length === 2 && mixedOut[0].spec === 'vue' && mixedOut[1].spec === '../../api/request.js', '多行 import 之后的单行 import 仍被抽取', JSON.stringify(mixedOut));
+
+  // ② 镜像夹具：I/O 在第 2/4 条、PageB（经 composable 间接）、PageC（自身第 2 条 import、无调用形式）
+  fs.mkdirSync(path.join(fakeRoot, 'client/src/composables/pageApi'), { recursive: true });
+  fs.writeFileSync(path.join(fakeRoot, 'client/src/composables/pageApi/usePageApi.js'),
+    "import request from '../../api/request.js';" + '\n' + 'export function usePageApi() { return request; }' + '\n');
+  const pageFixtures = {
+    'PageA.vue': ["import request from '../../api/request.js';"],
+    'PageB.vue': ["import { ref } from 'vue';", "import { usePageApi } from '../../composables/pageApi/usePageApi.js';"],
+    'PageC.vue': ["import { ref } from 'vue';", "import request from '../../api/request.js';"],
+    'IoFourth.vue': ["import { ref } from 'vue';", "import { computed } from 'vue';", "import { watch } from 'vue';", "import request from '../../api/request.js';"],
+  };
+  Object.entries(pageFixtures).forEach(([n, imports]) => writeFixture('client/src/views/teacher/' + n, imports));
+  const pageWl = tempWhitelist('b70-fixtures.wl.json', Object.keys(pageFixtures).map((n) => ({ path: 'client/src/views/teacher/' + n, reason: 'B70-F1 夹具：均应判红' })));
+  const pageRes = analyzeStaticExemption({ root: fakeRoot, whitelistFile: pageWl, files: collectSourceFiles(path.join(fakeRoot, 'client/src')) });
+  for (const n of Object.keys(pageFixtures)) {
+    const rel = 'client/src/views/teacher/' + n;
+    const hit = pageRes.violations.find((x) => x.file === rel);
+    check(!!hit && !pageRes.exempt.includes(rel), n + '（I/O import 位置/' + '(间接)' + '）⇒ FAIL 且不获豁免',
+      'violations=' + JSON.stringify(pageRes.violations.map((x) => x.file)) + ' exempt=' + JSON.stringify(pageRes.exempt.filter((f) => f.includes('views/teacher/'))));
+  }
+
+  // ───────────────────────── ⑧ B70-F2：符号链接执行仍正常运行 ─────────────────────────
+  section('⑧ B70-F2：经符号链接路径执行门禁必须真正运行（不得 fail-open 静默 exit 0）');
+  const linkRoot = path.join(TMP, 'gate-link');
+  fs.symlinkSync(ROOT, linkRoot, 'dir');
+  const linkRun = cp.spawnSync(process.execPath, [path.join(linkRoot, 'scripts/gates/arch-metrics.mjs'), '--json'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+  let linkJson = null;
+  try { linkJson = JSON.parse(linkRun.stdout); } catch { /* 由断言暴露 */ }
+  check(!!linkJson && linkJson.gate === 'arch-metrics' && Array.isArray(linkJson.rows) && linkJson.rows.length >= 3,
+    '经符号链接执行：stdout 为完整 JSON（gate/rows 齐备，非 0 字节）', 'bytes=' + String(linkRun.stdout || '').length);
+  check((linkRun.status === 0 || linkRun.status === 1) && !!linkJson && linkRun.status === (linkJson.verdict === 'PASS' ? 0 : 1),
+    '经符号链接执行：退出码与 verdict 一致（0=PASS / 1=FAIL，语义不变）', 'rc=' + linkRun.status + ' verdict=' + (linkJson && linkJson.verdict));
 } finally {
   fs.rmSync(TMP, { recursive: true, force: true });
   const residue = fs.existsSync(TMP);

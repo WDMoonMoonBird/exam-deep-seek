@@ -28,17 +28,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PrismaClient } from '@prisma/client';
-import { runDshGrader } from '../src/services/dshGraderRunner.js';
-import { consumeChecker, consumeMeasureResults } from '../src/services/dshCheckerConsumer.js';
-import { persistAnchor } from '../src/services/dshGradingAnchor.js';
-import { absolutizeDeviceArgs, withReuseCheckerArgs } from '../src/services/dshGradingJobWorker.js';
-import { findRulerByContentKey, resolvePollMs, resolveWaitMs, rulerStoreAvailable } from '../src/services/dshRulerStore.js';
+import { runDshGrader } from '../src/infrastructure/dsh/device/dshGraderRunner.js';
+import { consumeChecker, consumeMeasureResults } from '../src/infrastructure/dsh/checker/dshCheckerConsumer.js';
+import { persistAnchor } from '../src/infrastructure/dsh/runs/dshGradingAnchor.js';
+import { absolutizeDeviceArgs, withReuseCheckerArgs } from '../src/infrastructure/dsh/worker/index.js';
+import { findRulerByContentKey, resolvePollMs, resolveWaitMs, rulerStoreAvailable } from '../src/infrastructure/dsh/ruler/dshRulerStore.js';
 import {
   bindResolvedRuler, completeClaimedRuler, failClaimedRuler, resolveAssignmentContent, resolveRulerForAssignment,
   writeRulerCheckerFiles,
-} from '../src/services/dshRulerAssignment.js';
-import { captureSessionUsage, summarizeUsageForEvidence } from '../src/services/dshSessionUsage.js';
-import { loadLlmPrices, persistRunUsage } from '../src/services/dshRunUsageStore.js';
+} from '../src/infrastructure/dsh/ruler/dshRulerAssignment.js';
+import { captureSessionUsage, summarizeUsageForEvidence } from '../src/infrastructure/dsh/usage/dshSessionUsage.js';
+import { loadLlmPrices, persistRunUsage } from '../src/infrastructure/dsh/usage/dshRunUsageStore.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '..');
@@ -191,7 +191,7 @@ async function consumeAndSummarize({ prisma, runRoot, assignmentId, questionId, 
   }
   // ★R2-B35：造尺一次 ⇒ 置 ready（checker_id/frozen_sha256/原始字节）+ 首次绑定（内容指纹尺子）
   if (rulerPlan && rulerPlan.mode === 'build') {
-    const { readAnchorFromRunRoot } = await import('../src/services/dshGradingAnchor.js');
+    const { readAnchorFromRunRoot } = await import('../src/infrastructure/dsh/runs/dshGradingAnchor.js');
     const info = readAnchorFromRunRoot(runRoot);
     await completeClaimedRuler({
       prisma, contentKey: rulerPlan.contentKey, checkerId: stored.checkerId,
@@ -209,7 +209,7 @@ async function consumeAndSummarize({ prisma, runRoot, assignmentId, questionId, 
       console.log('RULER_INGEST_SKIPPED=yes reason=existing_ruler_differs content_key=' + rulerPlan.contentKey
         + ' existing_checker_id=' + existingRuler.checkerId + ' disk_checker_id=' + stored.checkerId + '（绝不覆盖已 ready 的同内容尺子）');
     } else {
-      const { readAnchorFromRunRoot } = await import('../src/services/dshGradingAnchor.js');
+      const { readAnchorFromRunRoot } = await import('../src/infrastructure/dsh/runs/dshGradingAnchor.js');
       const info = readAnchorFromRunRoot(runRoot);
       await completeClaimedRuler({
         prisma, contentKey: rulerPlan.contentKey, checkerId: stored.checkerId,
@@ -490,7 +490,7 @@ if (invokedDirectly) {
     const plan = globalThis.__B31_BUILD_RUN__;
     if (!plan || !plan.ownsRunRoot || !plan.workdir) return;
     try {
-      const { finalizeBuildRunRoot } = await import('../src/services/dshRunArchiver.js');
+      const { finalizeBuildRunRoot } = await import('../src/infrastructure/dsh/runs/dshRunArchiver.js');
       await finalizeBuildRunRoot({ runRoot: plan.workdir, assignmentId: plan.assignmentId, exitCode: rc });
     } catch (err) { console.log('BUILD_RUN_FINALIZE_FAILED reason=' + String(err && err.message).slice(0, 160)); }
   };

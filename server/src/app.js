@@ -10,7 +10,7 @@ import { fileURLToPath } from 'url';
 import { randomBytes } from 'crypto';
 import logger from './utils/logger.js';
 import prisma from './utils/prisma.js';
-import { initSocket, notifyGraded } from './socket.js';
+import { initSocket, notifyGraded } from './infrastructure/notifier/socket-server.js';
 import { compose } from './infrastructure/bootstrap/compose.js';
 
 import authRoutes from './routes/auth.js';

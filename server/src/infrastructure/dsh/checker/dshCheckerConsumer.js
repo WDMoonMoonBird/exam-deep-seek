@@ -12,7 +12,9 @@ import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'node:child_process';
 import logger from '../utils/logger.js';
-import { loadSummaries } from './dshSummarySession.js';   // ★R2-B48：会话内总评产物（缺失/坏 JSON ⇒ 降级不写 summary）
+import { listMeasureResults, loadGradingResultIndex, normalizeDetailDoc } from '../infrastructure/dsh/checker/measure-results.js';   // ★R2-B65 破环：产物只读叶子（原在本文件 + dshSummarySession）
+// ★R2-B65：下列两个名称的**实现**已下沉到 measure-results.js，此处原样再导出 ⇒ 对外 API 逐字不变。
+export { listMeasureResults, loadGradingResultIndex, normalizeDetailDoc };
 
 export const NO_SCORE_STATUS = 'needs_rerun'; // 需重跑/人工（显式呈现，不写分）
 
@@ -43,72 +45,6 @@ export function decideScoreWrite({ score, stale, unsupported, exitCode } = {}) {
   const n = Number(score);
   if (!Number.isFinite(n)) return { write: false, status: NO_SCORE_STATUS, reason: 'score_not_finite' };
   return { write: true, status: 'graded', reason: 'ok', score: n };
-}
-
-/**
- * ★R2-B41：逐项「依据」投影归一 —— 只取 items（+totals 便于对账），其余字段不参与回写。
- * 支持三种形状：①单份 doc `{items:[…]}` ②裸 items 数组 ③`{results|submissions:[{slug,items}]}`（由调用方按 slug 拆分）
- */
-export function normalizeDetailDoc(doc) {
-  if (!doc || typeof doc !== 'object') return null;
-  if (Array.isArray(doc)) return { items: doc, totals: null, source_shape: 'items_array' };
-  const items = Array.isArray(doc.items) ? doc.items : null;
-  if (items) return { items, totals: doc.totals || null, source_shape: 'items_doc' };
-  return null;
-}
-
-/**
- * ★R2-B41：读装置**带依据**的逐项结果投影（title/status/reason 含「证据: <路径>」），按 slug 建索引。
- * 优先级：`out/grading-result/<slug>.json` > `out/grading-result.json`（单份契约）> `out/results/<slug>*.json`（兼容）。
- * 只读、绝不改分数来源：分数与「是否写分」仍由 listMeasureResults()/decideScoreWrite() 的原来源决定。
- * @returns {{bySlug: Map<string,object>, fallback: object|null, sources: string[]}}
- */
-export function loadGradingResultIndex(runRoot) {
-  const bySlug = new Map();
-  const sources = [];
-  let fallback = null;
-  const put = (slug, doc, rel) => {
-    const norm = normalizeDetailDoc(doc);
-    if (!slug || !norm || !norm.items || norm.items.length === 0) return;
-    if (bySlug.has(String(slug))) return;                       // 先到先得（顺序=优先级）
-    bySlug.set(String(slug), { ...norm, source: rel });
-    sources.push(rel + ':' + String(slug));
-  };
-  // ① 单份文件（优先）
-  const perDir = path.join(runRoot, 'out', 'grading-result');
-  if (fs.existsSync(perDir)) {
-    for (const f of fs.readdirSync(perDir).sort()) {
-      if (!f.endsWith('.json')) continue;
-      try { put(f.replace(/\.json$/, ''), JSON.parse(fs.readFileSync(path.join(perDir, f), 'utf8')), 'out/grading-result/' + f); } catch { /* 坏文件跳过，不影响分数路径 */ }
-    }
-  }
-  // ② 单份契约 out/grading-result.json：items 数组 ⇒ 全局兜底；带 slug 的条目数组 ⇒ 按 slug 索引
-  const single = path.join(runRoot, 'out', 'grading-result.json');
-  if (fs.existsSync(single)) {
-    try {
-      const doc = JSON.parse(fs.readFileSync(single, 'utf8'));
-      const bare = normalizeDetailDoc(doc);
-      if (bare) {
-        fallback = { ...bare, source: 'out/grading-result.json' };
-      } else {
-        const arr = Array.isArray(doc) ? doc : (doc.results || doc.submissions || []);
-        for (const it of arr || []) {
-          const slug = it && (it.slug || (it.submission && it.submission.id) || it.submission_id);
-          if (slug) put(String(slug), it, 'out/grading-result.json');
-        }
-      }
-    } catch { /* 坏 JSON ⇒ 无依据可用（不崩、不改分数） */ }
-  }
-  // ③ 兼容旧布局 out/results/<slug>*.json
-  const resDir = path.join(runRoot, 'out', 'results');
-  if (fs.existsSync(resDir)) {
-    for (const f of fs.readdirSync(resDir).sort()) {
-      if (!f.endsWith('.json')) continue;
-      const slug = f.replace(/\.[a-z0-9_]*\.?model\.json$/, '').replace(/\.json$/, '');
-      try { put(slug, JSON.parse(fs.readFileSync(path.join(resDir, f), 'utf8')), 'out/results/' + f); } catch { /* 坏文件跳过 */ }
-    }
-  }
-  return { bySlug, fallback, sources };
 }
 
 /** 回写载荷（审计字段齐备） */
@@ -218,32 +154,6 @@ export async function consumeChecker({ prisma, runRoot, assignmentId, questionId
   });
   logger.info({ assignmentId, checkerId: check.checkerId, checkerPath }, 'W6：checker 已入库');
   return { ok: true, checkerId: check.checkerId, storedId: row.id, checkerPath };
-}
-
-/** 读量尺产物（out/measure/*.json 优先，兼容 out/results/*.json） */
-export function listMeasureResults(runRoot) {
-  const out = [];
-  const gradingIndex = loadGradingResultIndex(runRoot);   // ★R2-B41：依据投影（只读；不影响分数来源）
-  const summaries = loadSummaries(runRoot);               // ★R2-B48：会话内产出的总评（缺失/坏 JSON ⇒ 空表 ⇒ 降级不写 summary）
-  for (const dir of ['out/measure', 'out/results']) {
-    const d = path.join(runRoot, dir);
-    if (!fs.existsSync(d)) continue;
-    for (const f of fs.readdirSync(d).sort()) {
-      if (!f.endsWith('.json')) continue;
-      if (dir.endsWith('measure') && (f.startsWith('matrix-') || f.startsWith('coverage-'))) continue;
-      const p = path.join(d, f);
-      try {
-        const result = JSON.parse(fs.readFileSync(p, 'utf8'));
-        // ★R2-B41：按 slug 挂上**依据**投影（单份契约的 items 数组作为兜底）；找不到 ⇒ null（原行为）
-        const slug = result?.submission?.id ?? null;
-        const detail = (slug && gradingIndex.bySlug.get(String(slug))) || gradingIndex.fallback || null;
-        const summary = (slug && summaries.bySlug.get(String(slug))) || null;             // ★R2-B48：按 slug 取总评
-        const merged = { ...result, ...(detail ? { grading_detail: detail } : {}), ...(summary ? { summary } : {}) };
-        out.push({ path: p, result: merged });
-      } catch { /* 跳过坏文件 */ }
-    }
-  }
-  return out;
 }
 
 /**

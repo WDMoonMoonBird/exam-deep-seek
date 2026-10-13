@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { KEEP_SCENE_NAME, TEARDOWN_NAME, purgeRunRootSessions, sessionStats } from '../../src/services/dshRunArchiver.js';
+import { KEEP_SCENE_NAME, TEARDOWN_NAME, purgeRunRootSessions, sessionStats } from '../../src/infrastructure/dsh/runs/dshRunArchiver.js';
 
 function mkRoot({ sessions = 2, bytes = 1024, credentials = true, out = true } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'w54-job-'));
