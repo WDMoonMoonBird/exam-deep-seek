@@ -9,7 +9,7 @@
  * 只读被测代码：接口无任何写路径（本测试自己建/删夹具）。
  */
 import prisma from '../../src/utils/prisma.js';
-import { loadClassLossDistribution, parseLossBreakdown, aggregateLossByItem } from '../../src/application/queries/class-loss-distribution.js';
+import { loadClassLossDistribution, parseLossBreakdown, aggregateLossByItem } from '../../src/services/classLossDistribution.js';
 import { getAssignmentLossDistribution } from '../../src/interface/http/controllers/teacher/loss-distribution.js';
 
 const TAG = 'test_b68_' + Date.now();

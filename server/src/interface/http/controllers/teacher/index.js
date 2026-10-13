@@ -11,3 +11,5 @@ export { getPendingSummary, getAssignments, getAssignment, createAssignment, loc
 export { getAllTeachers } from './teachers.js';
 export { getMySchools, getAllClasses, createClass, updateClass, deleteClass, switchClassSchool } from './classes.js';
 export { getMyStudents, getMyClasses, updateStudent, deleteStudent, resetStudentPassword, addStudent, batchAddStudents } from './students.js';
+// ★R2-B68（WAVE3）：按班看失分项分布（只读聚合；权限口径复用 class-scope 的 resolveVisibleClassScope）
+export { getAssignmentLossDistribution } from './loss-distribution.js';

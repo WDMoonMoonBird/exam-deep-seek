@@ -6,6 +6,8 @@
   >
     <template #actions>
       <StatusTag :tone="loading ? 'neutral' : 'success'" :text="`共 ${total} 条`" />
+      <!-- ★R2-B68（WAVE3）：按班看失分项分布 —— 需先在筛选里填「作业ID」（口径=既有批改结果投影 breakdown） -->
+      <a-button size="small" :disabled="!filters.assignmentId" @click="lossOpen = true">失分项分布</a-button>
       <a-button size="small" :loading="loading" @click="load">刷新</a-button>
     </template>
     <a-card size="small" class="filter-card">
@@ -319,6 +321,8 @@
         </template>
       </a-spin>
     </a-drawer>
+
+    <LossDistributionDrawer v-model:open="lossOpen" :assignment-id="filters.assignmentId || null" role="admin" />
   </PageShell>
 </template>
 <script setup>
@@ -327,8 +331,10 @@ import 'ant-design-vue';
 import request from '../../api/request.js';
 import PageShell from '../../components/PageShell.vue';
 import StatusTag from '../../components/StatusTag.vue';
+import LossDistributionDrawer from '../../components/LossDistributionDrawer.vue';   // ★R2-B68：按班失分项分布抽屉
 
 const loading = ref(false);
+const lossOpen = ref(false);   // ★R2-B68：失分项分布抽屉（需 assignmentId；空/错态由抽屉兜底）
 const items = ref([]);
 const total = ref(0);
 const page = ref(1);

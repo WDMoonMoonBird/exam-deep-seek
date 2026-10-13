@@ -612,6 +612,64 @@ for (const [label, routePath] of [
       : '路由解析失败：' + hit.reason);
 }
 
+// ⑭ 按班看失分项分布（★R2-B68 WAVE3）：后端聚合口径（可执行）+ 页面入口/空态/错误态契约
+const B68_REPO = path.join(CLIENT, '..');
+const b68SvcPath = path.join(B68_REPO, 'server', 'src', 'services', 'classLossDistribution.js');
+const b68SvcTxt = read(b68SvcPath) || '';
+const b68Mod = await import(b68SvcPath);
+const b68Subs = [
+  { checkerId: 'ck1', canonicalSha256: 'a1', aiFeedback: JSON.stringify({ source: 'dsh-checker', breakdown: [
+    { item: 'P01', title: '命名规范', status: 'miss', score: 0, maxScore: 10 },
+    { item: 'P02', title: '空值处理', status: 'hit', score: 10, maxScore: 10 },
+  ] }) },
+  { checkerId: 'ck1', canonicalSha256: 'a1', aiFeedback: JSON.stringify({ source: 'dsh-checker', breakdown: [
+    { item: 'P01', title: '命名规范', status: 'miss', score: 0, maxScore: 10 },
+    { item: 'P02', title: '空值处理', status: 'hit', score: 8, maxScore: 10 },
+  ] }) },
+  { aiFeedback: JSON.stringify({ source: 'dsh-checker', breakdown: [
+    { item: 'P01', title: '命名规范', status: 'hit', score: 10, maxScore: 10 },
+    { item: 'P03', title: '异常分支', status: 'unknown', score: 0, maxScore: 5 },
+  ] }) },
+  { aiFeedback: 'not-json' },
+  { aiFeedback: null },
+];
+const b68Agg = b68Mod.aggregateLossByItem(b68Subs);
+const b68Empty = b68Mod.aggregateLossByItem([]);
+check('⑭a 聚合口径（可执行）：分子/分母与失分率正确、按失分率降序、未判定不计入分母、坏 JSON/空输入不抛（含空数据）',
+  b68Agg.items.length === 3
+    && b68Agg.items[0].item === 'P01' && b68Agg.items[0].numerator === 2 && b68Agg.items[0].denominator === 3 && Math.abs(b68Agg.items[0].lossRate - 0.6667) < 1e-4
+    && b68Agg.items[1].item === 'P02' && b68Agg.items[1].denominator === 2 && b68Agg.items[1].lossRate === 0
+    && b68Agg.items[2].item === 'P03' && b68Agg.items[2].unknown === 1 && b68Agg.items[2].denominator === 0 && b68Agg.items[2].lossRate === null
+    && b68Agg.totals.hits === 3 && b68Agg.totals.misses === 2 && b68Agg.totals.unknown === 1 && b68Agg.versions.length === 1
+    && b68Empty.items.length === 0 && b68Empty.totals.submissionsScanned === 0,
+  JSON.stringify({ first: b68Agg.items[0], last: b68Agg.items[2], totals: b68Agg.totals, emptyItems: b68Empty.items.length }));
+const b68TeacherRoute = read(path.join(B68_REPO, 'server', 'src', 'routes', 'teacher.js')) || '';
+const b68AdminRoutes = read(path.join(B68_REPO, 'server', 'src', 'interface', 'http', 'routes', 'admin.js')) || '';
+const b68TeacherCtrl = read(path.join(B68_REPO, 'server', 'src', 'interface', 'http', 'controllers', 'teacher', 'loss-distribution.js')) || '';
+const b68AdminCtrl = read(path.join(B68_REPO, 'server', 'src', 'interface', 'http', 'controllers', 'admin', 'grading-runs', 'loss-distribution.js')) || '';
+check('⑭b 后端接线：教师路由 + 管理员路由（注册在 /:id 之前）齐备，权限口径复用 resolveVisibleClassScope（403 fail-closed）',
+  /router\.get\('\/assignments\/:id\/loss-distribution'/.test(b68TeacherRoute)
+    // 注册顺序：router.get('/loss-distribution' …) 必须在 router.get('/:id' …) 之前（注释里出现 '/:id' 不算）
+    && b68AdminRoutes.indexOf("router.get('/loss-distribution'") > 0
+    && b68AdminRoutes.indexOf("router.get('/loss-distribution'") < b68AdminRoutes.indexOf("router.get('/:id'")
+    && /resolveVisibleClassScope/.test(b68TeacherCtrl) && /code: 1003/.test(b68TeacherCtrl)
+    && /loadClassLossDistribution/.test(b68TeacherCtrl) && /loadClassLossDistribution/.test(b68AdminCtrl)
+    && !/\$executeRawUnsafe|\$queryRawUnsafe|prisma\.[a-zA-Z]+\.(create|update|delete)/.test(b68SvcTxt + b68TeacherCtrl + b68AdminCtrl)
+    // 版本块走参数化只读 $queryRaw（Client DMMF 不含 grading_rulers/assignment_question_rulers）⇒ 断言「有只读 raw、无写 raw」
+    && /\$queryRaw/.test(b68SvcTxt) && !/\$executeRaw/.test(b68SvcTxt + b68TeacherCtrl + b68AdminCtrl)
+    && !/^\s*import\s/m.test(b68SvcTxt),   // 服务零 import（prisma 注入）⇒ 纯函数可被本脚本直接 import
+  'teacherRoute=' + /loss-distribution/.test(b68TeacherRoute) + ' adminOrder=' + b68AdminRoutes.indexOf("router.get('/loss-distribution'") + '<' + b68AdminRoutes.indexOf("router.get('/:id'") + ' svcImports=' + /^\s*import\s/m.test(b68SvcTxt));
+const b68Drawer = read(path.join(CLIENT, 'src', 'components', 'LossDistributionDrawer.vue')) || '';
+const b68ReviewClass = read(path.join(CLIENT, 'src', 'views', 'teacher', 'ReviewClass.vue')) || '';
+const b68GradingRuns = read(path.join(CLIENT, 'src', 'views', 'admin', 'GradingRuns.vue')) || '';
+check('⑭c 页面契约：两处入口按钮 + 共享抽屉（teacher/admin 双角色）+ 空态 + errorCopyOf 口径（无 err.message 上屏）',
+  /失分项分布/.test(b68ReviewClass) && /LossDistributionDrawer/.test(b68ReviewClass) && /role="teacher"/.test(b68ReviewClass)
+    && /失分项分布/.test(b68GradingRuns) && /LossDistributionDrawer/.test(b68GradingRuns) && /role="admin"/.test(b68GradingRuns)
+    && /<a-empty/.test(b68Drawer) && /errorCopyOf\(/.test(b68Drawer) && /errorCopy\.js/.test(b68Drawer)
+    && /loss-distribution/.test(b68Drawer) && /numerator|denominator/.test(b68Drawer)
+    && !/(?:err|e|error)\??\.message/.test(b68Drawer.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')),
+  'reviewClass=' + /LossDistributionDrawer/.test(b68ReviewClass) + ' gradingRuns=' + /LossDistributionDrawer/.test(b68GradingRuns) + ' drawerEmpty=' + /<a-empty/.test(b68Drawer));
+
 const failed = results.filter((r) => !r.ok);
 console.log('');
 console.log('SUMMARY checks=' + results.length + ' failed=' + failed.length + (failed.length ? ' :: ' + failed.map((f) => f.name).join(' | ') : ''));

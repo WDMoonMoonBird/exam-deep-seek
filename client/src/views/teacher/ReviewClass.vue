@@ -2,6 +2,8 @@
   <PageShell :title="assignmentTitle || '加载中...'" :description="pageDesc">
     <template #actions>
       <a-button type="link" @click="$router.push('/teacher/review')">← 返回评分审核</a-button>
+      <!-- ★R2-B68（WAVE3）：按班看失分项分布（只读抽屉；口径=既有批改结果投影 breakdown） -->
+      <a-button :disabled="!assignmentId" @click="lossOpen = true">失分项分布</a-button>
     </template>
 
     <!-- ★R2-B47（U-1）：错态（请求失败/异常）必须有可读提示 + 重试入口 ⇒ 任何情况下不白屏 -->
@@ -92,6 +94,8 @@
         </template>
       </template>
     </ListPage>
+
+    <LossDistributionDrawer v-model:open="lossOpen" :assignment-id="assignmentId" :class-id="classId" role="teacher" />
   </PageShell>
 </template>
 
@@ -108,6 +112,7 @@ import { exportReviewXlsx } from '../../infrastructure/export.js';
 import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
 import StatusTag from '../../components/StatusTag.vue';
+import LossDistributionDrawer from '../../components/LossDistributionDrawer.vue';   // ★R2-B68：按班失分项分布抽屉
 import { useConfirm } from '../../composables/useConfirm.js';
 
 /** ★R2-B54：UI 文案固定友好；原始错误只进 console（⑨e 会抽取本函数体执行断言） */
@@ -132,6 +137,7 @@ const assignmentId = computed(() => (route.query.assignmentId === undefined || r
 
 const loading = ref(false);
 const loadError = ref('');     // ★错态（不为空 ⇒ 模板显示错误 + 重试入口，绝不白屏）
+const lossOpen = ref(false);   // ★R2-B68：失分项分布抽屉（打开时才请求；空/错态由抽屉自己兜底）
 const list = ref([]);
 const keyword = ref('');
 const filter = ref('all');

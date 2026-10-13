@@ -9,10 +9,13 @@
  */
 import express from 'express';
 import { getGradingRun, getGradingRunLog, listGradingRuns } from '../controllers/admin/grading-runs/index.js';
+import { getLossDistribution } from '../controllers/admin/grading-runs/loss-distribution.js';   // ★R2-B68
 
 const router = express.Router();
 
 router.get('/', listGradingRuns);
+// ★R2-B68（WAVE3）：按班看失分项分布（只读）—— 必须注册在 '/:id' **之前**，否则会被 :id 路由吞掉
+router.get('/loss-distribution', getLossDistribution);
 router.get('/:id', getGradingRun);
 router.get('/:id/log', getGradingRunLog);
 

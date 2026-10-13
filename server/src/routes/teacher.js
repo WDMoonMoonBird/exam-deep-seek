@@ -74,6 +74,8 @@ router.get('/submissions/:id/project', review.getProjectReview);
 router.put('/submissions/:id/project/review', review.reviewProjectSubmission);
 router.post('/submissions/:id/project/regrade', projectReview.regradeProjectSubmission);
 router.post('/assignments/:id/grade', assignmentGrading.triggerAssignmentGrading); // W7：作业级批改触发（幂等）
+// ★R2-B68（WAVE3）：按班看失分项分布（只读；classId 需命中可见集合，未传则收敛到可见班级并集）
+router.get('/assignments/:id/loss-distribution', teacher.getAssignmentLossDistribution);
 
 // 教学团队
 router.get('/teams', team.getTeams);
