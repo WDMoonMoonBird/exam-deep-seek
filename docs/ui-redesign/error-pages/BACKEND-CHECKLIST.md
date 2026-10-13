@@ -75,16 +75,26 @@
 
 已生成/将生成：`client/public/error-pages/{400,401,403,404,405,408,409,410,413,418,429,500,501,502,503,504}.html`
 （基于 MIT 授权的 tarampampam/error-pages ghost 模板改写，中文文案，**保留版权声明**）。
-nginx 用法：`error_page 404 /error-pages/404.html;`（含 `internal;` 限定）或由 Express `sendFile` 提供。
+nginx 用法：`error_page 404 /exam/error-pages/404.html;`（含 `internal;` 限定）或由 Express `sendFile` 提供。
 
 ## 六、前端产出的可直接使用产物（后端无需自己写页面）
 
 - 静态错误页：`client/public/error-pages/<code>.html`（ghost 视觉、中文文案、MIT 声明保留、深浅色自动、429/5xx 自带 30 秒自动重试）
   → Express 用法：`res.status(404).sendFile(path.join(__dirname, '../../client/public/error-pages/404.html'))`
-  → nginx 用法：`error_page 404 /error-pages/404.html;`（建议配 `internal;`）+ `proxy_intercept_errors on`（502/503/504 才有用）
+  → nginx 用法：`error_page 404 /exam/error-pages/404.html;`（建议配 `internal;`）+ `proxy_intercept_errors on`（502/503/504 才有用）
 - 视觉/文案与前端 SPA 内的错误页一致（同一份来源），不会出现两套长得不一样。
 
 ## 七、如果要我出补丁
 
 P0 三项合计约 12 行（都在 `server/src/app.js`）。我可以直接写成 diff 发出来，但**不主动改 `server/`**（避免与后端会话撞车）——
 后端会话说一声「要补丁」，我就把 diff 贴进本文件。
+
+## 八、状态与口径更新（后端 2026-10-13 回复后）
+
+| 项 | 结论 |
+|---|---|
+| **静态错误页对外路径** | **`/exam/error-pages/<code>.html`**（本站 base 是 `/exam/`，vite 把 `client/public/error-pages/` 拷成 `dist/error-pages/`，对外即 `/exam/error-pages/`）→ nginx：`error_page 404 /exam/error-pages/404.html;` |
+| 实现方式 | **本文不再给 Express 写法**（服务端实现由后端决定）；本文只保留 ①nginx 口径 ②接口契约（状态码 + JSON 形状） |
+| **P0-3（`/exam/api/*` 未命中）** | 代码**已修好**，等一条小修复后发版：**发版前**仍是 HTML 404，**发版后**为 JSON `{code:1404,message:'接口不存在',data:null}` ✓ |
+| 短名单 | **采用 A**（前缀白名单 + 前端 404 页）；后端已核对白名单，**无误伤** ✓ |
+| 前端过渡期应对 | 发版前 `/exam/api/*` 未命中会返回 HTML：前端请求层已按「响应体不是 JSON 时不解析、不崩」处理，统一提示「接口不存在或服务未就绪」 |
