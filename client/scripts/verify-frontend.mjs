@@ -197,10 +197,14 @@ const routerViewScope = (txt) => {
   const tEnd = txt.indexOf('</transition>', rv);
   return { rv, rvEnd, b, bEnd, t, tEnd, inner: txt.slice(rv, rvEnd < 0 ? rv + 400 : rvEnd) };
 };
+// ★R2-B54：router-view 的 slot 内**不允许**任何 transition（路由过渡已根除），外层仍须有错误边界包住整个 router-view
 const boundaryOutside = (txt) => {
   const s = routerViewScope(txt);
   if (!s) return false;
-  return s.b >= 0 && s.b < s.rv && s.bEnd > s.rvEnd && s.t > s.b && s.t > s.rv && s.tEnd > s.t && s.tEnd < s.bEnd;
+  const outerOpensBefore = s.b >= 0 && s.b < s.rv;
+  const outerClosesAfter = txt.lastIndexOf('</ErrorBoundary>') > s.rvEnd;
+  const noTransitionInSlot = !/<transition\b/.test(String(txt).slice(s.rv, s.rvEnd < 0 ? s.rv + 600 : s.rvEnd));
+  return outerOpensBefore && outerClosesAfter && noTransitionInSlot;
 };
 check('⑦f 两处 Layout：ErrorBoundary 包住 router-view 且位于 transition 之外（不会被 out-in 卡住）',
   boundaryOutside(layoutTeacher) && boundaryOutside(layoutAdmin),
@@ -250,6 +254,204 @@ const guardedCall = /try \{[\s\S]{0,200}createTeacherSocket/.test(reviewSrc) && 
 check('⑧d 连接失败不影响渲染：建连异常被吞（返回 null 不抛）+ 无顶层 await + 两处调用均在 try/catch 内',
   threw === false && nullReturn === true && noBlockingAwait && guardedCall,
   JSON.stringify({ threw, nullReturn, noBlockingAwait, guardedCall }));
+
+// ⑨ 路由过渡根除 + UI 友好文案 + keyed 边界（★R2-B54）
+const stripComments = (t) => String(t).replace(/<!--[\s\S]*?-->/g, '');
+const vueFiles = [];
+const walkVue = (dir) => { for (const f of fs.readdirSync(dir)) { const p = path.join(dir, f); const st = fs.statSync(p); if (st.isDirectory()) walkVue(p); else if (p.endsWith('.vue')) vueFiles.push(p); } };
+walkVue(path.join(CLIENT, 'src'));
+const routeTransitionFiles = [];
+for (const p of vueFiles) {
+  const t = stripComments(read(p) || '');
+  const re = /<transition\b[^>]*>/g; let m;
+  while ((m = re.exec(t)) !== null) {
+    const end = t.indexOf('</transition>', m.index);
+    const span = t.slice(m.index, end < 0 ? t.length : end + 13);
+    if (span.includes('<component :is="Component"') || span.includes('<router-view')) routeTransitionFiles.push(path.relative(CLIENT, p));
+  }
+}
+check('⑨a 全仓不存在「包住路由组件」的 <transition>（含 App.vue 顶层；注释不算）',
+  routeTransitionFiles.length === 0,
+  'violations=' + (routeTransitionFiles.join(',') || '(none)') + ' scanned=' + vueFiles.length);
+const uiRel = [
+  'src/views/teacher/Students.vue', 'src/views/teacher/ReviewClass.vue', 'src/views/teacher/Review.vue',
+  'src/views/admin/GradingRuns.vue', 'src/components/ErrorBoundary.vue',
+  // ★R2-B55 扩展：composables/** 与 components/checker/**
+  'src/composables/useProjectUpload.js', 'src/composables/question/usePromptPreview.js',
+  'src/composables/project/useSaveQuestion.js', 'src/composables/project/useStudentSubmission.js',
+  'src/composables/project/useZipUpload.js', 'src/composables/project/useChecker.js',
+  'src/composables/review/useReviewAiPrompt.js', 'src/components/checker/CheckerWizard.vue',
+];
+const rawInUi = [];
+for (const rel of uiRel) {
+  // 先剥注释（HTML/块/行）⇒ 注释里提到 err.message 不算违规
+  const code = String(read(path.join(CLIENT, rel)) || '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+  const lines = code.split(/\r?\n/);
+  lines.forEach((line, i) => {
+    if (/console\./.test(line)) return;
+    const m2 = line.match(/(?:err|e|error)\??\.message/);
+    if (!m2) return;
+    const before = line.slice(0, line.indexOf(m2[0]));
+    if (/data\??\.$/.test(before)) return;   // 服务端业务文案（response.data.message）允许
+    rawInUi.push(rel + ':' + (i + 1));
+  });
+}
+check('⑨b 面向用户文案不得插值原始 JS 错误（console 行与服务端 data.message 除外）',
+  rawInUi.length === 0,
+  'rawInUi=' + (rawInUi.join(',') || '(none)'));
+const layoutRel = ['src/App.vue', 'src/views/teacher/Layout.vue', 'src/views/admin/Layout.vue', 'src/views/student/Layout.vue'];
+const keyedMissing = []; const outerMissing = [];
+for (const rel of layoutRel) {
+  const t = stripComments(read(path.join(CLIENT, rel)) || '');
+  const rv = t.indexOf('<router-view');
+  const rvEnd = t.indexOf('</router-view>', rv);
+  const slot = rv < 0 ? '' : t.slice(rv, rvEnd < 0 ? t.length : rvEnd);
+  // ②v-slot 内必须是 **keyed** ErrorBoundary，且该处**无** transition
+  const keyed = /<ErrorBoundary\s+:reset-key="route\.fullPath"/.test(slot) && slot.indexOf('<component :is="Component"') > slot.indexOf('<ErrorBoundary');
+  const noTransitionInSlot = !/<transition\b/.test(slot);
+  if (!(keyed && noTransitionInSlot)) keyedMissing.push(rel);
+  // ③外层错误边界仍在 router-view 之外
+  const b = t.lastIndexOf('<ErrorBoundary>', rv);
+  const outerClosesAfter = t.lastIndexOf('</ErrorBoundary>') > rvEnd;   // 外层边界闭合在 router-view 之后（inner 是 keyed 那个）
+  if (!(b >= 0 && b < rv && outerClosesAfter)) outerMissing.push(rel);
+}
+check('⑨c 四个入口 v-slot 内为 keyed <ErrorBoundary :reset-key=route.fullPath> 且无 transition；外层边界仍在 router-view 之外',
+  keyedMissing.length === 0 && outerMissing.length === 0,
+  'keyedMissing=' + (keyedMissing.join(',') || '(none)') + ' outerMissing=' + (outerMissing.join(',') || '(none)'));
+// ④可执行：抽取各页 friendlyLoadError 函数体执行（桩件 console）⇒ 固定文案、原始错误只进 console、不抛
+const extractFn = (src, header) => { const i = src.indexOf(header); if (i < 0) return null; const b = src.indexOf('{', i); let d = 0; for (let k = b; k < src.length; k += 1) { if (src[k] === '{') d += 1; else if (src[k] === '}') { d -= 1; if (d === 0) return src.slice(b + 1, k); } } return null; };
+const rawErr = new Error("Cannot read properties of null (reading 'parentNode')");
+const friendlyResults = [];
+for (const rel of ['src/views/teacher/Students.vue', 'src/views/teacher/ReviewClass.vue', 'src/views/teacher/Review.vue']) {
+  const src = read(path.join(CLIENT, rel)) || '';
+  const bodyTxt = extractFn(src, 'function friendlyLoadError(');
+  if (!bodyTxt) { friendlyResults.push(rel + ':NO_FN'); continue; }
+  const logged = [];
+  const fn = new Function('console', 'err', bodyTxt);
+  let out1 = ''; let threw = false;
+  try { out1 = fn({ error: (...a) => logged.push(a) }, rawErr); } catch { threw = true; }
+  // 再调一次（模拟「加载中导航离开后再触发」⇒ 仍应友好、不抛）
+  try { fn({ error: (...a) => logged.push(a) }, rawErr); } catch { threw = true; }
+  const friendly = out1 === '数据加载失败，请重试';
+  const noLeak = !String(out1).includes('parentNode') && !String(out1).includes('Cannot read');
+  const loggedRaw = logged.length === 2 && logged.every((a) => a.indexOf(rawErr) >= 0);
+  friendlyResults.push(rel + ':' + (friendly && noLeak && loggedRaw && !threw ? 'OK' : 'BAD'));
+}
+check('⑨d 可执行（抽取真实函数体）：返回固定友好文案、不含原始错误、原始错误进 console、两次调用不抛（导航离开场景）',
+  friendlyResults.every((r) => r.endsWith(':OK')),
+  friendlyResults.join(' | '));
+
+// ⑨e（★R2-B55）：**全仓** UI sink 规则 —— 非 console 行里若同时出现「UI 出口」与「原始错误 .message / String(err)」⇒ 违规
+//   UI 出口：antd message.* / notify( / .value = / :message|:sub-title|:description / {{ 插值 / Toast / alert(
+const UI_SINKS = /message\.(error|warning|info)\(|notify\(|\.value\s*=|:message=|:sub-title=|:description=|\{\{|Toast|alert\(|errorText|errMsg/;
+const RAW_MSG = /(?:err|e|error|reason)\??\.message|String\((?:err|e|error)\)/;
+const sinkViolations = [];
+const allCode = [];
+const walkAll = (dir) => { for (const f of fs.readdirSync(dir)) { const p = path.join(dir, f); const st = fs.statSync(p); if (st.isDirectory()) walkAll(p); else if (/\.(vue|js)$/.test(p)) allCode.push(p); } };
+walkAll(path.join(CLIENT, 'src'));
+for (const p of allCode) {
+  const code = String(read(p) || '').replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  code.split(/\r?\n/).forEach((line, i) => {
+    if (/console\.|log\.(warn|error|info)/.test(line)) return;
+    if (!UI_SINKS.test(line) || !RAW_MSG.test(line)) return;
+    const m3 = line.match(RAW_MSG);
+    const before = m3 ? line.slice(0, line.indexOf(m3[0])) : '';
+    if (/data\??\.$/.test(before)) return;   // 服务端业务文案豁免
+    sinkViolations.push(path.relative(CLIENT, p) + ':' + (i + 1));
+  });
+}
+// ★R2-B55：本批 inScope 不含 client/src/views/ ⇒ 已存在的越界文件按**文件级棘轮**记录在案（新增违规仍会失败）
+const OUT_OF_SCOPE_OFFENDERS = [];   // ★R2-B57：ProjectReviewNew.vue 的 4 处已改用 errorCopyOf ⇒ 棘轮收紧为 0（全仓零违规）
+const offenders = [...new Set(sinkViolations.map((v) => v.split(':')[0]))];
+const unexpected = offenders.filter((f) => !OUT_OF_SCOPE_OFFENDERS.includes(f));
+check('⑨e 全仓（剥注释）：UI 出口处不得出现原始错误 .message / String(err)（服务端 data.message 豁免）',
+  unexpected.length === 0,
+  'newViolations=' + (unexpected.join(',') || '(none)')
+    + ' knownOutOfScope=' + offenders.filter((f) => OUT_OF_SCOPE_OFFENDERS.includes(f)).map((f) => f + '(' + sinkViolations.filter((v) => v.startsWith(f + ':')).length + ')').join(',')
+    + ' scanned=' + allCode.length);
+// ⑨f 接线契约：新修文件必须走统一出口 errorCopyOf（且 errorRecovery 的 notify 收敛为「请重试 + 路由」）
+const copyUsers = ['src/composables/useProjectUpload.js', 'src/composables/question/usePromptPreview.js', 'src/composables/project/useSaveQuestion.js', 'src/composables/project/useStudentSubmission.js', 'src/composables/project/useZipUpload.js', 'src/composables/project/useChecker.js', 'src/composables/review/useReviewAiPrompt.js', 'src/components/checker/CheckerWizard.vue'];
+const notUsingCopy = copyUsers.filter((rel) => !/errorCopyOf\(/.test(String(read(path.join(CLIENT, rel)) || '')) || !/errorCopy\.js/.test(String(read(path.join(CLIENT, rel)) || '')));
+const recSrc2 = String(read(path.join(CLIENT, 'src', 'components', 'errorRecovery.js')) || '');
+const notifyOk = /notify\('页面加载出错了，请重试（路由：' \+ fullPath \+ '）'\)/.test(recSrc2) && (recSrc2.match(/请重试（路由：/g) || []).length >= 3 && !/notify\('[^']*' \+ \(\(err && err\.message\)/.test(recSrc2);
+check('⑨f 新修文件统一走 errorCopyOf（含 errorCopy.js 导入）；errorRecovery 的 notify 收敛为「请重试 + 路由」（保留路由信息）',
+  notUsingCopy.length === 0 && notifyOk,
+  'notUsingCopy=' + (notUsingCopy.join(',') || '(none)') + ' notifyOk=' + notifyOk);
+// ⑨g 可执行（★R2-B55 测试②）：模拟上传/校验失败 ⇒ UI 文案友好、原始错误进 console、无原文泄漏
+const copyMod = await import(path.join(CLIENT, 'src', 'composables', 'errorCopy.js'));
+const seen = [];
+const stubLog = { error: (...a) => seen.push(a) };
+const rawErr2 = new Error("Cannot read properties of null (reading 'parentNode')");
+const ui1 = copyMod.errorCopyOf(rawErr2, { tag: 'useZipUpload.js 上传压缩包', action: '上传', log: stubLog });
+const ui2 = copyMod.errorCopyOf({ response: { data: { message: '文件格式不正确' } } }, { tag: 'CheckerWizard.vue JSON 校验', action: 'JSON 校验', log: stubLog });
+const ui3 = copyMod.errorCopyOf({ code: 'ENOENT' }, { tag: 'useProjectUpload.js 解析题目文件', action: '解析', log: stubLog });
+check('⑨g 可执行：模拟上传/校验失败 ⇒ UI 固定友好（服务端业务文案优先）、原始错误三次都进 console、不泄漏原文',
+  ui1 === '上传失败，请重试' && ui2 === '文件格式不正确' && ui3 === '解析失败，请重试'
+    && seen.length === 3 && seen.every((a) => a.indexOf(rawErr) >= 0 || a[1] && a[1].err !== undefined)
+    && ![ui1, ui2, ui3].some((t) => String(t).includes('parentNode') || String(t).includes('Cannot read') || String(t).includes('[object Object]')),
+  JSON.stringify({ ui1, ui2, ui3, logged: seen.length }));
+
+// ⑩ 三端「我的信息 + 修改密码」对齐（★R2-B56）
+const threeLayouts = { teacher: 'src/views/teacher/Layout.vue', student: 'src/views/student/Layout.vue', admin: 'src/views/admin/Layout.vue' };
+const layoutGaps = [];
+for (const [who, rel] of Object.entries(threeLayouts)) {
+  const t = stripComments(read(path.join(CLIENT, rel)) || '');
+  const hasMenu = /key="profile"/.test(t) && />\s*我的信息\s*</.test(t);
+  const hasCard = /<ProfileCard\b/.test(t) && /<StatusTag|ProfileCard/.test(t);
+  const pwdFields = (t.match(/a-input-password/g) || []).length >= 3 && /原密码/.test(t) && /新密码/.test(t) && /确认新密码/.test(t);
+  const hasApi = /request\.put\('\/auth\/password'/.test(t);
+  const shape = /:width="520"/.test(t) && /:destroyOnClose="true"/.test(t) && /@cancel="resetPwdForm"/.test(t) && /function resetPwdForm\(/.test(t);
+  const icon = /UserOutlined/.test(t);
+  if (!(hasMenu && hasCard && pwdFields && hasApi && shape && icon)) {
+    layoutGaps.push(who + ':' + JSON.stringify({ hasMenu, hasCard, pwdFields, hasApi, shape, icon }));
+  }
+}
+check('⑩a 三端 Layout（teacher/student/admin）都含「我的信息」菜单项 + ProfileCard + 三字段密码表单 + /auth/password + 520/destroyOnClose/重置',
+  layoutGaps.length === 0,
+  'gaps=' + (layoutGaps.join(' | ') || '(none)'));
+// ⑩b ProfileCard 的 role 文案/色调（抽取真实 computed 表达式求值；teacher/student 逐字不变）
+const pcSrc = String(read(path.join(CLIENT, 'src', 'components', 'ProfileCard.vue')) || '');
+const roleTextExpr = (pcSrc.match(/const roleText = computed\(\(\) => \(([\s\S]*?)\)\);/) || [])[1];
+const roleToneExpr = (pcSrc.match(/const roleTone = computed\(\(\) => \(([\s\S]*?)\)\)/) || [])[1];
+const roleOf = (role) => {
+  const fn = new Function('props', 'return { text: ' + roleTextExpr + ', tone: ' + roleToneExpr + ' };');
+  return fn({ role });
+};
+const rTeacher = roleOf('teacher'); const rStudent = roleOf('student'); const rAdmin = roleOf('admin');
+check('⑩b ProfileCard：admin ⇒ 「管理员」(brand)；teacher ⇒ 「教师」(brand)、student ⇒ 「学生」(accent) 逐字不变',
+  rTeacher.text === '教师' && rTeacher.tone === 'brand' && rStudent.text === '学生' && rStudent.tone === 'accent'
+    && rAdmin.text === '管理员' && rAdmin.tone === 'brand',
+  JSON.stringify({ rTeacher, rStudent, rAdmin }));
+// ⑩c 抽取管理员 changePassword **真实函数体**执行（桩件 request/message）⇒ 校验、请求体、成功清空
+const adminSrc = String(read(path.join(CLIENT, 'src', 'views', 'admin', 'Layout.vue')) || '');
+const pwdBody = extractFn(adminSrc, 'async function changePassword(');
+const runPwd = (form) => { const calls = { put: [], warn: [], success: [], error: [], resets: 0 };
+  const pwdForm = { ...form };
+  // 真实函数体是**语句**（不是表达式）⇒ 包成 async IIFE 执行（返回其 Promise）
+  const stub = new Function('pwdForm', 'message', 'request', 'changingPwd', 'resetPwdForm', 'errorCopyOf', 'return (async () => {' + pwdBody + '})();');
+  const changingPwd = { value: false };
+  const p = stub(pwdForm, { warn: (t) => calls.warn.push(t), success: (t) => calls.success.push(t), error: (t) => calls.error.push(t) },
+    { put: (url, body) => { calls.put.push([url, body]); return Promise.resolve({}); } }, changingPwd,
+    () => { calls.resets += 1; pwdForm.oldPassword = ''; pwdForm.newPassword = ''; pwdForm.confirmPassword = ''; },
+    (err, opts) => copyMod.errorCopyOf(err, { ...(opts || {}), log: { error() {} } }));
+  return { p, calls, changingPwd, pwdForm };
+};
+const caseEmpty = runPwd({ oldPassword: '', newPassword: 'a', confirmPassword: 'a' }); await caseEmpty.p;
+const caseMismatch = runPwd({ oldPassword: 'x', newPassword: 'a', confirmPassword: 'b' }); await caseMismatch.p;
+const caseOk = runPwd({ oldPassword: 'x', newPassword: 'a', confirmPassword: 'a' }); await caseOk.p;
+const okBody = caseOk.calls.put[0] ? caseOk.calls.put[0][1] : null;
+const bodyKeys = okBody ? Object.keys(okBody).sort().join(',') : '(none)';
+check('⑩c 真实函数体执行：空值/不一致 ⇒ 零请求；一致 ⇒ 恰一次 PUT /auth/password 且请求体键恰为 oldPassword,newPassword（无 confirmPassword）+ 成功清空收起 + loading 复位',
+  caseEmpty.calls.put.length === 0 && caseEmpty.calls.warn.length === 1
+    && caseMismatch.calls.put.length === 0 && caseMismatch.calls.warn.length === 1
+    && caseOk.calls.put.length === 1 && caseOk.calls.put[0][0] === '/auth/password' && bodyKeys === 'newPassword,oldPassword'
+    && caseOk.calls.success.length === 1 && caseOk.calls.success[0] === '密码修改成功'
+    && caseOk.calls.resets === 1 && caseOk.pwdForm.oldPassword === '' && caseOk.pwdForm.newPassword === '' && caseOk.pwdForm.confirmPassword === ''
+    && caseOk.changingPwd.value === false,
+  JSON.stringify({ empty: caseEmpty.calls, mismatch: caseMismatch.calls.warn, put: caseOk.calls.put, bodyKeys, resets: caseOk.calls.resets, loading: caseOk.changingPwd.value }));
 const viteCfg = read(path.join(CLIENT, 'vite.config.js')) || '';
 check('⑧e 开发代理就位：vite.config.js 含 /exam/socket.io 代理（ws:true + 去前缀）',
   // ★锚定"代理键"位置（避免 rewrite 行里的同名字符串让断言恒真），并要求 target/ws/去前缀齐备

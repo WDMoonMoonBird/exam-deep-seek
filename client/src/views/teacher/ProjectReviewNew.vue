@@ -239,6 +239,7 @@ import loader from '@monaco-editor/loader';
 import { applyMonacoCompat } from '../../infrastructure/monaco/legacyLoaderCompat';
 import { useMonacoTheme } from '../../composables/useMonacoTheme.js';
 import { useMonacoKeyboardA11y } from '../../composables/useMonacoKeyboardA11y.js';
+import { errorCopyOf } from '../../composables/errorCopy.js';   // ★R2-B57：UI 文案统一出口（服务端业务文案优先、原始错误只进 console）
 import { getClassWithColor } from 'file-icons-js';
 import 'file-icons-js/css/style.css';
 import { getProjectReview, saveProjectReview, regradeProjectSubmission } from '../../api/projects.js';
@@ -520,7 +521,7 @@ async function onApprove() {
     };
     message.success('审核通过，学生已可见成绩');
   } catch (e) {
-    message.error('保存失败：' + (e.response?.data?.message || e.message));
+    message.error(errorCopyOf(e, { tag: 'ProjectReviewNew.vue 保存人工评分', action: '保存' }));
   } finally {
     saving.value = false;
   }
@@ -539,7 +540,7 @@ async function showPrompt() {
     const r = await request.get('/teacher/submissions/' + submissionId.value + '/project/prompt');
     promptData.value = r.data;
   } catch (e) {
-    message.error('获取提示词失败：' + (e.response?.data?.message || e.message));
+    message.error(errorCopyOf(e, { tag: 'ProjectReviewNew.vue 获取提示词', action: '获取提示词' }));
   } finally {
     promptLoading.value = false;
   }
@@ -557,7 +558,7 @@ async function onRegrade() {
     startPolling();
   } catch (e) {
     regrading.value = false; // 接口失败立即恢复
-    message.error('重评失败：' + (e.response?.data?.message || e.message));
+    message.error(errorCopyOf(e, { tag: 'ProjectReviewNew.vue 重新评分', action: '重评' }));
   }
   // 成功时保持 loading，直到轮询到评分完成/失败/超时才恢复
 }
@@ -648,7 +649,7 @@ async function fetchData() {
     if (first) openFile(first.path, first.name);
   } catch (e) {
     // ★R2-B47（U-1）：错态可读 + 重试入口（不再只有一条 message 后停在空白）
-    loadError.value = e?.response?.data?.message || e?.message || '加载失败';
+    loadError.value = errorCopyOf(e, { tag: 'ProjectReviewNew.vue 加载复审数据', action: '加载' });
     message.error('加载失败：' + loadError.value);
   } finally {
     loadingDetail.value = false;     // ★任何路径必复位 loading（防呆 ⑥a）
