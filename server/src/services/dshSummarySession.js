@@ -206,6 +206,10 @@ export async function defaultCallModel({ system, user, model, maxTokens = 2000, 
   } catch (err) { return { ok: false, error: 'request_failed:' + String(err && err.message).slice(0, 120) }; } finally { clearTimeout(timer); }
 }
 
+/** ★R2-B51（F-T32-1）：严格数值归一（null/undefined/'' ⇒ null；非有限数 ⇒ null）
+ *  —— 必须先把 null 归一，否则 Number(null)===0 会被当成"显式 0"（这正是 tokens.__session 兜底失效的根因）。 */
+export function numOrNullStrict(v) { return v === null || v === undefined || v === '' ? null : (Number.isFinite(Number(v)) ? Number(v) : null); }
+
 /** 预算：单次 usage 折算费用（平台价目口径） */
 export function costOfTokens(tokens, model, at = new Date()) {
   const hit = Number((tokens && tokens.cache_hit) || 0);
@@ -301,6 +305,11 @@ export async function runSummarySession({
       if (prisma) await putCachedSummary(prisma, { summaryKey, contentKey, resultDigest, text: entry.text, facts: entry.facts, model: entry.model, promptVersion: entry.prompt_version, tokens: entry.tokens, source: 'session' });
     }
     result.entries = entries;
+    // ★R2-B50（F1）：把三态 meta 随 tokens 一并返回（__session 命名空间，由 recordSummaryUsage 拆出并落库）
+    //   —— 这样**无需改动调用方（worker）**即可让 usage_json.summary_session 带上 mode/cache_hit/cache_hits/generated。
+    result.tokens = { ...(result.tokens || { prompt: 0, completion: 0, reasoning: 0 }), __session: {
+      mode: useMode, cache_hit: result.generated === 0 && result.cache_hits > 0, cache_hits: result.cache_hits, generated: result.generated,
+    } };
     if (Object.keys(entries).length > 0) {
       const doc = buildSummariesDoc({ assignmentId, mode: useMode, entries });
       writeSummaries(runRoot, doc);
@@ -315,13 +324,43 @@ export async function runSummarySession({
 }
 
 /** 把本会话的用量并入既有 grading_run_usage.usage_json.summary_session（同 run-root 自动计入；表/行缺失 ⇒ 静默跳过） */
-export async function recordSummaryUsage(prisma, { runRef, tokens, cost, model }) {
+/**
+ * ★R2-B50（B49-F1）：除 tokens/费用/型号外，**把三态判定所需字段一并落库** ⇒ 批改记录页无需依赖归档 meta 兜底即可精确显示
+ *   `{ mode, cache_hit, cache_hits, generated }`。
+ *   cache_hit 语义（与 B49 shapeSummarySession 对齐）：**本次运行的评语全部来自缓存**（generated===0 且 cache_hits>0）⇒ true；
+ *   有任何一份是本次新生成 ⇒ false（混合情形不宣称"整体命中"，与 B49 的归档 meta 判定一致）。
+ */
+export async function recordSummaryUsage(prisma, { runRef, tokens, cost, model, mode = null, cacheHits = null, generated = null }) {
   if (!prisma || !runRef) return false;
   try {
     const rows = await prisma.$queryRawUnsafe('SELECT usage_json FROM grading_run_usage WHERE run_ref = ? LIMIT 1', String(runRef));
     const cur = Array.isArray(rows) && rows[0] ? safeParse(rows[0].usage_json) || {} : null;
     if (!cur) return false;
-    cur.summary_session = { tokens: tokens || null, cost_total: Number.isFinite(Number(cost)) ? Number(cost) : null, model: model || null, recorded_at: new Date().toISOString() };
+    // 三态字段来源：显式参数优先；否则取 tokens.__session（R2-B50：runSummarySession 随 tokens 附带，
+    //   ⇒ 调用方无需改动即可落三态）；tokens 落库前剥离 __session（保持 tokens 形状干净）。
+    const meta = (tokens && typeof tokens === 'object' && tokens.__session) ? tokens.__session : null;
+    const cleanTokens = (() => {
+      if (!tokens || typeof tokens !== 'object') return tokens || null;
+      const { __session, ...rest } = tokens;
+      return Object.keys(rest).length ? rest : null;
+    })();
+    // ★R2-B51（F-T32-1）：**必须先把 null/undefined/'' 归一为 null 再判有限性**——
+    //   旧写法 Number.isFinite(Number(null)) === Number.isFinite(0) === true ⇒ 默认参数 null 被当成"显式 0"
+    //   ⇒ tokens.__session 兜底永不生效（页面把"全部命中缓存"显示成"本次会话生成"、cache_hits 审计恒 0）。
+    const numOrNull = (v) => (v === null || v === undefined || v === '' ? null : (Number.isFinite(Number(v)) ? Number(v) : null));
+    const hits = numOrNull(cacheHits) ?? numOrNull(meta ? meta.cache_hits : null);
+    const gen = numOrNull(generated) ?? numOrNull(meta ? meta.generated : null);
+    const cacheHit = hits === null && gen === null ? null : (gen === 0 && hits > 0);
+    cur.summary_session = {
+      tokens: cleanTokens,
+      mode: (mode || (meta && meta.mode) || null),
+      cost_total: Number.isFinite(Number(cost)) ? Number(cost) : null,
+      model: model || null,
+      cache_hit: cacheHit,
+      cache_hits: hits,
+      generated: gen,
+      recorded_at: new Date().toISOString(),
+    };
     await prisma.$executeRawUnsafe('UPDATE grading_run_usage SET usage_json = ? WHERE run_ref = ?', JSON.stringify(cur), String(runRef));
     return true;
   } catch { return false; }

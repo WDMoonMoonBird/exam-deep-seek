@@ -7,10 +7,13 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import prisma from '../../src/utils/prisma.js';
 import { recordSummaryUsage } from '../../src/services/dshSummarySession.js';
 import { shapeUsageBlock, shapeSummarySession } from '../../src/controllers/adminGradingRunsController.js';
 import { archiveRun } from '../../src/services/dshRunArchiver.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const ROW_BASE = { cost_total: 1.004, cost_currency: 'CNY', model: 'deepseek-v4-flash', model_calls: 12, uncached_input_tokens: 100, cache_read_tokens: 900, output_tokens: 50, cache_write_tokens: 0, cache_hit_rate: 0.9, price_version: '2026-10-13', price_tier: 'idle', no_model_session: 0 };
 const roots = [];
@@ -42,6 +45,11 @@ describe('W66b R2-B50：三态字段落库（F1）+ 归档含 summaries.json（F
     expect(ss.tokens).toMatchObject({ prompt: 900, completion: 130, reasoning: 90 });
     const shapedHit = shapeUsageBlock({ row: { ...ROW_BASE, usage_json: typeof raw === 'string' ? raw : JSON.stringify(raw) } });
     expect(shapedHit.summary_session.state).toBe('cached_hit');            // ★无需归档 meta 兜底
+    // ★R2-B51：生产真实路径是 Prisma 直接把 JSON 列给成**对象**（不 stringify）⇒ 这一形态也必须判出 cached_hit
+    //   （反例：String(object) === '[object Object]' 不可恢复 —— 故调用方须原样传对象/字符串，不得 String() 转换）
+    const shapedAsObject = shapeUsageBlock({ row: { ...ROW_BASE, usage_json: usageJsonOf(raw) } });
+    expect(shapedAsObject.summary_session.state).toBe('cached_hit');
+    expect(shapedAsObject.summary_session.source).toBe('usage_json');
     expect(shapedHit.summary_session.cache_hit).toBe(true);
     expect(shapedHit.summary_session.mode).toBe('cached');
     // B49 的 shapeSummarySession 对外暴露 cache_hit/mode（判定三态用），原始计数留在 usage_json（可审计/后续可展示）
@@ -81,6 +89,40 @@ describe('W66b R2-B50：三态字段落库（F1）+ 归档含 summaries.json（F
     expect(shaped.mode).toBe('cached');
     expect(shaped.entries).toBe(2);
   }, 120000);
+  it('★W66b-4（F-T32-1）worker 的真实调用形状：**只传 tokens.__session**、不传数值参数 ⇒ 三态照常落库（回归锁）', async () => {
+    const jobId = 992000 + (Date.now() % 800);
+    const ref = 'job:' + jobId;
+    runRefs.push(ref);
+    await prisma.$executeRawUnsafe(
+      'INSERT INTO grading_run_usage (run_ref, job_id, model_calls, cost_total, cost_currency, price_version, no_model_session, usage_json, created_at, updated_at) '
+      + 'VALUES (?, ?, 0, 0, ?, ?, 1, CAST(? AS JSON), NOW(3), NOW(3))',
+      ref, jobId, 'CNY', '2026-10-13:db', JSON.stringify({ schema: 'session-usage/1' }),
+    );
+    // ★worker 只传 tokens/cost/model —— 三态 meta 全在 tokens.__session；旧实现因 Number(null)===0 被当成「显式 0」⇒ 兜底永不生效
+    const ok = await recordSummaryUsage(prisma, { runRef: ref, tokens: { prompt: 800, completion: 120, reasoning: 340, __session: { mode: 'cached', cache_hit: true, cache_hits: 2, generated: 0 } }, cost: 0, model: 'deepseek-v4-flash' });
+    expect(ok).toBe(true);
+    const raw = (await prisma.$queryRawUnsafe('SELECT usage_json FROM grading_run_usage WHERE run_ref = ?', ref))[0].usage_json;
+    const doc = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    expect(doc.summary_session).toMatchObject({ mode: 'cached', cache_hit: true, cache_hits: 2, generated: 0 });   // ★不再是 0/false
+    expect(doc.summary_session.tokens).toMatchObject({ prompt: 800, completion: 120, reasoning: 340 });
+    expect(doc.summary_session.tokens.__session).toBe(undefined);                                                 // tokens 形状干净
+    const shaped = shapeUsageBlock({ row: { ...ROW_BASE, usage_json: typeof raw === 'string' ? raw : JSON.stringify(raw) } });
+    expect(shaped.summary_session.state).toBe('cached_hit');                                                      // ★三态对新数据正确（无需归档）
+    // 对照：显式传数值参数时仍以显式值为准（不回归 B50 语义）
+    await recordSummaryUsage(prisma, { runRef: ref, tokens: { __session: { mode: 'cached', cache_hits: 2, generated: 0 } }, cost: 0, model: 'm', cacheHits: 0, generated: 3 });
+    const raw2 = (await prisma.$queryRawUnsafe('SELECT usage_json FROM grading_run_usage WHERE run_ref = ?', ref))[0].usage_json;
+    const doc2 = typeof raw2 === 'string' ? JSON.parse(raw2) : raw2;
+    expect(doc2.summary_session).toMatchObject({ cache_hits: 0, generated: 3, cache_hit: false });
+  }, 120000);
+  it('★W66b-5（T32-O1）归档候选白名单契约：只保留平铺 summaries.json（不再含恒 inert 的 out/summaries.json 候选）', () => {
+    const ctrl = fs.readFileSync(path.resolve(__dirname, '..', '..', 'src', 'controllers', 'adminGradingRunsController.js'), 'utf8');
+    expect(ctrl).toContain("for (const rel of ['summaries.json'])");                  // ★唯一候选（白名单只放行不含 '/' 的文件名）
+    expect(ctrl).not.toContain("for (const rel of ['out/summaries.json'");           // 无效候选已删除
+    expect(ctrl).toContain('文件名白名单按设计拒绝');                                    // 选择与理由留痕（记录 §2 同口径）
+    // 平铺读取仍可用：shapeSummarySession 在 summaryMeta 注入下判 cached_hit（A8/A10 同语义）
+    const shaped = shapeSummarySession({ row: { ...ROW_BASE, usage_json: JSON.stringify({}) }, summaryMeta: { mode: 'cached', entries: 2, cache_hits: 2, truncated: 0, generated_at: null } });
+    expect(shaped.state).toBe('cached_hit');
+  }, 60000);
 
   it('★W66b-3 旧数据安全降级：无字段 + 无归档文件 ⇒ not_generated/null（不报错、不假 0）', async () => {
     const missing = await recordSummaryUsage(prisma, { runRef: 'job:does-not-exist-' + Date.now(), tokens: null, cost: 0, model: null, mode: 'cached', cacheHits: 1, generated: 0 });

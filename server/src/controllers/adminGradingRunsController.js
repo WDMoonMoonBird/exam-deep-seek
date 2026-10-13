@@ -236,7 +236,10 @@ function parseMaybeJson(v) {
  */
 function readSummariesMeta(archive) {
   if (!archive) return null;
-  for (const rel of ['out/summaries.json', 'summaries.json']) {
+  // ★R2-B51（T32-O1）：只读**平铺** summaries.json —— readArchiveFile 的**文件名白名单按设计拒绝 '/'**，
+  //   嵌套候选 out/summaries.json 永远读不到（恒 inert，且会误导读者以为支持嵌套）；归档布局自 B50 起即平铺
+  //   （dshRunArchiver：copy(out/summaries.json → summaries.json)）⇒ 删除无效候选，只保留平铺名。
+  for (const rel of ['summaries.json']) {
     const doc = readJsonSafe(archive, rel);
     if (!doc || typeof doc !== 'object' || !doc.summaries) continue;
     const entries = Object.values(doc.summaries).filter((x) => x && typeof x === 'object');
