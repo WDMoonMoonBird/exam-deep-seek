@@ -2,7 +2,8 @@
   <div class="rp-page wb-shell" v-if="data" :class="{ 'wb-drawer-open': panelOpen }">
     <!-- 顶栏：返回条 + 对象名 + 状态徽标（Workbench 壳） -->
     <div class="rp-top wb-top">
-      <a-button type="link" size="small" @click="$router.back()">
+      <!-- ★R2-B47（U-1）：返回落点确定性（有站内历史且落在复审流内才 back()，否则显式回复审列表） -->
+      <a-button type="link" size="small" @click="goBack">
         ← 返回
       </a-button>
       <!-- B3-1 ⑤：标题层级与 Layout 的 h1 衔接（h1 → h2 → 页内 h3）：由 h3 提升为 h2，避免 axe heading-order；
@@ -268,6 +269,7 @@
 
 <script setup>
 import { onMounted, onUnmounted } from 'vue';
+import { useRouter } from 'vue-router';
 import CodeEditor from '../../components/CodeEditor.vue';
 import StatusTag from '../../components/StatusTag.vue';
 import { useReviewPage } from '../../composables/review/useReviewPage.js';
@@ -286,6 +288,19 @@ const {
   narrow, panelOpen, collapsed, itemTypeLabel, itemTypeColor, itemTypeTagClass, safeSqContent, isCodeStem,
   subStatusColor, subStatusTagClass, subStatusText, onPageMounted, onPageUnmounted,
 } = useReviewPage();
+
+const router = useRouter();
+
+/**
+ * ★R2-B47（U-1）：返回落点确定性 + 兜底（无站内历史时裸 back() 会"什么都不做"⇒ 用户以为白屏）。
+ * 注：本文件禁止响应式原语（ref/reactive/computed/watch）⇒ 这里只用普通函数与 router，不引入任何真值源。
+ */
+function goBack() {
+  const back = router.options && router.options.history && router.options.history.state
+    ? router.options.history.state.back : null;
+  if (typeof back === 'string' && back.startsWith('/teacher/review')) router.back();
+  else router.push('/teacher/review');
+}
 
 // ★R2-B41：AI 评分依据（纯函数 + 模块级缓存；本文件禁止响应式原语 ⇒ 不用 computed）
 function fbOf(sqId) {

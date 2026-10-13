@@ -96,6 +96,45 @@ const resolveRouteComponent = (routePath) => {
   if (!m) return { file: null, reason: 'component_not_found:' + routePath };
   return { file: path.resolve(path.dirname(routerFile), m[1]), raw: m[1] };
 };
+// ⑥ 请求页三件套防呆（★R2-B47 U-1 根治）：views/teacher/** 中**发起数据请求**的页面必须
+//   ①loading 有复位路径（finally 或 catch 内复位）②有列表空态分支 ③依赖路由参数时从 route 取且有重入处理
+//   豁免：Layout.vue（壳组件：只渲染菜单/通知，不含列表与空态语义；已在此显式声明）
+const TEACHER_DIR = path.join(CLIENT, 'src', 'views', 'teacher');
+const TEACHER_EXEMPT = ['Layout.vue'];
+const teacherFiles = fs.existsSync(TEACHER_DIR)
+  ? fs.readdirSync(TEACHER_DIR).filter((f) => f.endsWith('.vue') && !TEACHER_EXEMPT.includes(f))
+  : [];
+const missing = { loading: [], empty: [], route: [] };
+for (const f of teacherFiles) {
+  const txt = read(path.join(TEACHER_DIR, f)) || '';
+  const requests = /request\.(get|post|put|delete|patch)|api\/[a-zA-Z]+\.js/.test(txt);
+  if (!requests) continue;
+  const hasFinally = /finally\s*\{/.test(txt);
+  const hasCatch = /catch\s*[({]/.test(txt);
+  // 命名约定：loading 态 ref 以 loading 开头（loading / loadingDetail / loadingList…）⇒ 复位语句须命中其中之一
+  const resetsLoading = /\b[a-zA-Z_$]*loading[a-zA-Z_$]*\.value\s*=\s*false/i.test(txt);
+  if (!(resetsLoading && (hasFinally || hasCatch))) missing.loading.push(f);
+  const hasEmpty = /<a-empty|ListPage|empty-title|暂无/.test(txt);
+  if (!hasEmpty) missing.empty.push(f);
+  const usesRoute = /route\.(params|query)/.test(txt);
+  if (usesRoute) {
+    const fromRoute = /useRoute\(/.test(txt);
+    // ★必须显式处理"路由重入"（参数变化/组件复用）：watch(() => route.*) / onBeforeRouteUpdate / onActivated
+    const reentry = /watch\(\s*\(\)\s*=>\s*\[?\s*route\.|onBeforeRouteUpdate|onActivated/.test(txt);
+    const naiveCapture = /^\s*const\s+\w+\s*=\s*\+?route\.(params|query)\./m.test(txt);
+    if (!(fromRoute && reentry && !naiveCapture)) missing.route.push(f);
+  }
+}
+check('⑥a 请求页 loading 必须有复位路径（finally / catch + loading.value=false）',
+  missing.loading.length === 0,
+  '缺复位=' + (missing.loading.join(',') || '(none)') + ' 扫描页=' + teacherFiles.length);
+check('⑥b 请求页必须有列表空态分支（<a-empty / ListPage / empty-title / 暂无）',
+  missing.empty.length === 0,
+  '缺空态=' + (missing.empty.join(',') || '(none)'));
+check('⑥c 依赖路由参数的页必须从 useRoute 取且有重入处理（watch route.* / onBeforeRouteUpdate / onActivated）',
+  missing.route.length === 0,
+  '不合规=' + (missing.route.join(',') || '(none)'));
+
 for (const [label, routePath] of [
   ['⑤a 项目题复审路由', 'review/project/:submissionId'],
   ['⑤b 通用复审路由', 'review/:id'],

@@ -4,6 +4,16 @@
     description="按班级查看作业的 AI 评分与审核进度；点「审核」进入学生提交逐份批改。"
   >
     <!-- TODO(P1-7): 接口支持服务端分页后切换（/teacher/review-summary 目前全量返回，沿用前端切片） -->
+    <!-- ★R2-B47（U-1）：错态（请求失败/异常）必须有可读提示 + 重试入口 ⇒ 任何情况下不白屏 -->
+    <a-alert
+      v-if="loadError"
+      type="error" show-icon :message="'加载失败：' + loadError"
+      description="可点击右侧「重试」重新拉取。"
+      style="margin-bottom:12px;"
+    >
+      <template #action><a-button size="small" @click="fetch">重试</a-button></template>
+    </a-alert>
+
     <ListPage
       :columns="columns"
       :data-source="pagedList"
@@ -105,6 +115,7 @@ const fmtMD = (v) => { const s = formatDate(v); return s ? s.slice(5) : ''; };
 
 const userStore = useUserStore();
 const loading = ref(false);
+const loadError = ref('');     // ★R2-B47（U-1）：错态（请求失败 ⇒ 显示原因 + 重试，绝不白屏）
 const list = ref([]);
 const selectedClass = ref('');
 const page = reactive({ current: 1, pageSize: 20 });
@@ -134,20 +145,33 @@ const pagedList = computed(() => list.value.slice((page.current - 1) * page.page
 function filterOption(input, option) { return option.label.toLowerCase().includes(input.toLowerCase()); }
 
 async function loadClasses() {
-  const r = await request.get('/teacher/classes');
-  classes.value = r.data || [];
+  try {
+    const r = await request.get('/teacher/classes');
+    classes.value = r.data || [];
+  } catch (e) {
+    classes.value = [];
+    loadError.value = (e && e.response && e.response.data && e.response.data.message) || (e && e.message) || '加载班级失败';
+  }
 }
 
 async function fetch() {
   const schoolId = userStore.currentSchool?.id;
   if (!schoolId) { list.value = []; return; }
   loading.value = true;
-  const params = { schoolId };
-  if (selectedClass.value) params.classId = selectedClass.value;
-  page.current = 1;
-  const r = await request.get('/teacher/review-summary', { params });
-  list.value = (r.data || []).map(item => ({ ...item, key: `${item.assignmentId}-${item.classId}` }));
-  loading.value = false;
+  loadError.value = '';
+  try {
+    const params = { schoolId };
+    if (selectedClass.value) params.classId = selectedClass.value;
+    page.current = 1;
+    const r = await request.get('/teacher/review-summary', { params });
+    list.value = (r.data || []).map(item => ({ ...item, key: `${item.assignmentId}-${item.classId}` }));
+  } catch (e) {
+    // ★U-1：失败 ⇒ 清空 + 错态（可读原因），而不是"停在 loading / 空白"
+    list.value = [];
+    loadError.value = (e && e.response && e.response.data && e.response.data.message) || (e && e.message) || '加载失败';
+  } finally {
+    loading.value = false;     // ★任何路径必复位
+  }
 }
 
 async function exportForRecord(record) {

@@ -7,6 +7,7 @@
 import prisma from '../../../../utils/prisma.js';
 import logger from '../../../../utils/logger.js';
 import { getSchoolId } from './guards.js';
+import { parsePaging, shapeList, pagingArgs } from './paging.js';
 
 // ===================== 教师列表 =====================
 
@@ -15,12 +16,18 @@ export const getAllTeachers = async (req, res) => {
     const schoolId = getSchoolId(req);
     const where = { role: 'teacher', deletedAt: null };
     if (schoolId) where.teacherSchools = { some: { schoolId } };
-    const list = await prisma.user.findMany({
-      where,
-      select: { id: true, username: true, realName: true, createdAt: true },
-      orderBy: { createdAt: 'desc' },
-    });
-    res.json({ code: 0, message: 'ok', data: list });
+    // ★R2-B47 / U-2：服务端分页（不传 page/pageSize ⇒ 全量数组，向后兼容）；select 已是最小集（无敏感列）
+    const paging = parsePaging(req.query);
+    const [list, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: { id: true, username: true, realName: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+        ...pagingArgs(paging),
+      }),
+      prisma.user.count({ where }),
+    ]);
+    res.json({ code: 0, message: 'ok', data: shapeList(paging, list, total) });
   } catch (err) {
     logger.error({ err }, '获取教师列表失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });

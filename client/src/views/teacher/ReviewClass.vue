@@ -4,6 +4,16 @@
       <a-button type="link" @click="$router.push('/teacher/review')">← 返回评分审核</a-button>
     </template>
 
+    <!-- ★R2-B47（U-1）：错态（请求失败/异常）必须有可读提示 + 重试入口 ⇒ 任何情况下不白屏 -->
+    <a-alert
+      v-if="loadError"
+      type="error" show-icon :message="'加载失败：' + loadError"
+      description="可点击右侧「重试」重新拉取；也可返回上一页后再进入。"
+      style="margin-bottom:12px;"
+    >
+      <template #action><a-button size="small" @click="fetch">重试</a-button></template>
+    </a-alert>
+
     <ListPage
       :columns="columns"
       :data-source="list"
@@ -105,10 +115,15 @@ const { confirm } = useConfirm();
 const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
-const classId = +route.params.classId;
-const assignmentId = +route.query.assignmentId;
+/**
+ * ★R2-B47（U-1）：路由参数一律**在请求时**从 route 读取（computed，不再是 setup 期一次性捕获的旧值）
+ * ⇒ 路由重入 / 换班 / 带不同 query 返回时，请求用的永远是**当前**路由的参数。
+ */
+const classId = computed(() => +route.params.classId);
+const assignmentId = computed(() => (route.query.assignmentId === undefined || route.query.assignmentId === '' ? null : +route.query.assignmentId));
 
 const loading = ref(false);
+const loadError = ref('');     // ★错态（不为空 ⇒ 模板显示错误 + 重试入口，绝不白屏）
 const list = ref([]);
 const keyword = ref('');
 const filter = ref('all');
@@ -223,20 +238,30 @@ function resetFilters() {
 
 async function fetch() {
   loading.value = true;
-  const params = { assignmentId, page: pagination.current, pageSize: pagination.pageSize, filter: filter.value };
-  if (sortField.value) { params.sortField = sortField.value; params.sortOrder = sortOrder.value; }
-  if (keyword.value) params.keyword = keyword.value;
-  const r = await request.get(`/teacher/review-class/${classId}`, { params });
-  list.value = r.data.list;
-  pagination.total = r.data.total;
-  if (r.data.list.length && !assignmentTitle.value) {
-    const first = r.data.list.find(i => i.assignmentTitle);
-    if (first) {
-      assignmentTitle.value = first.assignmentTitle || '';
-      className.value = first.className || '';
+  loadError.value = '';
+  try {
+    const params = { assignmentId: assignmentId.value, page: pagination.current, pageSize: pagination.pageSize, filter: filter.value };
+    if (sortField.value) { params.sortField = sortField.value; params.sortOrder = sortOrder.value; }
+    if (keyword.value) params.keyword = keyword.value;
+    const r = await request.get(`/teacher/review-class/${classId.value}`, { params });
+    const rows = (r.data && r.data.list) || [];
+    list.value = rows;
+    pagination.total = (r.data && r.data.total) || 0;
+    if (rows.length && !assignmentTitle.value) {
+      const first = rows.find(i => i.assignmentTitle);
+      if (first) {
+        assignmentTitle.value = first.assignmentTitle || '';
+        className.value = first.className || '';
+      }
     }
+  } catch (e) {
+    // ★U-1：请求失败 ⇒ 清空 + 进入**错态**（保留可读原因），绝不停在"加载中/空白"
+    list.value = [];
+    pagination.total = 0;
+    loadError.value = (e && e.response && e.response.data && e.response.data.message) || (e && e.message) || '加载失败';
+  } finally {
+    loading.value = false;     // ★任何路径都必须复位 loading（旧代码在请求之后裸置；抛错则永不复位 ⇒ 白屏）
   }
-  loading.value = false;
 }
 
 function onPageChange(page, size) {
@@ -248,7 +273,7 @@ function onPageChange(page, size) {
 async function batchReview() {
   reviewing.value = true;
   try {
-    const r = await request.post('/teacher/submissions/batch-review', { schoolId: userStore.currentSchool?.id, classId, assignmentId });
+    const r = await request.post('/teacher/submissions/batch-review', { schoolId: userStore.currentSchool?.id, classId: classId.value, assignmentId: assignmentId.value });
     message.success(r.message); fetch();
   } finally { reviewing.value = false; }
 }
@@ -262,14 +287,14 @@ async function batchPublish() {
     onOk: async () => {
       publishing.value = true;
       try {
-        const r = await request.post('/teacher/submissions/batch-publish', { schoolId: userStore.currentSchool?.id, classId, assignmentId });
+        const r = await request.post('/teacher/submissions/batch-publish', { schoolId: userStore.currentSchool?.id, classId: classId.value, assignmentId: assignmentId.value });
         message.success(r.message); fetch();
       } finally { publishing.value = false; }
     },
   });
 }
 async function exportXlsx() {
-  const r = await request.get('/teacher/export-review', { params: { classId, assignmentId } });
+  const r = await request.get('/teacher/export-review', { params: { classId: classId.value, assignmentId: assignmentId.value } });
   exportReviewXlsx(r.data, className.value, assignmentTitle.value);
 }
 
@@ -287,8 +312,15 @@ function connectSocket() {
   });
 }
 
-onMounted(() => {
+/** ★R2-B47（U-1）：路由参数变化（同组件复用/带新 query 重入）⇒ 重置页码并重建数据 */
+watch(() => [route.params.classId, route.query.assignmentId], () => {
+  pagination.current = 1;
+  assignmentTitle.value = '';
   fetch();
+});
+
+onMounted(() => {
+  fetch();               // ★computed 参数 ⇒ 挂载时读到的就是当前路由（返回后重入也会重新拉取）
   connectSocket();
 });
 onUnmounted(() => {

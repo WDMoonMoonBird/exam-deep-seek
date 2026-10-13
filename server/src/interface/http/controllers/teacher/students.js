@@ -9,6 +9,7 @@ import prisma from '../../../../utils/prisma.js';
 import logger from '../../../../utils/logger.js';
 import { getVisibleClassIds } from '../../../../controllers/teamController.js';
 import { getSchoolId, canTeacherManageClass, canTeacherManageStudent } from './guards.js';
+import { parsePaging, shapeList, pagingArgs } from './paging.js';
 
 // ===================== 学生管理 =====================
 
@@ -16,7 +17,7 @@ export const getMyStudents = async (req, res) => {
   try {
     const schoolId = getSchoolId(req);
     const { classId } = req.query;
-    if (!schoolId) return res.json({ code: 0, message: 'ok', data: [] });
+    if (!schoolId) return res.json({ code: 0, message: 'ok', data: shapeList(parsePaging(req.query), [], 0) });
 
     // 查教师可见班级（直连+团队）
     let classIds = await getVisibleClassIds(req.user.id, schoolId);
@@ -24,21 +25,33 @@ export const getMyStudents = async (req, res) => {
     if (classId && classIds.includes(+classId)) {
       classIds = [+classId];
     }
-    if (classIds.length === 0) return res.json({ code: 0, message: 'ok', data: [] });
+    if (classIds.length === 0) return res.json({ code: 0, message: 'ok', data: shapeList(parsePaging(req.query), [], 0) });
 
     const { keyword } = req.query;
     const where = { role: 'student', studentClasses: { some: { classId: { in: classIds } } } };
     if (keyword) where.realName = { contains: keyword };
 
-    const students = await prisma.user.findMany({
-      where,
-      select: {
-        id: true, username: true, realName: true, createdAt: true,
-        studentClasses: { include: { class: { include: { school: true } } } },
-      },
-      orderBy: { username: 'asc' },
-    });
-    res.json({ code: 0, message: 'ok', data: students });
+    // ★R2-B47 / U-2：服务端分页（不传 page/pageSize ⇒ 全量数组，向后兼容）；★字段最小化：显式 select，
+    //   绝不带 password/手机号/证件号等敏感列，class/school 也只取必要字段。
+    const paging = parsePaging(req.query);
+    const [students, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true, username: true, realName: true, createdAt: true,
+          studentClasses: {
+            select: {
+              classId: true,
+              class: { select: { id: true, name: true, school: { select: { id: true, name: true } } } },
+            },
+          },
+        },
+        orderBy: { username: 'asc' },
+        ...pagingArgs(paging),
+      }),
+      prisma.user.count({ where }),
+    ]);
+    res.json({ code: 0, message: 'ok', data: shapeList(paging, students, total) });
   } catch (err) {
     logger.error({ err }, '获取学生列表失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
@@ -49,12 +62,14 @@ export const getMyClasses = async (req, res) => {
   try {
     const schoolId = getSchoolId(req);
     if (!schoolId) return res.json({ code: 0, message: 'ok', data: [] });
-    const list = await prisma.class.findMany({
-      where: { schoolId },
-      include: { school: true },
-      orderBy: { createdAt: 'desc' },
-    });
-    res.json({ code: 0, message: 'ok', data: list });
+    // ★R2-B47 / U-2：服务端分页（不传参数 ⇒ 全量数组，向后兼容既有下拉/选择器调用方）
+    const paging = parsePaging(req.query);
+    const where = { schoolId };
+    const [list, total] = await Promise.all([
+      prisma.class.findMany({ where, include: { school: true }, orderBy: { createdAt: 'desc' }, ...pagingArgs(paging) }),
+      prisma.class.count({ where }),
+    ]);
+    res.json({ code: 0, message: 'ok', data: shapeList(paging, list, total) });
   } catch (err) {
     logger.error({ err }, '获取教师班级失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });

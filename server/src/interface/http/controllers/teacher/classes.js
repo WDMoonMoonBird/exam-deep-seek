@@ -8,6 +8,7 @@ import prisma from '../../../../utils/prisma.js';
 import logger from '../../../../utils/logger.js';
 import { getVisibleClassIds } from '../../../../controllers/teamController.js';
 import { getSchoolId, canTeacherManageClass, canTeacherManageTeams, isTeacherInSchool } from './guards.js';
+import { parsePaging, shapeList, pagingArgs } from './paging.js';
 
 // ===================== 学校 & 班级管理（教师仅看自己的） =====================
 
@@ -27,22 +28,29 @@ export const getMySchools = async (req, res) => {
 export const getAllClasses = async (req, res) => {
   try {
     const schoolId = getSchoolId(req);
-    if (!schoolId) return res.json({ code: 0, message: 'ok', data: [] });
+    if (!schoolId) return res.json({ code: 0, message: 'ok', data: shapeList(parsePaging(req.query), [], 0) });
     const visibleIds = await getVisibleClassIds(req.user.id, schoolId);
     // 获取教师直连班级 ID
     const directIds = (await prisma.teacherClass.findMany({ where: { teacherId: req.user.id }, select: { classId: true } })).map(d => d.classId);
-    const list = await prisma.class.findMany({
-      where: { id: { in: visibleIds }, schoolId },
-      include: { school: true, teacherClasses: { include: { teacher: { select: { id: true, username: true, realName: true } } } }, teamClasses: { select: { teamId: true } }, _count: { select: { studentClasses: true } } },
-      orderBy: { createdAt: 'desc' },
-    });
+    // ★R2-B47 / U-2：服务端分页（不传 page/pageSize ⇒ 全量数组，向后兼容）；作用域不变（visibleIds ∩ schoolId）
+    const paging = parsePaging(req.query);
+    const where = { id: { in: visibleIds }, schoolId };
+    const [list, total] = await Promise.all([
+      prisma.class.findMany({
+        where,
+        include: { school: true, teacherClasses: { include: { teacher: { select: { id: true, username: true, realName: true } } } }, teamClasses: { select: { teamId: true } }, _count: { select: { studentClasses: true } } },
+        orderBy: { createdAt: 'desc' },
+        ...pagingArgs(paging),
+      }),
+      prisma.class.count({ where }),
+    ]);
     // 标记团队班级和归属教师
     const result = list.map(c => ({
       ...c,
       isTeamClass: !directIds.includes(c.id),
       ownerTeacherName: c.teacherClasses?.[0]?.teacher?.realName || '',
     }));
-    res.json({ code: 0, message: 'ok', data: result });
+    res.json({ code: 0, message: 'ok', data: shapeList(paging, result, total) });
   } catch (err) {
     logger.error({ err }, '获取班级列表失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });

@@ -97,9 +97,12 @@ const pagedList = computed(() => list.value.slice((page.current - 1) * page.page
 
 async function fetch() {
   loading.value = true;
-  const r = await request.get('/teacher/teams', { params: { schoolId: userStore.currentSchool?.id } });
-  list.value = r.data || [];
-  loading.value = false;
+  try {
+    const r = await request.get('/teacher/teams', { params: { schoolId: userStore.currentSchool?.id } });
+    list.value = r.data || [];
+  } finally {
+    loading.value = false;     // ★R2-B47 防呆口径：任何路径必复位 loading（异常另有全局提示）
+  }
 }
 
 function openCreate() { createName.value = ''; createVisible.value = true; }

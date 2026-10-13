@@ -8,13 +8,23 @@
       <a-button :disabled="!filterClass || isTeamClass" @click="openUploadModal">批量导入</a-button>
     </template>
 
-    <!-- TODO(P1-7): 接口支持服务端分页后切换（/teacher/students 目前全量返回，沿用前端切片） -->
+    <!-- ★R2-B47（U-2）：/teacher/students 已支持服务端分页（page/pageSize ⇒ {list,total,page,pageSize}），
+         本页改为服务端分页；不传参数时接口仍返回全量数组（向后兼容其它调用方） -->
+    <a-alert
+      v-if="loadError"
+      type="error" show-icon :message="'加载失败：' + loadError"
+      description="可点击右侧「重试」重新拉取。"
+      style="margin-bottom:12px;"
+    >
+      <template #action><a-button size="small" @click="fetch">重试</a-button></template>
+    </a-alert>
+
     <ListPage
       :columns="columns"
       :data-source="pagedList"
+      :total="total"
       :loading="loading"
       row-key="id"
-      :total="list.length"
       :current="page.current"
       :page-size="page.pageSize"
       :empty-title="emptyTitle"
@@ -182,6 +192,8 @@ import { useConfirm } from '../../composables/useConfirm.js';
 const { confirm } = useConfirm();
 
 const page = reactive({ current: 1, pageSize: 20 });
+const total = ref(0);          // ★R2-B47（U-2）：服务端 total（不再用 list.length 近似）
+const loadError = ref('');     // ★R2-B47（U-1）：错态（可读原因 + 重试入口）
 const loading = ref(false);
 const list = ref([]);
 const teacherClasses = ref([]);
@@ -226,7 +238,8 @@ function avatarChar(record) {
 }
 
 /** 前端切片：接口全量返回（见上方 TODO(P1-7)） */
-const pagedList = computed(() => list.value.slice((page.current - 1) * page.pageSize, page.current * page.pageSize));
+/** ★R2-B47（U-2）：服务端已分页 ⇒ 不再前端切片（保留 computed 名以免动模板其余部分） */
+const pagedList = computed(() => list.value);
 
 /** 空态三态文案：未选班级 / 无搜索结果 / 班级无学生 */
 const emptyTitle = computed(() => {
@@ -267,11 +280,31 @@ function enrichStudent(s) {
 }
 
 async function fetch() {
-  if (!filterClass.value) { list.value = []; return; }
+  if (!filterClass.value) { list.value = []; total.value = 0; return; }
   loading.value = true;
-  const r = await request.get('/teacher/students', { params: { classId: filterClass.value, keyword: keyword.value || undefined } });
-  list.value = (r.data || []).map(enrichStudent);
-  loading.value = false;
+  loadError.value = '';
+  try {
+    // ★R2-B47（U-2）：改走**服务端分页**（page/pageSize ⇒ 返回 { list, total, page, pageSize }）
+    const r = await request.get('/teacher/students', {
+      params: {
+        classId: filterClass.value,
+        keyword: keyword.value || undefined,
+        page: page.current,
+        pageSize: page.pageSize,
+      },
+    });
+    const d = r.data;
+    const rows = Array.isArray(d) ? d : (d && d.list) || [];     // 老形状（全量数组）兼容
+    list.value = rows.map(enrichStudent);
+    total.value = Array.isArray(d) ? rows.length : Number((d && d.total) || 0);
+  } catch (e) {
+    // ★U-1：失败 ⇒ 清空 + 错态（可读原因），绝不停在 loading/空白
+    list.value = [];
+    total.value = 0;
+    loadError.value = (e && e.response && e.response.data && e.response.data.message) || (e && e.message) || '加载失败';
+  } finally {
+    loading.value = false;     // ★任何路径必复位
+  }
 }
 
 async function loadClasses() { const r = await request.get('/teacher/classes'); teacherClasses.value = r.data || []; }
@@ -444,9 +477,11 @@ async function handleUploadFile(file) {
   return false;
 }
 
-/** 前端切片页码（ListPage 只抛出页码，不内置请求） */
-function onPageChange(p) {
+/** ★R2-B47（U-2）：服务端分页 ⇒ 翻页要重新请求（不再前端切片） */
+function onPageChange(p, size) {
   page.current = p;
+  if (size && size !== page.pageSize) { page.pageSize = size; page.current = 1; }
+  fetch();
 }
 
 /** 空态按钮：未选班级 → 无按钮；有搜索词 → 清空搜索；否则 → 新增学生 */

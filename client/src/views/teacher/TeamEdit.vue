@@ -55,6 +55,13 @@
               @select="onClassSelect"
             />
           </div>
+          <!-- ★R2-B47（U-1 同族）：可选班级为空 ⇒ 明确空态提示（不静默留白） -->
+          <a-empty
+            v-if="!classOptions.length"
+            description="暂无可选班级（可能尚未归属任何班级或加载失败）"
+            :image="false"
+            style="margin:8px 0;"
+          />
           <a-table :columns="cCols" :dataSource="team.classes || []" rowKey="classId" size="small" :pagination="false">
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'cname'">{{ record.class?.name }}</template>
@@ -94,6 +101,7 @@ const route = useRoute();
 const userStore = useUserStore();
 const { confirm } = useConfirm();
 const team = reactive({ name: '', teachers: [], classes: [], createdBy: null });
+const loading = ref(false);     // ★R2-B47：加载态（任意路径必复位；供防呆断言与页面提示使用）
 const tab = ref('teachers');
 
 const allTeachers = ref([]);
@@ -120,20 +128,32 @@ const cCols = [
 ];
 
 async function fetch() {
-  const r = await request.get(`/teacher/teams/${route.params.id}`);
-  Object.assign(team, r.data);
-  selectedTeachers.value = (team.teachers || []).filter(t => t.teacherId !== team.createdBy).map(t => t.teacherId);
-  selectedClasses.value = (team.classes || []).map(c => c.classId);
+  loading.value = true;
+  try {
+    const r = await request.get(`/teacher/teams/${route.params.id}`);   // ★R2-B47：参数在请求时读 route
+    Object.assign(team, r.data);
+    selectedTeachers.value = (team.teachers || []).filter(t => t.teacherId !== team.createdBy).map(t => t.teacherId);
+    selectedClasses.value = (team.classes || []).map(c => c.classId);
+  } finally {
+    loading.value = false;     // ★R2-B47 防呆口径：任何路径必复位
+  }
 }
 async function loadTeachers() {
-  const r = await request.get('/teacher/teachers', { params: { schoolId: userStore.currentSchool?.id } });
-  allTeachers.value = r.data || [];
+  try {
+    const r = await request.get('/teacher/teachers', { params: { schoolId: userStore.currentSchool?.id } });
+    allTeachers.value = r.data || [];
+  } catch { allTeachers.value = []; }
 }
 async function loadClasses() {
-  const r = await request.get('/teacher/classes');
-  avalClasses.value = r.data || [];
-  myClassIds.value = (r.data || []).filter(c => !c.isTeamClass).map(c => c.id);
+  try {
+    const r = await request.get('/teacher/classes');
+    avalClasses.value = r.data || [];
+    myClassIds.value = (r.data || []).filter(c => !c.isTeamClass).map(c => c.id);
+  } catch { avalClasses.value = []; }
 }
+
+/** ★R2-B47：路由参数变化（复用组件时换团队）⇒ 重建数据 */
+watch(() => route.params.id, () => { fetch(); loadTeachers(); loadClasses(); });
 
 /** 教师名单保存（原 300ms 防抖 → useDraftAutosave，delay 原样保留） */
 async function saveTeachers() {

@@ -1,8 +1,17 @@
 <template>
+  <!-- ★R2-B47（U-1 同族）：加载失败 ⇒ 可读原因 + 重试入口；放在 v-if="loaded" 之外 ⇒ 未加载成功时也能看到，绝不白屏 -->
+  <a-alert
+    v-if="loadError"
+    type="error" show-icon :message="'加载失败：' + loadError"
+    style="margin:12px 16px;"
+  >
+    <template #action><a-button size="small" @click="fetchData">重试</a-button></template>
+  </a-alert>
   <div class="pr-page wb-shell" v-if="loaded" :class="{ 'wb-drawer-open': panelOpen }">
     <!-- 顶栏：返回条 + 对象名 + 状态徽标（Workbench 壳） -->
     <div class="pr-top wb-top">
-      <a-button type="link" size="small" @click="$router.back()">← 返回</a-button>
+      <!-- ★R2-B47（U-1）：返回落点确定性 —— 上一跳仍在复审流内才 back()，否则显式回「评分审核」列表 -->
+      <a-button type="link" size="small" @click="goBack">← 返回</a-button>
       <!-- B3-1 ⑤：标题层级与 Layout 的 h1 衔接（h1 → h2 → 页内 h3）：由 h3 提升为 h2，避免 axe heading-order；
          该类的字号/字重/margin 均已在 CSS 显式声明，标签变化不产生任何视觉差异。 -->
       <h2 class="pr-title">{{ question.title }}</h2>
@@ -223,7 +232,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { FileTextOutlined, FolderOutlined } from '@ant-design/icons-vue';
 import loader from '@monaco-editor/loader';
@@ -239,7 +248,23 @@ import { getLanguage } from '../../domain/fileLang.js';
 import StatusTag from '../../components/StatusTag.vue';
 
 const route = useRoute();
-const submissionId = +route.params.submissionId;
+const router = useRouter();
+/** ★R2-B47：路由参数在**请求时**读取（computed ⇒ 重入/换 id 不会再用旧值；防呆 ⑥c） */
+const submissionId = computed(() => +route.params.submissionId);
+const loadingDetail = ref(false);
+const loadError = ref('');
+
+/**
+ * ★R2-B47（U-1）：返回落点**确定性** + 兜底。
+ * 旧实现裸 `$router.back()`：无站内历史（直接打开/新标签页/刷新后）时什么都不做 ⇒ 留在原地像"白屏"。
+ * 现在：上一跳仍在复审流内 ⇒ back()（保留来路，含 query 里的 assignmentId）；否则显式回「评分审核」列表。
+ */
+function goBack() {
+  const back = router.options && router.options.history && router.options.history.state
+    ? router.options.history.state.back : null;
+  if (typeof back === 'string' && back.startsWith('/teacher/review')) router.back();
+  else router.push('/teacher/review');
+}
 
 const loaded = ref(false);
 const submission = ref({});
@@ -483,7 +508,7 @@ async function onApprove() {
   }
   saving.value = true;
   try {
-    await saveProjectReview(submissionId, {
+    await saveProjectReview(submissionId.value, {
       finalScore: finalScore.value,
       teacherFeedback: teacherFeedback.value,
     });
@@ -511,7 +536,7 @@ async function showPrompt() {
   promptLoading.value = true;
   promptData.value = null;
   try {
-    const r = await request.get('/teacher/submissions/' + submissionId + '/project/prompt');
+    const r = await request.get('/teacher/submissions/' + submissionId.value + '/project/prompt');
     promptData.value = r.data;
   } catch (e) {
     message.error('获取提示词失败：' + (e.response?.data?.message || e.message));
@@ -526,7 +551,7 @@ async function onRegrade() {
   if (regrading.value) return; // 防连点
   regrading.value = true;
   try {
-    await regradeProjectSubmission(submissionId);
+    await regradeProjectSubmission(submissionId.value);
     gradingState.value = 'pending';
     message.success('已重新触发评分，完成后自动刷新');
     startPolling();
@@ -556,7 +581,7 @@ function startPolling() {
       return;
     }
     try {
-      const r = await getProjectReview(submissionId);
+      const r = await getProjectReview(submissionId.value);
       const gs = r.data.submission?.grading?.state || 'none';
       if (gs !== 'pending') {
         stopPolling();
@@ -600,9 +625,14 @@ function applyReviewData(d) {
   loaded.value = true;
 }
 
+/** ★R2-B47（U-1）：路由参数变化（同组件复用/换提交）⇒ 重建数据 */
+watch(() => route.params.submissionId, () => { loaded.value = false; fetchData(); });
+
 async function fetchData() {
+  loadingDetail.value = true;
+  loadError.value = '';
   try {
-    const r = await getProjectReview(submissionId);
+    const r = await getProjectReview(submissionId.value);
     applyReviewData(r.data);
 
     // 默认数据源 = 学生提交（activeTree 初值 'student'）
@@ -617,7 +647,11 @@ async function fetchData() {
     const first = findFirstFile(studentFiles.tree);
     if (first) openFile(first.path, first.name);
   } catch (e) {
-    message.error('加载失败：' + (e.response?.data?.message || e.message));
+    // ★R2-B47（U-1）：错态可读 + 重试入口（不再只有一条 message 后停在空白）
+    loadError.value = e?.response?.data?.message || e?.message || '加载失败';
+    message.error('加载失败：' + loadError.value);
+  } finally {
+    loadingDetail.value = false;     // ★任何路径必复位 loading（防呆 ⑥a）
   }
 }
 
