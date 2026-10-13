@@ -341,9 +341,14 @@ async function runOnceInner({
       const contentRes = await resolveAssignmentContent({ prisma, assignmentId: job.assignmentId });
       if (contentRes.ok) {
         await setJobContentKey({ prisma, jobId: job.id, contentKey: contentRes.contentKey });
+        // ★R2-CAP2（真机端到端暴露的接线缺口）：`mode='build'` 时必须显式告诉 store「本次由调用方
+        //   （装置流程）造尺」——否则 canProduce() 只剩「可采纳的旧锚点」这一条路 ⇒ 对全新内容必然
+        //   fail-closed(reason=no_ruler_source)，即「无尺则本次造尺一次」在 worker 侧从未生效。
+        //   并发安全不受影响：抢占仍是 store 内原子完成（claimBuildingRuler），抢输者回到等待分支。
         const rr = await resolveRulerForAssignment({
           prisma, assignmentId: job.assignmentId, questionId: contentRes.questionId,
           mode: reuseChecker ? 'reuse' : 'build',
+          claimOnly: !reuseChecker,
           pollIntervalMs: resolvePollMs(), waitTimeoutMs: resolveWaitMs(),
           log: console, jobTag: 'job=' + job.id,
         });
