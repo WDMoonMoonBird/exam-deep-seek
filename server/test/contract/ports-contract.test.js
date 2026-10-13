@@ -53,9 +53,9 @@ describe('组合根 compose() 装配契约', () => {
     expect(composed).toBeDefined();
   });
 
-  it('装配键齐全：3 用例服务 + 5 适配器', () => {
+  it('装配键齐全：3 用例服务 + 5 适配器 + 读模型注入（dshRuns）', () => {
     const keys = Object.keys(composed).sort();
-    expect(keys).toEqual(['aiGateway', 'configRepo', 'eventBus', 'questionUseCases', 'rateLimiter', 'reviewUseCases', 'socketNotifier', 'submissionUseCases']);
+    expect(keys).toEqual(['aiGateway', 'configRepo', 'dshRuns', 'eventBus', 'questionUseCases', 'rateLimiter', 'reviewUseCases', 'socketNotifier', 'submissionUseCases']);
   });
 
   it('用例服务具备 controllers 依赖的方法（de-facto 使用契约）', () => {
