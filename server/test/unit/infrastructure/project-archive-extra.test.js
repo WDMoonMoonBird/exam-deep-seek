@@ -120,6 +120,46 @@ describe('extractZipSafely — 空文件/路径归一/过滤语义', () => {
   });
 });
 
+// ★R3-D8（t16 / O-C4-1）：非 zip / 损坏压缩包 —— adm-zip 内部文案不得外泄
+describe('extractZipSafely — 非法压缩包（O-C4-1：统一可读文案，不泄漏 adm-zip 内部错误）', () => {
+  it('纯文本内容（扩展名伪装 .zip）→ 抛「压缩包内容非法」，且不含 adm-zip 内部文案', () => {
+    const dir = tmpdir();
+    let err = null;
+    try {
+      extractZipSafely(Buffer.from('this is definitely not a zip archive'), dir);
+    } catch (e) { err = e; }
+    expect(err).not.toBeNull();
+    expect(err.message).toBe('压缩包内容非法');
+    // 内部文案（adm-zip / END header / Invalid 等）一律不得出现在抛出信息里
+    expect(err.message).not.toMatch(/END header|Invalid|unsupported|adm-zip/i);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('截断的 zip（前 32 字节合法头 + 截断）→ 同样抛「压缩包内容非法」', () => {
+    const zip = new AdmZip();
+    zip.addFile('src/Main.java', Buffer.from('class Main {}'));
+    const full = zip.toBuffer();
+    const dir = tmpdir();
+    let err = null;
+    try {
+      extractZipSafely(full.subarray(0, 32), dir);
+    } catch (e) { err = e; }
+    expect(err).not.toBeNull();
+    expect(err.message).toBe('压缩包内容非法');
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('合法 zip 仍正常解压（try/catch 未吞掉 happy path 的返回值）', () => {
+    const dir = tmpdir();
+    const zip = new AdmZip();
+    zip.addFile('src/Main.java', Buffer.from('class Main {}'));
+    const r = extractZipSafely(zip.toBuffer(), dir);
+    expect(r.fileCount).toBe(1);
+    expect(fs.existsSync(path.join(dir, 'src', 'Main.java'))).toBe(true);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
 describe('decodeUploadName — 上传包名清洗', () => {
   it('正常名字 → 原样（trim）', () => {
     expect(decodeUploadName('  my-project.zip ')).toBe('my-project.zip');

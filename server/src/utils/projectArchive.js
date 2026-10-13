@@ -111,8 +111,17 @@ export function extractZipSafely(buffer, targetDir) {
   }
   fs.mkdirSync(targetDir, { recursive: true });
 
-  const zip = new AdmZip(buffer);
-  const entries = zip.getEntries();
+  // ★O-C4-1（t16）：非 zip / 损坏压缩包 —— adm-zip 会抛出内部文案
+  //   （如 "Invalid or unsupported zip format. No END header found"），该文案不得外泄到客户端。
+  //   统一转成可读的客户端错误：调用方按 '压缩包' 前缀映射为 400 +「压缩包内容非法」。
+  let zip;
+  let entries;
+  try {
+    zip = new AdmZip(buffer);
+    entries = zip.getEntries();
+  } catch {
+    throw new Error('压缩包内容非法');
+  }
 
   // ---- 预算校验：解压前先遍历全部条目统计，超限整包拒收（不写任何文件）----
   // 统计口径：目录条目不落盘、不计文件数与展开大小；符号链接跳过不占预算；
@@ -173,7 +182,14 @@ export function extractZipSafely(buffer, targetDir) {
     if (abs !== targetDir && !abs.startsWith(targetDir + path.sep)) {
       throw new Error('Path traversal denied');
     }
-    const content = entry.getData();
+    // 同 O-C4-1：条目数据损坏（deflate 流非法等）也绝不能把 adm-zip 内部文案抛给客户端；
+    // 穿越/清理类校验在此行之前已完成，故此处异常一律视为「压缩包内容非法」。
+    let content;
+    try {
+      content = entry.getData();
+    } catch {
+      throw new Error('压缩包内容非法');
+    }
     // 内容层检测（魔数 + NUL 兜底，跨生态依赖识别）：文本源码才落盘，二进制依赖无论扩展名一律跳过
     if (shouldIgnorePathWithContent(decoded, content)) continue;
     // 空文件也必须写盘并计数：Buffer.byteLength === 0 的文件同样落盘，不能因 content.length === 0 被丢弃

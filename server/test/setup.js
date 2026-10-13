@@ -91,8 +91,15 @@ function maskDbUrl(url) {
  * 「套件失败但 0 例失败」（beforeAll 抛错），让同一 verify 命令的退出码随机变红。
  * 口径：**只对明确的 DB 争用签名重试**（带抖动退避，最多 5 次，留痕 SEED_RETRY）；
  *   其它错误（护栏拒绝、连接断开、SQL 语法等）一律原样抛出，绝不掩盖真实缺陷。
+ *
+ * ★R3-D8（t16 / C4 定位）：全量并行时 26 条「套件红但 0 例」的根因之一是**Prisma 的唯一约束文案**
+ *   —— Prisma 把 MySQL 的 Duplicate entry 包装成自己的措辞（见下），而原正则只认 MySQL 原生文案，
+ *   于是并发 seed 的「先删后插」撞唯一键时不再重试 ⇒ 套件直接红（表现为「套件红但 0 例」）。
+ *   现并入该签名（以及 Prisma 的 FK 包装文案 Foreign key constraint violated，原正则按前缀已覆盖）。
+ *   安全性：**真缺陷仍会暴露** —— 重试用尽（5 次）后原样抛出；本正则只决定「是否再试一次」，不改断言。
+ *   （导出仅用于单测锁定匹配/不匹配集合：test/unit/seed-contention-regex.test.js）
  */
-const SEED_CONTENTION_RE = /Foreign key constraint|Cannot add or update a child row|Duplicate entry|Deadlock|Lock wait timeout|ER_LOCK_DEADLOCK|ER_LOCK_WAIT_TIMEOUT/i;
+export const SEED_CONTENTION_RE = /Foreign key constraint|Cannot add or update a child row|Unique constraint failed|Duplicate entry|Deadlock|Lock wait timeout|ER_LOCK_DEADLOCK|ER_LOCK_WAIT_TIMEOUT/i;
 
 // 护栏：任何破坏性行为之前先校验数据源安全
 assertSafeToWipe();

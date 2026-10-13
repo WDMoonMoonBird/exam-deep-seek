@@ -116,7 +116,9 @@ describe('SubmissionRepository — 查询形状与更新映射', () => {
       where: { id: 's-1' },
       select: {
         status: true, aiScore: true, aiFeedback: true, teacherFeedback: true,
-        question: { select: { type: true } },
+        // ★R3-D8（t16 / F-C4-1）：R3-D5（t12 的 48cfd7b）为 G2 范围校验新增 question.maxScore，
+        //   本断言未同步 ⇒ npm test 必红。今后改仓储 select 请同时跑本套件（不能只跑 integration）。
+        question: { select: { type: true, maxScore: true } },
       },
     });
   });

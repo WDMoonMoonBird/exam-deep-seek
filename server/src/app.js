@@ -155,10 +155,19 @@ async function start() {
     where: { password: { not: { startsWith: '$2' } } },
   });
   for (const u of plainUsers) {
-    await prisma.user.update({
-      where: { id: u.id },
-      data: { password: bcrypt.hashSync(u.password, 10) },
-    });
+    try {
+      await prisma.user.update({
+        where: { id: u.id },
+        data: { password: bcrypt.hashSync(u.password, 10) },
+      });
+    } catch (err) {
+      // ★R3-D8（t16）：并发下该用户可能已被删除（测试库 seed/清理并行；生产亦有极小概率）⇒ P2025。
+      //   明文迁移是**尽力而为**的启动期运维动作，单个用户消失不应阻断服务启动
+      //   （否则 start() reject ⇒ process.exit(1)，表现为「整套件红但 0 例」的假红，见 t16/D8 报告）。
+      //   其它错误（连接断开 / 权限 / 语法等）仍原样抛出，不掩盖真缺陷。
+      if (!err || err.code !== 'P2025') throw err;
+      logger.warn({ userId: u.id, username: u.username }, '启动期明文密码迁移跳过：该用户已不存在');
+    }
   }
   if (plainUsers.length > 0) logger.info({ count: plainUsers.length }, '已迁移明文密码 → bcrypt');
 
