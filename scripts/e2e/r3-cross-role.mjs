@@ -1,5 +1,8 @@
 // ★R3-C7（t21）：基址可用 E2E_BASE 覆盖（默认本地栈 :3000）——便于指向 DATABASE_URL=exam_system_test 的独立 stack
+// ★R3-E1（t24）：接入共用守卫（非 localhost 默认拒绝 / 打印将写入库 / 非本地开发库需 --i-know）
+import { guard } from './_guard.mjs';
 const B = (process.env.E2E_BASE || "http://localhost:3000") + "/api";
+guard({ base: B });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const J = (o) => JSON.stringify(o);
 let pass = 0, fail = 0, skip = 0; const steps = [];
