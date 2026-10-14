@@ -23,6 +23,7 @@ import {
 import { loadLlmPrices, loadRunUsage, persistRunUsage, LLM_PRICES_KEY } from '../../src/infrastructure/dsh/usage/dshRunUsageStore.js';
 import { archiveRun, purgeRunRootSessions, USAGE_NAME } from '../../src/infrastructure/dsh/runs/dshRunArchiver.js';
 import { authReq, request } from './helpers.js';
+import { ensureAdminAccount } from '../fixtures/admin.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(__dirname, '../../..');
@@ -242,8 +243,9 @@ describe('W60 运行用量取证与落库（R2-B36）', () => {
     // 未登录 ⇒ 401/403（可达性证据：不是 404）
     const anon = await request().get('/api/admin/settings');
     expect([401, 403]).toContain(anon.status);
-    // 管理员登录（app.js 启动时预置 admin/***REDACTED***）
-    const login = await request().post('/api/auth/login').send({ username: 'admin', password: '***REDACTED***' });
+    // 管理员登录（W0-C 夹具：环境变量优先，缺省自建/复用专用测试管理员）
+    const adminCreds = await ensureAdminAccount();
+    const login = await request().post('/api/auth/login').send({ username: adminCreds.username, password: adminCreds.password });
     expect(login.body.code).toBe(0);
     const admin = authReq(login.body.data.token);
     const got = await admin.get('/api/admin/settings');

@@ -62,6 +62,22 @@ async function canManageProjectClasses(req, classIds) {
   return classIds.every(cid => visible.has(+cid));
 }
 
+/**
+ * ★H1：临时目录标识校验（防路径穿越）。
+ *   ① 白名单正则：只接受服务端 uploadPackage 生成的 temp_<毫秒>_<base36随机> 形状；
+ *   ② 目录包含：用 path.relative 判定解析结果仍落在 PROJECTS_UPLOAD_DIR 内（拒绝 .. 逃逸/绝对路径）。
+ * 任一不满足返回 null，调用方一律 400，且在任何写库/文件操作之前完成。
+ */
+function resolveTempDir(tempId) {
+  const id = String(tempId ?? '');
+  if (!/^temp_\d+_[a-z0-9]+$/.test(id)) return null;
+  const root = path.resolve(PROJECTS_UPLOAD_DIR);
+  const dir = path.resolve(root, id);
+  const rel = path.relative(root, dir);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
+  return dir;
+}
+
 // ==================== 实训任务 CRUD ====================
 
 /** GET / — 分页查询任务列表 */
@@ -187,6 +203,13 @@ export const createProject = async (req, res) => {
       return res.status(403).json({ code: 1003, message: '无权操作', data: null });
     }
 
+    // ★H1：tempId 先白名单 + 目录包含校验（在任何写库/文件操作之前）；不合规 400
+    let tempDir = null;
+    if (tempId) {
+      tempDir = resolveTempDir(tempId);
+      if (!tempDir) return res.status(400).json({ code: 1001, message: '非法临时目录标识', data: null });
+    }
+
     // 创建任务 + 关联班级 + 文件树记录：整体放入交互式事务，中途失败整体回滚，避免孤儿数据
     // 注：目录迁移/buildTree 属文件系统操作无法回滚，按约定容忍其在事务内执行；
     // 事务保证 project / projectClass / projectFile 三者要么全部成功要么全部回滚
@@ -214,9 +237,8 @@ export const createProject = async (req, res) => {
         });
       }
 
-      // 处理标准工程包：从临时目录迁移
-      if (tempId) {
-        const tempDir = path.join(PROJECTS_UPLOAD_DIR, String(tempId));
+      // 处理标准工程包：从临时目录迁移（tempDir 已过 ★H1 校验）
+      if (tempDir) {
         const targetDir = path.join(PROJECTS_UPLOAD_DIR, String(p.id));
         if (fs.existsSync(tempDir)) {
           fs.renameSync(tempDir, targetDir);
@@ -307,6 +329,13 @@ export const updateProject = async (req, res) => {
       return res.status(403).json({ code: 1003, message: '无权操作', data: null });
     }
 
+    // ★H1：tempId 先白名单 + 目录包含校验（在任何写库/文件操作之前）；不合规 400
+    let tempDir = null;
+    if (tempId) {
+      tempDir = resolveTempDir(tempId);
+      if (!tempDir) return res.status(400).json({ code: 1001, message: '非法临时目录标识', data: null });
+    }
+
     // 更新任务、班级关联、文件记录：整体放入交互式事务，中途失败回滚，避免孤儿数据
     // 注：rmSync/renameSync/buildTree 属文件系统操作，按约定容忍在事务内执行
     await prisma.$transaction(async (tx) => {
@@ -322,9 +351,8 @@ export const updateProject = async (req, res) => {
         }
       }
 
-      // 处理标准工程包迁移
-      if (tempId) {
-        const tempDir = path.join(PROJECTS_UPLOAD_DIR, String(tempId));
+      // 处理标准工程包迁移（tempDir 已过 ★H1 校验）
+      if (tempDir) {
         const targetDir = path.join(PROJECTS_UPLOAD_DIR, String(id));
         if (fs.existsSync(tempDir)) {
           // 删除旧文件记录和目录

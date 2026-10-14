@@ -4,12 +4,14 @@
  *
  * 功能：
  * 1. 创建数据库表结构（Prisma migrate）
- * 2. 创建超级管理员账号（admin / ***REDACTED***）
+ * 2. 创建超级管理员账号（初始口令：BOOTSTRAP_ADMIN_PASSWORD 优先；缺失则随机生成并仅在控制台回显一次）
  * 3. 导入教育部全国高校数据（从 XLS 文件）
  */
 import 'dotenv/config';
 import { execSync } from 'child_process';
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import XLSX from 'xlsx';
 import { existsSync } from 'fs';
 import { join, dirname } from 'path';
@@ -93,6 +95,23 @@ function maskDbUrl(url) {
   return String(url).replace(/(:\/\/[^:/?#]+):[^@]*@/, '$1:***@');
 }
 
+/**
+ * 解析超级管理员的**初始口令**（C1 收口：仓库内不得再出现任何默认口令字面量）。
+ *
+ * 策略：
+ *   ① 优先 `BOOTSTRAP_ADMIN_PASSWORD`（与 server/src/app.js 的引导建号同语义）；
+ *   ② 缺失则用 `crypto.randomBytes` 生成强口令 —— 固定前缀 'Aa1' 保证满足「同时含字母与数字」的
+ *      改密策略（H6 首登强制改密），其余 12 字节（96 bit）随机 base64url；
+ *   ③ 生成的口令**只在创建成功时于控制台回显一次**（调用方负责），不写日志文件、不落任何报告/产物。
+ *
+ * @returns {string} 初始口令
+ */
+function resolveInitialAdminPassword() {
+  const fromEnv = String(process.env.BOOTSTRAP_ADMIN_PASSWORD || '').trim();
+  if (fromEnv) return fromEnv;
+  return 'Aa1' + crypto.randomBytes(12).toString('base64url');
+}
+
 async function main() {
   // 护栏：任何破坏性行为之前先校验数据源安全
   assertSafeToWipe();
@@ -110,12 +129,21 @@ async function main() {
 
   // 2. 超级管理员
   console.log('[2/3] 创建超级管理员...');
+  // 已存在账号只更新 realName（**绝不改口令**）；只有新建才需要初始口令 ⇒ 先探一次，避免无谓生成/回显
+  const existingAdmin = await prisma.user.findUnique({ where: { username: 'admin' }, select: { id: true } });
+  const initialPassword = existingAdmin ? null : resolveInitialAdminPassword();
   const admin = await prisma.user.upsert({
     where: { username: 'admin' },
     update: { realName: '超级管理员' },
-    create: { username: 'admin', password: '***REDACTED***', realName: '超级管理员', role: 'super_admin' },
+    create: { username: 'admin', password: bcrypt.hashSync(initialPassword, 10), realName: '超级管理员', role: 'super_admin' },
   });
-  console.log(`  √ 超级管理员: admin / ***REDACTED*** (ID: ${admin.id})\n`);
+  if (initialPassword) {
+    // ★一次性回显：仅此一次、仅控制台；不写日志文件、不进任何报告/产物
+    console.log(`  √ 超级管理员已创建: admin / ${initialPassword} (ID: ${admin.id})`);
+    console.log('  ! 请立即登录并修改口令（本口令仅此处回显一次，不会写入日志或任何文件）\n');
+  } else {
+    console.log(`  √ 超级管理员已存在（ID: ${admin.id}）：仅更新姓名，**口令未改动**\n`);
+  }
 
   // 3. 导入高校数据
   console.log('[3/3] 导入全国高校数据...');
@@ -155,7 +183,7 @@ async function main() {
 
   console.log('========================================');
   console.log('  部署完成！');
-  console.log('  超级管理员: admin / ***REDACTED***');
+  console.log('  超级管理员: admin（口令见上方一次性回显，或你提供的 BOOTSTRAP_ADMIN_PASSWORD）');
   console.log('  后端启动: npm start (端口 3000)');
   console.log('========================================');
   await prisma.$disconnect();

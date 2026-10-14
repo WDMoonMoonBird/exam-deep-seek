@@ -3,9 +3,11 @@
  * 覆盖：删除成功/不存在/删除自己/删除后登录被拒/旧 token 失效。
  */
 import { request } from './helpers.js';
+import { ensureAdminAccount } from '../fixtures/admin.js';
 
 async function adminLogin() {
-  const r = await request().post('/api/auth/login').send({ username: 'admin', password: '***REDACTED***' });
+  const { username, password } = await ensureAdminAccount();
+  const r = await request().post('/api/auth/login').send({ username, password });
   if (r.body.code !== 0) throw new Error('admin 登录失败: ' + r.body.message);
   return r.body.data.token;
 }
@@ -44,7 +46,8 @@ describe('管理员删除教师（软删除）', () => {
   it('删除管理员账号 → 404（非教师角色不可删）；教师无权限调管理接口 → 1003', async () => {
     // BUG-013：删除自身（400 分支）在真实权限模型下不可达——admin 为 super_admin 不满足 role=teacher；
     // 验证真实可达分支：① 删除 super_admin → 404；② 教师调用管理删除接口 → 1003 无权限
-    const me = await request().post('/api/auth/login').send({ username: 'admin', password: '***REDACTED***' });
+    const adminCreds = await ensureAdminAccount();
+    const me = await request().post('/api/auth/login').send({ username: adminCreds.username, password: adminCreds.password });
     const adminId = me.body.data.user.id;
     const r1 = await request().delete('/api/admin/teachers/' + adminId).set('Authorization', 'Bearer ' + adminToken);
     expect(r1.body.code).toBe(1004); // role !== teacher → 教师不存在

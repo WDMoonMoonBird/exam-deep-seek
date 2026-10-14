@@ -493,10 +493,6 @@ const usageNote = computed(() => {
 const manifestText = computed(() => JSON.stringify((meta.value && meta.value.standard_package && meta.value.standard_package.manifest) || {}, null, 2));
 const ev = computed(() => (detail.value && detail.value.teardown_json) || {});
 const submissions = computed(() => (detail.value && detail.value.submissions) || []);
-const countsText = computed(() => {
-  const r = (detail.value && detail.value.run) || {};
-  return `measured=${r.measured ?? '—'} unmeasurable=${r.unmeasurable ?? '—'} failed=${r.failed ?? '—'} skipped=${r.skipped ?? '—'} written=${r.written ?? '—'}`;
-});
 const filesText = computed(() => {
   const e = ev.value;
   return `${e.session_files_before ?? '—'} → ${e.session_files_after ?? '—'}`;

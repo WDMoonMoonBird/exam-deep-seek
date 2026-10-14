@@ -99,7 +99,7 @@ export function checkTimeoutVsStale({ timeoutMs, staleMs } = {}) {
  * 回收僵尸 running 行（幂等；可反复调用）。
  * @returns {Promise<{total:number,toPending:number,toFailed:number,conflicts:number,staleMs:number,details:Array}>}
  */
-export async function reclaimStaleRunning({ prisma, staleMs = DEFAULT_STALE_RUNNING_MS, maxAttempts = 3, nowMs = Date.now(), clockToleranceMs = DEFAULT_CLOCK_TOLERANCE_MS, log = console } = {}) {
+export async function reclaimStaleRunning({ prisma, staleMs = DEFAULT_STALE_RUNNING_MS, maxAttempts = 3, nowMs = Date.now(), clockToleranceMs = DEFAULT_CLOCK_TOLERANCE_MS, _log = console } = {}) {
   const staleSec = staleSeconds(staleMs); // ★与写方同源：SQL 侧 UTC_TIMESTAMP(3) 计算阈值
   const result = { total: 0, toPending: 0, toFailed: 0, conflicts: 0, clockAhead: 0, staleMs, staleSec, clockToleranceMs, details: [] };
   const canRaw = prisma && typeof prisma.$queryRawUnsafe === 'function' && typeof prisma.$executeRawUnsafe === 'function';

@@ -588,9 +588,7 @@ const sections9to10 = [
   `},
 ];
 
-/* ===== 交互演示：自动发现 components/manual/sections/*.vue ===== 
-   每个演示文件在 script 块里导出 meta = { order, title, anchor }；新增演示 = 新增文件，不需要改本文件。
-   兜底截图按约定路径 /exam/doc-img/demo-<anchor>-light.png 传入；文件不存在时播放器会自动隐藏破图。 */
+/* 兜底截图按约定路径 /exam/doc-img/demo-<anchor>-light.png 传入；文件不存在时播放器会自动隐藏破图。 */
 /* ===== 放大演示（真弹窗）===== */
 const zoomOpen = ref(false);
 const zoomSec = ref({ id: '', title: '', demo: null });
@@ -606,20 +604,6 @@ function openZoom (sec) {
     syncZoomWidth();
     zoomOpen.value = true;
 }
-
-const manualModules = import.meta.glob('../components/manual/sections/*.vue', { eager: true });
-const manualDemos = Object.entries(manualModules)
-    .map(([key, mod]) => ({ key, comp: mod.default, meta: mod.meta || {} }))
-    .filter((d) => d.comp)
-    .map((d) => ({
-        key: d.key,
-        comp: d.comp,
-        title: d.meta.title || d.key.split('/').pop().replace('.vue', ''),
-        anchor: d.meta.anchor || '',
-        order: d.meta.order == null ? 999 : d.meta.order,
-        fallback: d.meta.anchor ? '/exam/doc-img/demo-' + d.meta.anchor + '-light.png' : '',
-    }))
-    .sort((a, b) => a.order - b.order);
 
 const allSections = [
     { id: 'intro', title: '1. 系统简介' },

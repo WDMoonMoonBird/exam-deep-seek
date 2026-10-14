@@ -6,6 +6,19 @@ import bcrypt from 'bcryptjs';
 import prisma from '../src/utils/prisma.js';
 
 /**
+ * ★W0-C 测试环境前置：C2 修复后 server/src/app.js 要求 INTERNAL_SECRET **必须显式配置**
+ * （未配置即拒绝启动，不再回落硬编码默认值）。测试进程需要一个取值才能加载 app，
+ * 否则整套 integration **「套件红但 0 例失败」**（假红，实测 71 个套件）。
+ *
+ * 口径：仅当环境（含 server/.env）未提供时兜底；**绝不覆盖**真实配置。
+ * · 若将来 server/.env 出现该键，本兜底**自动失效**（dotenv 先加载、不覆盖已存在值）；
+ * · 「生产缺失即拒启」是刻意设计（C2），**不得在 server/src/ 里加任何回落**。
+ */
+if (!process.env.INTERNAL_SECRET) {
+  process.env.INTERNAL_SECRET = 'test-only-internal-secret';
+}
+
+/**
  * 从数据库连接串中解析出「库名」（URL pathname，去掉前导斜杠与 query）。
  *
  * 必须只取库名参与安全判定：若对整条连接串做子串匹配，密码或主机名里

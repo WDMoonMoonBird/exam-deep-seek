@@ -4,10 +4,11 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import mammoth from 'mammoth';
+import { E2E_API_BASE } from './e2e-env.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const STATE = JSON.parse(fs.readFileSync(path.join(__dirname, '.e2e-state.json'), 'utf-8'));
-const API = 'http://localhost:3000/api';
+const API = E2E_API_BASE;   // ★W1-C6：端口可配置（默认 3000 不变）
 const ROOT = path.resolve(__dirname, '../../..');
 const EXAM_DIR = ROOT; // exam docs are at repo root
 
@@ -234,7 +235,15 @@ test.describe('E2E 全量测试 (测试计划模块8)', () => {
   });
 
   // ==================== E8.9 评分 Worker ====================
+  // ★W1-C6②：本机 E2E 的 webServer **不启动评分 worker**（只起 app + vite），而 worker 会经
+  //   `infrastructure/ai/deepseek` **真实外呼 DeepSeek**（server/.env 配了 DEEPSEEK_API_KEY）⇒
+  //   选"显式跳过"而不是"给门禁加真外呼"：本用例**原本也没有任何断言**（只轮询 50×3s 后打印状态），
+  //   留着它只会让每轮门禁白等 150s（retries=1 时最长 300s）。
+  //   ⇒ 异步评分链路由 Jest 集成测试覆盖（w5*/w15*/w30* 等）；需要真端到端验证时：
+  //      ① 自行起 `node src/worker.js`；② 设 `E2E_WITH_WORKER=1`。
   test('E8.9 评分Worker处理', async () => {
+    test.skip(!process.env.E2E_WITH_WORKER,
+      '本机 E2E 不启动评分 worker（会真实外呼 DeepSeek）⇒ 异步评分链路不在此层验证（由 Jest 集成测试覆盖）；需要时设 E2E_WITH_WORKER=1');
     test.setTimeout(180000); // AI 评分需 30-60s+，worker 异步处理
     // 等待 Worker 处理
     console.log('  等待 Worker 评分...');

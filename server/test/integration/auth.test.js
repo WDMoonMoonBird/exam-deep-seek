@@ -24,9 +24,12 @@ describe('认证 API', () => {
   });
 
   // A3: 错误密码
+  // ★H5：登录失败会计入「IP+账号」双维度限流 ⇒ 失败用例必须注入**唯一 X-Forwarded-For**，
+  //   保证限流状态按用例隔离（同时顺带验证 trust proxy=1 生效：XFF 不被采信时限流计数会串味）。
   it('A3: 错误密码 → 400', async () => {
     const res = await request()
       .post('/api/auth/login')
+      .set('X-Forwarded-For', '10.0.3.1')
       .send({ username: 'test_teacher', password: 'wrong_password' });
     expect(res.body.code).toBe(1001);
   });

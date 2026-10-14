@@ -3,7 +3,7 @@
 // 覆盖：班级管理（新增/编辑/删除）、学生管理（新增）、教师管理（新增/重置密码）
 // 定位器铁律：仅使用现有可见文本 / role / class，禁止 data-testid；
 //             client/** 只读，本文件不改任何 UI。
-// 依赖：global.setup.js 已就绪（admin/***REDACTED***、学校 E2E测试大学）
+// 依赖：global.setup.js 已就绪（其写入 .e2e-state.json 的管理员凭据来自 W0-C 夹具；学校名由 state 动态引用）
 // 数据：仅写 exam_system_test（由主控以 DATABASE_URL=测试库 串行执行）
 // ============================================================================
 import { test, expect } from '@playwright/test';
@@ -14,7 +14,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const state = JSON.parse(fs.readFileSync(path.join(__dirname, '.e2e-state.json'), 'utf-8'));
 
-const ADMIN = state.admin; // { username: 'admin', password: '***REDACTED***' }
+const ADMIN = state.admin; // 由 global.setup.js（W0-C 夹具）写入：{ username, password }
 // 学校名动态取自 global.setup 写入的 state（admin 不可创建学校，复用库中第一个）
 const SCHOOL_NAME = state.schoolName || 'E2E测试大学';
 

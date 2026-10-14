@@ -1,9 +1,24 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { ensureAdminAccount } from '../fixtures/admin.js';
+import { E2E_API_BASE } from './e2e-env.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const API = 'http://localhost:3000/api';
+// ★W1-C6：API 基址随端口可配置（默认 3000 不变）——否则全局 setup 会死打 3000，而 webServer 可能跑在备用端口
+const API = E2E_API_BASE;
+
+// 与 playwright.config.js 的 webServer 保持**同一个测试库**：
+// 该进程不继承 webServer 的内联 DATABASE_URL，缺省从 server/.env 派生 /exam_system_test，
+// 否则夹具会把测试管理员建到开发库（exam_system）而服务端连的是测试库 ⇒ 登录必失败。
+if (!process.env.DATABASE_URL) {
+  const m = fs.readFileSync(path.resolve(__dirname, '../../.env'), 'utf8').match(/^DATABASE_URL=(.+)$/m);
+  if (m) {
+    const u = new URL(m[1].trim());
+    u.pathname = '/exam_system_test';
+    process.env.DATABASE_URL = u.toString();
+  }
+}
 
 async function post(url, body, token) {
   const headers = { 'Content-Type': 'application/json' };
@@ -19,8 +34,10 @@ async function get(url, token) {
 }
 
 export default async function () {
-  // 1. 管理员登录（服务启动时自动创建 admin/***REDACTED***）
-  const adminLogin = await post('/auth/login', { username: 'admin', password: '***REDACTED***' });
+  // 1. 管理员登录（W0-C 夹具：环境变量优先，缺省自建/复用专用测试管理员；
+  //    不再依赖 C1 已移除的「启动期默认超管」）
+  const adminCreds = await ensureAdminAccount();
+  const adminLogin = await post('/auth/login', { username: adminCreds.username, password: adminCreds.password });
   const adminToken = adminLogin.data?.token;
   if (!adminToken) throw new Error('Admin login failed: ' + JSON.stringify(adminLogin));
   console.log('E2E setup: admin logged in');
@@ -98,7 +115,7 @@ export default async function () {
   // 学生密码 = 学号（@ 前部分），而非完整用户名（用户名含 @学校代码）
   const studentPassword = studentUsername.includes('@') ? studentUsername.split('@')[0] : studentUsername;
   const state = {
-    admin: { username: 'admin', password: '***REDACTED***' },
+    admin: { username: adminCreds.username, password: adminCreds.password },
     teacher: { username: 'e2e_teacher', password: 'e2e_teacher' },
     student: { username: studentUsername, password: studentPassword },
     schoolId, schoolName, classId, questionId, assignmentId,

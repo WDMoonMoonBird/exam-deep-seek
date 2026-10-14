@@ -1,4 +1,4 @@
-import { loginAsTeacher, loginAsStudent, authReq, getTestData, request } from './helpers.js';
+import { loginAsTeacher, loginAsStudent, loginAsAdmin, authReq, getTestData, request } from './helpers.js';
 
 describe('学生管理 V2 — 学号@院校代码格式', () => {
   let token, r, schoolId, classId, schoolCode, assignmentId;
@@ -300,15 +300,8 @@ describe('学生管理 V2 — 学号@院校代码格式', () => {
 
   it('T15: 相同学号多学校 → 登录返回学校选择', async () => {
     // 通过 setup 已有的学校 + 新增一个学校来构造多学校场景
-    const adminLogin = await request()
-      .post('/api/auth/login')
-      .send({ username: 'admin', password: '***REDACTED***' });
-
-    if (!adminLogin.body.data?.token) {
-      console.log('  ⚠ 无 admin 账号，跳过 T15');
-      return;
-    }
-    const adminToken = adminLogin.body.data.token;
+    // W0-C 夹具：admin 凭据不再硬编码（C1 已移除启动期默认超管）
+    const adminToken = await loginAsAdmin();
     const adminReq = {
       get: (url) => request().get(url).set('Authorization', `Bearer ${adminToken}`),
       post: (url, body) => request().post(url).send(body).set('Authorization', `Bearer ${adminToken}`),

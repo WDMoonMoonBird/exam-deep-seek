@@ -2,11 +2,12 @@ import { chromium } from '@playwright/test';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { E2E_CLIENT_BASE } from './e2e-env.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.resolve(__dirname, '../../../client/public/doc-img');
 
-const BASE = 'http://localhost:5173/exam';
+const BASE = E2E_CLIENT_BASE + '/exam';   // ★W1-C6：端口可配置（默认 5173 不变）
 const T = { username: 'testteacher1', password: 'testteacher1' };
 
 async function shot(page, name, fullPage = true) {

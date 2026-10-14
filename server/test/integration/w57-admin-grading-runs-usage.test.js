@@ -13,6 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import prisma from '../../src/utils/prisma.js';
 import { authReq, getTestData, request } from './helpers.js';
+import { ensureAdminAccount } from '../fixtures/admin.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(__dirname, '../../..');
@@ -85,7 +86,8 @@ describe('W57-U 批改记录：用量/元信息/工具调用（R2-B37）', () =>
 
   beforeAll(async () => {
     process.env[RUNS_ROOT_ENV] = runsRoot;
-    token = (await request().post('/api/auth/login').send({ username: 'admin', password: '***REDACTED***' })).body.data.token;
+    const adminCreds = await ensureAdminAccount();
+    token = (await request().post('/api/auth/login').send({ username: adminCreds.username, password: adminCreds.password })).body.data.token;
     const { teacher, question } = await mkQuestion('标准工程包-原始.zip');
     t1 = teacher; q1 = question;
     const classes = await mkClasses(2);

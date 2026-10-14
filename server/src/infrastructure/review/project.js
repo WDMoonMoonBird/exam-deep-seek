@@ -54,7 +54,8 @@ export const getProjectReview = async (req, res) => {
     if (!sub) return res.status(404).json({ code: 1004, message: '提交不存在', data: null });
     if (sub.question.type !== 'project') return res.status(400).json({ code: 1001, message: '非实训题提交', data: null });
 
-    // W2（R2-B2）：教师复核视图与评分同源（snapshot ?? live）
+    // W2（R2-B2）：教师复核视图与评分同源（snapshot ?? live）—— 与评分链路（projectGrading.js:203-205）
+    //   及同族入口（projectReviewController.js:107/144-145）同一口径：已发布作业读快照，无快照的历史作业回落活值。
     const std = resolveSnapshot(await loadAssignmentSnapshot(prisma, sub.assignmentId, sub.questionId), sub.question);
     // R3-D5（④）：可见性口径与其它按 id 直取的教师端入口统一为「教师可见班级」
     //（直连班级 ∪ 团队班级）—— 原先额外的「仅作业所属教师」判定比可见班级更严（同团队教师被 403），已移除；
@@ -83,7 +84,9 @@ export const getProjectReview = async (req, res) => {
       message: 'ok',
       data: {
         submission: toTeacherView(sub),
-        question: sub.question,
+        // W2（R2-B2）：显示与评分同源 —— material/scoringRubric 取快照值（无快照自动回落活值），
+        //   其余字段仍透传题目行；standardFiles 仍按 attachmentUrl 读取（快照只冻结 rubric/material/哈希）。
+        question: { ...sub.question, material: std.material, scoringRubric: std.rubric },
         assignment: sub.assignment,
         student: sub.student,
         version,

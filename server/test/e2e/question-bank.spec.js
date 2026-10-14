@@ -3,10 +3,11 @@ import { test, expect } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { E2E_API_BASE } from './e2e-env.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const state = JSON.parse(fs.readFileSync(path.join(__dirname, '.e2e-state.json'), 'utf-8'));
-const API = 'http://localhost:3000/api';
+const API = E2E_API_BASE;   // ★W1-C6：端口可配置（默认 3000 不变）
 const SQ = `schoolId=${state.schoolId || 1}`;
 
 test.describe('题库管理 API', () => {

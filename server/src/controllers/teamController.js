@@ -30,8 +30,19 @@ export const getTeams = async (req, res) => {
 // ===== 团队详情 =====
 export const getTeam = async (req, res) => {
   try {
-    const team = await prisma.team.findUnique({
-      where: { id: +req.params.id },
+    // ★H3：归属校验 —— 仅「团队成员」或「同校教师」可读；越权与不存在**同响 404**（不泄漏存在性）。
+    const mySchools = await prisma.teacherSchool.findMany({
+      where: { teacherId: req.user.id },
+      select: { schoolId: true },
+    });
+    const team = await prisma.team.findFirst({
+      where: {
+        id: +req.params.id,
+        OR: [
+          { teachers: { some: { teacherId: req.user.id } } },
+          { schoolId: { in: mySchools.map(s => s.schoolId) } },
+        ],
+      },
       include: {
         creator: { select: { id: true, realName: true } },
         teachers: { include: { teacher: { select: { id: true, username: true, realName: true } } } },

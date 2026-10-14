@@ -1,4 +1,7 @@
 // 完整压测：新建 500 人班级 + 作业 + 全部提交 → 64 并发评分
+// admin 凭据来自统一夹具（W0-C，环境变量优先/缺省自建）；需与被测服务同一 DATABASE_URL。
+import { ensureAdminAccount } from './fixtures/admin.js';
+
 const BASE = 'http://localhost:3000/api';
 
 function api(method, path, body, token) {
@@ -10,7 +13,8 @@ function api(method, path, body, token) {
 
 async function main() {
   console.log('=== 1. admin 登录 + 设并发 64 ===');
-  const admin = await api('POST', '/auth/login', { username: 'admin', password: '***REDACTED***' });
+  const adminCreds = await ensureAdminAccount();
+  const admin = await api('POST', '/auth/login', { username: adminCreds.username, password: adminCreds.password });
   const adminToken = admin.data.token;
   await api('PUT', '/admin/settings', { ai_concurrency: 64 }, adminToken);
 

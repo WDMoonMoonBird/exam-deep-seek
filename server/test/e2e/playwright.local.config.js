@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test';
+import { E2E_CLIENT_PORT } from './e2e-env.js';
 
 export default defineConfig({
   testDir: '.',
@@ -10,7 +11,7 @@ export default defineConfig({
   reporter: 'list',
 
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: 'http://localhost:' + E2E_CLIENT_PORT,
     headless: true,
     viewport: { width: 1440, height: 900 },
     actionTimeout: 10000,

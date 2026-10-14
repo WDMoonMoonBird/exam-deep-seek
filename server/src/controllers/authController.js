@@ -4,23 +4,78 @@ import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
 import { getJwtSecret } from '../config/jwtSecret.js';   // ★R2-B60：与中间件共用同一密钥解析（消除两处兜底）
 
+/** ★F-1：登录名/院校代码的**字符白名单**（ASCII，带上界）—— 与 normalizeLoginIdentity 的分工见其注释 */
+export const LOGIN_USERNAME_RE = /^[A-Za-z0-9_.@-]{1,50}$/;
+export const LOGIN_SCHOOLCODE_RE = /^[A-Za-z0-9_-]{0,32}$/;
+
+/**
+ * ★F-1：登录身份归一化 —— **唯一实现**，登录侧定位账号与限流侧建键共用（app.js 直接 import 复用，
+ *   杜绝两侧各自归一化而漂移）。语义：String 强制转换（与既有模板串 `${username}@${schoolCode}` 同源），
+ *   再 trim + toLowerCase。
+ *
+ * 语义：String 强转（与既有模板串 `${username}@${schoolCode}` 同源）→ NFKC → trim → toLowerCase。
+ *
+ * 为什么还要配套**字符白名单**（LOGIN_USERNAME_RE / LOGIN_SCHOOLCODE_RE）：
+ *   `users.username` 的 collation 是 `utf8mb4_unicode_ci`，其等价类**宽于任何 JS 归一化** ——
+ *   实测 ß↔ss / İ↔i / ﬁ↔fi / ①↔1 / ａ↔a 在 DB 侧全部"相等"，而 JS 侧不等；`normalize("NFKC")` 只能关掉其中
+ *   应用兼容类（ﬁ/①/ａ），ß↔ss 与 İ↔i **仍然开着** ⇒ 不存在"纯 JS 归一化"能保证与 collation 同向。
+ *   ⇒ 与其在 JS 里复刻 MySQL 折叠表（无界、随版本变化），不如**把入口字符集收窄到 ASCII**：
+ *     白名单内 unicode_ci 的相对等价只剩**大小写折叠**，而 toLowerCase() 与之逐位一致 ⇒
+ *     可证明"同一账号 ⇒ 同一把限流键"（证明与实测见 reports/fix/W1-D13-h5-type-confusion.md）。
+ *     NFKC 作为额外纵深保留（关掉全角/连字等兼容形，且 NFKC 后的 ASCII 仍在同一等价类里）。
+ *   白名单安全性已用真实库实测：exam_system_test 533 用户 / exam_system 1264 用户 / 2870 个院校代码，
+ *   **白名单外用户名 = 0、白名单外代码 = 0**。
+ *
+ * @param {unknown} value 任意输入（字符串/数组/对象/数字/null…）
+ * @returns {string} 归一化后的登录身份串（非字符串走 String 强转，与登录侧解析同源）
+ */
+export function normalizeLoginIdentity(value) {
+  return String(value ?? '').normalize('NFKC').trim().toLowerCase();
+}
+
+/**
+ * ★F-1：登录限流身份 —— 登录侧与限流侧**共用同一个判定**（app.js 直接 import 复用）：
+ *   通过白名单 ⇒ 返回归一化后的 { username, schoolCode }（= 该输入**有可能定位到账号**）；
+ *   不通过 ⇒ 返回 null ⇒ 登录侧 400、限流侧**不产生账号键**（该输入进不了口令比对，无需账号维度）。
+ */
+export function loginRateLimitIdentity(body) {
+  const username = normalizeLoginIdentity(body == null ? '' : body.username);
+  const schoolCode = normalizeLoginIdentity(body == null ? '' : body.schoolCode);
+  if (!LOGIN_USERNAME_RE.test(username) || !LOGIN_SCHOOLCODE_RE.test(schoolCode)) return null;
+  return { username, schoolCode };
+}
+
 export const login = async (req, res) => {
   try {
-    const { username, password, schoolCode } = req.body;
-    if (!username || !password) {
+    const { password } = req.body;
+    // ★R-1（A 的 round 2 复核，W1-A-review 残留表 R-1）：非字符串口令必须先归一为 400/1001 ——
+    //   此前 `{}`/`123` 会走到 `bcrypt.compareSync` 抛 Illegal arguments ⇒ 500/2001，且 500 **不计入任何限流键**
+    //   （限流只计 400/1001）⇒ 形成一条「不受限流的请求路径」。归一为 400/1001 后即被既有中间件正常计数。
+    //   注：非字符串口令本不可能比对成功（无认证风险），本项修的是「不受限流」这一面；无新增依赖、无阈值改动。
+    if (typeof password !== 'string' || !password) {
       return res.status(400).json({ code: 1001, message: '参数错误', data: null });
     }
 
+    // ★F-1：与**限流侧共用同一个判定/归一化**（唯一实现在本文件导出，app.js 复用）——
+    //   通过白名单 ⇒ 该输入可能定位到账号（限流必然记账号键）；不通过 ⇒ 400 且不产生账号键。
+    //   这样"DB 折叠比 JS 宽"的面从源头消失：非 ASCII/非白名单输入进不了查库与口令比对。
+    const identity = loginRateLimitIdentity(req.body);
+    if (!identity) {
+      return res.status(400).json({ code: 1001, message: '参数错误', data: null });
+    }
+    const u = identity.username;
+    const sc = identity.schoolCode;
+
     // schoolCode 存在时 → 精确匹配 username@schoolCode
-    const lookupUsername = schoolCode ? `${username}@${schoolCode}` : username;
+    const lookupUsername = sc ? `${u}@${sc}` : u;
 
     let user = null;
-    const isStudentLogin = !username.includes('@') && !schoolCode;
+    const isStudentLogin = !u.includes('@') && !sc;
 
     // 学生登录：优先匹配新格式（学号@院校代码），避免旧格式空壳用户抢先命中
     if (isStudentLogin) {
       const newStudents = await prisma.user.findMany({
-        where: { username: { startsWith: username + '@' }, role: 'student', deletedAt: null },
+        where: { username: { startsWith: u + '@' }, role: 'student', deletedAt: null },
       });
 
       if (newStudents.length === 1) {
@@ -48,11 +103,24 @@ export const login = async (req, res) => {
       return res.status(400).json({ code: 1001, message: '用户名或密码错误', data: null });
     }
 
+    // ★t24（B-1 复核的加强项）：以**DB 实际命中的行**为锚的权威账号键 —— 与"输入派生键"并存。
+    //   为什么值得做：输入派生键在查库前就能拦（便宜），但**同一账号的不同写法**（如 `10001@学号` 与
+    //   `学号` + `院校代码`）会落在**不同的输入键**上 ⇒ 属"少记"方向（计数可被写法切换拆散）；命中行的
+    //   id 与写法无关 ⇒ `acct-id:<id>` 让"同一账号 ⇒ 同一把键"**结构上成立**，不依赖正则与 collation 的巧合。
+    //   成本：handler 内一次内存查/记（查库本就已发生）⇒ 无额外 DB 查询、无新增依赖。
+    const limiter = req.app && req.app.locals ? req.app.locals.rateLimiter : null;
+    const idKey = limiter && user.id != null ? `acct-id:${user.id}` : null;
+    if (idKey && await limiter.isBlocked(idKey)) {
+      return res.status(429).json({ code: 1003, message: '登录失败次数过多，请 5 分钟后再试', data: null });
+    }
+
     const isMatch = bcrypt.compareSync(password, user.password);
     if (!isMatch) {
+      if (idKey) limiter.recordFailure(idKey);   // ★t24：权威键按"命中行"计失败（与写法无关）
       // 如果选了学校 or 学生多学校查询唯一命中时，密码错误也统一提示
       return res.status(400).json({ code: 1001, message: '用户名或密码错误', data: null });
     }
+    if (idKey) limiter.recordSuccess(idKey);   // ★t24：成功登录清权威键（与账号维度"成功即清"口径一致）
 
     const token = jwt.sign(
       { id: user.id, username: user.username, role: user.role },

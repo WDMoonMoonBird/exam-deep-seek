@@ -232,6 +232,67 @@ const PARSE_OPTS = {
   plugins: ['importAttributes'],
 };
 
+/** AST 遍历时跳过的元数据键（避免把 loc/注释当子节点递归） */
+const AST_SKIP_KEYS = new Set(['loc', 'start', 'end', 'range', 'extra', 'leadingComments', 'trailingComments', 'innerComments', 'comments']);
+
+/**
+ * ★W1-C-gate：子树上是否存在 `typeof <同名标识符>`（守卫探针，最多 400 个节点）。
+ * @param {object} node 子树根
+ * @param {string} name 目标标识符名（必须**同名**，异名守卫不放行）
+ * @param {{n:number}} [budget] 递归预算
+ * @returns {boolean}
+ */
+function subtreeHasTypeofGuard(node, name, budget = { n: 0 }) {
+  if (!node || typeof node.type !== 'string') return false;
+  if (budget.n++ > 400) return false;
+  if (node.type === 'UnaryExpression' && node.operator === 'typeof'
+    && node.argument && node.argument.type === 'Identifier' && node.argument.name === name) return true;
+  for (const [key, value] of Object.entries(node)) {
+    if (AST_SKIP_KEYS.has(key)) continue;
+    if (Array.isArray(value)) {
+      for (const child of value) if (child && subtreeHasTypeofGuard(child, name, budget)) return true;
+    } else if (value && typeof value.type === 'string' && subtreeHasTypeofGuard(value, name, budget)) return true;
+  }
+  return false;
+}
+
+/**
+ * ★W1-C-gate：短路守卫里的「构建期 define」豁免（修 lint 门禁对 vite define 的误报）。
+ *
+ * 假阳性原样：`typeof __BUILD_VERSION__ !== 'undefined' && __BUILD_VERSION__ ? String(__BUILD_VERSION__) : 'dev'`
+ *   —— 旧豁免只认「父节点直接是 `typeof X`」的那一次引用，短路表达式的第 2/3 次引用被误报 no-undef
+ *   （vite `define` 注入的变量只能这样写：client/vite.config.js 的 __BUILD_VERSION__）。
+ *
+ * 判据（保守，**只**放行被 typeof 守卫过的同名标识符）：
+ *   · `&&` 右侧：沿 `&&` 链上溯，若某个 `&&` 的**左操作数**含 `typeof <同名>` ⇒ 放行（短路语义保证左侧已求值）；
+ *   · 三元：若「我」是 `cond ? A : B` 的 A，且 `cond` 含 `typeof <同名>` ⇒ 放行。
+ * 不放行（保证真阳性仍被抓）：`||` 分支、异名守卫（`typeof window !== 'undefined' && 未声明标识符`）、裸引用。
+ *
+ * @param {object} p Babel ReferencedIdentifier path
+ * @param {string} name 标识符名
+ * @returns {boolean}
+ */
+function isTypeofShortCircuitGuarded(p, name) {
+  let cur = p;
+  for (let depth = 0; depth < 12 && cur.parentPath; depth += 1) {
+    const parent = cur.parentPath;
+    if (parent.isLogicalExpression({ operator: '&&' }) && parent.node.right === cur.node) {
+      if (subtreeHasTypeofGuard(parent.node.left, name)) return true;
+      cur = parent;
+      continue;
+    }
+    if (parent.isConditionalExpression() && parent.node.consequent === cur.node) {
+      if (subtreeHasTypeofGuard(parent.node.test, name)) return true;
+      cur = parent;
+      continue;
+    }
+    // 语句/函数/程序边界：不再上溯，避免把无关上下文误当守卫
+    if (parent.isStatement() || parent.isFunction() || parent.isProgram() || parent.isBlockStatement()) return false;
+    cur = parent;
+  }
+  return false;
+}
+
 /**
  * @param {string} code   脚本源码（.js 全文，或 .vue 的某一个 <script> 块内容）
  * @param {object} ctx    { absFile, isVue, isScriptSetup, templateText, lineAt }
@@ -307,6 +368,8 @@ function analyzeBlock(code, ctx) {
         if (fp && !fp.isProgram()) return; // 普通函数里的 arguments 是合法隐式绑定
       }
       if (p.parentPath.isUnaryExpression({ operator: 'typeof' })) return; // typeof 不会抛 ReferenceError，ESLint 默认也放行
+      // ★W1-C-gate：`typeof X !== 'undefined' && X ? String(X) : 'dev'` 的第 2/3 次引用同属被守卫引用
+      if (isTypeofShortCircuitGuarded(p, name)) return;
       if (p.scope.getBinding(name)) return;
       add('no-undef', p.node, name, '引用但未声明 / 未 import / 未注入');
     },
@@ -866,6 +929,9 @@ const CLEAN_FIXTURES = {
     'export const metaUrl = import.meta.url;',
     '',
     'export function takesCallback(a, b) { return a + b; }',
+    '',
+    '// ★W1-C-gate 复现夹具（vite 构建期 define 的标准写法：短路守卫里的第 2/3 次引用曾被误报 no-undef）',
+    "export const buildStamp = typeof __BUILD_VERSION__ !== 'undefined' && __BUILD_VERSION__ ? String(__BUILD_VERSION__) : 'dev';",
   ].join('\n'),
 
   'clean/ChildWidget.vue': [
@@ -926,6 +992,21 @@ const CONTROLS = [
     rule: 'no-undef', file: 'ctl/no-undef.js', desc: '引用但未声明 + 赋值给未声明的标识符',
     code: ['export function boom(event) {', '  freeIdentifierNeverDeclared(event);', '  alsoFreeAssignTarget = 1;', '  return event;', '}'].join('\n'),
     expect: [['no-undef', 'freeIdentifierNeverDeclared'], ['no-undef', 'alsoFreeAssignTarget']],
+  },
+  {
+    // ★W1-C-gate 守卫精度正控：typeof 豁免**只**放行同名标识符，且**只**认 && / 三元守卫
+    rule: 'no-undef【守卫精度】', file: 'ctl/no-undef-guard-scope.js',
+    desc: 'typeof 守卫必须同名同链才豁免：异名 &&、|| 右侧、裸引用仍须报 no-undef',
+    code: [
+      'export function pick(flag) {',
+      "  const guarded = typeof __BUILD_VERSION__ !== 'undefined' && __BUILD_VERSION__ ? String(__BUILD_VERSION__) : 'dev';",
+      "  const otherName = typeof window !== 'undefined' && missingAfterGuard;",
+      '  const orBranch = flag || ghostInOr;',
+      '  return [guarded, otherName, orBranch];',
+      '}',
+    ].join('\n'),
+    expect: [['no-undef', 'missingAfterGuard'], ['no-undef', 'ghostInOr']],
+    mustNotReport: ['__BUILD_VERSION__'],
   },
   {
     rule: 'no-unused-vars', file: 'ctl/no-unused-vars.js', desc: '声明但从未使用（export 的不算）',

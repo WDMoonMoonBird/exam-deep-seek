@@ -1,11 +1,19 @@
 // ================================================================
 // 安全修复后 — 生产环境全业务 API 测试
-// 用法: node server/test/e2e/security-prod-test.js
+// 用法: TEST_ADMIN_USERNAME=... TEST_ADMIN_PASSWORD=... node server/test/e2e/security-prod-test.js
 // ================================================================
+import { getEnvAdminCredentials } from '../fixtures/admin.js';
+
 const BASE = 'https://deadpan.asia/exam/api';
 
-// 测试账号（生产环境已有）
-const ADMIN = { username: 'admin', password: '***REDACTED***' };
+// 测试账号（生产环境已有）；admin 凭据一律由环境变量注入（W0-C）：
+//   TEST_ADMIN_USERNAME / TEST_ADMIN_PASSWORD（兼容 BOOTSTRAP_ADMIN_*）
+// 仓库内不再保存任何默认超管口令（C1 已移除启动期默认超管）。
+const ADMIN = getEnvAdminCredentials();
+if (!ADMIN) {
+  console.error('⛔ 跳过：未配置 TEST_ADMIN_USERNAME / TEST_ADMIN_PASSWORD —— C1 之后仓库不再提供默认超管口令。');
+  process.exit(2);
+}
 const TEACHER = { username: '202519011', password: '202519011' };
 const STUDENT = { username: '2458030306', password: '2458030306' };
 

@@ -10,8 +10,9 @@ import { generateChecker, getCheckerState, confirmChecker, rollbackChecker } fro
  */
 export const getChecker = async (req, res) => {
   try {
-    const q = await prisma.question.findUnique({
-      where: { id: +req.params.id },
+    // ★H4：归属校验 —— 题目必须属于调用者；未命中走既有 404 分支（与 confirmCheckerHandler 同口径）
+    const q = await prisma.question.findFirst({
+      where: { id: +req.params.id, teacherId: req.user.id },
       select: { id: true, type: true },
     });
     if (!q) return res.status(404).json({ code: 1004, message: '题目不存在', data: null });

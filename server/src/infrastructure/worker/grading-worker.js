@@ -10,10 +10,13 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECTS_UPLOAD_DIR = path.join(__dirname, '../../uploads/projects');
 
-const INTERNAL_SECRET = process.env.INTERNAL_SECRET || '***REDACTED***';
+// ★C2：**无字面量兜底** —— 密钥唯一来源是环境变量；未配置则不发内部回调（主进程同样拒绝启动）。
+const INTERNAL_SECRET = process.env.INTERNAL_SECRET;
 function notifyGradedViaHttp(schoolId, data) {
+  if (!INTERNAL_SECRET) return;
   const port = process.env.PORT || 3000;
-  fetch(`http://localhost:${port}/api/internal/graded`, {
+  // 目标固定 127.0.0.1：主进程只绑回环，且该端点的来源白名单按回环放行（避免 localhost 解析到 ::1 时连不上）
+  fetch(`http://127.0.0.1:${port}/api/internal/graded`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${INTERNAL_SECRET}` },
     body: JSON.stringify({ schoolId, ...data }),

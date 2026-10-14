@@ -1,5 +1,11 @@
 // 创建测试数据：测试教师1~2、测试学生1~5、测试班级1、测试题目1、测试作业1、测试团队1
-const BASE = 'http://localhost:3000/api';
+// admin 凭据来自统一夹具（W0-C）：环境变量优先，缺省自建/复用专用测试管理员。
+// 注意：本脚本经 HTTP 打被测服务，需与被测服务共用同一 DATABASE_URL（缺省读 server/.env）。
+import { ensureAdminAccount } from '../fixtures/admin.js';
+import { E2E_API_BASE } from './e2e-env.js';
+
+// ★W1-C6：基址随端口可配置（默认 3000 不变）；下方 schoolId 拼接语义保持原样
+const BASE = E2E_API_BASE;
 
 async function api(method, path, body, token) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
@@ -18,7 +24,8 @@ async function api(method, path, body, token) {
   try {
     // 1. 登录 admin
     console.log('1. 登录 admin...');
-    const adminLogin = await api('POST', '/auth/login', { username: 'admin', password: '***REDACTED***' });
+    const adminCreds = await ensureAdminAccount();
+    const adminLogin = await api('POST', '/auth/login', { username: adminCreds.username, password: adminCreds.password });
     const adminToken = adminLogin.token;
 
     // 2. 创建测试教师1
