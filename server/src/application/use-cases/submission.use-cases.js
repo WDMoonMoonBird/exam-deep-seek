@@ -32,6 +32,30 @@ export class SubmissionUseCases {
   }
 
   /**
+   * 入参归属守卫（★R3-D11 / F-E2E-1）：questionId 必填且必须是**该作业下的题目**；
+   * subQuestionId 若传也必须是**该题目的小题**。
+   *
+   * 背景：原实现直接把 `+questionId`（缺参 ⇒ NaN）传进仓储，Prisma 抛
+   * `Argument questionId is missing` / `Invalid prisma.submission.create() invocation` ⇒
+   * mapSubmissionError 认不出 DomainError ⇒ 500 + 原始 Prisma 文本外泄。
+   * 现在一律抛 DomainError（走既有 DomainError → 400 通道），文案可读且不含内部信息。
+   *
+   * @throws {DomainError}
+   */
+  async _assertQuestionInAssignment(assignmentId, questionId, subQuestionId) {
+    const qid = Number(questionId);
+    if (!Number.isInteger(qid) || qid < 1) throw new DomainError('题目不存在或不属于该作业');
+    const link = await this.submissionRepo.findAssignmentQuestion(assignmentId, qid);
+    if (!link) throw new DomainError('题目不存在或不属于该作业');
+    if (subQuestionId != null && subQuestionId !== '') {
+      const sqid = Number(subQuestionId);
+      const owned = Number.isInteger(sqid)
+        && (link.question?.subQuestions || []).some((sq) => sq.id === sqid);
+      if (!owned) throw new DomainError('小题不存在或不属于该题目');
+    }
+  }
+
+  /**
    * 提交答案（等价 submitAnswer）：锁定/截止/防重复/练习次数校验 → 落库（attemptCount 递增）。
    * @param {object} cmd
    * @param {number} cmd.assignmentId
@@ -49,8 +73,13 @@ export class SubmissionUseCases {
 
     if (assignment.locked) throw new DomainError('作业已被锁定，无法提交', 'LOCKED');
 
+    // ★R3-D11（t20 / F-E2E-1）：入参归属校验前置，避免 NaN/越权题目进入仓储（否则 500 + Prisma 原文泄漏）
+    await this._assertQuestionInAssignment(assignmentId, questionId, subQuestionId);
+    const qid = Number(questionId);
+    const sqid = (subQuestionId != null && subQuestionId !== '') ? Number(subQuestionId) : null;
+
     const isExpired = new Date() > new Date(assignment.endTime);
-    const submission = await this.submissionRepo.findByAssignmentAndQuestion(assignmentId, studentId, +questionId, subQuestionId ? +subQuestionId : null);
+    const submission = await this.submissionRepo.findByAssignmentAndQuestion(assignmentId, studentId, qid, sqid);
 
     if (isExpired && !force) throw new DomainError('已过截止时间，不可提交');
     if (submission && submission.status !== 'draft' && !assignment.allowResubmit && !force) {
@@ -66,12 +95,12 @@ export class SubmissionUseCases {
 
     const data = { answer, status: 'submitted', submittedAt: new Date() };
     data.attemptCount = submission ? (submission.attemptCount || 0) + 1 : 1;
-    if (subQuestionId) data.subQuestionId = +subQuestionId;
+    if (sqid != null) data.subQuestionId = sqid;
 
     if (submission) {
       await this.submissionRepo.update(submission.id, data);
     } else {
-      await this.submissionRepo.create({ assignmentId, studentId, questionId: +questionId, ...data });
+      await this.submissionRepo.create({ assignmentId, studentId, questionId: qid, ...data });
     }
 
     return { message: force ? '时间已截止，已自动提交' : '提交成功' };
@@ -88,14 +117,19 @@ export class SubmissionUseCases {
     if (assignment.locked) throw new DomainError('作业已被锁定', 'LOCKED');
     if (new Date() > new Date(assignment.endTime)) return { message: '已过截止时间，跳过草稿' };
 
-    const submission = await this.submissionRepo.findByAssignmentAndQuestion(assignmentId, studentId, +questionId, subQuestionId ? +subQuestionId : null);
+    // ★R3-D11（t20）：与 submit 同一守卫（草稿接口同样不能把 NaN/越权题目写进库）
+    await this._assertQuestionInAssignment(assignmentId, questionId, subQuestionId);
+    const qid = Number(questionId);
+    const sqid = (subQuestionId != null && subQuestionId !== '') ? Number(subQuestionId) : null;
+
+    const submission = await this.submissionRepo.findByAssignmentAndQuestion(assignmentId, studentId, qid, sqid);
     if (submission && submission.status !== 'draft') return { message: '已提交，跳过草稿' };
 
     if (submission) {
       await this.submissionRepo.update(submission.id, { answer });
     } else {
       await this.submissionRepo.create({
-        assignmentId, studentId, questionId: +questionId, subQuestionId: subQuestionId ? +subQuestionId : null, answer, status: 'draft',
+        assignmentId, studentId, questionId: qid, subQuestionId: sqid, answer, status: 'draft',
       });
     }
     return { message: '草稿已保存' };

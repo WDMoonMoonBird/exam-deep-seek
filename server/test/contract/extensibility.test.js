@@ -40,6 +40,12 @@ class SecondSubmissionRepository {
   async findById(id) { return this.subs.get(id) || null; }
   async findScoreContext(id) { return this.subs.get(id) || null; }
   async findAssignmentContext(assignmentId) { return this.assignments.get(assignmentId) || null; }
+  /** ★R3-D11（t20）：入参归属校验用（替身：作业下题目集合由 seed 提供，缺省视为命中，保持既有用例语义） */
+  async findAssignmentQuestion(assignmentId, questionId) {
+    const aq = this.assignmentQuestions?.get(assignmentId);
+    if (aq) return aq.get(questionId) || null;
+    return { questionId, question: { id: questionId, type: 'code', subQuestions: [] } };
+  }
   async findByAssignmentAndQuestion(assignmentId, studentId, questionId, subQuestionId) {
     for (const s of this.subs.values()) {
       if (s.assignmentId === assignmentId && s.studentId === studentId && s.questionId === questionId

@@ -147,9 +147,9 @@ describe('仓储适配器形状（不连 DB：stub prisma 构造）', () => {
     }
   });
 
-  it('SubmissionRepository 具备 7 个 de-facto 方法，且均返回 Promise', async () => {
+  it('SubmissionRepository 具备 8 个 de-facto 方法，且均返回 Promise', async () => {
     const repo = new SubmissionRepository({ prisma: stubPrisma });
-    const names = ['findById', 'findScoreContext', 'update', 'findAssignmentContext', 'findByAssignmentAndQuestion', 'create', 'resetByAssignment'];
+    const names = ['findById', 'findScoreContext', 'update', 'findAssignmentContext', 'findByAssignmentAndQuestion', 'findAssignmentQuestion', 'create', 'resetByAssignment'];
     expectMethods(repo, names);
     expect(repo.findById(1) && typeof repo.findById(1).then === 'function').toBe(true);
     expect(repo.create({ assignmentId: 1, studentId: 2, questionId: 3, answer: 'x' }) && typeof repo.create({ assignmentId: 1, studentId: 2, questionId: 3, answer: 'x' }).then === 'function').toBe(true);
@@ -170,7 +170,7 @@ describe('仓储适配器形状（不连 DB：stub prisma 构造）', () => {
     expect(reviewRepo).toBeInstanceOf(SubmissionRepository);
     expectMethods(reviewRepo, ['findById', 'findScoreContext', 'update']);
     const submitRepo = composed.submissionUseCases.submissionRepo;
-    expectMethods(submitRepo, ['findAssignmentContext', 'findByAssignmentAndQuestion', 'update', 'create', 'resetByAssignment']);
+    expectMethods(submitRepo, ['findAssignmentContext', 'findByAssignmentAndQuestion', 'findAssignmentQuestion', 'update', 'create', 'resetByAssignment']);
     expect(composed.questionUseCases.questionRepo).toBeInstanceOf(QuestionRepository);
     expectMethods(composed.questionUseCases.questionRepo, ['create']);
   });
@@ -191,13 +191,13 @@ describe('契约核对矩阵（8 仓储 + 5 端口 + EventBus，方法级覆盖�
     expect(matrix.eventBus.port).toBe('EventBus');
   });
 
-  it('矩阵 100% 覆盖：3 仓储 17 方法 + 5 端口 9 方法 + EventBus 2 方法 = 28 行（DSGN-001 契约重写后）', () => {
+  it('矩阵 100% 覆盖：3 仓储 18 方法 + 5 端口 9 方法 + EventBus 2 方法 = 29 行（DSGN-001 契约重写后；★R3-D11 增 findAssignmentQuestion）', () => {
     const repoMethods = matrix.repos.reduce((s, p) => s + p.methods.length, 0);
     const gatewayMethods = matrix.gateways.reduce((s, p) => s + p.methods.length, 0);
-    expect(repoMethods).toBe(17);
+    expect(repoMethods).toBe(18);
     expect(gatewayMethods).toBe(9);
     expect(matrix.eventBus.methods.length).toBe(2);
-    expect(stats.total).toBe(28);
+    expect(stats.total).toBe(29);
     for (const r of matrix.rows) {
       expect(['一致', '命名不一致', '契约缺实现']).toContain(r.status);
     }
@@ -228,7 +228,7 @@ describe('适配器额外方法盘点（契约外的实现方法，供架构师�
   it('记录 SubmissionRepository 方法集（与契约 save/findByAssignmentAndStudent/listByAssignment 不一致）', () => {
     const methods = classMethods(SubmissionRepository);
     expect(methods).toEqual([
-      'create', 'findAssignmentContext', 'findByAssignmentAndQuestion',
+      'create', 'findAssignmentContext', 'findAssignmentQuestion', 'findByAssignmentAndQuestion',
       'findById', 'findScoreContext', 'resetByAssignment', 'update',
     ]);
   });

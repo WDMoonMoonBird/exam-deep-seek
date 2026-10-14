@@ -6,6 +6,8 @@ const assignment = { id: 1, endTime: new Date('2099-01-01'), allowResubmit: fals
 function makeRepo(overrides = {}) {
   return {
     findAssignmentContext: async () => assignment,
+    // ★R3-D11（t20）：新增的入参归属校验依赖此方法（默认：题目 3 属于作业 1，且含小题 5）
+    findAssignmentQuestion: async () => ({ questionId: 3, question: { id: 3, type: 'code', subQuestions: [{ id: 5 }, { id: 7 }] } }),
     findByAssignmentAndQuestion: async () => null,
     update: async (id, data) => ({ id, ...data }),
     create: async (data) => ({ id: 1, ...data }),

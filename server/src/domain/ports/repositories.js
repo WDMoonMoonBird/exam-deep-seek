@@ -11,6 +11,7 @@
  * @property {(id: number, data: object) => Promise<object>} update 更新提交字段
  * @property {(assignmentId: number, studentId?: number) => Promise<object|null>} findAssignmentContext 作业提交上下文（endTime/allowResubmit/mode/maxAttempts/locked）；传 studentId 时追加归属收窄：学生不在作业投放班级内 ⇒ null（round 6）
  * @property {(assignmentId: number, studentId: number, questionId: number, subQuestionId?: number|null) => Promise<object|null>} findByAssignmentAndQuestion 学生某题提交
+ * @property {(assignmentId: number, questionId: number) => Promise<object|null>} findAssignmentQuestion 作业-题目关联（★R3-D11：入参归属校验用；返回 { questionId, question: { id, type, subQuestions: [{ id }] } } 或 null）
  * @property {(data: object) => Promise<object>} create 创建提交
  * @property {(assignmentId: number, studentId: number) => Promise<object>} resetByAssignment 重置为草稿（练习重答）
  */

@@ -73,6 +73,21 @@ export class SubmissionRepository {
     return this.prisma.submission.findFirst({ where });
   }
 
+  /**
+   * 作业-题目关联（★R3-D11 / F-E2E-1：提交入参归属校验）。
+   * 命中 ⇒ 返回 { questionId, question: { id, type, subQuestions: [{ id }] } }；未投放/不存在 ⇒ null。
+   * 一次查询同时支撑两个判定：questionId 属于该作业、subQuestionId 属于该题目。
+   */
+  findAssignmentQuestion(assignmentId, questionId) {
+    return this.prisma.assignmentQuestion.findUnique({
+      where: { assignmentId_questionId: { assignmentId, questionId } },
+      select: {
+        questionId: true,
+        question: { select: { id: true, type: true, subQuestions: { select: { id: true } } } },
+      },
+    });
+  }
+
   /** 创建提交 */
   create(data) {
     return this.prisma.submission.create({ data });
