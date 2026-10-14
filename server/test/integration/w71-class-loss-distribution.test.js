@@ -161,4 +161,37 @@ describe('W71 失分项分布（R2-B68）', () => {
     expect(empty.out.code).toBe(0);
     expect(empty.out.body.data.items).toEqual([]);
   }, 60000);
+
+  it('W71-6 ★R3-S5（t30）：legacy 形状（无 title/status）真实库往返 ⇒ 按 score/maxScore 推导 hit/miss，未知仍不计入分母', async () => {
+    // legacy 写回形状：services/projectGrading.js clampBreakdown 旧实现（item/score/maxScore/comment，无 title/status）
+    const legacySub = await prisma.submission.create({
+      data: {
+        assignmentId: ctx.assignmentId, studentId: ctx.studentIds[0], questionId: ctx.questionId,
+        status: 'ai_graded', aiScore: 5, checkerId: 'ck_b68', canonicalSha256: 'sha_legacy_b68',
+        aiFeedback: bk([
+          { item: 'P01', score: 0, maxScore: 10, comment: 'legacy：命名缺失' },   // ⇒ 推导 miss
+          { item: 'P04', score: 5, maxScore: 5, comment: 'legacy：全对' },        // ⇒ 推导 hit
+          { item: 'P05', score: 2, maxScore: 10 },                                // 部分得分 ⇒ 未知
+        ]),
+      },
+    });
+    try {
+      const raw = await prisma.submission.findUnique({ where: { id: legacySub.id } });
+      const parsed = parseLossBreakdown(raw.aiFeedback);   // 真 JSON 列往返（legacy 形状）
+      expect(parsed.items.map((i) => [i.item, i.status])).toEqual([['P01', 'miss'], ['P04', 'hit'], ['P05', null]]);
+
+      const r = await loadClassLossDistribution({ prisma, assignmentId: ctx.assignmentId, classId: ctx.classId });
+      const p01 = r.items.find((i) => i.item === 'P01');
+      const p04 = r.items.find((i) => i.item === 'P04');
+      const p05 = r.items.find((i) => i.item === 'P05');
+      // 夹具 2 条（带 status）+ legacy 1 条 ⇒ P01 3 次 miss（旧形状不再落 unknown）
+      expect(p01).toMatchObject({ hit: 0, miss: 3, unknown: 0, numerator: 3, denominator: 3, lossRate: 1 });
+      expect(p04).toMatchObject({ title: '', hit: 1, miss: 0, unknown: 0, numerator: 0, denominator: 1, lossRate: 0 });
+      expect(p05).toMatchObject({ hit: 0, miss: 0, unknown: 1, numerator: 0, denominator: 0, lossRate: null });
+      // 口径不放宽：分母仍是 hit+miss（3+3），未知 2 项（P03 与 P05）单列
+      expect(r.totals).toMatchObject({ submissionsScanned: 3, submissionsWithItems: 3, hits: 3, misses: 3, unknown: 2 });
+    } finally {
+      await prisma.submission.deleteMany({ where: { id: legacySub.id } });
+    }
+  }, 60000);
 });

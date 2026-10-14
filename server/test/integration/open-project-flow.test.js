@@ -252,7 +252,14 @@ describe('开放性实训题全链路（建题无包 → 布置确认 → 提交
     // AI 结构化评语（总分在 submission.aiScore，明细在 aiResult）
     expect(d.submission.aiScore).toBe(MOCK_AI_RESULT.totalScore);
     expect(d.aiResult.overallComment).toBe(MOCK_AI_RESULT.overallComment);
-    expect(d.aiResult.breakdown[0]).toEqual(MOCK_AI_RESULT.breakdown[0]);
+    // ★R3-S5（t30）：写入端（services/projectGrading.js）自本波起经 domain/services/lossBreakdownItem
+    //   补齐 title（≤80）与 status（显式优先；缺失时按 score/maxScore 推导：满分=hit / 0 分=miss /
+    //   部分得分或不可判定=null）⇒ 落库明细比 mock 多出两个键。此处断言「mock 字段逐字保留 + 新增两键取推导值」。
+    expect(d.aiResult.breakdown[0]).toEqual({
+      ...MOCK_AI_RESULT.breakdown[0],
+      title: '',          // mock 未给 title/name ⇒ 空串（不编造）
+      status: null,       // 53/60 部分得分 ⇒ 未知（不得猜成 hit/miss）
+    });
     expect(d.aiResult.highlights).toEqual(MOCK_AI_RESULT.highlights);
     expect(d.aiResult.issues).toEqual(MOCK_AI_RESULT.issues);
     expect(d.question.scoringRubric).toContain('功能完整性 60 分');

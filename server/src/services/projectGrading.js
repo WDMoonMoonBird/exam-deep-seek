@@ -31,6 +31,9 @@ import { gradeProjectTrustJudge } from '../infrastructure/ai/trust-judge-grader.
 import { ABNORMAL_FEEDBACK } from '../constants.js';
 import { standardDir, submissionDir, hasStandardPackage } from '../utils/projectPaths.js';
 import { parseProjectAnswer, serializeProjectAnswer } from '../domain/services/project-view.js';
+// ★R3-S5（t30）：breakdown 项统一规范化（补齐 title/status，status 缺失时按 score/maxScore 推导）——
+//   原实现只写 { item, score, maxScore, comment, kind }（legacy 形状）⇒ 读取侧按 status 聚合时全落 unknown
+import { buildLossBreakdown } from '../domain/services/lossBreakdownItem.js';
 import { loadAssignmentSnapshot, resolveSnapshot } from './assignmentSnapshot.js';
 import { textSha256, standardPackSha256 } from '../utils/snapshotHash.js';
 
@@ -291,13 +294,11 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
     // gradeProject 返回 { totalScore, breakdown[], highlights[], issues[], overallComment }
     const aiScore = Math.max(0, Math.min(sub.question.maxScore || 100, Math.round(Number(result.totalScore) || 0)));
     // 解析层强制输出约束（与提示词约束一致，超限截断，违规不落库）
-    const clampBreakdown = (b) => ({
-      item: String(b.item || '').slice(0, 50),
-      score: Number(b.score) || 0,
-      maxScore: Number(b.maxScore) || 0,
-      comment: String(b.comment || '').slice(0, 60),
-      kind: b.kind, // 检查器链路标记 'checker'/'ai'；原链路无该字段
-    });
+    // ★R3-S5（t30 / 修法 A）：写入端补齐 title（≤80）与 status（显式优先；缺失时按 score/maxScore 推导：
+    //   满分=hit / 0 分=miss / 部分得分或不可判定=null）—— 原实现只写 {item,score,maxScore,comment,kind}，
+    //   读取侧按 status 聚合时整项落 unknown、失分项分布失真。其余字段与截断长度与改动前逐字一致
+    //   （item ≤50、comment ≤60、score/maxScore 非数字⇒0；kind 由本处追加，保持落库形状不变）。
+    const clampBreakdown = (b) => ({ ...buildLossBreakdown([b], { commentLimit: 60 })[0], kind: b.kind });
     const aiFeedback = JSON.stringify({
       // 检查器链路（规则驱动）：明细全量保留；原 LLM 链路：固定分项按分项数，降级 8 项上限
       breakdown: (Array.isArray(result.breakdown) ? result.breakdown : [])

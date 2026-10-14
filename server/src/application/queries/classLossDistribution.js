@@ -8,11 +8,32 @@
  *   · 每项 status：'hit' 命中 / 'miss' 未命中 / 其它（未知）⇒ 未知**不计入分母**，单独计数上报（不猜、不折算）；
  *   · 失分率 = miss / (hit + miss)（分母为 0 ⇒ null，前端显示「—」）；分子/分母一并返回，便于核对。
  *
+ * ★R3-S5（t30）：breakdown 存在**两代形状** —— 新（检查器链路 dshCheckerConsumer.buildWriteback）带
+ *   { item, title, status, score, maxScore, comment }；旧（legacy 写回 services/projectGrading.js:294 起）
+ *   只有 { item, score, maxScore, comment }。真实数据里两代混存 ⇒ 原实现只看 it.status 会把旧形状整项计成
+ *   unknown、失分项分布失真。现按 rule 兜底：**status 显式优先；缺失才按 score/maxScore 推导**
+ *   （maxScore>0 且 score>=maxScore ⇒ hit；score<=0 ⇒ miss；其余/不可判定 ⇒ 保持 unknown —— 不猜、不折算）。
+ *
  * 本模块**零 import**（prisma 由调用方注入）⇒ 纯函数可被自测与 client/scripts/verify-frontend.mjs 直接 import，
  * 不建 DB 连接、不起副作用。只读：本模块没有任何写路径。
+ * 推导规则与 domain/services/lossBreakdownItem.deriveItemStatus 同口径；因零 import 契约（verify-frontend ⑭b
+ * 断言 `!/^\s*import\s/m`）此处内联，两者一致性由 server/test/unit/domain/loss-breakdown-item.test.js 的一致性表锁定。
  */
 
 export const ITEM_STATUS = { hit: 'hit', miss: 'miss' };
+
+/**
+ * status 兜底推导（内联；与 domain/services/lossBreakdownItem.deriveItemStatus 同口径）：
+ *   maxScore > 0 且 score >= maxScore ⇒ 'hit'；score <= 0 ⇒ 'miss'；其余（部分得分/不可判定）⇒ null（未知）。
+ */
+export function deriveStatusFromScore(score, maxScore) {
+  const s = Number(score);
+  const m = Number(maxScore);
+  if (!Number.isFinite(s) || !Number.isFinite(m) || m <= 0) return null;
+  if (s >= m) return ITEM_STATUS.hit;
+  if (s <= 0) return ITEM_STATUS.miss;
+  return null;
+}
 
 /** 解析 Submission.aiFeedback（JSON 字符串或对象）⇒ { ok, source, items[] }；坏数据/缺字段一律安全降级 */
 export function parseLossBreakdown(aiFeedback) {
@@ -23,13 +44,19 @@ export function parseLossBreakdown(aiFeedback) {
   }
   if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return { ok: false, reason: 'not_object', source: null, items: [] };
   const raw = Array.isArray(doc.breakdown) ? doc.breakdown : [];
-  const items = raw.filter((it) => it && typeof it === 'object').map((it) => ({
-    item: String(it.item !== undefined && it.item !== null ? it.item : (it.name || '')).slice(0, 50),
-    title: String(it.title || '').slice(0, 80),
-    status: it.status === undefined || it.status === null ? null : String(it.status).slice(0, 24),
-    score: Number(it.score) || 0,
-    maxScore: Number(it.maxScore !== undefined ? it.maxScore : it.max_score) || 0,
-  }));
+  const items = raw.filter((it) => it && typeof it === 'object').map((it) => {
+    const score = Number(it.score) || 0;
+    const maxScore = Number(it.maxScore !== undefined ? it.maxScore : it.max_score) || 0;
+    const explicit = it.status === undefined || it.status === null || it.status === '' ? '' : String(it.status).slice(0, 24);
+    return {
+      item: String(it.item !== undefined && it.item !== null ? it.item : (it.name || '')).slice(0, 50),
+      title: String(it.title || '').slice(0, 80),
+      // ★R3-S5：显式 status 优先；legacy 形状（无 status）⇒ 按 score/maxScore 推导；不可判定 ⇒ null（仍计 unknown）
+      status: explicit || deriveStatusFromScore(score, maxScore),
+      score,
+      maxScore,
+    };
+  });
   return { ok: true, reason: 'ok', source: doc.source || null, items };
 }
 
