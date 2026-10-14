@@ -66,10 +66,12 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
 import request from '../../api/request.js';
+import { useSafeRequest } from '../../composables/useSafeRequest.js';   // ★W1（t1）：失败就地提示、不冒泡
 import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
 import { formatDate } from '../../domain/format.js';
 
+const { safeLoad, safeSubmit } = useSafeRequest({ tag: 'admin/Classes.vue' });
 const loading = ref(false);
 const list = ref([]);
 const page = reactive({ current: 1, pageSize: 20 });
@@ -100,15 +102,21 @@ function onPageChange(p) {
 
 async function fetch() {
   loading.value = true;
-  const r = await request.get('/admin/classes');
-  list.value = r.data;
-  loading.value = false;
+  try {
+    const r = await safeLoad(() => request.get('/admin/classes'), { action: '加载班级列表' });
+    if (!r.error) list.value = r.data || [];
+  } finally {
+    loading.value = false;
+  }
 }
 
 async function loadOptions() {
-  const [s, t] = await Promise.all([request.get('/admin/schools'), request.get('/admin/teachers')]);
-  schools.value = s.data;
-  teachers.value = t.data;
+  const [s, t] = await Promise.all([
+    safeLoad(() => request.get('/admin/schools'), { action: '加载学校列表' }),
+    safeLoad(() => request.get('/admin/teachers'), { action: '加载教师列表' }),
+  ]);
+  if (!s.error) schools.value = s.data || [];
+  if (!t.error) teachers.value = t.data || [];
 }
 
 function openAdd() {
@@ -126,11 +134,21 @@ function openEdit(record) {
 
 async function handleOk() {
   const d = { name: form.name, schoolId: form.schoolId, teacherIds: form.teacherIds };
-  isEdit.value ? await request.put(`/admin/classes/${editId.value}`, d) : await request.post('/admin/classes', d);
-  visible.value = false; fetch();
+  // ★W1（t1）：提交走 safeSubmit ⇒ 400/500 只就地提示，弹窗不关、列表不消失（旧写法会让整页被错误页替换）
+  const r = await safeSubmit(
+    () => (isEdit.value ? request.put(`/admin/classes/${editId.value}`, d) : request.post('/admin/classes', d)),
+    { action: isEdit.value ? '保存' : '新增' },
+  );
+  if (r.error) return;
+  visible.value = false;
+  fetch();
 }
 
-async function del(id) { await request.delete(`/admin/classes/${id}`); fetch(); }
+async function del(id) {
+  const r = await safeSubmit(() => request.delete(`/admin/classes/${id}`), { action: '删除' });
+  if (r.error) return;
+  fetch();
+}
 
 onMounted(fetch);
 </script>

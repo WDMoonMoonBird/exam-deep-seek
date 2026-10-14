@@ -192,11 +192,14 @@ function friendlyLoadError(err) {
 import { InboxOutlined, CheckCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons-vue';
 import * as XLSX from 'xlsx';
 import request from '../../api/request.js';
+import { useSafeRequest } from '../../composables/useSafeRequest.js';   // ★W1（t1）：失败就地提示、不冒泡
 import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
 import StatusTag from '../../components/StatusTag.vue';
 import { formatDate } from '../../domain/format.js';
 import { useConfirm } from '../../composables/useConfirm.js';
+
+const { safeLoad, safeSubmit } = useSafeRequest({ tag: 'teacher/Students.vue' });
 
 /** 命令式确认框（Wave 2 构件 useConfirm）：替代原 antd 命令式调用，行为等价 */
 const { confirm } = useConfirm();
@@ -317,7 +320,10 @@ async function fetch() {
   }
 }
 
-async function loadClasses() { const r = await request.get('/teacher/classes'); teacherClasses.value = r.data || []; }
+async function loadClasses() {
+  const r = await safeLoad(() => request.get('/teacher/classes'), { action: '加载班级列表' });
+  if (!r.error) teacherClasses.value = r.data || [];
+}
 
 function openAdd() {
   isEdit.value = false; modalTitle.value = '新增学生';
@@ -337,7 +343,11 @@ function openEdit(row) {
 }
 
 async function handleOk() {
-  const d = { realName: form.realName, classId: form.classId };
+  // ★W1（t1）④：提交前必填校验（姓名 / 学号 / 班级）—— 从源头避免 400（旧实现留空直接 POST）
+  if (!String(form.realName || '').trim()) return message.warn('请输入姓名');
+  if (!isEdit.value && !String(form.username || '').trim()) return message.warn('请输入学号');
+  if (!form.classId) return message.warn('请选择班级');
+  const d = { realName: String(form.realName).trim(), classId: form.classId };
   if (isEdit.value) {
     // 补全学号：二次确认，保存后不可再修改
     if (form._canEditUsername) {
@@ -349,19 +359,24 @@ async function handleOk() {
         cancelText: '取消',
         danger: true,   // 学号补齐后不可再次修改（不可逆）
         onOk: async () => {
-          try {
-            await request.put(`/teacher/students/${editId.value}`, d);
-            message.success('修改成功');
-            visible.value = false; await Promise.all([fetch(), loadClasses()]);
-          } catch {}
+          // ★W1：safeSubmit 不抛 ⇒ 失败已就地提示，弹窗不关、列表不丢
+          const r = await safeSubmit(() => request.put(`/teacher/students/${editId.value}`, d), { action: '修改' });
+          if (r.error) return;
+          message.success('修改成功');
+          visible.value = false; await Promise.all([fetch(), loadClasses()]);
         },
       });
       return;
     }
-    await request.put(`/teacher/students/${editId.value}`, d);
+    const r = await safeSubmit(() => request.put(`/teacher/students/${editId.value}`, d), { action: '修改' });
+    if (r.error) return;
     message.success('修改成功');
   } else {
-    await request.post('/teacher/students', { username: form.username, realName: form.realName, classId: form.classId });
+    const r = await safeSubmit(
+      () => request.post('/teacher/students', { username: String(form.username).trim(), realName: String(form.realName).trim(), classId: form.classId }),
+      { action: '新增' },
+    );
+    if (r.error) return;
     message.success('新增成功');
   }
   visible.value = false; await Promise.all([fetch(), loadClasses()]);
@@ -374,7 +389,12 @@ async function resetPassword() {
   } catch {}
 }
 
-async function del(id) { await request.delete(`/teacher/students/${id}`); message.success('删除成功'); await Promise.all([fetch(), loadClasses()]); }
+async function del(id) {
+  const r = await safeSubmit(() => request.delete(`/teacher/students/${id}`), { action: '删除' });
+  if (r.error) return;
+  message.success('删除成功');
+  await Promise.all([fetch(), loadClasses()]);
+}
 
 function openUploadModal() { uploadFileList.value = []; uploadModalOpen.value = true; }
 

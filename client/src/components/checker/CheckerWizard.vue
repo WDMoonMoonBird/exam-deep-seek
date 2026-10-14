@@ -168,6 +168,9 @@ import {
   mockRules, mockHealthReport, mockVersions,
 } from '../../api/checker.js';
 import { detectProjectType } from '../../domain/projectType.js';
+import { useSafeRequest } from '../../composables/useSafeRequest.js';   // ★W1（t1）：评分器请求失败就地提示、不冒泡
+
+const { safeLoad, safeSubmit } = useSafeRequest({ tag: 'CheckerWizard.vue' });
 
 const props = defineProps({
   questionId: { type: [String, Number], required: true },
@@ -310,7 +313,9 @@ function applyState(d) {
 
 /** 真实模式：拉取一次完整状态（页面加载 / 轮询共用） */
 async function refreshState() {
-  const r = await getCheckerStatus(props.questionId);
+  // ★W1（t1）：safeLoad ⇒ 进入页面/轮询时的失败只就地提示（返回空对象），不会把评分器/整页打崩
+  const r = await safeLoad(() => getCheckerStatus(props.questionId), { action: '加载评分器状态' });
+  if (r.error) return {};
   applyState(r.data || {});
   return r.data || {};
 }
@@ -392,7 +397,9 @@ async function handleConfirm() {
       setStatus('ready');
       message.success('规则已启用（版本 ' + activeVersionLabel.value + '）');
     } else {
-      const r = await confirmChecker(props.questionId, { action: 'confirm' });
+      // ★W1（t1）：safeSubmit ⇒ 启用失败只就地提示，不冒泡（原 try/finally 无 catch ⇒ 失败会把整页替换成错误页）
+      const r = await safeSubmit(() => confirmChecker(props.questionId, { action: 'confirm' }), { action: '启用规则' });
+      if (r.error) return;
       applyState(r.data || {});
       message.success('规则已启用（版本 ' + activeVersionLabel.value + '）');
     }
@@ -414,7 +421,9 @@ async function handleRollback() {
     message.success('已回滚到 ' + activeVersionLabel.value);
     return;
   }
-  const r = await rollbackChecker(props.questionId, rollbackTarget.value);
+  // ★W1（t1）：回滚失败只就地提示，不冒泡
+  const r = await safeSubmit(() => rollbackChecker(props.questionId, rollbackTarget.value), { action: '回滚版本' });
+  if (r.error) return;
   applyState(r.data || {});
   message.success('已回滚到 ' + activeVersionLabel.value);
 }

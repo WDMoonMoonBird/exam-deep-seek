@@ -105,6 +105,7 @@ import { message } from 'ant-design-vue';
 import { io } from 'socket.io-client';
 import { createTeacherSocket } from '../../composables/socketConfig.js';   // ★R2-B53：端点（默认 /exam/socket.io）与一次性日志
 import request from '../../api/request.js';
+import { useSafeRequest } from '../../composables/useSafeRequest.js';   // ★W1（t1）：失败就地提示、不冒泡
 import { useUserStore } from '../../stores/user.js';
 import { savedSortField, savedSortOrder, savedPage } from '../../stores/reviewStore.js';
 import { exportReviewXlsx } from '../../infrastructure/export.js';
@@ -127,6 +128,7 @@ const { confirm } = useConfirm();
 const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
+const { safeLoad, safeSubmit } = useSafeRequest({ tag: 'teacher/ReviewClass.vue' });
 /**
  * ★R2-B47（U-1）：路由参数一律**在请求时**从 route 读取（computed，不再是 setup 期一次性捕获的旧值）
  * ⇒ 路由重入 / 换班 / 带不同 query 返回时，请求用的永远是**当前**路由的参数。
@@ -280,8 +282,13 @@ function onPageChange(page, size) {
 async function batchReview() {
   reviewing.value = true;
   try {
-    const r = await request.post('/teacher/submissions/batch-review', { schoolId: userStore.currentSchool?.id, classId: classId.value, assignmentId: assignmentId.value });
-    message.success(r.message); fetch();
+    // ★W1（t1）：原 try/finally 无 catch ⇒ 失败冒泡到错误边界；现失败就地提示、列表保持可用
+    const r = await safeSubmit(
+      () => request.post('/teacher/submissions/batch-review', { schoolId: userStore.currentSchool?.id, classId: classId.value, assignmentId: assignmentId.value }),
+      { action: '一键审核全班' },
+    );
+    if (r.error) return;
+    message.success((r.res && r.res.message) || '已一键审核'); fetch();
   } finally { reviewing.value = false; }
 }
 async function batchPublish() {
@@ -294,14 +301,21 @@ async function batchPublish() {
     onOk: async () => {
       publishing.value = true;
       try {
-        const r = await request.post('/teacher/submissions/batch-publish', { schoolId: userStore.currentSchool?.id, classId: classId.value, assignmentId: assignmentId.value });
-        message.success(r.message); fetch();
+        // ★W1（t1）：同上 —— 发布失败只提示，页面/列表不受影响
+        const r = await safeSubmit(
+          () => request.post('/teacher/submissions/batch-publish', { schoolId: userStore.currentSchool?.id, classId: classId.value, assignmentId: assignmentId.value }),
+          { action: '发布全班成绩' },
+        );
+        if (r.error) return;
+        message.success((r.res && r.res.message) || '已发布全班成绩'); fetch();
       } finally { publishing.value = false; }
     },
   });
 }
 async function exportXlsx() {
-  const r = await request.get('/teacher/export-review', { params: { classId: classId.value, assignmentId: assignmentId.value } });
+  // ★W1（t1）：导出失败只就地提示（原裸 await ⇒ 失败会把整页替换成错误页）
+  const r = await safeLoad(() => request.get('/teacher/export-review', { params: { classId: classId.value, assignmentId: assignmentId.value } }), { action: '导出成绩' });
+  if (r.error) return;
   exportReviewXlsx(r.data, className.value, assignmentTitle.value);
 }
 

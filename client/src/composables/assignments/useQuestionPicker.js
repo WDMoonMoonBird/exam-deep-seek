@@ -6,8 +6,10 @@
  */
 import { ref, computed, onUpdated, watch, nextTick, h } from 'vue';
 import request from '../../api/request.js';
+import { useSafeRequest } from '../useSafeRequest.js';   // ★W1（t1）：失败就地提示、不冒泡
 
 export function useQuestionPicker({ visible }) {
+  const { safeLoad } = useSafeRequest({ tag: 'useQuestionPicker.js' });
   const questions = ref([]);
   const qKeyword = ref('');
   const selectedQIds = ref([]);
@@ -43,8 +45,9 @@ export function useQuestionPicker({ visible }) {
   watch(visible, async (v) => { if (v) { await nextTick(); labelQuestionRadios(); } });
 
   async function searchQuestions() {
-    const r = await request.get('/teacher/questions', { params: { keyword: qKeyword.value, pageSize: 100 } });
-    questions.value = r.data.list;
+    const r = await safeLoad(() => request.get('/teacher/questions', { params: { keyword: qKeyword.value, pageSize: 100 } }), { action: '搜索题目' });
+    if (r.error) return;   // ★失败就地提示：保留上一次结果，不把弹窗/页面打崩
+    questions.value = (r.data && r.data.list) || [];
   }
 
   /** 源 :556-561 —— 单选：radio 点选与整行点击共用（原来点行不选中，必须精确点中圆点） */

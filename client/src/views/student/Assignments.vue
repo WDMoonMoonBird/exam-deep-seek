@@ -90,12 +90,14 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import request from '../../api/request.js';
+import { useSafeRequest } from '../../composables/useSafeRequest.js';   // ★W1（t1）：失败就地提示、不冒泡
 import { LockOutlined } from '@ant-design/icons-vue';
 import PageShell from '../../components/PageShell.vue';
 import StatusTag from '../../components/StatusTag.vue';
 import { formatDateTime, deadlineInfo } from '../../domain/format.js';
 
 const router = useRouter();
+const { safeLoad } = useSafeRequest({ tag: 'student/Assignments.vue' });
 const list = ref([]);
 const listPage = reactive({ current: 1, pageSize: 20 });
 const loading = ref(false);
@@ -199,9 +201,12 @@ function goDetail(record) {
 
 async function fetch() {
   loading.value = true;
-  const r = await request.get('/student/assignments', { params: { keyword: keyword.value || undefined } });
-  list.value = r.data.list || [];
-  loading.value = false;
+  try {
+    const r = await safeLoad(() => request.get('/student/assignments', { params: { keyword: keyword.value || undefined } }), { action: '加载作业列表' });
+    if (!r.error) list.value = (r.data && r.data.list) || [];
+  } finally {
+    loading.value = false;
+  }
 }
 
 onMounted(() => {

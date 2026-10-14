@@ -63,10 +63,13 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
+import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
+import { useSafeRequest } from '../../composables/useSafeRequest.js';   // ★W1（t1）：失败就地提示、不冒泡
 import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
 import { formatDate } from '../../domain/format.js';
+const { safeLoad, safeSubmit } = useSafeRequest({ tag: 'admin/Students.vue' });
 const loading = ref(false);
 const list = ref([]);
 const page = reactive({ current: 1, pageSize: 20 });
@@ -100,21 +103,31 @@ function onPageChange(p) {
 
 async function fetch() {
   loading.value = true;
-  const r = await request.get('/admin/students');
-  list.value = r.data;
-  loading.value = false;
+  try {
+    const r = await safeLoad(() => request.get('/admin/students'), { action: '加载学生列表' });
+    if (!r.error) list.value = r.data || [];
+  } finally {
+    loading.value = false;
+  }
 }
 
 async function openAdd() {
   form.username = ''; form.realName = ''; form.classIds = [];
-  const r = await request.get('/admin/classes');
-  classes.value = r.data;
+  const r = await safeLoad(() => request.get('/admin/classes'), { action: '加载班级列表' });
+  if (!r.error) classes.value = r.data || [];
   visible.value = true;
 }
 
 async function handleOk() {
-  await request.post('/admin/students', { ...form });
-  visible.value = false; fetch();
+  // ★W1（t1）④：提交前必填校验（学号 / 姓名）—— 从源头避免 400
+  if (!String(form.username || '').trim() || !String(form.realName || '').trim()) {
+    message.warning('请填写学号与姓名');
+    return;
+  }
+  const r = await safeSubmit(() => request.post('/admin/students', { ...form }), { action: '新增' });
+  if (r.error) return;
+  visible.value = false;
+  fetch();
 }
 
 onMounted(fetch);

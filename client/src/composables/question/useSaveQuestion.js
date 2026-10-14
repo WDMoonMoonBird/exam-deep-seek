@@ -9,6 +9,7 @@
 import { h } from 'vue';
 import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
+import { safeSubmit } from '../useSafeRequest.js';   // ★W1（t1）：提交失败就地提示、不冒泡（不再让保存失败把整页打崩）
 import { _sanHtml, itemTypeLabel } from './questionPure.js';
 
 export function useSaveQuestion({ form, subQuestions, questionKind, computedMaxScore, objectiveSettings, saveDraft, promptAiGenerate, isEdit, editId, saving, router, confirm }) {
@@ -94,7 +95,13 @@ async function doSave(){
         objectiveItems:sq.objectiveItems?.length?sq.objectiveItems:undefined,
         scoringCriteria:sq.scoringCriteria||undefined,
       })),};
-    if(isEdit){await request.put(`/teacher/questions/${editId}`,p);message.success('保存成功');}else{await request.post('/teacher/questions',p);message.success('创建成功');}
+    // ★W1（t1）：safeSubmit 不抛 ⇒ 失败就地提示且**不跳页**（表单与草稿原样保留，可直接改完重试）
+    const r=await safeSubmit(
+      () => (isEdit?request.put(`/teacher/questions/${editId}`,p):request.post('/teacher/questions',p)),
+      { action: isEdit?'保存':'创建' },
+    );
+    if(r.error){return;}
+    message.success(isEdit?'保存成功':'创建成功');
     router.push('/teacher/questions');
   }finally{saving.value=false;}
 }

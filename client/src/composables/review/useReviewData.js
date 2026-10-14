@@ -12,8 +12,10 @@
 import { ref, reactive, computed } from 'vue';
 import DOMPurify from 'dompurify';
 import request from '../../api/request.js';
+import { useSafeRequest } from '../useSafeRequest.js';   // ★W1（t1）：失败就地提示、不冒泡
 
 export function useReviewData({ route }) {
+  const { safeLoad } = useSafeRequest({ tag: 'useReviewData.js' });
 
 /** 页级状态徽标（展示既有提交状态，不新增语义） */
 const pageStatus = computed(() => {
@@ -67,7 +69,9 @@ function getSub(sqId) { return subMap.value[sqId] || null; }
 
 // ===================== 数据加载 =====================
 async function fetch() {
-  const r = await request.get(`/teacher/submissions/${route.params.id}`);
+  // ★W1（t1）：404/403（提交不存在或不属于本人）只就地提示，页面保持可用（不再整页被错误边界替换）
+  const r = await safeLoad(() => request.get(`/teacher/submissions/${route.params.id}`), { action: '加载提交详情' });
+  if (r.error) return;
   data.value = r.data;
   studentName.value = r.data.student?.realName || '';
   studentNo.value = r.data.student?.username || '';

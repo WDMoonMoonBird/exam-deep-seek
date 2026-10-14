@@ -155,12 +155,14 @@ import { useConfirm } from '../../composables/useConfirm.js';
 import { useTheme } from '../../composables/useTheme.js';
 import ThemeToggle from '../../components/ThemeToggle.vue';
 import { errorCopyOf } from '../../composables/errorCopy.js';               // ★R2-B55 口径：UI 固定友好 + 原始错误只进 console
+import { useSafeRequest } from '../../composables/useSafeRequest.js';      // ★W1（t1）：切换学校等提交走 safeSubmit（失败就地提示、不冒泡）
 import { PASSWORD_RULE_TEXT, localPasswordIssue } from '../../composables/passwordPolicy.js';   // ★R2-B58：改密码规则（与后端同口径）
 import ErrorBoundary from '../../components/ErrorBoundary.vue';   // ★R2-B52：错误边界（绝不白屏）
 import ProfileCard from '../../components/ProfileCard.vue';
 import { QuestionCircleOutlined, UserOutlined, NodeIndexOutlined, UserSwitchOutlined, PoweroffOutlined, AppstoreOutlined, IdcardOutlined, DatabaseOutlined, FileTextOutlined, SafetyCertificateOutlined, TeamOutlined, BookOutlined, BulbOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CaretDownOutlined, LineChartOutlined } from '@ant-design/icons-vue';
 
 const router = useRouter(); const route = useRoute(); const userStore = useUserStore();
+const { safeSubmit } = useSafeRequest({ tag: 'teacher/Layout.vue' });
 const { confirm } = useConfirm();
 const { mode: themeMode, setMode } = useTheme();
 const user = userStore.user;
@@ -313,7 +315,9 @@ function onMenuClick ({ key }) {
 }
 
 async function switchSchool (school) {
-    await request.put('/teacher/switch-school', { schoolId: school.id });
+    // ★W1（t1）：失败就地提示且**不切换**（原裸 await ⇒ 失败冒泡到错误边界，整页被替换）
+    const r = await safeSubmit(() => request.put('/teacher/switch-school', { schoolId: school.id }), { action: '切换学校' });
+    if (r.error) return;
     userStore.setCurrentSchool(school);
     router.go(0);
 }

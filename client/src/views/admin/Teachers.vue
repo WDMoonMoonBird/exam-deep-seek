@@ -58,16 +58,17 @@
       </template>
     </ListPage>
 
-    <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" :ok-text="isEdit ? '保存修改' : '新增教师'" cancel-text="取消" :width="640">
+    <!-- ★W1（t1）④：字段级校验提示（validate-status/help）+ 提交中屏蔽重复点击 -->
+    <a-modal :title="modalTitle" :open="visible" @ok="handleOk" @cancel="visible = false" :ok-text="isEdit ? '保存修改' : '新增教师'" cancel-text="取消" :width="640" :ok-button-props="{ loading: submitting }">
       <a-form :model="form">
-        <a-form-item label="工号" html-for="admin-teacher-username">
-          <a-input id="admin-teacher-username" v-model:value="form.username" :disabled="isEdit" />
+        <a-form-item label="工号" html-for="admin-teacher-username" :validate-status="formErrors.username ? 'error' : ''" :help="formErrors.username">
+          <a-input id="admin-teacher-username" v-model:value="form.username" :disabled="isEdit" placeholder="教师登录用的工号，必填" />
         </a-form-item>
-        <a-form-item label="姓名" html-for="admin-teacher-realname">
-          <a-input id="admin-teacher-realname" v-model:value="form.realName" />
+        <a-form-item label="姓名" html-for="admin-teacher-realname" :validate-status="formErrors.realName ? 'error' : ''" :help="formErrors.realName">
+          <a-input id="admin-teacher-realname" v-model:value="form.realName" placeholder="真实姓名，必填" />
         </a-form-item>
-        <a-form-item label="隶属学校" html-for="admin-teacher-schools">
-          <a-select id="admin-teacher-schools" :value="undefined" showSearch placeholder="搜索学校添加" :options="availableSchoolOptions" :filterOption="filterSchool" @select="addSchool" style="width: 100%;" />
+        <a-form-item label="隶属学校" html-for="admin-teacher-schools" :validate-status="formErrors.schoolIds ? 'error' : ''" :help="formErrors.schoolIds">
+          <a-select id="admin-teacher-schools" :value="undefined" showSearch placeholder="搜索学校添加（至少一所）" :options="availableSchoolOptions" :filterOption="filterSchool" @select="addSchool" style="width: 100%;" />
           <div v-if="form.schoolIds.length > 0" class="school-tags">
             <a-tag v-for="sid in form.schoolIds" :key="sid" closable @close="removeSchool(sid)">{{ getSchoolName(sid) }}</a-tag>
           </div>
@@ -81,11 +82,15 @@
 import { ref, reactive, computed, onMounted } from 'vue';
 import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
+// ★W1（t1）：所有请求走 safeLoad / safeSubmit —— 失败就地提示、**不冒泡**（旧的 handleOk 裸 await 会让 400 把整页替换成错误页）
+import { useSafeRequest } from '../../composables/useSafeRequest.js';
 import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
 import StatusTag from '../../components/StatusTag.vue';
 import { formatDate } from '../../domain/format.js';
+const { safeLoad, safeSubmit } = useSafeRequest({ tag: 'Teachers.vue' });
 const loading = ref(false);
+const submitting = ref(false);
 const list = ref([]);
 const page = reactive({ current: 1, pageSize: 20 });
 const schools = ref([]);
@@ -94,6 +99,16 @@ const modalTitle = ref('');
 const isEdit = ref(false);
 const editId = ref(null);
 const form = reactive({ username: '', realName: '', schoolIds: [] });
+// ★W1（t1）④：提交前**字段级**校验（工号必填 / 姓名必填 / 至少一所学校）—— 曾经的故障就是姓名留空直接 POST ⇒ 400 ⇒ 整页被错误页替换
+const formErrors = reactive({ username: '', realName: '', schoolIds: '' });
+
+/** 逐字段校验（只做前端可判定的必填/空白）；返回是否全部通过 */
+function validateForm() {
+  formErrors.username = !isEdit.value && !String(form.username || '').trim() ? '请填写工号（教师登录账号）' : '';
+  formErrors.realName = !String(form.realName || '').trim() ? '请填写姓名' : '';
+  formErrors.schoolIds = form.schoolIds.length === 0 ? '请至少选择一所学校' : '';
+  return !formErrors.username && !formErrors.realName && !formErrors.schoolIds;
+}
 // 列表样式 v2：工号等宽、姓名列（24px 中性头像 + 单行姓名）吃掉剩余宽度、创建时间单行 formatDate
 const columns = [
   { title: '工号', dataIndex: 'username', width: 140, ellipsis: true },
@@ -133,12 +148,19 @@ function onPageChange(p) {
 
 async function fetch() {
   loading.value = true;
-  const r = await request.get('/admin/teachers');
-  list.value = r.data;
-  loading.value = false;
+  try {
+    // safeLoad 永不抛出：失败已就地提示 ⇒ 列表保持原样（绝不整页崩）
+    const r = await safeLoad(() => request.get('/admin/teachers'), { action: '加载教师列表' });
+    if (!r.error) list.value = r.data || [];
+  } finally {
+    loading.value = false;
+  }
 }
 
-async function loadSchools() { const r = await request.get('/admin/schools'); schools.value = r.data; }
+async function loadSchools() {
+  const r = await safeLoad(() => request.get('/admin/schools'), { action: '加载学校列表' });
+  if (!r.error) schools.value = r.data || [];
+}
 
 function filterSchool(input, option) { return option.label?.toLowerCase().includes(input.toLowerCase()); }
 
@@ -148,9 +170,12 @@ function addSchool(value) {
 
 function removeSchool(id) { form.schoolIds = form.schoolIds.filter(s => s !== id); }
 
+function clearFormErrors() { formErrors.username = ''; formErrors.realName = ''; formErrors.schoolIds = ''; }
+
 function openAdd() {
   isEdit.value = false; modalTitle.value = '新增教师';
   form.username = ''; form.realName = ''; form.schoolIds = [];
+  clearFormErrors();
   loadSchools(); visible.value = true;
 }
 
@@ -158,21 +183,35 @@ function openEdit(row) {
   isEdit.value = true; modalTitle.value = '编辑教师'; editId.value = row.id;
   form.username = row.username; form.realName = row.realName;
   form.schoolIds = (row.teacherSchools || []).map(ts => ts.school?.id).filter(Boolean);
+  clearFormErrors();
   loadSchools(); visible.value = true;
 }
 
 async function handleOk() {
-  const data = { realName: form.realName, schoolIds: form.schoolIds };
-  if (!isEdit.value) data.username = form.username;
-  isEdit.value ? await request.put(`/admin/teachers/${editId.value}`, data) : await request.post('/admin/teachers', data);
-  visible.value = false; fetch();
+  // ① 提交前校验：不通过就地给字段级提示，**不发请求**（从源头避免 400）
+  if (!validateForm()) {
+    message.warning('请先补全表单中标红的必填项');
+    return;
+  }
+  const data = { realName: String(form.realName).trim(), schoolIds: form.schoolIds.slice() };
+  if (!isEdit.value) data.username = String(form.username).trim();
+  submitting.value = true;
+  // ② 提交走 safeSubmit：失败就地提示、弹窗不关、列表不消失、路由不崩
+  const r = await safeSubmit(
+    () => (isEdit.value ? request.put(`/admin/teachers/${editId.value}`, data) : request.post('/admin/teachers', data)),
+    { action: isEdit.value ? '保存' : '新增' },
+  );
+  submitting.value = false;
+  if (r.error) return;
+  message.success(isEdit.value ? '已保存修改' : '教师已新增');
+  visible.value = false;
+  fetch();
 }
 
 async function resetPwd(id) {
-  try {
-    const r = await request.put(`/admin/teachers/${id}/reset-password`);
-    message.success(r.message);
-  } catch { message.error('重置失败'); }
+  const r = await safeSubmit(() => request.put(`/admin/teachers/${id}/reset-password`), { action: '重置密码' });
+  if (r.error) return;
+  message.success((r.res && r.res.message) || '密码已重置');
 }
 
 /** 当前登录管理员 id（与 request.js 的 localStorage 约定一致），用于隐藏自身的删除按钮 */
@@ -181,13 +220,10 @@ const currentUserId = (() => {
 })();
 
 async function removeTeacher(row) {
-  try {
-    await request.delete(`/admin/teachers/${row.id}`);
-    message.success(`教师「${row.realName}」已删除`);
-    fetch();
-  } catch (e) {
-    message.error(e.response?.data?.message || '删除失败');
-  }
+  const r = await safeSubmit(() => request.delete(`/admin/teachers/${row.id}`), { action: '删除' });
+  if (r.error) return;
+  message.success(`教师「${row.realName}」已删除`);
+  fetch();
 }
 
 onMounted(fetch);

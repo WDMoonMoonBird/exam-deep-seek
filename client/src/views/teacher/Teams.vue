@@ -71,11 +71,13 @@
 import { ref, reactive, computed, onMounted } from 'vue';
 import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
+import { useSafeRequest } from '../../composables/useSafeRequest.js';   // ★W1（t1）：失败就地提示、不冒泡
 import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
 import { useUserStore } from '../../stores/user.js';
 import { formatDate } from '../../domain/format.js';
 
+const { safeLoad, safeSubmit } = useSafeRequest({ tag: 'teacher/Teams.vue' });
 const userStore = useUserStore();
 const loading = ref(false);
 const list = ref([]);
@@ -98,24 +100,37 @@ const pagedList = computed(() => list.value.slice((page.current - 1) * page.page
 async function fetch() {
   loading.value = true;
   try {
-    const r = await request.get('/teacher/teams', { params: { schoolId: userStore.currentSchool?.id } });
-    list.value = r.data || [];
+    // ★W1（t1）：原来只有 try/finally（无 catch）⇒ 失败会一路冒泡到错误边界把整页替换；现在失败就地提示
+    const r = await safeLoad(() => request.get('/teacher/teams', { params: { schoolId: userStore.currentSchool?.id } }), { action: '加载团队列表' });
+    if (!r.error) list.value = r.data || [];
   } finally {
-    loading.value = false;     // ★R2-B47 防呆口径：任何路径必复位 loading（异常另有全局提示）
+    loading.value = false;     // ★R2-B47 防呆口径：任何路径必复位 loading
   }
 }
 
 function openCreate() { createName.value = ''; createVisible.value = true; }
 
 async function handleCreate() {
-  if (!createName.value) return message.warn('请输入团队名称');
-  await request.post('/teacher/teams', { name: createName.value }, { params: { schoolId: userStore.currentSchool?.id } });
+  if (!String(createName.value || '').trim()) return message.warn('请输入团队名称');
+  const r = await safeSubmit(
+    () => request.post('/teacher/teams', { name: String(createName.value).trim() }, { params: { schoolId: userStore.currentSchool?.id } }),
+    { action: '创建' },
+  );
+  if (r.error) return;   // ★失败就地提示：弹窗不关、列表不消失
   message.success('创建成功');
   createVisible.value = false; fetch();
 }
 
-async function del(id) { await request.delete(`/teacher/teams/${id}`); message.success('删除成功'); fetch(); }
-async function leave(id) { await request.post(`/teacher/teams/${id}/leave`); message.success('已退出团队'); fetch(); }
+async function del(id) {
+  const r = await safeSubmit(() => request.delete(`/teacher/teams/${id}`), { action: '删除' });
+  if (r.error) return;
+  message.success('删除成功'); fetch();
+}
+async function leave(id) {
+  const r = await safeSubmit(() => request.post(`/teacher/teams/${id}/leave`), { action: '退出团队' });
+  if (r.error) return;
+  message.success('已退出团队'); fetch();
+}
 
 /** 前端切片页码（ListPage 只抛出页码，不内置请求） */
 function onPageChange(p) {

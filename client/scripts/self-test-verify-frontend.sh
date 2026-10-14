@@ -18,6 +18,14 @@ node scripts/verify-frontend.mjs --no-build > /tmp/b38-fe-neg2.log 2>&1
 echo "neg2_rc=$? （期望非 0）" | tee -a "$SUM"
 grep -E '^FAIL|SUMMARY' /tmp/b38-fe-neg2.log | tee -a "$SUM"
 mv "dist/assets/$CHUNK.bak" "dist/assets/$CHUNK"
+echo "=== 反例 3：视图里注入**裸请求**（await request.get 既无 try/catch 又非 safe*）⇒ ⑮ 静态门禁必须报红 ===" | tee -a "$SUM"
+PAGE2=src/views/admin/Schools.vue
+cp "$PAGE2" /tmp/w1-page2.bak
+node -e "const fs=require('fs');const p=process.argv[1];let s=fs.readFileSync(p,'utf8');s=s.replace('async function fetch() {','async function fetch() {\n  const injected = await request.get(\'/admin/teachers\');',1);fs.writeFileSync(p,s);" "$PAGE2"
+node scripts/verify-frontend.mjs --no-build > /tmp/w1-fe-neg3.log 2>&1
+echo "neg3_rc=$? （期望非 0）" | tee -a "$SUM"
+grep -E '^FAIL ⑮|SUMMARY' /tmp/w1-fe-neg3.log | tee -a "$SUM"
+cp /tmp/w1-page2.bak "$PAGE2"
 echo "=== 还原校验：正例必须通过 ===" | tee -a "$SUM"
 node scripts/verify-frontend.mjs --no-build > /tmp/b38-fe-pos.log 2>&1
 echo "pos_rc=$?" | tee -a "$SUM"

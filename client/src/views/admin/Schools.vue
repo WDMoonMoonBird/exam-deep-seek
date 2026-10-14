@@ -37,10 +37,12 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
 import request from '../../api/request.js';
+import { useSafeRequest } from '../../composables/useSafeRequest.js';   // ★W1（t1）：失败就地提示、不冒泡
 import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
 import StatusTag from '../../components/StatusTag.vue';
 
+const { safeLoad } = useSafeRequest({ tag: 'admin/Schools.vue' });
 const loading = ref(false);
 const list = ref([]);
 const total = ref(0);
@@ -83,10 +85,15 @@ function onPageSizeChange(size, page) {
 
 async function fetch() {
   loading.value = true;
-  const r = await request.get('/admin/schools');
-  list.value = r.data;
-  total.value = r.data.length;
-  loading.value = false;
+  try {
+    const r = await safeLoad(() => request.get('/admin/schools'), { action: '加载学校列表' });
+    if (!r.error) {
+      list.value = r.data || [];
+      total.value = (r.data || []).length;
+    }
+  } finally {
+    loading.value = false;
+  }
 }
 
 // T5-A2（B2-8）：「每页条数」的可访问名称已归位到 ListPage 组件本身（该 select 的真正属主），

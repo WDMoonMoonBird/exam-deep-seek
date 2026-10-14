@@ -670,6 +670,292 @@ check('⑭c 页面契约：两处入口按钮 + 共享抽屉（teacher/admin 双
     && !/(?:err|e|error)\??\.message/.test(b68Drawer.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')),
   'reviewClass=' + /LossDistributionDrawer/.test(b68ReviewClass) + ' gradingRuns=' + /LossDistributionDrawer/.test(b68GradingRuns) + ' drawerEmpty=' + /<a-empty/.test(b68Drawer));
 
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+// ⑮ 裸请求静态门禁（★W1 / t1）：**未就地处理的请求调用 = 0** —— 防"API 失败 ⇒ 整页被错误边界替换"复发
+//
+// 规则（口径写死在此，供 CI 与人工判读；改动必须同步改本注释与自检样例）：
+//   · 命中定义（client/src/**/*.{js,vue}）：
+//       ① request.<get|post|put|delete|patch>(…) 调用（含 await 与非 await 形态）；
+//       ② await <api 封装函数>(…) —— 封装清单从 client/src/api/*.js 的 export 声明**自动收集**
+//          （api 层只是端点定义 / Promise 透传，本身不处理错误 ⇒ ① 在 api/*.js 内豁免，
+//            但 ② 把"经封装层取数"的调用方重新纳入判据，不留后门）。
+//   · 合规（命中处必须满足其一）：
+//       ⓐ 位于**带 catch 的 try 块**内 —— 失败被就地处理，不会冒泡到错误边界；
+//       ⓒ 作为 safeLoad(...) / safeSubmit(...)（composables/useSafeRequest.js 约定）的实参 —— 失败只提示、不抛。
+//     ★只有 try/finally（无 catch）**不算**合规：它不吸收错误，失败照旧冒泡 ⇒ 正是本类缺陷的温床
+//       （已复现：Teams.vue / Questions.vue / ReviewClass.vue 曾是 try/finally 裸 await ⇒ 失败即整页被替换）。
+//   · 豁免：client/src/api/*.js（端点定义层，见 ②）。清单写死，其余任何文件都不豁免。
+//   · 自检样例（每次运行都跑，任一不满足即门禁自身失效 ⇒ FAIL）：
+//       反例 ×3 必须报红：裸 await / 仅 try-finally / 裸的 api 封装调用；
+//       正例 ×4 必须无事：try/catch 内、safeLoad 实参、多行 safeSubmit 实参、api/*.js 豁免位。
+//   · 真实仓库命中数必须为 0（明细逐条打在 FAIL 输出里，可直接定位）。
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+
+/** 把注释与字符串替换成等长空白（保留行号/列位），使扫描是"语法级"的而不是"文本级"的 */
+function maskCode(src) {
+  const text = String(src || '');
+  const arr = text.split('');
+  const blank = (from, to) => { for (let k = from; k < to && k < arr.length; k += 1) { if (arr[k] !== '\n') arr[k] = ' '; } };
+  let i = 0; const n = text.length;
+  while (i < n) {
+    const c = text[i];
+    if (c === '/' && text[i + 1] === '/') { const s = i; while (i < n && text[i] !== '\n') i += 1; blank(s, i); continue; }
+    if (c === '/' && text[i + 1] === '*') { const s = i; i += 2; while (i < n && !(text[i] === '*' && text[i + 1] === '/')) i += 1; i += 2; blank(s, Math.min(i, n)); continue; }
+    if (c === "'" || c === '"' || c === String.fromCharCode(96)) {
+      const s = i; const q = c; i += 1;
+      while (i < n) { if (text[i] === '\\') { i += 2; continue; } if (text[i] === q) { i += 1; break; } i += 1; }
+      blank(s, Math.min(i, n)); continue;
+    }
+    i += 1;
+  }
+  return arr.join('');
+}
+
+/** 该 { 对应的块后面是否跟 catch（⇒ 这个 try 能吸收错误） */
+function blockHasCatch(code, open) {
+  let depth = 0;
+  for (let k = open; k < code.length; k += 1) {
+    if (code[k] === '{') depth += 1;
+    else if (code[k] === '}') { depth -= 1; if (depth === 0) return /^\s*catch\b/.test(code.slice(k + 1, k + 30)); }
+  }
+  return false;
+}
+
+/** 命中点外围的调用名（识别 safeLoad/safeSubmit(...) 实参）：由内向外逐层取 callee */
+function enclosingCallees(code, idx, limit) {
+  const out = [];
+  let depth = 0;
+  let k = idx - 1;
+  const max = limit || 8;
+  while (k >= 0 && out.length < max) {
+    const c = code[k];
+    if (c === ')') depth += 1;
+    else if (c === '(') {
+      if (depth === 0) {
+        const m = /([A-Za-z_$][\w$]*)\s*$/.exec(code.slice(Math.max(0, k - 60), k));
+        out.push(m ? m[1] : '?');
+      } else depth -= 1;
+    }
+    k -= 1;
+  }
+  return out;
+}
+
+// api 封装函数清单（从 client/src/api/*.js 的 export 自动收集；request.js 只导出实例，跳过）
+const API_WRAPPER_NAMES = (() => {
+  const dir = path.join(CLIENT, 'src', 'api');
+  const names = [];
+  if (!fs.existsSync(dir)) return names;
+  for (const f of fs.readdirSync(dir)) {
+    if (!f.endsWith('.js') || f === 'request.js') continue;
+    const t = read(path.join(dir, f)) || '';
+    for (const m of t.matchAll(/export\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/g)) names.push(m[1]);
+    for (const m of t.matchAll(/export\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(/g)) names.push(m[1]);
+  }
+  return [...new Set(names)];
+})();
+
+/**
+ * 扫描一个文件：返回 { total, safe, guarded, exempt, naked[] }；naked[] 每项 = { line, text }（可直接打印定位）
+ */
+function scanUnguardedRequests(relPath, source) {
+  const rel = String(relPath || '').split(path.sep).join('/');
+  const isApiLayer = rel.indexOf('src/api/') === 0;      // 端点定义层：① 豁免（其调用方由 ② 覆盖）
+  const raw = String(source || '');
+  const code = maskCode(raw);
+  const rawLines = raw.split(/\r?\n/);
+  const hitRe = new RegExp(
+    'await\\s+request\\s*\\.\\s*(get|post|put|delete|patch)'
+    + '|request\\s*\\.\\s*(get|post|put|delete|patch)\\s*\\('
+    + (API_WRAPPER_NAMES.length ? '|await\\s+(?:' + API_WRAPPER_NAMES.join('|') + ')\\s*\\(' : ''),
+    'g',
+  );
+  const out = { total: 0, safe: 0, guarded: 0, exempt: 0, naked: [] };
+  const stack = [];
+  let next = hitRe.exec(code);
+  let i = 0;
+  while (i < code.length && next) {
+    if (next.index === i) {
+      out.total += 1;
+      const lineNo = code.slice(0, i).split('\n').length;
+      const text = (rawLines[lineNo - 1] || '').trim().slice(0, 120);
+      const callees = enclosingCallees(code, i);
+      const inGuardedTry = stack.some((s) => s.kind === 'try' && s.catchOk === true);
+      if (callees.some((c) => /^safe[A-Z]/.test(c))) out.safe += 1;
+      else if (inGuardedTry) out.guarded += 1;
+      else if (isApiLayer) out.exempt += 1;
+      else out.naked.push({ line: lineNo, text });
+      i += next[0].length;
+      next = hitRe.exec(code);
+      continue;
+    }
+    const c = code[i];
+    if (c === '{') {
+      const isTry = /(?:^|[^\w$.])try\s*$/.test(code.slice(Math.max(0, i - 12), i));
+      stack.push(isTry ? { kind: 'try', catchOk: blockHasCatch(code, i) } : { kind: 'block' });
+    } else if (c === '}') stack.pop();
+    i += 1;
+  }
+  return out;
+}
+
+// ── ⑮a 门禁自检样例（恒真校验：反例必红、正例必绿）──────────────────────────────────────────────
+const FIX_BAD_PLAIN = ['async function fetch() {', "  const r = await request.get('/admin/teachers');", '  list.value = r.data;', '}'].join('\n');
+const FIX_BAD_FINALLY = ['async function f() {', '  try {', "    await request.get('/x');", '  } finally {', '    loading.value = false;', '  }', '}'].join('\n');
+const FIX_WRAPPER = API_WRAPPER_NAMES[0] || 'uploadPackage';
+const FIX_BAD_WRAPPER = ['async function g() {', '  const r = await ' + FIX_WRAPPER + '(1);', '  return r;', '}'].join('\n');
+const FIX_OK_CATCH = ['async function ok() {', '  try {', "    const r = await request.get('/x');", '    return r;', '  } catch (e) {', "    message.error('失败');", '  }', '}'].join('\n');
+const FIX_OK_SAFELOAD = ["const r = await safeLoad(() => request.get('/x'));"];
+const FIX_OK_SAFESUBMIT = ['const r = await safeSubmit(', "  () => request.post('/x', { a: 1 }),", "  { action: '保存' },", ');'];
+const FIX_OK_API_LAYER = ['export function getX() {', "  return request.get('/x');", '}'].join('\n');
+const selfBadPlain = scanUnguardedRequests('src/views/__fixture_bad__.vue', FIX_BAD_PLAIN);
+const selfBadFinally = scanUnguardedRequests('src/views/__fixture_bad__.vue', FIX_BAD_FINALLY);
+const selfBadWrapper = scanUnguardedRequests('src/views/__fixture_bad__.vue', FIX_BAD_WRAPPER);
+const selfOkCatch = scanUnguardedRequests('src/views/__fixture_ok__.vue', FIX_OK_CATCH);
+const selfOkSafeLoad = scanUnguardedRequests('src/views/__fixture_ok__.vue', FIX_OK_SAFELOAD);
+const selfOkSafeSubmit = scanUnguardedRequests('src/views/__fixture_ok__.vue', FIX_OK_SAFESUBMIT);
+const selfOkApiLayer = scanUnguardedRequests('src/api/__fixture__.js', FIX_OK_API_LAYER);
+check('⑮a 门禁自检：反例必红（裸 await / 仅 try-finally / 裸的 api 封装调用）+ 正例必绿（try-catch / safeLoad / safeSubmit / api 层豁免）',
+  selfBadPlain.naked.length === 1 && selfBadFinally.naked.length === 1 && selfBadWrapper.naked.length === 1
+    && selfOkCatch.naked.length === 0 && selfOkSafeLoad.naked.length === 0 && selfOkSafeSubmit.naked.length === 0
+    && selfOkApiLayer.naked.length === 0 && selfOkApiLayer.exempt === 1,
+  JSON.stringify({
+    badPlain: selfBadPlain.naked.length, badFinally: selfBadFinally.naked.length, badWrapper: selfBadWrapper.naked.length,
+    okCatch: selfOkCatch.naked.length, okSafeLoad: selfOkSafeLoad.naked.length, okSafeSubmit: selfOkSafeSubmit.naked.length,
+    apiLayerNaked: selfOkApiLayer.naked.length, apiLayerExempt: selfOkApiLayer.exempt, wrapperProbe: FIX_WRAPPER,
+  }));
+
+// ── ⑮b 真实仓库：未就地处理的请求调用必须为 0 ───────────────────────────────────────────────────
+const unguarded = [];
+const scanTally = { total: 0, safe: 0, guarded: 0, exempt: 0 };
+for (const p of allCode) {
+  const rel = path.relative(CLIENT, p).split(path.sep).join('/');
+  const res = scanUnguardedRequests(rel, read(p) || '');
+  scanTally.total += res.total;
+  scanTally.safe += res.safe;
+  scanTally.guarded += res.guarded;
+  scanTally.exempt += res.exempt;
+  for (const n of res.naked) unguarded.push(rel + ':' + n.line + '  ' + n.text);
+}
+check('⑮b 全仓（client/src：视图 / 组合式函数 / 组件）不存在未被就地处理的请求调用（带 catch 的 try 或 safeLoad/safeSubmit）',
+  unguarded.length === 0,
+  'naked=' + (unguarded.length ? unguarded.join(' | ') : '(none)')
+    + ' 命中总计=' + scanTally.total + '（safe*=' + scanTally.safe + ' try/catch=' + scanTally.guarded + ' api端点定义层豁免=' + scanTally.exempt + '）扫描文件=' + allCode.length);
+
+// ── ⑮c 可执行：拦截器规范化 + safe* 约定（假响应对象，不发真实网络）────────────────────────────────
+const apiErrMod = await import(path.join(CLIENT, 'src', 'api', 'apiError.js'));
+const reqMod = await import(path.join(CLIENT, 'src', 'api', 'request.js'));
+const safeMod = await import(path.join(CLIENT, 'src', 'composables', 'useSafeRequest.js'));
+const respHandlers = reqMod.default.interceptors.response.handlers[0];
+const onFulfilled = respHandlers.fulfilled;
+const onRejected = respHandlers.rejected;
+// 全局提示器换成可计数桩件（node 无 document，antd message 会异步抛错；见 request.js setErrorNotifier 注释）
+const toasts = [];
+reqMod.setErrorNotifier((text) => toasts.push(String(text)));
+const fake400 = { response: { status: 400, data: { code: 1004, message: '题目不存在或无权访问' } }, config: { url: '/teacher/questions/9' } };
+const fake404 = { response: { status: 404, data: {} }, config: { url: '/teacher/teams/7' } };
+const fake403 = { response: { status: 403, data: null }, config: { url: '/admin/teachers' } };
+const fakeNet = { message: 'Network Error', config: { url: '/admin/teachers' } };
+const fake500 = { response: { status: 500, data: '<html>500</html>' }, config: { url: '/admin/teachers' } };
+const catchOf = async (p) => { try { await p; return null; } catch (e) { return e; } };
+const e400 = await catchOf(onRejected(fake400));
+const e404 = await catchOf(onRejected(fake404));
+const e403 = await catchOf(onRejected(fake403));
+const eNet = await catchOf(onRejected(fakeNet));
+const e500 = await catchOf(onRejected(fake500));
+const envelopeRejected = await catchOf(onFulfilled({ status: 200, data: { code: 1007, message: '以下题目未上传标准工程包', data: { requiresConfirmation: true } }, config: { url: '/teacher/assignments' } }));
+check('⑮c 可执行：任何失败都被规范化成 ApiError{status,code,message,url}（400+业务码 / 404 / 403 / 网络 / 500+HTML / 业务码≠0 信封）且保留 response/cause',
+  !!e400 && e400.isApiError === true && e400.status === 400 && e400.code === 1004 && e400.message === '题目不存在或无权访问' && e400.url === '/teacher/questions/9'
+    && !!e400.response && !!e400.cause
+    && !!e404 && e404.status === 404 && e404.message === '请求的内容不存在或已被删除' && e404.uiSafe === true
+    && !!e403 && e403.status === 403 && e403.message === '没有权限执行该操作'
+    && !!eNet && eNet.status === 0 && eNet.message === '网络异常，请检查网络后重试' && eNet.uiSafe === true
+    && apiErrMod.normalizeApiError(new TypeError('boom')).uiSafe === false
+    && apiErrMod.normalizeApiError(new TypeError('boom')).message === '请求失败，请重试'
+    && !!e500 && e500.status === 500 && e500.message === '服务出错了，请稍后重试' && !String(e500.message).includes('html')
+    && !!envelopeRejected && envelopeRejected.isApiError === true && envelopeRejected.code === 1007
+    && envelopeRejected.response.data.code === 1007 && envelopeRejected.response.data.data.requiresConfirmation === true
+    && apiErrMod.normalizeApiError(e404) === e404,
+  JSON.stringify({
+    e400: e400 && e400.toString(), e404: e404 && e404.toString(), e403: e403 && e403.toString(),
+    net: eNet && eNet.toString(), e500: e500 && e500.toString(), envelope: envelopeRejected && envelopeRejected.toString(),
+  }));
+check('⑮c2 可执行：拦截器提示次数正确且 1007 软警告（HTTP 400 + requiresConfirmation）**不弹报错**（确认框分支不被破坏）',
+  toasts.length === 5 && !toasts.some((t) => t.includes('未上传标准工程包')),
+  JSON.stringify({ toasts }));
+const softWarn = await catchOf(onRejected({ response: { status: 400, data: { code: 1007, message: '以下题目未上传标准工程包', data: { requiresConfirmation: true } } }, config: { url: '/teacher/assignments' } }));
+const softWarnOk = !!softWarn && softWarn.code === 1007 && toasts.length === 5;
+check('⑮c3 可执行：1007 软警告（HTTP 400）reject 后提示数不增（由页面确认框承接，不误导为"报错"）',
+  softWarnOk && softWarn.response.data.code === 1007 && softWarn.response.data.data.requiresConfirmation === true,
+  JSON.stringify({ toasts: toasts.length, code: softWarn && softWarn.code }));
+// 401 统一语义：清登录态 + 跳登录页 + 一句统一文案，且并发多次只处置一次
+const redirects = [];
+reqMod.setAuthRedirect(() => redirects.push(1));
+reqMod.resetAuthExpired();
+const e401a = await catchOf(onRejected({ response: { status: 401, data: {} }, config: { url: '/teacher/classes' } }));
+const e401b = await catchOf(onRejected({ response: { status: 401, data: {} }, config: { url: '/teacher/students' } }));
+check('⑮d 可执行：401 统一语义（同一句统一文案 + 只处置一次：并发多请求不再重复提示/重复跳转）',
+  !!e401a && e401a.status === 401 && e401a.message === '登录已过期，请重新登录' && !!e401b && e401b.message === '登录已过期，请重新登录'
+    && redirects.length === 1,
+  JSON.stringify({ a: e401a && e401a.toString(), b: e401b && e401b.toString(), redirects: redirects.length }));
+// safeLoad / safeSubmit：失败**不抛**、文案走 errorCopyOf 口径、同一次失败不重复提示
+const notices = [];
+const errLogs = [];
+const runner = safeMod.createSafeRunner({ tag: 'verify ⑮', action: '加载', notify: (t) => notices.push(String(t)), log: { error: () => errLogs.push(1) } });
+// ★关键：复用**同一个** ApiError 实例（拦截器已提示并登记）⇒ safe* 必须保持沉默（一次失败只提示一次）
+const rFailIntercepted = await runner.safeLoad(() => Promise.reject(e400));
+const rFailRaw = await runner.safeSubmit(() => { throw new TypeError('boom'); });
+const rOk = await runner.safeLoad(() => Promise.resolve({ code: 0, data: { list: [1, 2] }, message: 'ok' }));
+const stillNeedsNotice = apiErrMod.shouldNotify(rFailIntercepted.error);
+const quietRunner = safeMod.createSafeRunner({ tag: 'verify ⑮', action: '加载', notify: () => {}, log: { error: () => {} } });
+const rCurated = await quietRunner.safeLoad(() => onRejected(fake403));
+check('⑮e 可执行：safeLoad/safeSubmit 失败**不抛**且返回 {ok,data,error,loading,message}；提示不重复；成功按约定解包 data',
+  rFailIntercepted.ok === false && rFailIntercepted.error === e400 && rFailIntercepted.loading === false
+    && rFailIntercepted.data === null && rFailIntercepted.message === '题目不存在或无权访问'
+    && rFailIntercepted.error.status === 400 && rFailIntercepted.error.url === '/teacher/questions/9'
+    && rFailRaw.ok === false && rFailRaw.error.isApiError === true && rFailRaw.error.status === 0 && rFailRaw.message === '加载失败，请重试'
+    && rOk.ok === true && Array.isArray(rOk.data.list) && rOk.data.list.length === 2 && rOk.error === null && rOk.message === ''
+    && rCurated.ok === false && rCurated.message === '没有权限执行该操作'
+    && notices.length === 1 && errLogs.length === 2 && stillNeedsNotice === false,
+  JSON.stringify({ failIntercepted: { ok: rFailIntercepted.ok, msg: rFailIntercepted.message, status: rFailIntercepted.error && rFailIntercepted.error.status }, failRaw: { ok: rFailRaw.ok, msg: rFailRaw.message, status: rFailRaw.error && rFailRaw.error.status, uiSafe: rFailRaw.error && rFailRaw.error.uiSafe }, ok: { ok: rOk.ok, data: rOk.data }, curated: rCurated.message, notices, errLogs: errLogs.length }));
+// useSafeRequest：ref 形态（loading 必复位、error 落库、data 解包）
+const sr = safeMod.useSafeRequest({ tag: 'verify ⑮', notify: () => {}, log: { error: () => {} } });
+const srFail = await sr.safeLoad(() => onRejected(fake500));
+const srFailSnap = { ok: srFail.ok, status: sr.error.value && sr.error.value.status, loading: sr.loading.value, msg: sr.message.value, data: sr.data.value };
+const srOk = await sr.safeLoad(() => Promise.resolve({ code: 0, data: 7 }));
+check('⑮f 可执行：useSafeRequest 的 data/error/loading/message 四要素 ref 全部按约定落位（失败路径 loading 必复位）',
+  srFailSnap.ok === false && srFailSnap.status === 500 && srFailSnap.loading === false && srFailSnap.msg === '服务出错了，请稍后重试'
+    && srFailSnap.data === null && srOk.ok === true && sr.data.value === 7 && sr.error.value === null && sr.message.value === '',
+  JSON.stringify({ failSnap: srFailSnap, ok: { ok: srOk.ok, data: sr.data.value, error: sr.error.value, msg: sr.message.value } }));
+// 错误边界：可复制的字符串堆栈（路由 + 组件名 + 错误消息 + 堆栈）
+const ebErr = new TypeError("Cannot read properties of null (reading 'x')");
+const ebOpts = { route: '/admin/teachers', component: 'Teachers.vue', info: 'onErrorCaptured', at: '2026-01-01T00:00:00.000Z' };
+const ebDiag = recovery.diagnosticTextOf(ebErr, ebOpts);
+const ebState = recovery.boundaryState(ebErr, '/admin/teachers', ebOpts);
+const ebSrc = read(path.join(CLIENT, 'src', 'components', 'ErrorBoundary.vue')) || '';
+check('⑮g 错误边界可诊断：诊断串含 路由/组件/错误消息/堆栈（可直接复制），错误页提供 复制诊断信息 + 返回上一页 + 回首页',
+  ebDiag.includes('路由：/admin/teachers') && ebDiag.includes('组件：Teachers.vue')
+    && ebDiag.includes('onErrorCaptured') && ebDiag.includes('Cannot read properties of null')
+    && ebDiag.includes(recovery.DIAG_BEGIN) && ebDiag.includes(recovery.DIAG_END) && ebDiag.split('\n').length >= 9
+    && ebState.diagnostics === ebDiag && ebState.component === 'Teachers.vue' && ebState.failed === true
+    && /复制诊断信息/.test(ebSrc) && /返回上一页/.test(ebSrc) && /回首页/.test(ebSrc) && /navigator\.clipboard/.test(ebSrc)
+    && /diagnostics/.test(ebSrc),
+  JSON.stringify({ lines: ebDiag.split('\n').length, component: ebState.component, hasCopy: /复制诊断信息/.test(ebSrc), hasBack: /返回上一页/.test(ebSrc), hasHome: /回首页/.test(ebSrc) }));
+
+// ── ⑮h 两处**已复现故障**的回归锚点（静态断言：热点页面必须保持"就地处理"的写法）─────────────────────
+//   ① 管理员「新增教师」姓名留空 ⇒ POST 400 ⇒ handler 无 try/catch ⇒ 整页被错误边界替换、列表消失；
+//   ② 打开非本人/不存在的题（404 + code 1004）⇒ useLoadQuestion 未处理 ⇒ 同样整页被替换。
+const hotTeachers = read(path.join(CLIENT, 'src', 'views', 'admin', 'Teachers.vue')) || '';
+const hotLoadQ = read(path.join(CLIENT, 'src', 'composables', 'question', 'useLoadQuestion.js')) || '';
+check('⑮h 故障① 回归锚点：Teachers.vue 提交前字段级校验（formErrors/validateForm + 表单 validate-status）且提交走 safeSubmit + 失败即返回（列表不消失）',
+  /formErrors/.test(hotTeachers) && /function validateForm\(/.test(hotTeachers) && /safeSubmit\(/.test(hotTeachers)
+    && /if \(r\.error\) return;/.test(hotTeachers) && /:validate-status="formErrors\./.test(hotTeachers)
+    && /useSafeRequest/.test(hotTeachers) && /safeLoad\(/.test(hotTeachers),
+  JSON.stringify({ validateForm: /function validateForm\(/.test(hotTeachers), safeSubmit: /safeSubmit\(/.test(hotTeachers), fieldHint: /:validate-status="formErrors\./.test(hotTeachers) }));
+check('⑮h 故障② 回归锚点：题目编辑链路（useLoadQuestion）失败只置 loadError 并返回（不再冒泡 ⇒ 页面不被替换）',
+  /safeLoad\(/.test(hotLoadQ) && /loadError\.value\s*=\s*res\.error/.test(hotLoadQ) && /return;/.test(hotLoadQ) && /useSafeRequest/.test(hotLoadQ),
+  JSON.stringify({ safeLoad: /safeLoad\(/.test(hotLoadQ), loadError: /loadError\.value\s*=\s*res\.error/.test(hotLoadQ) }));
+
 const failed = results.filter((r) => !r.ok);
 console.log('');
 console.log('SUMMARY checks=' + results.length + ' failed=' + failed.length + (failed.length ? ' :: ' + failed.map((f) => f.name).join(' | ') : ''));

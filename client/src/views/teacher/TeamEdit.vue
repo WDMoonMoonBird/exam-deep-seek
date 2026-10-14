@@ -91,6 +91,7 @@ import { ref, reactive, computed, watch, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
+import { useSafeRequest } from '../../composables/useSafeRequest.js';   // ★W1（t1）：失败就地提示、不冒泡
 import { useUserStore } from '../../stores/user.js';
 import { useConfirm } from '../../composables/useConfirm.js';
 import { useDraftAutosave } from '../../composables/useDraftAutosave.js';
@@ -100,6 +101,7 @@ import StatusTag from '../../components/StatusTag.vue';
 const route = useRoute();
 const userStore = useUserStore();
 const { confirm } = useConfirm();
+const { safeLoad, safeSubmit } = useSafeRequest({ tag: 'teacher/TeamEdit.vue' });
 const team = reactive({ name: '', teachers: [], classes: [], createdBy: null });
 const loading = ref(false);     // ★R2-B47：加载态（任意路径必复位；供防呆断言与页面提示使用）
 const tab = ref('teachers');
@@ -130,7 +132,9 @@ const cCols = [
 async function fetch() {
   loading.value = true;
   try {
-    const r = await request.get(`/teacher/teams/${route.params.id}`);   // ★R2-B47：参数在请求时读 route
+    // ★R2-B47：参数在请求时读 route；★W1（t1）：原 try/finally 无 catch ⇒ 失败会把整页替换成错误页，现失败就地提示
+    const r = await safeLoad(() => request.get(`/teacher/teams/${route.params.id}`), { action: '加载团队' });
+    if (r.error) return;
     Object.assign(team, r.data);
     selectedTeachers.value = (team.teachers || []).filter(t => t.teacherId !== team.createdBy).map(t => t.teacherId);
     selectedClasses.value = (team.classes || []).map(c => c.classId);
@@ -158,7 +162,10 @@ watch(() => route.params.id, () => { fetch(); loadTeachers(); loadClasses(); });
 /** 教师名单保存（原 300ms 防抖 → useDraftAutosave，delay 原样保留） */
 async function saveTeachers() {
   const ids = [...new Set([team.createdBy, ...selectedTeachers.value])];
-  await request.put(`/teacher/teams/${route.params.id}`, { teacherIds: ids });
+  // ★W1（t1）：safeSubmit **不抛**；这里的失败用显式 rethrow 交回 useDraftAutosave 的状态机（→ status='error'，
+  //   该 rejection 由 runSave 的 then 第二参消费）⇒ 既不冒泡到错误边界，也不丢"同步失败"的状态提示。
+  const r = await safeSubmit(() => request.put(`/teacher/teams/${route.params.id}`, { teacherIds: ids }), { action: '保存教师名单' });
+  if (r.error) throw r.error;
   message.success('教师已更新');
   fetch();
 }
@@ -166,7 +173,9 @@ const teacherSaver = useDraftAutosave({ save: saveTeachers, delay: 300 });
 
 /** 共享班级保存（同上） */
 async function saveClasses() {
-  await request.put(`/teacher/teams/${route.params.id}`, { classIds: selectedClasses.value });
+  // ★W1（t1）：同上 —— 失败 rethrow 给 useDraftAutosave 的 'error' 状态（不冒泡到错误边界）
+  const r = await safeSubmit(() => request.put(`/teacher/teams/${route.params.id}`, { classIds: selectedClasses.value }), { action: '保存班级' });
+  if (r.error) throw r.error;
   message.success('班级已更新');
   fetch();
 }

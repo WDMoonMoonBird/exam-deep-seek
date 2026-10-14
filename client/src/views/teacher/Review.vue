@@ -103,6 +103,7 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 import { io } from 'socket.io-client';
 import { createTeacherSocket } from '../../composables/socketConfig.js';   // ★R2-B53：端点（默认 /exam/socket.io）与一次性日志
 import request from '../../api/request.js';
+import { useSafeRequest } from '../../composables/useSafeRequest.js';   // ★W1（t1）：失败就地提示、不冒泡
 import { useUserStore } from '../../stores/user.js';
 import { savedSortField, savedSortOrder, savedPage } from '../../stores/reviewStore.js';
 import { exportReviewXlsx } from '../../infrastructure/export.js';
@@ -122,6 +123,7 @@ function friendlyLoadError(err) {
 const fmtMD = (v) => { const s = formatDate(v); return s ? s.slice(5) : ''; };
 
 const userStore = useUserStore();
+const { safeLoad } = useSafeRequest({ tag: 'teacher/Review.vue' });
 const loading = ref(false);
 const loadError = ref('');     // ★R2-B47（U-1）：错态（请求失败 ⇒ 显示原因 + 重试，绝不白屏）
 const list = ref([]);
@@ -183,7 +185,9 @@ async function fetch() {
 }
 
 async function exportForRecord(record) {
-  const r = await request.get('/teacher/export-review', { params: { classId: record.classId, assignmentId: record.assignmentId } });
+  // ★W1（t1）：导出失败只就地提示（原裸 await ⇒ 失败冒泡到错误边界、整页被替换，导不出的同时页面也没了）
+  const r = await safeLoad(() => request.get('/teacher/export-review', { params: { classId: record.classId, assignmentId: record.assignmentId } }), { action: '导出成绩' });
+  if (r.error) return;
   exportReviewXlsx(r.data, record.className, record.title);
 }
 

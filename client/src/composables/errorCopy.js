@@ -4,7 +4,9 @@
  * 口径（与 B54 一致并推广到 composables/components）：
  *   ① 面向用户的 UI/toast 文案**固定友好**（「<操作名>失败，请重试」），**不得**出现原始 JS 错误原文
  *      （err.message / String(err) 之类）；服务端业务文案 response.data.message 仍优先使用（那是后端给出的友好提示）；
- *   ② 原始错误一律 console.error（带组件/操作标签 + 路由信息）⇒ 排查不受影响、界面不吓人。
+ *   ② 原始错误一律 console.error（带组件/操作标签 + 路由信息）⇒ 排查不受影响、界面不吓人；
+ *   ③ ★W1（t1）例外且仅有一处：**已规范化的 ApiError**（api/apiError.js，带 uiSafe 标记）的 message 是
+ *      经过审查的统一口径（服务端业务文案 / 401 / 403 / 404 / 5xx 可读文案），可直接上屏——它**不是**原始 JS 错误。
  *
  * 本模块零依赖（只用注入的 console/window），可在 node 下直接 import 做断言（verify-frontend ⑨e）。
  */
@@ -35,6 +37,11 @@ export function errorCopyOf(err, { tag = '未标注位置', action = '', log = c
   let serverMsg = null;
   try { serverMsg = err && err.response && err.response.data && err.response.data.message; } catch { serverMsg = null; }
   if (serverMsg) return String(serverMsg) + (suffix || '');
+  // ★W1（t1）：规范化后的 ApiError 文案已过审查（服务端业务文案 / 统一 HTTP 口径），可直接上屏；
+  //   只有 uiSafe 标记为真时才取——原始 JS 错误（无该标记）仍一律不读 message，只进 console。
+  let curated = null;
+  try { curated = err && err.uiSafe === true && typeof err.message === 'string' ? err.message : null; } catch { curated = null; }
+  if (curated) return String(curated) + (suffix || '');
   const base = action ? action + '失败，请重试' : DEFAULT_FRIENDLY;
   return base + (suffix || '');
 }

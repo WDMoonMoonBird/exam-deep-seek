@@ -6,6 +6,7 @@
 import { computed } from 'vue';
 import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
+import { safeSubmit } from '../useSafeRequest.js';   // ★W1（t1）：批量提交逐题安全提交（失败就地提示、不冒泡）
 import { limitReached as isLimitReached, limitText } from './submitSwitches.js';
 
 export function useSubmitActions({
@@ -86,17 +87,22 @@ async function submitAll() {
     danger: isUnfinished,
     onOk: async () => {
       submittingAll.value = true;
+      // ★W1（t1）：逐题独立 safeSubmit（失败就地提示、**不抛出**）⇒ 提交失败不再冒泡到错误边界
       const results = await Promise.allSettled(
         toSubmit.map(sq => {
           const answer = sq.type === 'objective' ? buildObjectiveAnswer(sq) : answers[sq.id];
-          return request.post(`/student/assignments/${route.params.id}/submit`, {
+          return safeSubmit(() => request.post(`/student/assignments/${route.params.id}/submit`, {
             questionId: q.value.id, subQuestionId: sq.id, answer,
-          }).then(() => { subStatuses[sq.id] = 'submitted'; return true; });
+          }), { action: '提交' }).then((r) => {
+            if (r.error) return false;
+            subStatuses[sq.id] = 'submitted';
+            return true;
+          });
         })
       );
       submittingAll.value = false;
-      const ok = results.filter(r => r.status === 'fulfilled').length;
-      const fail = results.filter(r => r.status === 'rejected').length;
+      const ok = results.filter(r => r.status === 'fulfilled' && r.value === true).length;
+      const fail = results.length - ok;
       if (fail === 0) {
         message.success(`全部 ${ok} 题提交成功`);
         draftNotice.value = '';   // 答案已随提交入库，此前的「改动仅在重新提交时保存」提示随之失效

@@ -10,6 +10,7 @@
  */
 import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
+import { safeSubmit } from '../useSafeRequest.js';   // ★W1（t1）：批量审核逐题走安全提交（失败就地提示、不冒泡）
 
 export function useReviewActions({ subMap, reviewScores, reviewFeedbacks, regrading, reviewingAll, publishingAll, confirm }) {
 
@@ -51,20 +52,22 @@ async function reviewAll() {
 
   reviewingAll.value = true;
   try {
+    // ★W1（t1）：逐题独立 safeSubmit（失败就地提示、**不抛出**）⇒ 批量审核不再有"任一失败 ⇒ 整页被替换"的路径
     const tasks = subs.map(s => {
       const key = s.subQuestionId || s.questionId;
-      return request.put(`/teacher/submissions/${s.id}/review`, {
+      return safeSubmit(() => request.put(`/teacher/submissions/${s.id}/review`, {
         finalScore: reviewScores[key],
         teacherFeedback: reviewFeedbacks[key] || s.aiFeedback || '',
-      }).then(() => {
+      }), { action: '保存审核' }).then((r) => {
+        if (r.error) return false;
         s.status = 'reviewed';
         s.finalScore = reviewScores[key];
         return true;
       });
     });
-    const results = await Promise.allSettled(tasks);
-    const ok = results.filter(r => r.status === 'fulfilled').length;
-    const fail = results.filter(r => r.status === 'rejected').length;
+    const settled = await Promise.allSettled(tasks);
+    const ok = settled.filter(r => r.status === 'fulfilled' && r.value === true).length;
+    const fail = settled.length - ok;   // 不再有 rejection：失败以 value===false 表达
     if (fail === 0) message.success(`全部 ${ok} 题审核已保存`);
     else message.warning(`${ok} 题成功，${fail} 题失败`);
   } finally { reviewingAll.value = false; }

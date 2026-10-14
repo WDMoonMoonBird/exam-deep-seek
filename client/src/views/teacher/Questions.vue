@@ -111,12 +111,14 @@ import { useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { DownOutlined, CodeOutlined, FolderOpenOutlined } from '@ant-design/icons-vue';
 import request from '../../api/request.js';
+import { useSafeRequest } from '../../composables/useSafeRequest.js';   // ★W1（t1）：失败就地提示、不冒泡
 import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
 import StatusTag from '../../components/StatusTag.vue';
 import { splitDateTime, difficultyText } from '../../domain/format.js';
 
 const router = useRouter();
+const { safeLoad, safeSubmit } = useSafeRequest({ tag: 'teacher/Questions.vue' });
 
 const loading = ref(false);
 /** 「新增题目」下拉是否展开：只用于把按钮上的箭头转 180°（与欢迎页演示一致） */
@@ -146,9 +148,12 @@ async function fetch() {
   try {
     const params = { page: pagination.current, pageSize: pagination.pageSize };
     if (keyword.value) params.keyword = keyword.value;
-    const r = await request.get('/teacher/questions', { params });
-    list.value = r.data.list || [];
-    pagination.total = r.data.total || 0;
+    // ★W1（t1）：原 try/finally 无 catch ⇒ 失败冒泡到错误边界、整页被替换；现改走 safeLoad（失败就地提示）
+    const r = await safeLoad(() => request.get('/teacher/questions', { params }), { action: '加载题目列表' });
+    if (!r.error) {
+      list.value = (r.data && r.data.list) || [];
+      pagination.total = (r.data && r.data.total) || 0;
+    }
   } finally {
     loading.value = false;
   }
@@ -176,7 +181,8 @@ function onEmptyAction() {
 }
 
 async function del(id) {
-  await request.delete(`/teacher/questions/${id}`);
+  const r = await safeSubmit(() => request.delete(`/teacher/questions/${id}`), { action: '删除' });
+  if (r.error) return;   // ★失败就地提示：列表保持可用
   message.success('删除成功');
   fetch();
 }

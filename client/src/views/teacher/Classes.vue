@@ -85,11 +85,13 @@
 import { ref, reactive, computed, onMounted } from 'vue';
 import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
+import { useSafeRequest } from '../../composables/useSafeRequest.js';   // ★W1（t1）：失败就地提示、不冒泡
 import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
 import StatusTag from '../../components/StatusTag.vue';
 import { useUserStore } from '../../stores/user.js';
 import { formatDate } from '../../domain/format.js';
+const { safeLoad, safeSubmit } = useSafeRequest({ tag: 'teacher/Classes.vue' });
 const loading = ref(false);
 const list = ref([]);
 const page = reactive({ current: 1, pageSize: 20 });
@@ -126,14 +128,17 @@ const pagedList = computed(() => list.value.slice((page.current - 1) * page.page
 
 async function fetch() {
   loading.value = true;
-  const r = await request.get('/teacher/classes');
-  list.value = r.data;
-  loading.value = false;
+  try {
+    const r = await safeLoad(() => request.get('/teacher/classes'), { action: '加载班级列表' });
+    if (!r.error) list.value = r.data || [];
+  } finally {
+    loading.value = false;     // ★R2-B47 防呆口径：任何路径必复位 loading（safeLoad 不抛，失败已就地提示）
+  }
 }
 
 async function loadTeams() {
-  const r = await request.get('/teacher/teams');
-  teams.value = r.data || [];
+  const r = await safeLoad(() => request.get('/teacher/teams'), { action: '加载团队列表' });
+  if (!r.error) teams.value = r.data || [];
 }
 
 function openAdd() {
@@ -150,13 +155,23 @@ function openEdit(record) {
 }
 
 async function handleOk() {
-  const d = { name: form.name, teamIds: form.teamIds };
-  isEdit.value ? await request.put(`/teacher/classes/${editId.value}`, d) : await request.post('/teacher/classes', d);
+  // ★W1（t1）④：提交前必填校验（班级名称）—— 从源头避免 400
+  if (!String(form.name || '').trim()) return message.warn('请输入班级名称');
+  const d = { name: String(form.name).trim(), teamIds: form.teamIds };
+  const r = await safeSubmit(
+    () => (isEdit.value ? request.put(`/teacher/classes/${editId.value}`, d) : request.post('/teacher/classes', d)),
+    { action: isEdit.value ? '修改' : '创建' },
+  );
+  if (r.error) return;   // ★失败就地提示：弹窗不关、列表不消失
   message.success(isEdit.value ? '修改成功' : '创建成功');
   visible.value = false; fetch();
 }
 
-async function del(id) { await request.delete(`/teacher/classes/${id}`); message.success('删除成功'); fetch(); }
+async function del(id) {
+  const r = await safeSubmit(() => request.delete(`/teacher/classes/${id}`), { action: '删除' });
+  if (r.error) return;
+  message.success('删除成功'); fetch();
+}
 
 function openSwitchSchool(record) {
   switchingClass.value = record;
@@ -166,12 +181,14 @@ function openSwitchSchool(record) {
 
 async function handleSwitch() {
   if (!targetSchoolId.value) return message.warn('请选择目标学校');
-  try {
-    const r = await request.put(`/teacher/classes/${switchingClass.value.id}/switch-school`, { newSchoolId: targetSchoolId.value });
-    message.success(r.message);
-    switchVisible.value = false;
-    fetch();
-  } catch { message.error('切换失败'); }
+  const r = await safeSubmit(
+    () => request.put(`/teacher/classes/${switchingClass.value.id}/switch-school`, { newSchoolId: targetSchoolId.value }),
+    { action: '切换学校' },
+  );
+  if (r.error) return;
+  message.success((r.res && r.res.message) || '切换成功');
+  switchVisible.value = false;
+  fetch();
 }
 
 /** 前端切片页码（ListPage 只抛出页码，不内置请求） */

@@ -56,9 +56,11 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { getRuleQuality, mockRuleQuality } from '../../api/checker.js';
+import { useSafeRequest } from '../../composables/useSafeRequest.js';   // ★W1（t1）：失败就地提示、不冒泡
 
 const mock = true; // 原型阶段；后端就绪后置 false
 const router = useRouter();
+const { safeLoad } = useSafeRequest({ tag: 'teacher/RuleQuality.vue' });
 const loading = ref(false);
 const summary = ref({ totalSignals: 0, activeRules: 0, suggestions: 0 });
 const rows = ref([]);
@@ -83,7 +85,9 @@ async function load() {
       rows.value = d.rows.map((r, i) => ({ ...r, id: i + 1 }));
       return;
     }
-    const r = await getRuleQuality();
+    // ★W1（t1）：safeLoad ⇒ 加载失败只就地提示（原 try/finally 无 catch ⇒ 失败会把整页替换成错误页）
+    const r = await safeLoad(() => getRuleQuality(), { action: '加载规则质量' });
+    if (r.error) return;
     const d = r.data || {};
     summary.value = d.summary || summary.value;
     rows.value = (d.rows || []).map((x, i) => ({ ...x, id: i + 1 }));

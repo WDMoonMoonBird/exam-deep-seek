@@ -4,6 +4,7 @@
  */
 
 import request from '../../api/request.js';
+import { useSafeRequest } from '../useSafeRequest.js';   // ★W1（t1）：失败就地提示、不冒泡
 
 export function useAssignmentLoader({
   route, data, allowResubmit, endTime, maxAttempts, scorePolicy, answerVisibility, q, subQuestions,
@@ -11,13 +12,16 @@ export function useAssignmentLoader({
   submittedAttempts, currentAttempt,
   initObjectiveAnswers, markObjectiveCorrect, armDeadlineTimer,
 }) {
+const { safeLoad } = useSafeRequest({ tag: 'useAssignmentLoader.js' });
 
 // ===================== 数据加载 =====================
 
 /** 数据加载器。注意：函数名不得叫 fetch —— 同模块内的函数声明会遮蔽全局 fetch，
  *  曾导致 onBeforeUnload 的 keepalive 落盘实际发出 GET 列表请求（V3）。 */
 async function loadAssignment() {
-  const r = await request.get(`/student/assignments/${route.params.id}`);
+  // ★W1（t1）：作业不存在/已关闭（404/403）只就地提示并保留空态，不再把整页替换成错误页
+  const r = await safeLoad(() => request.get(`/student/assignments/${route.params.id}`), { action: '加载作业' });
+  if (r.error) return;
   data.value = r.data;
   const ass = r.data.assignment;
   if (ass) {

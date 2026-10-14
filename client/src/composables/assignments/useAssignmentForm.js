@@ -17,6 +17,7 @@ import { message } from 'ant-design-vue';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
 import request from '../../api/request.js';
+import { useSafeRequest } from '../useSafeRequest.js';   // ★W1（t1）：safeLoad / safeSubmit 约定（失败就地提示、不冒泡）
 import { useConfirm } from '../useConfirm.js';
 import { classCount } from './assignmentsPure.js';
 import { useQuestionPicker } from './useQuestionPicker.js';
@@ -30,6 +31,8 @@ import {
 dayjs.locale('zh-cn');   // 源 :311（原在 setup 首行；模块级一次性设定，效果与拆分前一致）
 
 export function useAssignmentForm({ list, onSaved }) {
+  /** ★W1（t1）：本 composable 的所有请求都走安全约定（safeLoad 读取 / safeSubmit 提交；失败就地提示、不冒泡） */
+  const { safeLoad, safeSubmit } = useSafeRequest({ tag: 'useAssignmentForm.js' });
   /** 命令式确认框（Wave 2 构件 useConfirm）：替代原 antd 命令式调用，行为等价 */
   const { confirm } = useConfirm();   // 源 :313-314
 
@@ -243,24 +246,49 @@ export function useAssignmentForm({ list, onSaved }) {
       onOk: () => { visible.value = false; },
     });
   }
-  async function loadClasses() { const r = await request.get('/teacher/classes'); avalClasses.value = r.data; }
+  async function loadClasses() {
+    const r = await safeLoad(() => request.get('/teacher/classes'), { action: '加载班级列表' });
+    if (!r.error) avalClasses.value = r.data || [];
+  }
 
   /** 提交布置作业请求；confirmWithoutStandardPackage=true 表示教师已在确认框点「确认布置」（开放性题目） */
+  /** ★W1（t1）：1007 软警告（未上传标准工程包）是**正常业务分支** —— 由确认框承接，不再当报错弹（与 request.js 的白名单例外同一口径） */
+  function isConfirmableWarning(err) {
+    const body = err && err.response && err.response.data;
+    return !!(body && body.code === 1007 && body.data && body.data.requiresConfirmation);
+  }
+
+  /** 失败就地提示（读 safeSubmit 已经算好的统一文案；不含原始 JS 错误） */
+  function toastFail(result) {
+    if (result && result.message) message.error(result.message);
+  }
+
+  /**
+   * 提交布置作业请求；confirmWithoutStandardPackage=true 表示教师已在确认框点「确认布置」（开放性题目）。
+   * ★W1：返回 safeSubmit 结果（{ok,data,error,message}），**失败不抛** —— 调用方据 r.error 判定，不再依赖异常穿透。
+   */
   async function createAssignment(confirmWithoutStandardPackage) {
-    const payload = {
-      title: timeForm.title, description: timeForm.description,
-      startTime: timeForm.timeRange[0].toISOString(), endTime: timeForm.timeRange[1].toISOString(),
-      // R3-D1（US-B1）：三开关按表单当前值下发（字段名与后端一致）
-      ...buildSwitchPayload(switches),
-      mode: 'exam',   // 建作业不再写 practice；行为由三开关驱动（US-B5）
-      questionIds: selectedQIds.value.slice(), classIds: selectedCIds.value.slice(),
-    };
-    if (confirmWithoutStandardPackage) payload.confirmWithoutStandardPackage = true;
-    await request.post('/teacher/assignments', payload);
+    const r = await safeSubmit(() => {
+      const payload = {
+        title: timeForm.title, description: timeForm.description,
+        startTime: timeForm.timeRange[0].toISOString(), endTime: timeForm.timeRange[1].toISOString(),
+        // R3-D1（US-B1）：三开关按表单当前值下发（字段名与后端一致）
+        ...buildSwitchPayload(switches),
+        mode: 'exam',   // 建作业不再写 practice；行为由三开关驱动（US-B5）
+        questionIds: selectedQIds.value.slice(), classIds: selectedCIds.value.slice(),
+      };
+      if (confirmWithoutStandardPackage) payload.confirmWithoutStandardPackage = true;
+      return request.post('/teacher/assignments', payload);
+    }, { action: '布置作业', notify: false });   // 提示统一在下面按分支给（1007 不弹报错）
+    if (r.error) {
+      if (!isConfirmableWarning(r.error)) toastFail(r);
+      return r;
+    }
     message.success('布置成功');
     clearDraft();          // 布置成功即清掉草稿，避免下次误恢复
     visible.value = false;
     onSaved();
+    return r;
   }
 
   /**
@@ -280,11 +308,11 @@ export function useAssignmentForm({ list, onSaved }) {
     if (submitting.value) return;
     submitting.value = true;
     try {
-      await createAssignment(false);
-    } catch (err) {
-      const resp = err?.response?.data;
-      // 非「需确认」类错误（参数错误/网络错误等）由 request 拦截器统一提示
-      if (resp?.code !== 1007 || !resp?.data?.requiresConfirmation) return;
+      const r = await createAssignment(false);
+      // ★W1：safeSubmit 不抛 —— 失败分支直接用返回值判定（非「需确认」类错误已在 createAssignment 里就地提示）
+      if (!r.error) return;
+      const resp = r.error.response && r.error.response.data;
+      if (!resp || resp.code !== 1007 || !resp.data || !resp.data.requiresConfirmation) return;
       const warnings = resp.data.warnings || [];
       const names = warnings.map(w => w.title).join('、');
       confirm({
@@ -297,11 +325,9 @@ export function useAssignmentForm({ list, onSaved }) {
         okText: '确认布置',
         cancelText: '取消',
         onOk: async () => {
-          try {
-            await createAssignment(true);
-          } catch {
-            // 二次提交失败：原因已由 request 拦截器提示；吞掉 rejection 关闭确认框，避免重复提交
-          }
+          // 二次提交失败：safeSubmit 已就地提示（不抛）⇒ 关闭确认框，避免重复提交
+          const r2 = await createAssignment(true);
+          if (r2.error) toastFail(r2);
         },
       });
     } finally { submitting.value = false; }

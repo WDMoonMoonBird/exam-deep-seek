@@ -8,8 +8,11 @@
 import { ref, reactive, computed } from 'vue';
 import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
+// ★W1（t1）：请求一律走 safeLoad/safeSubmit —— 失败就地提示、不冒泡（杜绝"失败 ⇒ 整页被错误边界替换"）
+import { useSafeRequest } from '../useSafeRequest.js';
 
 export function useAssignmentsList({ openAdd }) {
+  const { safeLoad } = useSafeRequest({ tag: 'useAssignmentsList.js' });
   // ===================== 列表（Wave 1 试点：服务端筛选 + 真实进度 + 状态语义） =====================
   const loading = ref(false);
   const list = ref([]);
@@ -20,12 +23,9 @@ export function useAssignmentsList({ openAdd }) {
   const hasFilter = computed(() => !!(filters.keyword || filters.classId || filters.status));
 
   async function fetchSummary() {
-    try {
-      const r = await request.get('/teacher/pending-summary');
-      Object.assign(summary, r.data || {});
-    } catch {
-      // KPI 是辅助信息，失败不阻塞列表（错误提示由 request 拦截器统一处理）
-    }
+    // KPI 是辅助信息，失败不阻塞列表（safeLoad 已就地提示一次，且**不会抛**）
+    const r = await safeLoad(() => request.get('/teacher/pending-summary'), { action: '加载待审核汇总' });
+    if (!r.error) Object.assign(summary, r.data || {});
   }
 
   async function fetch() {
@@ -35,9 +35,14 @@ export function useAssignmentsList({ openAdd }) {
       if (filters.keyword) params.keyword = filters.keyword;
       if (filters.classId) params.classId = filters.classId;
       if (filters.status) params.status = filters.status;
-      const [r] = await Promise.all([request.get('/teacher/assignments', { params }), fetchSummary()]);
-      list.value = r.data.list || [];
-      pagination.total = r.data.total || 0;
+      const [r] = await Promise.all([
+        safeLoad(() => request.get('/teacher/assignments', { params }), { action: '加载作业列表' }),
+        fetchSummary(),
+      ]);
+      if (!r.error) {
+        list.value = (r.data && r.data.list) || [];
+        pagination.total = (r.data && r.data.total) || 0;
+      }
     } finally {
       loading.value = false;
     }

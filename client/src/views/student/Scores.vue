@@ -60,11 +60,13 @@
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import request from '../../api/request.js';
+import { useSafeRequest } from '../../composables/useSafeRequest.js';   // ★W1（t1）：失败就地提示、不冒泡
 import PageShell from '../../components/PageShell.vue';
 import ListPage from '../../components/ListPage.vue';
 import StatusTag from '../../components/StatusTag.vue';
 
 const router = useRouter();
+const { safeLoad } = useSafeRequest({ tag: 'student/Scores.vue' });
 const list = ref([]);
 const loading = ref(false);
 const page = reactive({ current: 1, pageSize: 20 });
@@ -120,9 +122,12 @@ function scoreBand(record) {
 
 async function fetch() {
   loading.value = true;
-  const r = await request.get('/student/scores');
-  list.value = r.data || [];
-  loading.value = false;
+  try {
+    const r = await safeLoad(() => request.get('/student/scores'), { action: '加载成绩' });
+    if (!r.error) list.value = r.data || [];
+  } finally {
+    loading.value = false;
+  }
 }
 
 onMounted(fetch);

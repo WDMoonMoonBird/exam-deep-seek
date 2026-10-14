@@ -6,14 +6,24 @@
  *      形态真值源唯一（U3），本文件不得自行创建第二份。
  * loadSq(0,0) 的 dir===0 语义（不触发 saveDraft / 不改 slideDir）逐字保留；旧数据 score==null 的兼容分支未动。
  */
+import { ref } from 'vue';
 import request from '../../api/request.js';
 import { DEFAULT_TYPE_SCORES, updateFillBlanks } from './questionPure.js';
+// ★W1（t1）：题 ② 的真实故障 —— 打开「非本人 / 不存在」的题（404 + code 1004）时裸 await 直接抛 ⇒ 整页被错误边界替换；
+//   改走 safeLoad 后失败只就地提示（'请求的内容不存在或已被删除'），页面保持可用。
+import { useSafeRequest } from '../useSafeRequest.js';
 
 export function useLoadQuestion({ isEdit, editId, form, subQuestions, questionKind, objectiveSettings, showMaterial, loadSq, newSq }) {
+const { safeLoad } = useSafeRequest({ tag: 'useLoadQuestion.js 加载题目' });
+/** 加载失败的错误（供页面显示空态/返回入口；null=未失败） */
+const loadError = ref(null);
 // 加载已有题目
 async function load(){
   if(!isEdit){return;}
-  const r=await request.get(`/teacher/questions/${editId}`);const q=r.data;
+  const res=await safeLoad(() => request.get(`/teacher/questions/${editId}`), { action: '加载题目' });
+  if(res.error){ loadError.value=res.error; return; }   // ★失败就地提示：不抛出、不替换整页
+  loadError.value=null;
+  const q=res.data;
   form.title=q.title;form.difficulty=q.difficulty;form.material=q.material||'';
   if(q.objectiveSettings){Object.assign(objectiveSettings,q.objectiveSettings);}
   if(q.material)showMaterial.value=true;
@@ -35,7 +45,7 @@ async function load(){
   if(subQuestions.value.length>0)loadSq(0,0);
 }
 
-  return { load };
+  return { load, loadError };
 }
 
 export default useLoadQuestion;

@@ -5,6 +5,7 @@
 
 import { ref, computed, watch } from 'vue';
 import request from '../../api/request.js';
+import { safeSubmit } from '../useSafeRequest.js';   // ★W1（t1）：自动保存逐条安全提交（失败不清脏、不冒泡）
 
 export function useDraftSave({
   route, q, subQuestions, answers, itemAnswers, multiAnswerBind,
@@ -62,14 +63,16 @@ async function saveAllDrafts() {
     }
     tasks.push(
       // 逐条记录成败（请求形状不变）：失败不清脏，留待下一轮重试（V4）
-      request.put(`/student/assignments/${assignmentId}/draft`, {
+      // ★W1（t1）：safeSubmit 不抛 ⇒ 自动保存失败不会冒泡（旧写法靠 .then 第二参兜 rejection，形状不稳且门禁盲区）
+      safeSubmit(() => request.put(`/student/assignments/${assignmentId}/draft`, {
         questionId, subQuestionId: sqId, answer,
-      }).then((r) => {
+      }), { action: '保存草稿' }).then((res) => {
+        if (res.error) return false;
         // D3：HTTP 200 不等于已入库 —— 识别服务端的「跳过」语义
-        const msg = r?.message || '';
+        const msg = (res.res && res.res.message) || '';
         if (msg.includes('跳过草稿')) skipped.push(msg.includes('已提交') ? 'submitted' : 'expired');
         return true;
-      }, () => false)
+      })
     );
   }
   if (tasks.length === 0) return;
