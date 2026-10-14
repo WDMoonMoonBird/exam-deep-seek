@@ -3,8 +3,25 @@
 cd "$(git rev-parse --show-toplevel)/client"
 SUM=/tmp/b38-fe-negative.log
 : > "$SUM"
+
+# ★自愈：本脚本会**就地改工作树**（注入反例）。无论正常结束还是被 kill（Ctrl-C / CI 超时），
+#   都必须把真正动过的文件还原回去 —— 否则会留下"注入态"污染工作树（W4 实测踩到过一次）。
+MUTATED=/tmp/w1-selftest-mutated.list
+: > "$MUTATED"
+mark_mutated() { printf '%s\t%s\n' "$1" "$2" >> "$MUTATED"; }
+restore_all() {
+  if [ -s "$MUTATED" ]; then
+    while IFS="$(printf '\t')" read -r mf mb; do
+      [ -n "$mf" ] && [ -f "$mb" ] && cp -f "$mb" "$mf"
+    done < "$MUTATED"
+  fi
+  : > "$MUTATED"
+  for f in dist/assets/*.bak; do [ -f "$f" ] && mv -f "$f" "${f%.bak}"; done
+  return 0
+}
+trap restore_all EXIT INT TERM
 PAGE=src/views/admin/GradingRuns.vue
-cp "$PAGE" /tmp/b38-page.bak
+cp "$PAGE" /tmp/b38-page.bak && mark_mutated "$PAGE" /tmp/b38-page.bak
 echo "=== 反例 1：页面里注入裸根资源（href=\"/assets/x.css\"） ===" | tee -a "$SUM"
 node -e "const fs=require('fs');const p=process.argv[1];let s=fs.readFileSync(p,'utf8');s=s.replace('<template>','<template>\n  <!-- 反例注入 -->\n  <link rel=\"stylesheet\" href=\"/assets/injected.css\" />');fs.writeFileSync(p,s);" "$PAGE"
 node scripts/verify-frontend.mjs --no-build > /tmp/b38-fe-neg1.log 2>&1
@@ -20,21 +37,31 @@ grep -E '^FAIL|SUMMARY' /tmp/b38-fe-neg2.log | tee -a "$SUM"
 mv "dist/assets/$CHUNK.bak" "dist/assets/$CHUNK"
 echo "=== 反例 3：视图里注入**裸请求**（await request.get 既无 try/catch 又非 safe*）⇒ ⑮ 静态门禁必须报红 ===" | tee -a "$SUM"
 PAGE2=src/views/admin/Schools.vue
-cp "$PAGE2" /tmp/w1-page2.bak
-node -e "const fs=require('fs');const p=process.argv[1];let s=fs.readFileSync(p,'utf8');s=s.replace('async function fetch() {','async function fetch() {\n  const injected = await request.get(\'/admin/teachers\');',1);fs.writeFileSync(p,s);" "$PAGE2"
+cp "$PAGE2" /tmp/w1-page2.bak && mark_mutated "$PAGE2" /tmp/w1-page2.bak
+node -e "const fs=require('fs');const p=process.argv[1];let s=fs.readFileSync(p,'utf8');const n=s.replace('async function fetch() {','async function fetch() {\n  const injected = await request.get(\'/admin/teachers\');',1);if(n===s){console.error('INJECT_FAILED：未找到 fetch() 锚点');process.exit(2);}fs.writeFileSync(p,n);" "$PAGE2" || { echo "INJECT_FAILED（反例 3 注入未生效 ⇒ 本次反例无效）" | tee -a "$SUM"; cp /tmp/w1-page2.bak "$PAGE2"; exit 2; }
 node scripts/verify-frontend.mjs --no-build > /tmp/w1-fe-neg3.log 2>&1
 echo "neg3_rc=$? （期望非 0）" | tee -a "$SUM"
 grep -E '^FAIL ⑮|SUMMARY' /tmp/w1-fe-neg3.log | tee -a "$SUM"
 cp /tmp/w1-page2.bak "$PAGE2"
 echo "=== 反例 4（W1-r2）：删掉控制流码分支（200+code 1002 又变回 reject）⇒ ⑮c4/⑮c5/⑮h故障③ 必须报红 ===" | tee -a "$SUM"
 REQ=src/api/request.js
-cp "$REQ" /tmp/w1-req.bak
-node -e "const fs=require('fs');const p=process.argv[1];let s=fs.readFileSync(p,'utf8');const before=s;s=s.replace('if (isControlFlowEnvelope(res)) return body;','');if(s===before){console.error('INJECT_FAILED：未找到控制流分支');process.exit(2);}fs.writeFileSync(p,s);" "$REQ"
+cp "$REQ" /tmp/w1-req.bak && mark_mutated "$REQ" /tmp/w1-req.bak
+node -e "const fs=require('fs');const p=process.argv[1];let s=fs.readFileSync(p,'utf8');const before=s;s=s.replace('if (isControlFlowEnvelope(res)) return body;','');if(s===before){console.error('INJECT_FAILED：未找到控制流分支');process.exit(2);}fs.writeFileSync(p,s);" "$REQ" || { echo "INJECT_FAILED（反例 4 注入未生效 ⇒ 本次反例无效）" | tee -a "$SUM"; cp /tmp/w1-req.bak "$REQ"; exit 2; }
 node scripts/verify-frontend.mjs --no-build > /tmp/w1-fe-neg4.log 2>&1
 echo "neg4_rc=$? （期望非 0）" | tee -a "$SUM"
 grep -E '^FAIL ⑮|SUMMARY' /tmp/w1-fe-neg4.log | tee -a "$SUM"
 cp /tmp/w1-req.bak "$REQ"
 diff -q /tmp/w1-req.bak "$REQ" && echo "REQUEST_JS_RESTORED_OK" | tee -a "$SUM"
+echo "=== 反例 5（W4/F6）：去掉 curatedMessage 的 401 分支（401 文案退回服务端原文）⇒ ⑮d 必须报红 ===" | tee -a "$SUM"
+APIERR=src/api/apiError.js
+cp "$APIERR" /tmp/w4-apierr.bak && mark_mutated "$APIERR" /tmp/w4-apierr.bak
+# ★锚点必须落在 curatedMessage 内：'if (s === 401) …' 在 httpMessageOf / apiErrorCopy 里也各有一处（首处替换会误伤别的函数 ⇒ 反例假绿）
+node -e "const fs=require('fs');const p=process.argv[1];let s=fs.readFileSync(p,'utf8');const blk='const s = Number(status) || 0;\n  if (s === 401) return AUTH_EXPIRED_MESSAGE;\n  if (s >= 500) return httpMessageOf(s);';const rep='const s = Number(status) || 0;\n  if (s >= 500) return httpMessageOf(s);';if(!s.includes(blk)){console.error('INJECT_FAILED：未找到 curatedMessage 的 401 分支');process.exit(2);}fs.writeFileSync(p,s.replace(blk,rep));" "$APIERR" || { echo "INJECT_FAILED（反例 5 注入未生效 ⇒ 本次反例无效）" | tee -a "$SUM"; cp /tmp/w4-apierr.bak "$APIERR"; exit 2; }
+node scripts/verify-frontend.mjs --no-build > /tmp/w4-fe-neg5.log 2>&1
+echo "neg5_rc=$? （期望非 0）" | tee -a "$SUM"
+grep -E '^FAIL ⑮d|SUMMARY' /tmp/w4-fe-neg5.log | tee -a "$SUM"
+cp /tmp/w4-apierr.bak "$APIERR"
+diff -q /tmp/w4-apierr.bak "$APIERR" && echo "APIERROR_JS_RESTORED_OK" | tee -a "$SUM"
 echo "=== 还原校验：正例必须通过 ===" | tee -a "$SUM"
 node scripts/verify-frontend.mjs --no-build > /tmp/b38-fe-pos.log 2>&1
 echo "pos_rc=$?" | tee -a "$SUM"

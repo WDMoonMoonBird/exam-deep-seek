@@ -921,7 +921,7 @@ check('⑮c4 可执行：控制流码判据 = HTTP 2xx + code + 载荷齐备 ⇒
     && cf200ToastDelta === 0
     && cf200NoPayload.resolved === false && cf200NoPayload.error.status === 200 && cf200NoPayload.error.code === 1002
     && cf401.resolved === false && cf401.error.status === 401 && cf401Redirects.length === 1
-    && cf401Toasts.join('|') === '登录已过期，请重新登录'   // 401 的**用户可见文案**统一（ApiError.message 仍保留服务端原文供排查）
+    && cf401Toasts.join('|') === '登录已过期，请重新登录'   // 401 的用户可见文案统一（★W4：ApiError.message 也已统一，原文只在 response/cause —— 见 ⑮d）
     && cf404.resolved === false && cf404.error.status === 404 && cf404.error.code === 1002 && cf404.error.message === '运行记录不存在：归档目录与数据库行都不存在'
     && cf429.resolved === false && cf429.error.status === 429 && cf429.error.code === 1002,
   JSON.stringify({
@@ -962,16 +962,50 @@ check('⑮c5 A/B 自证（同一份登录响应回放）：HEAD 版=分支可达
     t1: { reachable: loginBranchReachable(abT1), err: abT1.resolved ? 'RESOLVED(✗)' : abT1.error.toString() },
     current: { reachable: loginBranchReachable(abCurrent), toasts: currentToasts },
   }));
-// 401 统一语义：清登录态 + 跳登录页 + 一句统一文案，且并发多次只处置一次
+// ── ⑮d 401 统一语义（★W4/t6 改为**真实形态回放**）──────────────────────────────────────────────────
+//   F6（W3b 复审）：旧 ⑮d 用空 message 假响应，掩盖了"401 的 ApiError.message 仍是服务端原文"这一事实。
+//   现在回放 middleware/auth.js 的**三种真实 401 文案**，并对每条断言：
+//     · reject + status 401 + 保留原文（response.data.message 与 cause）；
+//     · **用户可见文案三者恒等**且等于 AUTH_EXPIRED_MESSAGE（ApiError.message 与 errorCopyOf 出口两条都查）；
+//     · 原文只进 console（errorCopyOf 的 log.error 收到含该错误的载荷），绝不出现在可见文案里；
+//     · 401 既有语义不变：仍走 handleAuthExpired（清态 + 跳登录），且并发多个 401 **只处置一次**。
+const REAL_401_SHAPES = [
+  { url: '/teacher/classes', raw: '未登录或 Token 过期', from: 'middleware/auth.js:10,37' },
+  { url: '/teacher/students', raw: '用户不存在', from: 'middleware/auth.js:18' },
+  { url: '/student/assignments', raw: '登录状态已失效（密码已变更），请重新登录', from: 'middleware/auth.js:31' },
+];
 const redirects = [];
+const toastsBefore401Real = toasts.length;
 reqMod.setAuthRedirect(() => redirects.push(1));
 reqMod.resetAuthExpired();
-const e401a = await catchOf(onRejected({ response: { status: 401, data: {} }, config: { url: '/teacher/classes' } }));
-const e401b = await catchOf(onRejected({ response: { status: 401, data: {} }, config: { url: '/teacher/students' } }));
-check('⑮d 可执行：401 统一语义（同一句统一文案 + 只处置一次：并发多请求不再重复提示/重复跳转）',
-  !!e401a && e401a.status === 401 && e401a.message === '登录已过期，请重新登录' && !!e401b && e401b.message === '登录已过期，请重新登录'
+const rows401 = [];
+for (const shape of REAL_401_SHAPES) {
+  const seen = [];
+  const err = await catchOf(onRejected({ response: { status: 401, data: { code: 1002, message: shape.raw, data: null } }, config: { url: shape.url } }));
+  const uiCopy = err ? copyMod.errorCopyOf(err, { tag: 'verify ⑮d ' + shape.url, log: { error: (...a) => seen.push(a) } }) : '(未 reject)';
+  rows401.push({
+    url: shape.url, from: shape.from,
+    status: err && err.status, code: err && err.code,
+    apiMessage: err && err.message,
+    rawKept: !!(err && err.response && err.response.data && err.response.data.message === shape.raw),
+    causeKept: !!(err && err.cause),
+    uiCopy,
+    consoleHasErr: seen.length === 1 && !!seen[0][1] && seen[0][1].err === err,
+    rawOnScreen: String(uiCopy).includes(shape.raw),
+  });
+}
+const toasts401 = toasts.slice(toastsBefore401Real);
+const visibleCopies = rows401.map((r) => r.apiMessage);
+const uiCopies = rows401.map((r) => r.uiCopy);
+check('⑮d 可执行：401 用户可见文案**恒为统一口径**（三种真实服务端原文下一致：ApiError.message 与 errorCopyOf 出口两条都查）；原文只留在 response/cause 并进 console；仍走 handleAuthExpired 且并发只处置一次',
+  rows401.length === 3
+    && rows401.every((r) => r.status === 401 && r.code === 1002)
+    && new Set(visibleCopies).size === 1 && visibleCopies.every((t) => t === '登录已过期，请重新登录')
+    && uiCopies.every((t) => t === '登录已过期，请重新登录')
+    && rows401.every((r) => r.rawKept && r.causeKept && r.consoleHasErr && r.rawOnScreen === false)
+    && toasts401.length === 1 && toasts401[0] === '登录已过期，请重新登录'
     && redirects.length === 1,
-  JSON.stringify({ a: e401a && e401a.toString(), b: e401b && e401b.toString(), redirects: redirects.length }));
+  JSON.stringify({ rows: rows401, toasts: toasts401, redirects: redirects.length, distinctVisible: new Set(visibleCopies).size }));
 // safeLoad / safeSubmit：失败**不抛**、文案走 errorCopyOf 口径、同一次失败不重复提示
 const notices = [];
 const errLogs = [];

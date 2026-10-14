@@ -6,19 +6,35 @@
  *      （err.message / String(err) 之类）；服务端业务文案 response.data.message 仍优先使用（那是后端给出的友好提示）；
  *   ② 原始错误一律 console.error（带组件/操作标签 + 路由信息）⇒ 排查不受影响、界面不吓人；
  *   ③ ★W1（t1）例外且仅有一处：**已规范化的 ApiError**（api/apiError.js，带 uiSafe 标记）的 message 是
- *      经过审查的统一口径（服务端业务文案 / 401 / 403 / 404 / 5xx 可读文案），可直接上屏——它**不是**原始 JS 错误。
+ *      经过审查的统一口径（服务端业务文案 / 401 / 403 / 404 / 5xx 可读文案），可直接上屏——它**不是**原始 JS 错误；
+ *   ④ ★W4（t6）：**401 与 ≥ 500 的服务端原文一律不上屏**（hidesServerCopy），统一口径见 apiError.curatedMessage。
  *
  * 本模块零依赖（只用注入的 console/window），可在 node 下直接 import 做断言（verify-frontend ⑨e）。
  */
 export const DEFAULT_FRIENDLY = '操作失败，请重试';
 
 /**
- * ★W1-r2（t4）：是否为"服务端故障"（已规范化的 ApiError 且 status ≥ 500）。
- * 命中 ⇒ 不用服务端原文，改用 ApiError 的统一 HTTP 口径文案（'服务出错了，请稍后重试'）；
- * 只在 status ≥ 500 时生效：4xx 的业务文案仍照旧优先（那是后端给出的友好提示）。
+ * ★W1-r2（t4）：是否为"服务端故障"（status ≥ 500）。
+ * 命中 ⇒ 不用服务端原文，改用 ApiError 的统一 HTTP 口径文案（'服务出错了，请稍后重试'）。
  */
 export function isServerFault(err) {
   try { return !!err && err.isApiError === true && Number(err.status) >= 500; } catch { return false; }
+}
+
+/**
+ * ★W4（t6/F6）：**服务端原文不得上屏**的两类状态 —— 401 与 ≥ 500。
+ *   · 401：middleware/auth.js 有三种原文（未登录或 Token 过期 / 用户不存在 / 登录状态已失效（密码已变更）…），
+ *     而"登录态失效"的用户可见文案必须**恒为**统一口径（与 request.js handleAuthExpired 一致），否则同一件事三种措辞；
+ *   · ≥ 500：服务端 5xx 的 message 可能夹带内部实现细节。
+ * 命中 ⇒ errorCopyOf 跳过 response.data.message，改走 ApiError 的统一口径；原文仍进 console。
+ * 兼容未规范化（裸 axios 错误）的形状：无 ApiError 标记时读 response.status。
+ */
+export function hidesServerCopy(err) {
+  try {
+    if (!err) return false;
+    const status = Number((err.isApiError === true ? err.status : (err.response && err.response.status)) || 0);
+    return status === 401 || status >= 500;
+  } catch { return false; }
 }
 
 /** 当前路由信息（便于 console 侧定位；非浏览器环境安全回落） */
@@ -45,9 +61,9 @@ export function errorCopyOf(err, { tag = '未标注位置', action = '', log = c
   try { log.error('[R2-B55] ' + tag, { route: routePathOf(win), err }); } catch { /* ignore */ }
   let serverMsg = null;
   try { serverMsg = err && err.response && err.response.data && err.response.data.message; } catch { serverMsg = null; }
-  // ★W1-r2（t4）：5xx 一律用 HTTP 口径文案 —— 服务端 5xx 的 message 可能夹带内部实现细节
-  //   （如「服务器错误: xxx is not a function」）；原文只进 console / 诊断信息，不上屏。
-  if (serverMsg && !isServerFault(err)) return String(serverMsg) + (suffix || '');
+  // ★W1-r2（t4）+ ★W4（t6）：401 与 ≥ 500 一律走统一口径，服务端原文不上屏（原文只进 console / 诊断信息）。
+  //   —— 401 的三种服务端措辞必须收敛成同一句（见 hidesServerCopy 注释）。
+  if (serverMsg && !hidesServerCopy(err)) return String(serverMsg) + (suffix || '');
   // ★W1（t1）：规范化后的 ApiError 文案已过审查（服务端业务文案 / 统一 HTTP 口径），可直接上屏；
   //   只有 uiSafe 标记为真时才取——原始 JS 错误（无该标记）仍一律不读 message，只进 console。
   let curated = null;
@@ -57,4 +73,4 @@ export function errorCopyOf(err, { tag = '未标注位置', action = '', log = c
   return base + (suffix || '');
 }
 
-export default { DEFAULT_FRIENDLY, isServerFault, routePathOf, reportError, errorCopyOf };
+export default { DEFAULT_FRIENDLY, isServerFault, hidesServerCopy, routePathOf, reportError, errorCopyOf };

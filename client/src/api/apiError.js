@@ -118,13 +118,22 @@ export function apiErrorCopy(status, fallback = '') {
 }
 
 /**
- * ★W1-r2（t4）：**5xx 一律使用 HTTP 口径文案**，服务端原文只留在 response/cause 里（进 console / 诊断信息）。
- * 背景：server 端 500 曾把 err.message 拼进响应（如「服务器错误: xxx is not a function」），
- *   若照旧"服务端文案优先上屏"，内部实现细节会直接送到用户眼前（errorCopy 的 5xx 兜底是第二道防线，这里是第一道）。
+ * 文案出口的**两条强制口径**（★W1-r2/t4 的 5xx + ★W4/t6 的 401），服务端原文只留在 response/cause 里
+ * （进 console / 诊断信息，不上屏）：
+ *   · HTTP 401 ⇒ **恒定** AUTH_EXPIRED_MESSAGE。原因：middleware/auth.js 有**三种**401 文案
+ *     （未登录或 Token 过期 / 用户不存在 / 登录状态已失效（密码已变更），请重新登录），若"服务端文案优先上屏"，
+ *     同一件"登录态失效"会因入口不同而显示三种不同措辞，用户看到的提示不可预期；
+ *     而 401 的处置本就只有一个出口（request.js handleAuthExpired：清态 + 跳登录），文案必须与之一致。
+ *     原文仍完整保留在 ApiError.response.data.message 与 cause 里 —— 排查能力不受影响（errorCopyOf 已把它送进 console）。
+ *   · HTTP ≥ 500 ⇒ HTTP 口径文案。原因：server 端 500 曾把 err.message 拼进响应
+ *     （如「服务器错误: xxx is not a function」），内部实现细节不得直接送到用户眼前。
+ * 其余状态码不变：服务端业务文案优先（那是后端给出的友好提示）。
  */
 function curatedMessage(status, body) {
-  if (Number(status) >= 500) return httpMessageOf(status);
-  return serverCopy(body) || httpMessageOf(status);
+  const s = Number(status) || 0;
+  if (s === 401) return AUTH_EXPIRED_MESSAGE;
+  if (s >= 500) return httpMessageOf(s);
+  return serverCopy(body) || httpMessageOf(s);
 }
 
 /** 从"HTTP 200 但业务码 ≠ 0"的信封响应构造 ApiError（request.js 成功分支用） */
