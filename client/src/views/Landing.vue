@@ -33,6 +33,8 @@ const withBase = (p) => BASE + (p.startsWith('/') ? p : '/' + p);
 const loginHref = computed(() => withBase('/login'));
 const consoleHref = computed(() => withBase(consolePath.value));
 const docHref = computed(() => withBase('/doc'));
+/** 开源仓库地址：外链（不走 BASE 前缀），页脚最底部展示 */
+const REPO_URL = 'https://gitee.com/WD_MoonMoonBird/exam-deep-seek';
 
 /* ===== ① 控制台窗口：由**侧栏**切换视图（原来那行「题库管理/评分审核/作业管理 可点击切换」已按用户要求取消） ===== */
 const activeView = ref('questions');
@@ -540,6 +542,15 @@ const rubricPublished = ref(false);
           <a href="#capability">系统能力</a>
         </span>
       </div>
+      <!-- 开源地址（最底部）：Gitee 官方 logo + 仓库地址 -->
+      <div class="section-inner foot-open-source">
+        <a class="os-link" :href="REPO_URL" target="_blank" rel="noopener">
+          <svg class="os-logo" viewBox="0 0 1024 1024" aria-hidden="true" focusable="false">
+            <path d="M512 1024C229.222 1024 0 794.778 0 512S229.222 0 512 0s512 229.222 512 512-229.222 512-512 512z m259.149-568.883h-290.74a25.293 25.293 0 0 0-25.292 25.293l-0.026 63.206c0 13.952 11.315 25.293 25.267 25.293h177.024c13.978 0 25.293 11.315 25.293 25.267v12.646a75.853 75.853 0 0 1-75.853 75.853h-240.23a25.293 25.293 0 0 1-25.267-25.293V417.203a75.853 75.853 0 0 1 75.827-75.853h353.946a25.293 25.293 0 0 0 25.267-25.292l0.077-63.207a25.293 25.293 0 0 0-25.268-25.293H417.152a189.62 189.62 0 0 0-189.62 189.645V771.15c0 13.977 11.316 25.293 25.294 25.293h372.94a170.65 170.65 0 0 0 170.65-170.65V480.384a25.293 25.293 0 0 0-25.293-25.267z" fill="rgb(199,29,35)" />
+          </svg>
+          <span>开源地址：{{ REPO_URL }}</span>
+        </a>
+      </div>
     </footer>
 
     <!-- 图标雪碧（lg- 前缀避免与其它页面/组件的 symbol id 冲突） -->
@@ -859,6 +870,11 @@ a { color: inherit; text-decoration: none; }
 .sep { width: 1px; height: 14px; background: var(--border-default); }
 .foot-links { margin-left: auto; display: flex; gap: var(--space-4); }
 .foot-links a:hover { color: var(--text-link); }
+/* 开源地址行（页脚最底部）：logo 用 Gitee 官方红，其余全走令牌 */
+.foot-open-source { margin-top: var(--space-4); }
+.os-link { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text-tertiary); }
+.os-link:hover { color: var(--text-link); }
+.os-logo { width: 16px; height: 16px; flex: none; }
 
 /* ===== 响应式 ===== */
 @media (max-width: 1080px) {
