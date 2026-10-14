@@ -1,0 +1,48 @@
+const B = "http://localhost:3000/api";
+const J = (o) => JSON.stringify(o);
+let pass = 0, fail = 0; const steps = [];
+const ok = (n, c, d) => { (c ? pass++ : fail++); steps.push((c ? "PASS " : "FAIL ") + n + (d ? "  <- " + d : "")); };
+const api = async (m, p, t, body) => { const r = await fetch(B + p, { method: m, headers: Object.assign({ "Content-Type": "application/json" }, t ? { Authorization: "Bearer " + t } : {}), body: body ? J(body) : undefined }); const txt = await r.text(); let j = null; try { j = JSON.parse(txt); } catch (e) {} return { status: r.status, j, txt }; };
+const login = async (u) => { const r = await api("POST", "/auth/login", null, { username: u, password: "Test@12345" }); return r.j && r.j.data && r.j.data.token; };
+(async () => {
+  const ts = Date.now().toString().slice(-6);
+  const tt = await login("test_teacher"); ok("教师登录", !!tt);
+  const st = await login("test_stu_01@10001"); ok("学生登录(班级123)", !!st);
+  const now = Date.now();
+  const create = await api("POST", "/teacher/assignments", tt, { title: "E2E-贯通-" + ts, description: "跨角色端到端(可删)", startTime: new Date(now - 3600e3).toISOString(), endTime: new Date(now + 86400e3).toISOString(), questionIds: [326], classIds: [123], allowResubmit: true, maxAttempts: 2, scorePolicy: "best", answerVisibility: "after_publish", confirmWithoutStandardPackage: true });
+  const aid = create.j && create.j.data && create.j.data.id;
+  ok("① 教师建作业(三开关落库)", create.status === 200 && !!aid, "id=" + aid);
+  const det = await api("GET", "/teacher/assignments/" + aid, tt); const sw = (det.j && det.j.data) || {};
+  ok("② 教师端回显三开关", sw.allowResubmit === true && sw.maxAttempts === 2 && sw.scorePolicy === "best" && sw.answerVisibility === "after_publish");
+  const sDet = await api("GET", "/student/assignments/" + aid, st); const asg = (sDet.j && sDet.j.data && sDet.j.data.assignment) || {};
+  const aq = asg.assignmentQuestions || [];
+  steps.push("    assignmentQuestions[0] = " + J(aq[0]));
+  const qid = (aq[0] && (aq[0].questionId || (aq[0].question && aq[0].question.id) || aq[0].id)) || 326;
+  const sq = aq[0] && (aq[0].subQuestions || (aq[0].question && aq[0].question.subQuestions));
+  const sqid = (sq && sq[0] && sq[0].id) || (aq[0] && aq[0].subQuestionId) || undefined;
+  ok("③ 解析出 questionId/subQuestionId", !!qid, "qid=" + qid + " sqid=" + sqid);
+  const mk = (ans) => { const b = { questionId: qid, answer: ans }; if (sqid) b.subQuestionId = sqid; return b; };
+  const sub1 = await api("POST", "/student/assignments/" + aid + "/submit", st, mk("public class A { }"));
+  ok("④ 学生第1次提交", sub1.status === 200 && sub1.j && sub1.j.code === 0, "status=" + sub1.status + " " + String(sub1.txt).slice(0, 110));
+  const sub2 = await api("POST", "/student/assignments/" + aid + "/submit", st, mk("public class A { public static void main(String[] a){} }"));
+  ok("⑤ 学生第2次提交(允许重交)", sub2.status === 200 && sub2.j && sub2.j.code === 0, "status=" + sub2.status + " " + String(sub2.txt).slice(0, 110));
+  const sub3 = await api("POST", "/student/assignments/" + aid + "/submit", st, mk("public class A { }"));
+  ok("⑥ 第3次被上限拦截", String(sub3.txt).includes("次数上限"), "status=" + sub3.status + " " + String(sub3.txt).slice(0, 110));
+  const rl = await api("GET", "/teacher/submissions?assignmentId=" + aid, tt);
+  const all = (rl.j && rl.j.data && (rl.j.data.list || rl.j.data)) || [];
+  const cand = (Array.isArray(all) ? all : []).filter((x) => String(x.assignmentId) === String(aid));
+  const sid = cand.length ? cand[0].id : null;
+  ok("⑦ 教师看到该作业提交", !!sid, "匹配 " + cand.length + " / 全量 " + (Array.isArray(all) ? all.length : 0));
+  if (sid) {
+    const sc = await api("PUT", "/teacher/submissions/" + sid + "/score", tt, { finalScore: 88, teacherFeedback: "E2E 改分" });
+    ok("⑧ 教师改总分=88", sc.status === 200 && sc.j && sc.j.code === 0, "status=" + sc.status + " " + String(sc.txt).slice(0, 80));
+    const bad = await api("PUT", "/teacher/submissions/" + sid + "/score", tt, { finalScore: -5 });
+    ok("⑨ 非法分值 400+文案", bad.status === 400 && String(bad.txt).includes("分数不合法"), "status=" + bad.status);
+    const rv = await api("PUT", "/teacher/submissions/" + sid + "/review", tt, { status: "published", teacherFeedback: "E2E 发布" });
+    ok("⑩ 教师发布", rv.status === 200 && rv.j && rv.j.code === 0, "status=" + rv.status);
+    const after = await api("GET", "/student/assignments/" + aid, st);
+    ok("⑪ 学生端发布后看到 88", /88/.test(String(after.txt || "")));
+  }
+  console.log(steps.join("\n"));
+  console.log("\n===== PASS=" + pass + " FAIL=" + fail + " ｜ 作业 id=" + aid + " =====");
+})().catch((e) => { console.log("异常: " + (e && e.message)); console.log(steps.join("\n")); });
