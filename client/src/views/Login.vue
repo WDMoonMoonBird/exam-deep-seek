@@ -204,8 +204,8 @@ async function handleSelectSchool() {
     margin: -24px 0 20px;
     padding: 8px 12px;
     border-radius: var(--radius-md);
-    background: var(--status-warning-bg, rgba(250, 173, 20, 0.12));
-    color: var(--status-warning-fg, #ad6800);
+    background: var(--status-warning-bg);
+    color: var(--status-warning-fg);
     font-size: var(--fs-body-sm);
 }
 
