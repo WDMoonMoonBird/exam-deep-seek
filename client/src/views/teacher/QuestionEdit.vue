@@ -6,6 +6,18 @@
     :title="isEdit ? '编辑题目' : '新建题目'"
     :back="{ text: '返回题库管理', to: '/teacher/questions' }"
   >
+    <!-- ★W6（t8/F1）：加载失败（题目不存在 / 非所有者）⇒ **常驻空态** + 返回出口。
+         修前：只弹 3 秒 toast，页面停在"空白可编辑表单"（总分 0、还能点选题型）——
+         即 useLoadQuestion 的 loadError 到不了渲染层（死代码）。空态写法复用本文件既有 a-empty 风格。 -->
+    <a-empty v-if="loadError" class="qe-load-error" :image="false">
+      <template #description>
+        <p class="qe-load-error-title">题目不存在或无权编辑</p>
+        <p class="qe-load-error-desc">该题目可能已被删除，或不属于当前账号；请返回题库管理重新选择。</p>
+      </template>
+      <a-button type="primary" @click="backToQuestions">返回题库管理</a-button>
+    </a-empty>
+
+    <template v-else>
     <div class="lc-page-inner">
       <!-- 顶部基本信息 -->
       <div class="lc-top">
@@ -301,10 +313,13 @@
       </Transition>
     </a-modal>
 
-    <!-- 底部动作条：保存状态（role=status）+ 操作，FormPage 契约 -->
+    </template>
+
+    <!-- 底部动作条：保存状态（role=status）+ 操作，FormPage 契约。
+         ★W6（t8）：loadError 时动作条一并收起 —— 空态页不能出现"可保存空白表单"的入口。 -->
     <template #actionbar>
       <span class="save-status" role="status" aria-live="polite">{{ statusText }}</span>
-      <div v-if="questionKind" class="actionbar-actions">
+      <div v-if="questionKind && !loadError" class="actionbar-actions">
         <a-button size="large" @click="handleCancel">取消</a-button>
         <a-button v-if="isEdit && questionKind === 'subjective'" @click="showPromptPreview">查看 AI 提示词</a-button>
         <a-button type="primary" size="large" :loading="saving" @click="handleSave">保存</a-button>
@@ -330,9 +345,12 @@ const {
   showSettings, objectiveSettings, tempSettings, resetSettings, applySettings,
   showUploadExam, uploadFileList, uploadAnalyzing, uploadResult, uploadError, uploadProgress, resetUpload, handleUploadExam,
   aiTag, promptModalOpen, promptLoading, promptPreviewData, promptActiveKeys, showPromptPreview,
-  statusText, handleCancel, handleSave, saving, isEdit, codeEditorRef, formatCode,
+  statusText, handleCancel, handleSave, saving, isEdit, codeEditorRef, formatCode, router, loadError,
   onPageMounted, onPageUnmounted,
 } = useQuestionEditPage();
+
+/** ★W6（t8/F1）：常驻空态里的出口 —— 返回题库管理（空态页唯一可做的动作） */
+function backToQuestions() { router.push('/teacher/questions'); }
 
 onMounted(onPageMounted);
 onUnmounted(onPageUnmounted);
@@ -343,6 +361,10 @@ onUnmounted(onPageUnmounted);
    页头 compact 化后这一块少占 76px（实测：旧页头 120.1px → 单行页头 44px），故常量同步 300 → 224：
    省下的高度让给工作区，而不是变成页面下方的新留白。 */
 .lc-page-inner{height:calc(100vh - 224px);min-height:480px;display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-3);}
+/* ★W6（t8）：加载失败常驻空态（占满工作区、居中；与 lc-page-inner 同高，避免页面塌陷成一条） */
+.qe-load-error{margin:auto;min-height:calc(100vh - 224px);justify-content:center;padding:var(--space-6) var(--space-3);}
+.qe-load-error-title{margin:0 0 6px;font-size:var(--fs-title-3);font-weight:var(--fw-semibold);color:var(--text-primary);}
+.qe-load-error-desc{margin:0;color:var(--text-tertiary);font-size:var(--fs-body-sm);}
 .lc-top{flex-shrink:0;background:var(--bg-surface);border-radius:var(--radius-lg);padding:12px 20px;box-shadow:var(--shadow-sm);}
 .lc-top :deep(.ant-form-inline){display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .lc-top :deep(.ant-form-item){margin-bottom:0;}

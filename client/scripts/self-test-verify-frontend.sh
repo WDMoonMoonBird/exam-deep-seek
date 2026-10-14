@@ -62,6 +62,16 @@ echo "neg5_rc=$? （期望非 0）" | tee -a "$SUM"
 grep -E '^FAIL ⑮d|SUMMARY' /tmp/w4-fe-neg5.log | tee -a "$SUM"
 cp /tmp/w4-apierr.bak "$APIERR"
 diff -q /tmp/w4-apierr.bak "$APIERR" && echo "APIERROR_JS_RESTORED_OK" | tee -a "$SUM"
+echo "=== 反例 6（W6/F1）：删掉 QuestionEdit.vue 的 loadError 常驻空态渲染（状态仍被置位、但页面不消费）⇒ ⑮h故障② 必须报红 ===" | tee -a "$SUM"
+QEV=src/views/teacher/QuestionEdit.vue
+cp "$QEV" /tmp/w6-qev.bak && mark_mutated "$QEV" /tmp/w6-qev.bak
+# 两处替换：① 删掉 a-empty 空态块与其配对的 <template v-else> ② 删掉配对的 </template>（保持模板可解析）
+node -e "const fs=require('fs');const p=process.argv[1];let s=fs.readFileSync(p,'utf8');const before=s;s=s.replace(/<a-empty v-if=\"loadError\"[\s\S]*?<\/a-empty>\s*<template v-else>/,'');s=s.replace('\n    </template>\n\n    <!-- 底部动作条','\n\n    <!-- 底部动作条');if(s===before){console.error('INJECT_FAILED：未找到空态块');process.exit(2);}if(/v-if=\"loadError\"/.test(s)){console.error('INJECT_FAILED：空态条件仍残留');process.exit(2);}fs.writeFileSync(p,s);" "$QEV" || { echo "INJECT_FAILED（反例 6 注入未生效 ⇒ 本次反例无效）" | tee -a "$SUM"; cp /tmp/w6-qev.bak "$QEV"; exit 2; }
+node scripts/verify-frontend.mjs --no-build > /tmp/w6-fe-neg6.log 2>&1
+echo "neg6_rc=$? （期望非 0）" | tee -a "$SUM"
+grep -E '^FAIL ⑮h|SUMMARY' /tmp/w6-fe-neg6.log | cut -c1-260 | tee -a "$SUM"
+cp /tmp/w6-qev.bak "$QEV"
+diff -q /tmp/w6-qev.bak "$QEV" && echo "QUESTIONEDIT_VUE_RESTORED_OK" | tee -a "$SUM"
 echo "=== 还原校验：正例必须通过 ===" | tee -a "$SUM"
 node scripts/verify-frontend.mjs --no-build > /tmp/b38-fe-pos.log 2>&1
 echo "pos_rc=$?" | tee -a "$SUM"

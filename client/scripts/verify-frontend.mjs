@@ -14,6 +14,7 @@
  * 退出码：0=全部通过；1=有失败项（逐项打印 PASS/FAIL，便于 CI 判读）。
  */
 import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1142,9 +1143,77 @@ check('⑮h 故障① 回归锚点：Teachers.vue 提交前字段级校验（for
     && /if \(r\.error\) return;/.test(hotTeachers) && /:validate-status="formErrors\./.test(hotTeachers)
     && /useSafeRequest/.test(hotTeachers) && /safeLoad\(/.test(hotTeachers),
   JSON.stringify({ validateForm: /function validateForm\(/.test(hotTeachers), safeSubmit: /safeSubmit\(/.test(hotTeachers), fieldHint: /:validate-status="formErrors\./.test(hotTeachers) }));
-check('⑮h 故障② 回归锚点：题目编辑链路（useLoadQuestion）失败只置 loadError 并返回（不再冒泡 ⇒ 页面不被替换）',
-  /safeLoad\(/.test(hotLoadQ) && /loadError\.value\s*=\s*res\.error/.test(hotLoadQ) && /return;/.test(hotLoadQ) && /useSafeRequest/.test(hotLoadQ),
-  JSON.stringify({ safeLoad: /safeLoad\(/.test(hotLoadQ), loadError: /loadError\.value\s*=\s*res\.error/.test(hotLoadQ) }));
+// ── ⑮h 故障②（★W6/t8 升级为"被页面消费"）：只断言"置了 loadError"挡不住死代码 ──────────────────────
+//   教训（W2 的 F1）：useLoadQuestion 早已 return { load, loadError }，但 useQuestionEditPage 没透出、
+//   页面模板也没消费 ⇒ loadError 是死代码：非所有者打开题目时只弹 3 秒 toast，页面停在"空白可编辑表单"。
+//   因此本锚点分四层断言（① 置位 ② 透出 ③ 渲染层消费 ④ 可执行差分：所有者路径正常 / 失败路径落空态）。
+const hotEditPage = read(path.join(CLIENT, 'src', 'composables', 'question', 'useQuestionEditPage.js')) || '';
+const hotEditVue = read(path.join(CLIENT, 'src', 'views', 'teacher', 'QuestionEdit.vue')) || '';
+const hotEditTplRaw = (() => {
+  const i = hotEditVue.indexOf('<template>');
+  const j = hotEditVue.lastIndexOf('</template>');
+  return i >= 0 && j > i ? hotEditVue.slice(i + '<template>'.length, j) : '';
+})();
+// ③ 渲染层消费：空态块（v-if="loadError" … </a-empty>）内必须同时有文案与出口按钮，且紧跟 v-else（表单被隐藏）
+const emptyStart = hotEditTplRaw.indexOf('v-if="loadError"');
+const emptyEnd = hotEditTplRaw.indexOf('</a-empty>', emptyStart);
+const emptyBlock = emptyStart >= 0 && emptyEnd > emptyStart ? hotEditTplRaw.slice(emptyStart, emptyEnd) : '';
+const emptyHidesForm = emptyEnd > 0 && /<\/a-empty>\s*<template v-else>/.test(hotEditTplRaw);
+const actionbarGated = /v-if="questionKind && !loadError"/.test(hotEditTplRaw);
+const editScript = (() => { const i = hotEditVue.indexOf('<script setup>'); return i >= 0 ? hotEditVue.slice(i) : ''; })();
+const scriptWires = /useQuestionEditPage\(\)/.test(editScript) && /loadError/.test(editScript)
+  && /function backToQuestions\(\)/.test(editScript) && /push\('\/teacher\/questions'\)/.test(editScript);
+// ③′ 编译级证据：真编译模板，渲染函数里必须真的出现 loadError 条件与空态文案（不是"注释里写了"）
+let tplCompiled = { ok: false, note: 'compiler 不可用' };
+try {
+  const sfcRequire = createRequire(path.join(CLIENT, 'package.json'));
+  const sfcNS = sfcRequire('@vue/compiler-sfc');
+  const parsedTpl = sfcNS.parse(hotEditVue, { filename: 'QuestionEdit.vue' });
+  const compiled = sfcNS.compileTemplate({ source: parsedTpl.descriptor.template.content, filename: 'QuestionEdit.vue', id: 'qe' });
+  const code = compiled.code || '';
+  tplCompiled = { ok: (compiled.errors || []).length === 0 && /loadError/.test(code) && code.includes('题目不存在或无权编辑') && code.includes('返回题库管理'), note: '' };
+} catch (e) { tplCompiled = { ok: false, note: String(e.message).slice(0, 80) }; }
+// ④ 可执行差分：抽取 useLoadQuestion 的 load() 真函数体，注入桩件跑三态
+const loadBody = extractFn(hotLoadQ, 'async function load');
+const runLoadReplay = async ({ isEdit = true, outcome }) => {
+  const refs = {
+    form: { title: '', difficulty: '', material: '' }, subQuestions: { value: [] }, questionKind: { value: '' },
+    showMaterial: { value: false }, loadError: { value: null }, isEdit, editId: 42, loadSqCalls: [], safeLoadCalls: 0,   // ★isEdit 是**普通布尔**（useQuestionEditPage:29 'const isEdit = !!editId'），不是 ref
+  };
+  const stub = new Function(
+    'isEdit', 'editId', 'form', 'subQuestions', 'questionKind', 'objectiveSettings', 'showMaterial', 'loadSq', 'newSq',
+    'safeLoad', 'request', 'DEFAULT_TYPE_SCORES', 'updateFillBlanks', 'loadError',
+    'return (async () => {' + loadBody + '})();',
+  );
+  await stub(refs.isEdit, refs.editId, refs.form, refs.subQuestions, refs.questionKind, {}, refs.showMaterial,
+    (...a) => refs.loadSqCalls.push(a), (o) => o,
+    () => { refs.safeLoadCalls += 1; return outcome; },
+    { get: () => Promise.resolve({}) }, { code: 10 }, () => {}, refs.loadError);
+  return refs;
+};
+const ownerRun = await runLoadReplay({ outcome: Promise.resolve({ ok: true, error: null, data: { title: '既有题目', difficulty: 'hard', material: '', subQuestions: [{ id: 7, type: 'subjective', title: '小问 1', score: null, content: 'x' }] } }) });
+const failRun = await runLoadReplay({ outcome: Promise.resolve({ ok: false, data: null, error: { status: 404, code: 1004, message: '题目不存在或无权访问' } }) });
+const newRun = await runLoadReplay({ isEdit: false, outcome: Promise.resolve({ ok: true, error: null, data: { title: '不该被写入' } }) });
+check('⑮h 故障② 回归锚点（★升级为"被页面消费"）：loadError ①置位 ②由 useQuestionEditPage 透出 ③渲染层消费（空态块含文案「题目不存在或无权编辑」+「返回题库管理」按钮、v-else 隐藏表单、动作条收起、模板真编译进渲染函数）④所有者路径照常填表 / 失败路径落空态 / 新建页不动',
+  /safeLoad\(/.test(hotLoadQ) && /loadError\.value\s*=\s*res\.error/.test(hotLoadQ) && /return \{ load, loadError \}/.test(hotLoadQ)
+    && /const \{ load, loadError \} = loader/.test(hotEditPage) && /loadError,/.test(hotEditPage)
+    && hotEditTplRaw.indexOf('v-if="loadError"') >= 0 && emptyBlock.includes('题目不存在或无权编辑') && emptyBlock.includes('返回题库管理')
+    && /@click="backToQuestions"/.test(emptyBlock) && emptyHidesForm && actionbarGated && scriptWires && tplCompiled.ok
+    && !!loadBody
+    && ownerRun.form.title === '既有题目' && ownerRun.form.difficulty === 'hard' && ownerRun.subQuestions.value.length === 1
+    && ownerRun.questionKind.value === 'subjective' && ownerRun.loadError.value === null && ownerRun.loadSqCalls.length === 1
+    && failRun.safeLoadCalls === 1 && failRun.form.title === '' && failRun.subQuestions.value.length === 0
+    && !!failRun.loadError.value && failRun.loadError.value.code === 1004
+    && /const isEdit = !!editId;/.test(hotEditPage)   // 新建页 isEdit=false ⇒ load() 直接 return（不请求、不置 loadError ⇒ 不误挂空态）
+    && newRun.safeLoadCalls === 0 && newRun.form.title === '' && newRun.loadError.value === null,
+  JSON.stringify({
+    setFlag: /loadError\.value\s*=\s*res\.error/.test(hotLoadQ),
+    exposed: /const \{ load, loadError \} = loader/.test(hotEditPage),
+    consumed: { emptyBlock: emptyBlock.length, copy: emptyBlock.includes('题目不存在或无权编辑'), btn: emptyBlock.includes('返回题库管理'), hidesForm: emptyHidesForm, actionbarGated, scriptWires, compiled: tplCompiled.ok, compiledNote: tplCompiled.note },
+    owner: { title: ownerRun.form.title, diff: ownerRun.form.difficulty, subs: ownerRun.subQuestions.value.length, kind: ownerRun.questionKind.value, loadError: ownerRun.loadError.value, loadSq: ownerRun.loadSqCalls.length },
+    fail: { title: failRun.form.title, subs: failRun.subQuestions.value.length, loadError: failRun.loadError.value && failRun.loadError.value.code, toastPath: failRun.safeLoadCalls },
+    fresh: { safeLoadCalls: newRun.safeLoadCalls, loadError: newRun.loadError.value },
+  }));
 
 const failed = results.filter((r) => !r.ok);
 console.log('');

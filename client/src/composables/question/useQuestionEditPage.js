@@ -53,7 +53,9 @@ const { promptModalOpen, promptLoading, promptPreviewData, promptActiveKeys, sho
 const save = useSaveQuestion({ form, subQuestions, questionKind, computedMaxScore, objectiveSettings, saveDraft, promptAiGenerate, isEdit, editId, saving, router, confirm });
 const { handleCancel, handleSave } = save;
 const loader = useLoadQuestion({ isEdit, editId, form, subQuestions, questionKind, objectiveSettings, showMaterial, loadSq, newSq });
-const { load } = loader;
+// ★W6（t8/F1）：loadError 必须**透出**给页面 —— 此前只解构 load，加载失败态到不了渲染层（死代码），
+//   页面于是停在"空白可编辑表单"（总分 0 / 还能点选题型），只有 3 秒 toast。
+const { load, loadError } = loader;
 
 // 格式化
 function formatCode(){codeEditorRef.value?.format();}
@@ -74,6 +76,7 @@ function onPageUnmounted(){window.removeEventListener('beforeunload',beforeUnloa
     aiTag, promptModalOpen, promptLoading, promptPreviewData, promptActiveKeys, showPromptPreview,
     statusText, handleCancel, handleSave, saving, isEdit, codeEditorRef, formatCode,
     router, route, confirm, editId, aiGenerateRefs, genRunning, markDraftChanged, fillFromParsed,
+    loadError,   // ★W6（t8/F1）：加载失败态（QuestionEdit.vue 据此渲染常驻空态；verify-frontend ⑮h 故障② 按"被页面消费"断言）
     onPageMounted, onPageUnmounted,
   };
 }
