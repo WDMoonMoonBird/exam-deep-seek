@@ -96,6 +96,10 @@ function editorA11yLabel() {
 /** 编辑器主题跟随应用主题：ensureTheme() 在 create 之前按当前令牌定义并返回主题名 */
 const { ensureTheme } = useMonacoTheme();
 
+/** ★热修：卸载标志 —— Monaco 初始化是异步的，若容器在 await 期间被卸载（例如父页面切到空态），
+ *  继续 create 会读到 null 容器并抛 "Cannot read properties of null (reading 'parentNode')"。 */
+let unmounted = false;
+
 onMounted(async () => {
   // 旧浏览器（:where() 不可用即 Chrome < 88，或可选链不可用即 Chrome < 80）：
   // Monaco 0.55+ 产物无法解析，降级 0.24.0（判定与版本口径以 domain/browserCompat.js 的
@@ -107,7 +111,10 @@ onMounted(async () => {
   loader.config({ paths: { vs: import.meta.env.BASE_URL + 'monaco/vs' } });
   applyMonacoCompat(loader);
   monaco = await loader.init();
-  editor = monaco.editor.create(editorRef.value, {
+  // ★热修：await 期间组件可能已被卸载，或容器已被移除 ⇒ 中止创建，避免 Monaco 内部读 null.parentNode 抛错
+  if (unmounted || !editorRef.value || !editorRef.value.isConnected) return;
+  try {
+    editor = monaco.editor.create(editorRef.value, {
     value: props.modelValue,
     language: props.language,
     readOnly: props.readOnly,
@@ -124,8 +131,13 @@ onMounted(async () => {
     // 缩进替代键见文件上方注释：Ctrl+] / Ctrl+[（macOS ⌘] / ⌘[），撤销 Ctrl+Z。
     tabFocusMode: true,
     // 聚焦元素（.native-edit-context，role=textbox）的可访问名称：见 editorA11yLabel()
-    ariaLabel: editorA11yLabel(),
-  });
+      ariaLabel: editorA11yLabel(),
+    });
+  } catch (err) {
+    // 容器在创建瞬间消失等边界：不抛出（避免冒泡到错误边界），只留诊断
+    console.error('[CodeEditor] 创建编辑器失败（容器可能已卸载）', err);
+    return;
+  }
 
   subscription = editor.onDidChangeModelContent(() => {
     emit('update:modelValue', editor.getValue());
@@ -133,6 +145,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  unmounted = true;
   subscription?.dispose();
   editor?.dispose();
 });

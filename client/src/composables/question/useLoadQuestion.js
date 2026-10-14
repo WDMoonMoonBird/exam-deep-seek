@@ -17,10 +17,16 @@ export function useLoadQuestion({ isEdit, editId, form, subQuestions, questionKi
 const { safeLoad } = useSafeRequest({ tag: 'useLoadQuestion.js 加载题目' });
 /** 加载失败的错误（供页面显示空态/返回入口；null=未失败） */
 const loadError = ref(null);
+/** ★热修（编辑器竞态）：加载中标志 —— 页面据此先渲染骨架，避免"表单/编辑器先挂载、失败后再被卸载"，
+ *  否则 Monaco 在 await 期间容器被移除会抛 Cannot read properties of null (reading 'parentNode')。
+ *  编辑页初始即为 true（挂载后立刻发起加载）；新建页无加载，置 false。 */
+const loadLoading = ref(!!isEdit);
 // 加载已有题目
 async function load(){
-  if(!isEdit){return;}
+  if(!isEdit){ loadLoading.value=false; return; }
+  loadLoading.value=true;
   const res=await safeLoad(() => request.get(`/teacher/questions/${editId}`), { action: '加载题目' });
+  loadLoading.value=false;   // ★热修：无论成功/失败都收起骨架，避免卡在加载态
   if(res.error){ loadError.value=res.error; return; }   // ★失败就地提示：不抛出、不替换整页
   loadError.value=null;
   const q=res.data;
@@ -45,7 +51,7 @@ async function load(){
   if(subQuestions.value.length>0)loadSq(0,0);
 }
 
-  return { load, loadError };
+  return { load, loadLoading, loadError };
 }
 
 export default useLoadQuestion;

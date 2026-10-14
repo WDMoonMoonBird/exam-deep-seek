@@ -9,7 +9,11 @@
     <!-- ★W6（t8/F1）：加载失败（题目不存在 / 非所有者）⇒ **常驻空态** + 返回出口。
          修前：只弹 3 秒 toast，页面停在"空白可编辑表单"（总分 0、还能点选题型）——
          即 useLoadQuestion 的 loadError 到不了渲染层（死代码）。空态写法复用本文件既有 a-empty 风格。 -->
-    <a-empty v-if="loadError" class="qe-load-error" :image="false">
+    <!-- ★热修（Monaco 竞态）：加载中先渲染骨架 —— 否则表单/编辑器会"先挂载、失败后再被 v-else 卸载"，
+         Monaco 在异步初始化里读到已移除的容器 ⇒ Cannot read properties of null (reading 'parentNode')。 -->
+    <a-skeleton v-if="loadLoading" class="qe-loading" active :paragraph="{ rows: 8 }" />
+
+    <a-empty v-else-if="loadError" class="qe-load-error" :image="false">
       <template #description>
         <p class="qe-load-error-title">题目不存在或无权编辑</p>
         <p class="qe-load-error-desc">该题目可能已被删除，或不属于当前账号；请返回题库管理重新选择。</p>

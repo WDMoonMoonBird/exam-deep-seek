@@ -1160,7 +1160,8 @@ const hotEditTplRaw = (() => {
   return i >= 0 && j > i ? hotEditVue.slice(i + '<template>'.length, j) : '';
 })();
 // ③ 渲染层消费：空态块（v-if="loadError" … </a-empty>）内必须同时有文案与出口按钮，且紧跟 v-else（表单被隐藏）
-const emptyStart = hotEditTplRaw.indexOf('v-if="loadError"');
+// ★热修后空态改为 v-else-if（前面多了骨架分支）⇒ 用正则匹配 v-if / v-else-if 两种写法
+const emptyStart = (() => { const m = /v-(?:else-)?if="loadError"/.exec(hotEditTplRaw); return m ? m.index : -1; })();
 const emptyEnd = hotEditTplRaw.indexOf('</a-empty>', emptyStart);
 const emptyBlock = emptyStart >= 0 && emptyEnd > emptyStart ? hotEditTplRaw.slice(emptyStart, emptyEnd) : '';
 const emptyHidesForm = emptyEnd > 0 && /<\/a-empty>\s*<template v-else>/.test(hotEditTplRaw);
@@ -1183,26 +1184,28 @@ const loadBody = extractFn(hotLoadQ, 'async function load');
 const runLoadReplay = async ({ isEdit = true, outcome }) => {
   const refs = {
     form: { title: '', difficulty: '', material: '' }, subQuestions: { value: [] }, questionKind: { value: '' },
-    showMaterial: { value: false }, loadError: { value: null }, isEdit, editId: 42, loadSqCalls: [], safeLoadCalls: 0,   // ★isEdit 是**普通布尔**（useQuestionEditPage:29 'const isEdit = !!editId'），不是 ref
+    showMaterial: { value: false }, loadError: { value: null }, loadLoading: { value: isEdit }, isEdit, editId: 42, loadSqCalls: [], safeLoadCalls: 0,   // ★isEdit 是**普通布尔**（useQuestionEditPage:29 'const isEdit = !!editId'），不是 ref；★loadLoading=热修新增的加载中态
   };
   const stub = new Function(
     'isEdit', 'editId', 'form', 'subQuestions', 'questionKind', 'objectiveSettings', 'showMaterial', 'loadSq', 'newSq',
-    'safeLoad', 'request', 'DEFAULT_TYPE_SCORES', 'updateFillBlanks', 'loadError',
+    'safeLoad', 'request', 'DEFAULT_TYPE_SCORES', 'updateFillBlanks', 'loadError', 'loadLoading',
     'return (async () => {' + loadBody + '})();',
   );
   await stub(refs.isEdit, refs.editId, refs.form, refs.subQuestions, refs.questionKind, {}, refs.showMaterial,
     (...a) => refs.loadSqCalls.push(a), (o) => o,
     () => { refs.safeLoadCalls += 1; return outcome; },
-    { get: () => Promise.resolve({}) }, { code: 10 }, () => {}, refs.loadError);
+    { get: () => Promise.resolve({}) }, { code: 10 }, () => {}, refs.loadError, refs.loadLoading);
   return refs;
 };
 const ownerRun = await runLoadReplay({ outcome: Promise.resolve({ ok: true, error: null, data: { title: '既有题目', difficulty: 'hard', material: '', subQuestions: [{ id: 7, type: 'subjective', title: '小问 1', score: null, content: 'x' }] } }) });
 const failRun = await runLoadReplay({ outcome: Promise.resolve({ ok: false, data: null, error: { status: 404, code: 1004, message: '题目不存在或无权访问' } }) });
 const newRun = await runLoadReplay({ isEdit: false, outcome: Promise.resolve({ ok: true, error: null, data: { title: '不该被写入' } }) });
 check('⑮h 故障② 回归锚点（★升级为"被页面消费"）：loadError ①置位 ②由 useQuestionEditPage 透出 ③渲染层消费（空态块含文案「题目不存在或无权编辑」+「返回题库管理」按钮、v-else 隐藏表单、动作条收起、模板真编译进渲染函数）④所有者路径照常填表 / 失败路径落空态 / 新建页不动',
-  /safeLoad\(/.test(hotLoadQ) && /loadError\.value\s*=\s*res\.error/.test(hotLoadQ) && /return \{ load, loadError \}/.test(hotLoadQ)
-    && /const \{ load, loadError \} = loader/.test(hotEditPage) && /loadError,/.test(hotEditPage)
-    && hotEditTplRaw.indexOf('v-if="loadError"') >= 0 && emptyBlock.includes('题目不存在或无权编辑') && emptyBlock.includes('返回题库管理')
+  /safeLoad\(/.test(hotLoadQ) && /loadError\.value\s*=\s*res\.error/.test(hotLoadQ) && /return \{ load, loadLoading, loadError \}/.test(hotLoadQ)
+    && /const \{ load, loadLoading, loadError \} = loader/.test(hotEditPage) && /loadError,/.test(hotEditPage)
+    // ★热修新增：加载中态被页面消费（骨架），且两条路径都复位（避免卡在加载态）
+    && /v-if="loadLoading"/.test(hotEditTplRaw) && ownerRun.loadLoading.value === false && failRun.loadLoading.value === false && newRun.loadLoading.value === false
+    && emptyStart >= 0 && emptyBlock.includes('题目不存在或无权编辑') && emptyBlock.includes('返回题库管理')
     && /@click="backToQuestions"/.test(emptyBlock) && emptyHidesForm && actionbarGated && scriptWires && tplCompiled.ok
     && !!loadBody
     && ownerRun.form.title === '既有题目' && ownerRun.form.difficulty === 'hard' && ownerRun.subQuestions.value.length === 1
