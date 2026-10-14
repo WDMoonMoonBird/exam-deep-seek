@@ -72,6 +72,16 @@ echo "neg6_rc=$? （期望非 0）" | tee -a "$SUM"
 grep -E '^FAIL ⑮h|SUMMARY' /tmp/w6-fe-neg6.log | cut -c1-260 | tee -a "$SUM"
 cp /tmp/w6-qev.bak "$QEV"
 diff -q /tmp/w6-qev.bak "$QEV" && echo "QUESTIONEDIT_VUE_RESTORED_OK" | tee -a "$SUM"
+echo "=== 反例 7（W8/F1）：把 401 跳转写回裸根（window.location.href = '/login'）⇒ ⑯b 必须报红 ===" | tee -a "$SUM"
+REQ10=src/api/request.js
+cp "$REQ10" /tmp/w8-req.bak && mark_mutated "$REQ10" /tmp/w8-req.bak
+# 替换整段兜底实现（不能只把 withAppBase 换成字符串变量：门禁按"跳转点目标是否字面量"判定，变量属合规）
+node -e "const fs=require('fs');const p=process.argv[1];let s=fs.readFileSync(p,'utf8');const blk=\"    const target = withAppBase('/login') + '?expired=1';\n    if (typeof window !== 'undefined' && window.location) window.location.assign(target);\";const rep=\"    if (typeof window !== 'undefined' && window.location) window.location.href = '/login';\";if(!s.includes(blk)){console.error('INJECT_FAILED：未找到 base 感知跳转段');process.exit(2);}fs.writeFileSync(p,s.replace(blk,rep));" "$REQ10" || { echo "INJECT_FAILED（反例 7 注入未生效 ⇒ 本次反例无效）" | tee -a "$SUM"; cp /tmp/w8-req.bak "$REQ10"; exit 2; }
+node scripts/verify-frontend.mjs --no-build > /tmp/w8-fe-neg7.log 2>&1
+echo "neg7_rc=$? （期望非 0）" | tee -a "$SUM"
+grep -E '^FAIL ⑯|SUMMARY' /tmp/w8-fe-neg7.log | cut -c1-300 | tee -a "$SUM"
+cp /tmp/w8-req.bak "$REQ10"
+diff -q /tmp/w8-req.bak "$REQ10" && echo "REQUEST_JS_BASEAWARE_RESTORED_OK" | tee -a "$SUM"
 echo "=== 还原校验：正例必须通过 ===" | tee -a "$SUM"
 node scripts/verify-frontend.mjs --no-build > /tmp/b38-fe-pos.log 2>&1
 echo "pos_rc=$?" | tee -a "$SUM"

@@ -7,6 +7,10 @@
             <h1 class="login-title">Deadpan 判题</h1>
             <p class="login-desc">请登录以继续</p>
 
+            <!-- ★W8（t10/F2）：登录态过期被送回登录页时常驻展示统一文案 ——
+                 应用内跳转时 toast 仍可见（此处是第二保险）；整页兜底跳转会销毁 toast ⇒ 这里就是唯一可见处 -->
+            <p v-if="expiredNotice" id="login-expired" class="login-expired" role="alert">{{ expiredNotice }}</p>
+
             <!-- 多学校选择 -->
             <template v-if="schoolOptions.length">
               <p class="login-desc" style="font-size:var(--fs-body-lg);color:var(--text-tertiary);margin-bottom:var(--space-4);">
@@ -79,12 +83,17 @@
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, nextTick, computed } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import request from '../api/request.js';
+import { AUTH_EXPIRED_MESSAGE } from '../api/apiError.js';   // ★W8（t10/F2）：与 401 统一文案**同源**，避免两处各写一句
 import { useUserStore } from '../stores/user.js';
 
 const router = useRouter();
+const route = useRoute();
+
+/** ★W8（t10/F2）：401 跳转带的 ?expired=1 ⇒ 登录页常驻提示（文案与 request.js 的 toast 完全一致） */
+const expiredNotice = computed(() => (route.query.expired ? AUTH_EXPIRED_MESSAGE : ''));
 const userStore = useUserStore();
 const username = ref('');
 const password = ref('');
@@ -188,6 +197,16 @@ async function handleSelectSchool() {
 
 .login-form {
     text-align: left;
+}
+
+/* ★W8（t10/F2）：登录态过期提示（与 .login-error 同区、不同色：这是"说明"不是"你输错了"） */
+.login-expired {
+    margin: -24px 0 20px;
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    background: var(--status-warning-bg, rgba(250, 173, 20, 0.12));
+    color: var(--status-warning-fg, #ad6800);
+    font-size: var(--fs-body-sm);
 }
 
 .login-error {

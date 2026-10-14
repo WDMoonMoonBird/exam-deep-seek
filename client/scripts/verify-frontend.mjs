@@ -980,9 +980,11 @@ const toastsBefore401Real = toasts.length;
 reqMod.setAuthRedirect(() => redirects.push(1));
 reqMod.resetAuthExpired();
 const rows401 = [];
+const err401s = [];
 for (const shape of REAL_401_SHAPES) {
   const seen = [];
   const err = await catchOf(onRejected({ response: { status: 401, data: { code: 1002, message: shape.raw, data: null } }, config: { url: shape.url } }));
+  err401s.push(err);
   const uiCopy = err ? copyMod.errorCopyOf(err, { tag: 'verify ⑮d ' + shape.url, log: { error: (...a) => seen.push(a) } }) : '(未 reject)';
   rows401.push({
     url: shape.url, from: shape.from,
@@ -1005,8 +1007,11 @@ check('⑮d 可执行：401 用户可见文案**恒为统一口径**（三种真
     && uiCopies.every((t) => t === '登录已过期，请重新登录')
     && rows401.every((r) => r.rawKept && r.causeKept && r.consoleHasErr && r.rawOnScreen === false)
     && toasts401.length === 1 && toasts401[0] === '登录已过期，请重新登录'
-    && redirects.length === 1,
-  JSON.stringify({ rows: rows401, toasts: toasts401, redirects: redirects.length, distinctVisible: new Set(visibleCopies).size }));
+    && redirects.length === 1
+    // ★W8（t10）：401 只由 handleAuthExpired 提示一次 —— 每个 401 ApiError 都必须**已登记**，
+    //   否则页面里的 safeLoad/safeSubmit 会拿同一个实例再弹一次同名文案（真浏览器实测到重复 2 条）
+    && err401s.every((e) => apiErrMod.shouldNotify(e) === false),
+  JSON.stringify({ rows: rows401, toasts: toasts401, redirects: redirects.length, distinctVisible: new Set(visibleCopies).size, silencedForPages: err401s.map((e) => apiErrMod.shouldNotify(e) === false) }));
 // safeLoad / safeSubmit：失败**不抛**、文案走 errorCopyOf 口径、同一次失败不重复提示
 const notices = [];
 const errLogs = [];
@@ -1214,6 +1219,144 @@ check('⑮h 故障② 回归锚点（★升级为"被页面消费"）：loadErro
     fail: { title: failRun.form.title, subs: failRun.subQuestions.value.length, loadError: failRun.loadError.value && failRun.loadError.value.code, toastPath: failRun.safeLoadCalls },
     fresh: { safeLoadCalls: newRun.safeLoadCalls, loadError: newRun.loadError.value },
   }));
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+// ⑯ JS 跳转目标不得为裸根（★W8 / t10 · F1）：现有 ③a/③b 只扫**资源引用**（script/link 的 src/href），
+//    扫不到"代码里把用户送到哪儿"——W5 实测：401 时 window.location.href = <裸根 '/login'> 在 /exam/ 部署下
+//    请求站点根 ⇒ 生产 nginx 只注册 '= /exam/login' ⇒ 用户被踢到默认 404 页。
+//
+// 命中定义（client/src/**/*.{js,vue}；**只剥注释、保留字符串**——被检的正是字面量目标）：
+//   ① location 型：window.location.href = X / location.href = X / location.assign(X) / location.replace(X) / window.open(X)
+//   ② router 型  ：router.push(X) / router.replace(X) / $router.push(X) / $router.replace(X)
+// 合规判定：
+//   ⓐ location 型：X **不得是裸根字面量**（单/双引号或反引号包裹、内容以 '/' 开头）。
+//      非字面量（变量 / 表达式 / withAppBase(...) / BASE_URL 拼接）一律放行——语义上这才可能 base 感知。
+//   ⓑ router 型：字面量裸根**可以**，但前提是 history 真的带 base（router/index.js 里 createWebHistory(<非 '/' 参数>)）：
+//      vue-router 会用 history base 拼绝对路径（/exam/ + /login）。history 没带 base ⇒ 裸根 = 站点根 ⇒ 同样违规（fail-closed）。
+// 自检样例（每次运行）：反例 ×4 必红（location.href 裸根 / location.assign 裸根 / location.replace 反引号裸根 /
+//      router.push 裸根且 history 无 base）；正例 ×4 必绿（withAppBase(...) / BASE_URL 拼接 / 变量目标 /
+//      router.push 裸根但 history 带 base）。真实仓库命中数必须为 0。
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+
+/** 只剥注释（行注释 + 块注释），**保留字符串字面量**（被检目标就是它们）：等长空白替换，行号列位不变 */
+function stripCommentsKeepStrings(src) {
+  const text = String(src || '');
+  const arr = text.split('');
+  const blank = (from, to) => { for (let k = from; k < to && k < arr.length; k += 1) { if (arr[k] !== '\n') arr[k] = ' '; } };
+  let i = 0; const n = text.length;
+  while (i < n) {
+    const c = text[i];
+    if (c === '/' && text[i + 1] === '/') { const s = i; while (i < n && text[i] !== '\n') i += 1; blank(s, i); continue; }
+    if (c === '/' && text[i + 1] === '*') { const s = i; i += 2; while (i < n && !(text[i] === '*' && text[i + 1] === '/')) i += 1; i += 2; blank(s, Math.min(i, n)); continue; }
+    if (c === "'" || c === '"' || c === String.fromCharCode(96)) {   // 跳过字符串内容（保留原文，不空白化）
+      const q = c; i += 1;
+      while (i < n) { if (text[i] === '\\') { i += 2; continue; } if (text[i] === q) { i += 1; break; } i += 1; }
+      continue;
+    }
+    i += 1;
+  }
+  return arr.join('');
+}
+
+/** 括号平衡地取出 idx 处 '(' 内的实参原文 */
+function argTextAt(code, openIdx) {
+  let depth = 0;
+  for (let k = openIdx; k < code.length; k += 1) {
+    const c = code[k];
+    if (c === '(') depth += 1;
+    else if (c === ')') { depth -= 1; if (depth === 0) return code.slice(openIdx + 1, k); }
+  }
+  return code.slice(openIdx + 1, Math.min(code.length, openIdx + 200));
+}
+
+/** 目标表达式是否为"裸根字面量"（引号/反引号包裹且内容以 / 开头；\u0060 = 反引号，避免本文件出现裸反引号） */
+function isBareRootLiteral(expr) {
+  const t = String(expr == null ? '' : expr).trim();
+  const m = new RegExp('^([\'"\u0060])([\\s\\S]*?)\\1$').exec(t);
+  return !!m && m[2].startsWith('/');
+}
+
+/**
+ * 扫描一个文件：返回 { total, location, router, naked[] }；naked[] 每项 = { line, kind, target, text }
+ * @param {boolean} routerHasBase router/index.js 的 history 是否带 base（router 型字面量裸根的判据）
+ */
+function scanBareRootJumps(relPath, source, routerHasBase) {
+  const raw = String(source || '');
+  const code = stripCommentsKeepStrings(raw);
+  const lines = raw.split(/\r?\n/);
+  const out = { total: 0, location: 0, router: 0, naked: [] };
+  const add = (idx, kind, target) => {
+    out.total += 1;
+    const lineNo = code.slice(0, idx).split('\n').length;
+    const bad = kind === 'location' ? isBareRootLiteral(target) : (isBareRootLiteral(target) && !routerHasBase);
+    if (kind === 'location') out.location += 1; else out.router += 1;
+    if (bad) out.naked.push({ line: lineNo, kind, target: String(target).trim().slice(0, 60), text: (lines[lineNo - 1] || '').trim().slice(0, 120) });
+  };
+  const patterns = [
+    { kind: 'location', re: /(?:\bwindow\s*\.\s*)?\blocation\s*\.\s*href\s*=\s*([^;\n]+)/g, arg: (m) => m[1] },
+    { kind: 'location', re: /\blocation\s*\.\s*(?:assign|replace)\s*\(/g, arg: null },
+    { kind: 'location', re: /\bwindow\s*\.\s*open\s*\(/g, arg: null, firstOnly: true },
+    { kind: 'router', re: /(?:\$?router)\s*\.\s*(?:push|replace)\s*\(/g, arg: null },
+  ];
+  for (const p of patterns) {
+    let m;
+    while ((m = p.re.exec(code)) !== null) {
+      if (p.arg) { add(m.index, p.kind, p.arg(m)); continue; }
+      const openIdx = code.indexOf('(', m.index + (m[0].length - 1));
+      const arg = argTextAt(code, openIdx);
+      add(m.index, p.kind, p.firstOnly ? arg.split(',')[0] : arg);
+    }
+  }
+  return out;
+}
+
+// ── ⑯a 门禁自检样例（恒真：反例必红、正例必绿）────────────────────────────────────────────────────
+const ROUTER_SRC_16 = read(path.join(CLIENT, 'src', 'router', 'index.js')) || '';
+const histArg16 = (/createWebHistory\(([^)]*)\)/.exec(ROUTER_SRC_16) || [])[1] || '';
+const routerHasBase16 = !!histArg16.trim() && !/^['"]\/['"]$/.test(histArg16.trim());
+const BT = String.fromCharCode(96);
+const FIX_BARE_HREF = ['function go() {', "  window.location.href = '/login';", '}'].join('\n');
+const FIX_BARE_ASSIGN = ['function go() {', "  location.assign('/teacher/classes');", '}'].join('\n');
+const FIX_BARE_REPLACE = ['function go() {', '  location.replace(' + BT + '/login?next=/' + BT + ');', '}'].join('\n');
+const FIX_ROUTER_LITERAL = ['function go() {', "  router.push('/teacher/questions');", '}'].join('\n');
+const FIX_OK_HELPER = ['function go() {', "  location.assign(withAppBase('/login'));", '}'].join('\n');
+const FIX_OK_BASE_URL = ['function go() {', "  window.location.href = (import.meta.env.BASE_URL || '/') + 'login';", '}'].join('\n');
+const FIX_OK_VAR = ['function go(target) {', '  location.assign(target);', '}'].join('\n');
+const FIX_OK_ROUTER_BASE = ['function go() {', "  router.push('/login');", '}'].join('\n');
+const g16 = (src, hasBase) => scanBareRootJumps('src/__fixture__.vue', src, hasBase === undefined ? routerHasBase16 : hasBase);
+const self16 = {
+  bareHref: g16(FIX_BARE_HREF).naked.length,
+  bareAssign: g16(FIX_BARE_ASSIGN).naked.length,
+  bareTemplate: g16(FIX_BARE_REPLACE).naked.length,
+  routerNoBase: g16(FIX_ROUTER_LITERAL, false).naked.length,
+  okHelper: g16(FIX_OK_HELPER).naked.length,
+  okBaseUrl: g16(FIX_OK_BASE_URL).naked.length,
+  okVar: g16(FIX_OK_VAR).naked.length,
+  okRouterWithBase: g16(FIX_OK_ROUTER_BASE, true).naked.length,
+};
+check('⑯a 门禁自检：反例必红（location.href / assign / replace 反引号 的裸根字面量；router.push 裸根且 history 无 base）+ 正例必绿（withAppBase / BASE_URL 拼接 / 变量目标 / router.push 裸根但 history 带 base）',
+  self16.bareHref === 1 && self16.bareAssign === 1 && self16.bareTemplate === 1 && self16.routerNoBase === 1
+    && self16.okHelper === 0 && self16.okBaseUrl === 0 && self16.okVar === 0 && self16.okRouterWithBase === 0
+    && routerHasBase16 === true,
+  JSON.stringify({ ...self16, routerHasBase: routerHasBase16, histArg: histArg16.trim() }));
+
+// ── ⑯b 真实仓库：JS 跳转目标不得为裸根 ────────────────────────────────────────────────────────────
+const jumpFindings = [];
+const jumpTally = { total: 0, location: 0, router: 0 };
+for (const p of allCode) {
+  const rel = path.relative(CLIENT, p).split(path.sep).join('/');
+  const res = scanBareRootJumps(rel, read(p) || '', routerHasBase16);
+  jumpTally.total += res.total; jumpTally.location += res.location; jumpTally.router += res.router;
+  for (const n of res.naked) jumpFindings.push(rel + ':' + n.line + ' [' + n.kind + '] -> ' + n.target + '  |  ' + n.text);
+}
+check('⑯b 全仓（client/src）：JS 跳转目标不存在裸根字面量（location.* 一律 base 感知；router.* 依赖 createWebHistory 的 base 契约）',
+  jumpFindings.length === 0,
+  'naked=' + (jumpFindings.length ? jumpFindings.join(' | ') : '(none)')
+    + ' 跳转命中=' + jumpTally.total + '（location=' + jumpTally.location + ' router=' + jumpTally.router + '）扫描文件=' + allCode.length
+    + ' routerBase=' + JSON.stringify(histArg16.trim()));
+check('⑯c router base 契约：createWebHistory 必须带 base（否则 router.push 的裸根字面量等同站点根 ⇒ ⑯b 按 fail-closed 判红）',
+  routerHasBase16 && /createWebHistory\(/.test(ROUTER_SRC_16),
+  'histArg=' + JSON.stringify(histArg16.trim()));
 
 const failed = results.filter((r) => !r.ok);
 console.log('');

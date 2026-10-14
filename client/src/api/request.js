@@ -3,6 +3,7 @@ import { message } from 'ant-design-vue';
 import {
   ApiError, AUTH_EXPIRED_MESSAGE, apiErrorFromEnvelope, isBusinessEnvelope, markNotified, normalizeApiError,
 } from './apiError.js';
+import { withAppBase } from '../domain/appPath.js';   // ★W8（t10/F1）：站内地址一律 base 感知（禁裸根）
 
 /**
  * 全站唯一 axios 实例 + ★W1（t1）**失败规范化**：任何失败都变成 ApiError{status,code,message,url}，
@@ -127,11 +128,22 @@ export function controlFlowCodes() {
   return CONTROL_FLOW_ENVELOPES.map((e) => ({ code: e.code, why: e.why }));
 }
 
-/** ★401 统一语义（唯一出口；自检注入点见 setAuthRedirect）：清登录态 + 跳登录页 + 一句统一文案 */
+/**
+ * ★401 统一语义（唯一出口；自检注入点见 setAuthRedirect）：清登录态 + 跳登录页 + 一句统一文案。
+ *
+ * ★W8（t10/F1/F2）：跳登录有两条路径，二者都不许用裸根地址，且都要让统一文案**真的可见**：
+ *   · 主路径（应用内）：main.js 用 setAuthRedirect 注入 `router.push({ path: '/login', query: { expired: '1' } })`
+ *     —— 留在 SPA 里，antd message 不会被整页跳转销毁（F2 的直接原因就是旧实现的 location 整页跳转），
+ *     登录页再据 ?expired=1 常驻展示同一句文案（双保险）。
+ *   · 兜底路径（router 不可用时）：本文件的默认实现 —— 必须 **base 感知**（withAppBase ⇒ '/exam/login'），
+ *     否则在 /exam/ 部署下会请求站点根 /login ⇒ 生产 nginx 无此 location ⇒ 用户被踢到默认 404（F1）；
+ *     同样带上 ?expired=1，让登录页承接提示（整页跳转会丢掉 toast，这条参数就是那一路的保险）。
+ */
 let authExpiredHandled = false;
 let redirectToLogin = () => {
   try {
-    if (typeof window !== 'undefined' && window.location) window.location.href = '/login';
+    const target = withAppBase('/login') + '?expired=1';
+    if (typeof window !== 'undefined' && window.location) window.location.assign(target);
   } catch { /* 非浏览器环境（自检）忽略 */ }
 };
 
@@ -176,6 +188,9 @@ request.interceptors.response.use(
     const fail = normalizeApiError(err, err && err.config);   // ★页面从此拿到的是 ApiError，不是裸 AxiosError
     if (fail.status === 401) {
       handleAuthExpired();                                    // 401 已统一提示 + 跳转 ⇒ 不再走下面的通用提示
+      // ★W8（t10）：必须登记"这次失败已提示过" —— handleAuthExpired 弹的就是统一文案；不登记的话，
+      //   页面里的 safeLoad/safeSubmit 会拿同一个 ApiError 再弹一次同名提示（真浏览器实测到 2 条重复）。
+      markNotified(fail);
       return Promise.reject(fail);
     }
     if (!fail.silent && !isConfirmableWarning(fail)) {

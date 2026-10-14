@@ -30,6 +30,7 @@ import { ref, watch, computed, onErrorCaptured } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { boundaryState, clearChunkReloadMark, componentNameOf, isChunkLoadError } from './errorRecovery.js';
+import { withAppBase } from '../domain/appPath.js';   // ★W8（t10）：整页兜底跳转必须 base 感知（禁裸根）
 
 const props = defineProps({
   /** 复位信号（默认取当前路由 fullPath）：路由变化 ⇒ 自动清空错误态 ⇒ 后续导航仍可正常渲染（症状核心） */
@@ -82,7 +83,8 @@ function onBack() {
 /** ★W1：回首页（'/' 是公开路由，登录与否都能进 ⇒ 不会被卡在错误页） */
 function onHome() {
   try { router.push('/'); } catch {
-    try { if (typeof window !== 'undefined' && window.location) window.location.href = '/'; } catch { /* ignore */ }
+    // ★W8（t10）：整页兜底也必须 base 感知（裸根 '/' 在 /exam/ 部署下会离开应用 ⇒ 404）
+    try { if (typeof window !== 'undefined' && window.location) window.location.assign(withAppBase('/')); } catch { /* ignore */ }
   }
 }
 
