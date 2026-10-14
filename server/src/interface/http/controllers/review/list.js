@@ -52,8 +52,10 @@ async function enrichWithSchool(list) {
 
 export const getSubmissions = async (req, res) => {
   try {
-    const { schoolId, classId, questionId, status, page = 1, pageSize = 20 } = req.query;
-    const where = await buildFilter({ teacherId: req.user.id, schoolId, classId, questionId, status });
+    // ★R3-D12（t22 / O-E2E-1）：原解构漏取 assignmentId ⇒ buildFilter 收不到 ⇒「带 assignmentId 过滤」静默失效
+    //   （带/不带返回同一批数据）。此处补齐；classId/questionId/status/schoolId 语义不变。
+    const { schoolId, classId, assignmentId, questionId, status, page = 1, pageSize = 20 } = req.query;
+    const where = await buildFilter({ teacherId: req.user.id, schoolId, classId, assignmentId, questionId, status });
 
     const [list, total] = await Promise.all([
       prisma.submission.findMany({
