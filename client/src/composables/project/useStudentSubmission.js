@@ -11,6 +11,7 @@ import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
 import { formatDateTimeSec } from '../../domain/format.js';
 import { findFirstFile } from './zipEntry.js';
+import { safeInitMonaco } from '../monacoGuard.js';   // ★W1-r2（t4）：Monaco 初始化失败就地兜底（提示一次 + 骨架降级）
 
 export function useStudentSubmission({ route, form, submitting, editorContainerRef, resetModels, initMonaco, openFile, externalTree, fileContents, hasUploaded, uploadKeptCount, uploadKeptBytes }) {
 
@@ -71,7 +72,8 @@ async function handleSubmit() {
       if (data.files.contents) Object.entries(data.files.contents).forEach(([p, c]) => fileContents.set(p, c));
       hasUploaded.value = true;
       await nextTick(); await new Promise(res => setTimeout(res, 300));
-      if (editorContainerRef.value) await initMonaco();
+      // ★W1-r2（t4）：编辑器挂了 ≠ 提交失败 —— 只提示一次 + 骨架降级，不误报成提交错误、不冒泡
+      if (editorContainerRef.value) await safeInitMonaco(initMonaco, { tag: 'useStudentSubmission.js' });
       const first = findFirstFile(data.files.tree);
       if (first) openFile(first.path, first.name, first.language);
     }

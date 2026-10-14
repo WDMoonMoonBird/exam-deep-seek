@@ -10,6 +10,7 @@ import { ref, nextTick } from 'vue';
 import { message } from 'ant-design-vue';
 import { uploadPackage } from '../../api/projects.js';
 import { findFirstFile } from './zipEntry.js';
+import { safeInitMonaco } from '../monacoGuard.js';   // ★W1-r2（t4）：Monaco 初始化失败就地兜底（提示一次 + 骨架降级）
 
 export function useZipUpload({ form, isTeacher, externalTree, fileContents, editorContainerRef, resetModels, initMonaco, openFile, isCheckerLoaded, getCheckerStatus, checkerStale }) {
 
@@ -44,7 +45,8 @@ async function onZipReady({ tree, fileContents: fc, keptCount, keptBytes }) {
 
   await nextTick();
   await new Promise(r => setTimeout(r, 300));
-  if (editorContainerRef.value) await initMonaco();
+  // ★W1-r2（t4）：Monaco 是重资产（loader 动态取 vs/worker），失败只提示一次 + 页面骨架降级，绝不冒泡
+  if (editorContainerRef.value) await safeInitMonaco(initMonaco, { tag: 'useZipUpload.js' });
   const first = findFirstFile(tree);
   if (first) openFile(first.path, first.name, first.language);
 }

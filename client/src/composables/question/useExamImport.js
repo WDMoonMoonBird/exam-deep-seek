@@ -12,6 +12,7 @@ import { message } from 'ant-design-vue';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 import { DEFAULT_TYPE_SCORES, normalizeItem, detectCodeLang } from './questionPure.js';
+import { errorCopyOf } from '../errorCopy.js';   // ★W1-r2（t4）：SSE 通道不走 axios 拦截器 ⇒ 文案在此手动对齐统一口径
 
 export function useExamImport({ questionKind, subQuestions, newSq, loadSq, objectiveSettings }) {
 // 上传
@@ -86,7 +87,12 @@ async function handleUploadExam(file){
       fillFromParsed(questions);
       showUploadExam.value=false;resetUpload();
     }
-  }catch(e){console.error('[上传试卷] 错误:', e);uploadError.value=e?.message||'解析失败请重试';}
+  }catch(e){
+    // ★W1-r2（t4）：原始错误只进 console；上屏用固定友好文案（本通道是 fetch+SSE，不走 request 拦截器，
+    //   服务端文案无法按 data.message 口径识别 ⇒ 统一走 errorCopyOf 的固定口径）
+    console.error('[上传试卷] 错误:', e);
+    uploadError.value = errorCopyOf(e, { tag: 'useExamImport.js 解析试卷', action: '解析' });
+  }
   finally{uploadAnalyzing.value=false;}
   return false;
 }

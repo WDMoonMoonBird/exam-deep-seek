@@ -90,6 +90,43 @@ function isConfirmableWarning(err) {
   return !!body && body.code === 1007 && body.data?.requiresConfirmation === true;
 }
 
+/**
+ * ★W1-r2（t4）：**控制流码**白名单 —— 与 isConfirmableWarning 同级，把"控制流"与"错误"分开。
+ *
+ * 为什么必须单独判：同一个 `code: 1002` 在本仓有**四种语义、横跨四种 HTTP 状态**：
+ *   · HTTP 200 + code 1002 + data.schools ⇒ **登录控制流**（该学号存在多个学校，请选校）—— 唯一必须 resolve 的一支
+ *     （server：controllers/authController.js 返回 {code:1002,data:{schools}}；前端消费点：views/Login.vue 的 if (res.code === 1002)）
+ *   · HTTP 401 + code 1002 ⇒ 未登录 / Token 过期 / 用户不存在 / 密码已变更 ⇒ **必须**走 handleAuthExpired
+ *   · HTTP 404 + code 1002 ⇒ 运行记录不存在；HTTP 429 + code 1002 ⇒ 原密码错误次数过多
+ * ⇒ 因此**不能**按 code 做白名单（会把 401/404/429 的语义一起吞掉）。判据必须三条件同时成立：
+ *     ① HTTP 2xx（控制流只可能是成功响应）；② code 命中控制流码集合；③ 该控制流所需的载荷齐备（data.schools 非空数组）。
+ *   命中 ⇒ **照旧 resolve**（把信封原样交给调用方自行分支），且**不弹任何错误提示**。
+ *   其余（含 401/404/429 + 1002）一律照旧 reject —— 401 仍由 handleAuthExpired 统一处置。
+ * 登记（与 ⑮ 注释同款口径）：本函数是"控制流 ⇒ resolve"的唯一出口；新增控制流码必须同时在此登记 +
+ *   在 client/scripts/verify-frontend.mjs 的 ⑮c4 补回放断言（200 ⇒ RESOLVED，401/404/429 ⇒ REJECTED）。
+ */
+const CONTROL_FLOW_ENVELOPES = [
+  {
+    code: 1002,
+    /** 载荷齐备判定：多学校登录必须真的带着可选学校列表 */
+    hasPayload: (data) => Array.isArray(data && data.schools) && data.schools.length > 0,
+    why: '多学校学生登录：需先选校（Login.vue 1002 分支）',
+  },
+];
+
+function isControlFlowEnvelope(res) {
+  const status = Number((res && res.status) || 0);
+  if (!(status >= 200 && status < 300)) return false;      // ① 只有成功响应才是控制流（401/404/429 一律排除）
+  const body = res && res.data;
+  if (!isBusinessEnvelope(body)) return false;
+  return CONTROL_FLOW_ENVELOPES.some((entry) => entry.code === body.code && entry.hasPayload(body.data));   // ② + ③
+}
+
+/** 自检/排查用：控制流码清单（verify-frontend ⑮c4 按此做回放断言） */
+export function controlFlowCodes() {
+  return CONTROL_FLOW_ENVELOPES.map((e) => ({ code: e.code, why: e.why }));
+}
+
 /** ★401 统一语义（唯一出口；自检注入点见 setAuthRedirect）：清登录态 + 跳登录页 + 一句统一文案 */
 let authExpiredHandled = false;
 let redirectToLogin = () => {
@@ -124,6 +161,9 @@ request.interceptors.response.use(
   (res) => {
     const body = res.data;
     if (isBusinessEnvelope(body) && body.code !== 0) {
+      // ★W1-r2：先判**控制流码**（HTTP 2xx + code 1002 + data.schools）⇒ 照旧 resolve、不提示，把信封交给调用方
+      //   （回归背景：t1 把"信封一律 reject"写死 ⇒ Login.vue 的选校分支不可达 ⇒ 多学校学生无法登录）
+      if (isControlFlowEnvelope(res)) return body;
       // ★业务码 ≠ 0 = 失败：一律 reject(ApiError)；静默请求不提示（调用方处理）；
       // 1007 软警告（需确认）与 HTTP 400 分支共用同一白名单 ⇒ 不弹"报错"，由页面确认框承接。
       const fail = businessError(res);

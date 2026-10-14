@@ -12,6 +12,15 @@
  */
 export const DEFAULT_FRIENDLY = '操作失败，请重试';
 
+/**
+ * ★W1-r2（t4）：是否为"服务端故障"（已规范化的 ApiError 且 status ≥ 500）。
+ * 命中 ⇒ 不用服务端原文，改用 ApiError 的统一 HTTP 口径文案（'服务出错了，请稍后重试'）；
+ * 只在 status ≥ 500 时生效：4xx 的业务文案仍照旧优先（那是后端给出的友好提示）。
+ */
+export function isServerFault(err) {
+  try { return !!err && err.isApiError === true && Number(err.status) >= 500; } catch { return false; }
+}
+
 /** 当前路由信息（便于 console 侧定位；非浏览器环境安全回落） */
 export function routePathOf(win) {
   try {
@@ -36,7 +45,9 @@ export function errorCopyOf(err, { tag = '未标注位置', action = '', log = c
   try { log.error('[R2-B55] ' + tag, { route: routePathOf(win), err }); } catch { /* ignore */ }
   let serverMsg = null;
   try { serverMsg = err && err.response && err.response.data && err.response.data.message; } catch { serverMsg = null; }
-  if (serverMsg) return String(serverMsg) + (suffix || '');
+  // ★W1-r2（t4）：5xx 一律用 HTTP 口径文案 —— 服务端 5xx 的 message 可能夹带内部实现细节
+  //   （如「服务器错误: xxx is not a function」）；原文只进 console / 诊断信息，不上屏。
+  if (serverMsg && !isServerFault(err)) return String(serverMsg) + (suffix || '');
   // ★W1（t1）：规范化后的 ApiError 文案已过审查（服务端业务文案 / 统一 HTTP 口径），可直接上屏；
   //   只有 uiSafe 标记为真时才取——原始 JS 错误（无该标记）仍一律不读 message，只进 console。
   let curated = null;
@@ -46,4 +57,4 @@ export function errorCopyOf(err, { tag = '未标注位置', action = '', log = c
   return base + (suffix || '');
 }
 
-export default { DEFAULT_FRIENDLY, routePathOf, reportError, errorCopyOf };
+export default { DEFAULT_FRIENDLY, isServerFault, routePathOf, reportError, errorCopyOf };

@@ -689,6 +689,13 @@ check('⑭c 页面契约：两处入口按钮 + 共享抽屉（teacher/admin 双
 //       反例 ×3 必须报红：裸 await / 仅 try-finally / 裸的 api 封装调用；
 //       正例 ×4 必须无事：try/catch 内、safeLoad 实参、多行 safeSubmit 实参、api/*.js 豁免位。
 //   · 真实仓库命中数必须为 0（明细逐条打在 FAIL 输出里，可直接定位）。
+//   · ★口径例外（W1-r2 登记，⑮j 自检其登记与自身兜底都在）：以下两处**不经 axios 实例**，因此不受本门禁的
+//       "已规范化"覆盖 —— 后人不得据此认为"全仓请求都已规范化"：
+//       ① `client/src/composables/submit/useDraftSave.js` —— 关闭/崩溃时的 **keepalive** 落盘（window.fetch + keepalive:true，
+//          页面卸载阶段不能用 axios 实例；自身已 `.catch(() => {})` 兜底，失败不留未处理 rejection）；
+//       ② `client/src/composables/question/useExamImport.js` —— 试卷解析的 **SSE 流式**请求（fetch + ReadableStream，
+//          需要逐段读响应体；自身已 try/catch 且失败落到 uploadError，不冒泡到错误边界）。
+//       若将来要统一，请迁移为 request 实例上的 stream/keepalive 封装，而不是把这两处从门禁里"删掉了事"。
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════
 
 /** 把注释与字符串替换成等长空白（保留行号/列位），使扫描是"语法级"的而不是"文本级"的 */
@@ -888,6 +895,73 @@ const softWarnOk = !!softWarn && softWarn.code === 1007 && toasts.length === 5;
 check('⑮c3 可执行：1007 软警告（HTTP 400）reject 后提示数不增（由页面确认框承接，不误导为"报错"）',
   softWarnOk && softWarn.response.data.code === 1007 && softWarn.response.data.data.requiresConfirmation === true,
   JSON.stringify({ toasts: toasts.length, code: softWarn && softWarn.code }));
+// ── ⑮c4 控制流码回放（★W1-r2 / t4）：**HTTP 2xx + code ∈ 控制流集合 + 载荷齐备 ⇒ RESOLVED；401/404/429 同码仍 REJECTED**
+//   背景（真实回归）：t1 把"200 + code≠0 一律 reject"写死 ⇒ Login.vue 的 if (res.code === 1002) 不可达 ⇒ 多学校学生无法登录。
+//   同一个 code 1002 在本仓有四种语义（200 选校 / 401 未登录 / 404 记录不存在 / 429 改密锁定），故判据必须绑 HTTP 状态。
+const settle = async (p) => { try { return { resolved: true, value: await p }; } catch (e) { return { resolved: false, error: e }; } };
+const LOGIN_1002_ENVELOPE = {
+  status: 200,
+  data: { code: 1002, message: '该学号存在多个学校，请选择所在学校', data: { schools: [{ name: '示例大学', officialCode: 'A001' }, { name: '第二大学', officialCode: 'B002' }] } },
+  config: { url: '/auth/login' },
+};
+const toastsBeforeCf = toasts.length;
+const cf200 = await settle(onFulfilled(LOGIN_1002_ENVELOPE));                               // 200 + 1002 + schools ⇒ 必须 resolve
+const cf200ToastDelta = toasts.length - toastsBeforeCf;
+const cf200NoPayload = await settle(onFulfilled({ status: 200, data: { code: 1002, message: '该学号存在多个学校，请选择所在学校', data: { schools: [] } }, config: { url: '/auth/login' } }));
+const cf401Redirects = [];
+const toastsBefore401 = toasts.length;
+reqMod.setAuthRedirect(() => cf401Redirects.push(1));
+reqMod.resetAuthExpired();
+const cf401 = await settle(onRejected({ response: { status: 401, data: { code: 1002, message: '未登录或 Token 过期' } }, config: { url: '/teacher/classes' } }));
+const cf401Toasts = toasts.slice(toastsBefore401);   // ★立刻取快照：后面 404/429 的提示也会进同一个 toasts
+const cf404 = await settle(onRejected({ response: { status: 404, data: { code: 1002, message: '运行记录不存在：归档目录与数据库行都不存在' } }, config: { url: '/admin/grading-runs/x' } }));
+const cf429 = await settle(onRejected({ response: { status: 429, data: { code: 1002, message: '原密码错误次数过多，请 5 分钟后再试' } }, config: { url: '/auth/password' } }));
+check('⑮c4 可执行：控制流码判据 = HTTP 2xx + code + 载荷齐备 ⇒ RESOLVED 且零提示；401/404/429 + 同码 ⇒ 仍 REJECTED（401 走鉴权出口）；载荷不齐（schools 空）⇒ 不算控制流',
+  cf200.resolved === true && !!cf200.value && cf200.value.code === 1002 && Array.isArray(cf200.value.data.schools) && cf200.value.data.schools.length === 2
+    && cf200ToastDelta === 0
+    && cf200NoPayload.resolved === false && cf200NoPayload.error.status === 200 && cf200NoPayload.error.code === 1002
+    && cf401.resolved === false && cf401.error.status === 401 && cf401Redirects.length === 1
+    && cf401Toasts.join('|') === '登录已过期，请重新登录'   // 401 的**用户可见文案**统一（ApiError.message 仍保留服务端原文供排查）
+    && cf404.resolved === false && cf404.error.status === 404 && cf404.error.code === 1002 && cf404.error.message === '运行记录不存在：归档目录与数据库行都不存在'
+    && cf429.resolved === false && cf429.error.status === 429 && cf429.error.code === 1002,
+  JSON.stringify({
+    cf200: cf200.resolved ? { code: cf200.value.code, schools: cf200.value.data.schools.length } : cf200.error.toString(),
+    cf200ToastDelta,
+    cf200NoPayload: cf200NoPayload.resolved ? 'RESOLVED(✗应为失败)' : cf200NoPayload.error.toString(),
+    cf401: cf401.resolved ? 'RESOLVED(✗)' : cf401.error.toString(), cf401Redirects: cf401Redirects.length, cf401Toast: cf401Toasts,
+    cf404: cf404.resolved ? 'RESOLVED(✗)' : cf404.error.toString(),
+    cf429: cf429.resolved ? 'RESOLVED(✗)' : cf429.error.toString(),
+  }));
+
+// ── ⑮c5 A/B 自证（新旧实现回放**同一份**登录响应）──────────────────────────────────────────────────
+//   legacyHead = t1 之前的实现：业务码 ≠ 0 ⇒ 提示后**仍 resolve**（分支可达，但会误弹一次提示）
+//   legacyT1   = t1 之后的实现（本次修复前）：信封**一律 reject** ⇒ Login 的 1002 分支**不可达**（多学校登录失败的根因）
+//   current    = 本次修复：2xx + 控制流码 + 载荷齐备 ⇒ resolve 且不提示
+const legacyHeadReplay = async (res) => {           // 逐字等价于 HEAD 版 request.js 的成功分支
+  const body = res.data;
+  if (body.code !== 0) toasts.push(body.message || '请求失败');   // 旧实现：toast 后照旧返回
+  return body;
+};
+const legacyT1Replay = async (res) => {             // 逐字等价于 t1 版 request.js 的成功分支（信封一律 reject）
+  throw apiErrMod.apiErrorFromEnvelope(res, res.config);
+};
+const loginBranchReachable = (outcome) => outcome.resolved === true && !!outcome.value && outcome.value.code === 1002
+  && Array.isArray(outcome.value.data && outcome.value.data.schools) && outcome.value.data.schools.length > 0;
+const toastMark = toasts.length;
+const abHead = await settle(legacyHeadReplay(LOGIN_1002_ENVELOPE));
+const headToasts = toasts.length - toastMark;
+const abT1 = await settle(legacyT1Replay(LOGIN_1002_ENVELOPE));
+const abCurrent = await settle(onFulfilled(LOGIN_1002_ENVELOPE));
+const currentToasts = toasts.length - toastMark - headToasts;
+check('⑮c5 A/B 自证（同一份登录响应回放）：HEAD 版=分支可达但误提示一次；t1 版=分支**不可达**（回归根因）；本次修复=分支可达且零提示',
+  loginBranchReachable(abHead) === true && headToasts === 1
+    && loginBranchReachable(abT1) === false && abT1.error.isApiError === true && abT1.error.code === 1002
+    && loginBranchReachable(abCurrent) === true && currentToasts === 0,
+  JSON.stringify({
+    head: { reachable: loginBranchReachable(abHead), toasts: headToasts },
+    t1: { reachable: loginBranchReachable(abT1), err: abT1.resolved ? 'RESOLVED(✗)' : abT1.error.toString() },
+    current: { reachable: loginBranchReachable(abCurrent), toasts: currentToasts },
+  }));
 // 401 统一语义：清登录态 + 跳登录页 + 一句统一文案，且并发多次只处置一次
 const redirects = [];
 reqMod.setAuthRedirect(() => redirects.push(1));
@@ -942,7 +1016,89 @@ check('⑮g 错误边界可诊断：诊断串含 路由/组件/错误消息/堆�
     && /diagnostics/.test(ebSrc),
   JSON.stringify({ lines: ebDiag.split('\n').length, component: ebState.component, hasCopy: /复制诊断信息/.test(ebSrc), hasBack: /返回上一页/.test(ebSrc), hasHome: /回首页/.test(ebSrc) }));
 
-// ── ⑮h 两处**已复现故障**的回归锚点（静态断言：热点页面必须保持"就地处理"的写法）─────────────────────
+/** ⑮i 辅助：三次调用共两次失败 ⇒ 提示文案固定且去重（notices 里同一条只出现一次） */
+const mgShows = (notices) => notices.length >= 1 && notices.every((t) => t === '代码编辑器加载失败，本页其余内容仍可查看；刷新页面可重试')
+  && new Set(notices).size === 1;
+
+// ── ⑮h 故障③（W3 回归）回归锚点：**真实回放** Login.vue 的 1002 分支（与故障①②同级）──────────────────
+//   "真实回放"= 抽取 Login.vue 里 handleLogin 的**真实函数体**执行，喂给它的 post 结果是**真拦截器**算出来的
+//   （⑮c4 的 cf200.value），不是手写桩；再对同一份响应喂"t1 行为（reject）"做对照 ⇒ 证明回归在 UI 层的表现。
+const loginSrc = read(path.join(CLIENT, 'src', 'views', 'Login.vue')) || '';
+const loginBody = extractFn(loginSrc, 'async function handleLogin');
+const replayLogin = async (postImpl) => {
+  const calls = { setAuth: [], push: [] };
+  const refs = { username: { value: 'S001' }, password: { value: 'pw' }, errorMsg: { value: '' }, loading: { value: false }, schoolOptions: { value: [] }, selectedCode: { value: '' } };
+  const stub = new Function(
+    'username', 'password', 'errorMsg', 'nextTick', 'usernameInputRef', 'passwordInputRef', 'loading', 'request', 'schoolOptions', 'selectedCode', 'userStore', 'router',
+    'return (async () => {' + loginBody + '})();',
+  );
+  await stub(refs.username, refs.password, refs.errorMsg, () => Promise.resolve(), { value: null }, { value: null }, refs.loading,
+    { post: postImpl }, refs.schoolOptions, refs.selectedCode,
+    { setAuth: (...a) => calls.setAuth.push(a) }, { push: (...a) => calls.push.push(a) });
+  return { calls, refs };
+};
+const loginReplayOk = await replayLogin(() => Promise.resolve(cf200.value));
+const loginReplayRegressed = await replayLogin(() => Promise.reject(abT1.error));
+check('⑮h 故障③（W3 回归）回归锚点：真实回放 Login.vue 的 handleLogin —— 控制流信封 ⇒ 走到选校（schools 就位、未直接登录/跳转、无报错）；t1 行为（reject）⇒ 停在登录页报错（选校页不可达）',
+  !!loginBody
+    && loginReplayOk.refs.schoolOptions.value.length === 2 && loginReplayOk.refs.selectedCode.value === 'A001'
+    && loginReplayOk.calls.setAuth.length === 0 && loginReplayOk.calls.push.length === 0 && loginReplayOk.refs.errorMsg.value === ''
+    && loginReplayRegressed.refs.schoolOptions.value.length === 0 && loginReplayRegressed.calls.push.length === 0
+    && loginReplayRegressed.refs.errorMsg.value === '该学号存在多个学校，请选择所在学校',
+  JSON.stringify({
+    ok: { schools: loginReplayOk.refs.schoolOptions.value.length, code: loginReplayOk.refs.selectedCode.value, setAuth: loginReplayOk.calls.setAuth.length, push: loginReplayOk.calls.push.length, err: loginReplayOk.refs.errorMsg.value },
+    regressed: { schools: loginReplayRegressed.refs.schoolOptions.value.length, err: loginReplayRegressed.refs.errorMsg.value },
+  }));
+
+// ── ⑮i Monaco 初始化兜底（★W1-r2）：全仓不得再有裸 await initMonaco()；safeInitMonaco 三态可执行 ──────
+const monacoGuard = await import(path.join(CLIENT, 'src', 'composables', 'monacoGuard.js'));
+const unguardedMonaco = [];
+for (const p of allCode) {
+  const rel = path.relative(CLIENT, p).split(path.sep).join('/');
+  // 剥注释后再扫：文档注释里提到写法（如 monacoGuard.js 的说明）不算违规
+  const codeOnly = String(read(p) || '').replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  if (/await\s+initMonaco\s*\(/.test(codeOnly)) unguardedMonaco.push(rel);
+}
+const mgNotices = [];
+const mgLogs = [];
+const mgOpts = { tag: 'verify ⑮i', notify: (t) => mgNotices.push(String(t)), log: { error: () => mgLogs.push(1) } };
+monacoGuard.resetMonacoNotice();
+const mgOk = await monacoGuard.safeInitMonaco(() => Promise.resolve(), mgOpts);
+const mgFail1 = await monacoGuard.safeInitMonaco(() => { throw new Error('loader init failed'); }, mgOpts);
+const mgFail2 = await monacoGuard.safeInitMonaco(() => Promise.reject(new Error('monaco/vs 404')), mgOpts);
+const mgShownAfterTwo = monacoGuard.isMonacoNoticeShown();
+monacoGuard.resetMonacoNotice();
+const mgFail3 = await monacoGuard.safeInitMonaco(() => { throw new Error('again'); }, mgOpts);
+check('⑮i Monaco 兜底：全仓 0 处裸 await initMonaco()；safeInitMonaco 成功=true / 失败**不抛**且一次故障只提示一次（复位后可再提示）',
+  unguardedMonaco.length === 0 && mgOk === true && mgFail1 === false && mgFail2 === false && mgFail3 === false
+    && mgShows(mgNotices) && mgLogs.length === 3 && mgShownAfterTwo === true,
+  'unguarded=' + (unguardedMonaco.join(',') || '(none)') + ' :: ' + JSON.stringify({ ok: mgOk, fail: [mgFail1, mgFail2, mgFail3], notices: mgNotices, logs: mgLogs.length, shownAfterTwo: mgShownAfterTwo }));
+
+// ── ⑮j 口径例外登记（★W1-r2）：不经 axios 实例的两处请求必须显式登记，避免后人误以为"全仓请求都已规范化" ──
+const selfSrc = read(path.join(CLIENT, 'scripts', 'verify-frontend.mjs')) || '';
+const draftSaveSrc = read(path.join(CLIENT, 'src', 'composables', 'submit', 'useDraftSave.js')) || '';
+const examImportSrc = read(path.join(CLIENT, 'src', 'composables', 'question', 'useExamImport.js')) || '';
+check('⑮j 口径例外已登记：⑮ 注释显式列出「keepalive 落盘（useDraftSave.js）」与「SSE 流式解析（useExamImport.js）」，且两处自身都有兜底（不冒泡、不把失败当成功）',
+  /口径例外/.test(selfSrc) && /useDraftSave\.js/.test(selfSrc) && /useExamImport\.js/.test(selfSrc)
+    && /keepalive/.test(selfSrc) && /SSE/.test(selfSrc)
+    && /keepalive: true/.test(draftSaveSrc) && /window\.fetch\(/.test(draftSaveSrc) && /catch\(\(\) => \{\}\)/.test(draftSaveSrc)
+    && /parse-exam-stream/.test(examImportSrc) && /resp\.ok/.test(examImportSrc) && /uploadError\.value/.test(examImportSrc),
+  JSON.stringify({ selfDoc: [/口径例外/, /useDraftSave\.js/, /useExamImport\.js/, /keepalive/, /SSE/].map((r) => r.test(selfSrc)), keepaliveGuard: /catch\(\(\) => \{\}\)/.test(draftSaveSrc), streamGuard: /uploadError\.value/.test(examImportSrc) }));
+
+// ── ⑮k 5xx 文案口径（★W1-r2）：服务端 5xx 原文一律不上屏（客户端兜底）+ 服务端 500 固定文案（含后续项登记）──
+const copy5xx = copyMod.errorCopyOf(apiErrMod.normalizeApiError({ response: { status: 500, data: { code: 2001, message: '服务器错误: xxx is not a function' } }, config: { url: '/x' } }), { tag: 'verify ⑮k', log: { error: () => {} } });
+const copy4xx = copyMod.errorCopyOf(apiErrMod.normalizeApiError({ response: { status: 400, data: { code: 1001, message: '用户名或密码错误' } }, config: { url: '/auth/login' } }), { tag: 'verify ⑮k', log: { error: () => {} } });
+// 剥注释后再断言"代码里没有旧写法"（文件头注释逐字引用了旧写法，属说明而非违规）；"后续项登记"则断在原文上
+const submissionCtrlRaw = read(path.join(CLIENT, '..', 'server', 'src', 'interface', 'http', 'controllers', 'student', 'submission.js')) || '';
+const submissionCtrlSrc = String(submissionCtrlRaw)
+  .replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+check('⑮k 5xx 文案：客户端 errorCopy 对 5xx 一律用 HTTP 口径（服务端原文不上屏）、4xx 业务文案照旧优先；server 500 用固定文案且原文只进日志（其余 6 处已登记为后续项）',
+  copy5xx === '服务出错了，请稍后重试' && !copy5xx.includes('is not a function')
+    && copy4xx === '用户名或密码错误'
+    && /FALLBACK_500_MESSAGE/.test(submissionCtrlSrc) && !/服务器错误: ['"]? \+/.test(submissionCtrlSrc) && /后续项/.test(submissionCtrlRaw),
+  JSON.stringify({ copy5xx, copy4xx, serverFixed: /FALLBACK_500_MESSAGE/.test(submissionCtrlSrc), serverRawGone: !/服务器错误: ['"]? \+/.test(submissionCtrlSrc) }));
+
+// ── ⑮h 两处已复现故障的回归锚点（静态断言：热点页面必须保持"就地处理"的写法）─────────────────────
 //   ① 管理员「新增教师」姓名留空 ⇒ POST 400 ⇒ handler 无 try/catch ⇒ 整页被错误边界替换、列表消失；
 //   ② 打开非本人/不存在的题（404 + code 1004）⇒ useLoadQuestion 未处理 ⇒ 同样整页被替换。
 const hotTeachers = read(path.join(CLIENT, 'src', 'views', 'admin', 'Teachers.vue')) || '';

@@ -117,6 +117,16 @@ export function apiErrorCopy(status, fallback = '') {
   return httpMessageOf(s);
 }
 
+/**
+ * ★W1-r2（t4）：**5xx 一律使用 HTTP 口径文案**，服务端原文只留在 response/cause 里（进 console / 诊断信息）。
+ * 背景：server 端 500 曾把 err.message 拼进响应（如「服务器错误: xxx is not a function」），
+ *   若照旧"服务端文案优先上屏"，内部实现细节会直接送到用户眼前（errorCopy 的 5xx 兜底是第二道防线，这里是第一道）。
+ */
+function curatedMessage(status, body) {
+  if (Number(status) >= 500) return httpMessageOf(status);
+  return serverCopy(body) || httpMessageOf(status);
+}
+
 /** 从"HTTP 200 但业务码 ≠ 0"的信封响应构造 ApiError（request.js 成功分支用） */
 export function apiErrorFromEnvelope(res, config = null) {
   const body = (res && res.data) || {};
@@ -125,7 +135,7 @@ export function apiErrorFromEnvelope(res, config = null) {
   return new ApiError({
     status,
     code,
-    message: serverCopy(body) || httpMessageOf(status),
+    message: curatedMessage(status, body),
     url: (config && config.url) || (res && res.config && res.config.url) || '',
     cause: null,
     response: res || null,
@@ -154,8 +164,9 @@ export function normalizeApiError(raw, config = null) {
   const status = Number((res && res.status) || (raw && raw.status) || 0) || 0;
   const body = res && res.data;
   const code = isBusinessEnvelope(body) ? body.code : (status || null);
-  const message = serverCopy(body)
-    || (status ? apiErrorCopy(status) : (isTransportFailure(raw) ? NETWORK_MESSAGE : UNKNOWN_MESSAGE));
+  const message = status
+    ? curatedMessage(status, body)
+    : (isTransportFailure(raw) ? NETWORK_MESSAGE : UNKNOWN_MESSAGE);
   return new ApiError({
     status,
     code,

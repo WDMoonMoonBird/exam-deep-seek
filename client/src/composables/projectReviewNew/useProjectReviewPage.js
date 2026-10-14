@@ -11,6 +11,7 @@ import { message } from 'ant-design-vue';
 import { getProjectReview } from '../../api/projects.js';
 import { errorCopyOf } from '../errorCopy.js';
 import { useMonacoWorkspace } from './useMonacoWorkspace.js';
+import { safeInitMonaco } from '../monacoGuard.js';   // ★W1-r2（t4）：Monaco 初始化失败就地兜底（提示一次 + 骨架降级）
 import {
   STATUS_TONE, statusColorOf, statusTextOf, displayNoOf, findFirstFile,
   bestScoreNotice, newSubmissionNotice, reviewHintOf,
@@ -147,7 +148,8 @@ export function useProjectReviewPage() {
       // 等 DOM 就绪再挂 Monaco
       await nextTick();
       await new Promise(res => setTimeout(res, 300));
-      if (editorContainerRef.value) await initMonaco();
+      // ★W1-r2（t4）：编辑器挂了 ≠ 复审数据加载失败 —— 只提示一次 + 骨架降级（不再把整页打进 error 态）
+      if (editorContainerRef.value) await safeInitMonaco(initMonaco, { tag: 'useProjectReviewPage.js' });
 
       // 第一眼看到学生答案：自动打开第一个文件
       const first = findFirstFile(studentFiles.tree);

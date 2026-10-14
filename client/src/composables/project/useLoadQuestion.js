@@ -8,7 +8,8 @@
 import { nextTick } from 'vue';
 import { message } from 'ant-design-vue';
 import request from '../../api/request.js';
-import { useSafeRequest } from '../useSafeRequest.js';   // ★W1（t1）：题目编辑链路的取数改走 safeLoad（失败就地提示、不冒泡）
+import { useSafeRequest } from '../useSafeRequest.js';
+import { safeInitMonaco } from '../monacoGuard.js';   // ★W1-r2（t4）：Monaco 初始化失败就地兜底   // ★W1（t1）：题目编辑链路的取数改走 safeLoad（失败就地提示、不冒泡）
 import { findFirstFile } from './zipEntry.js';
 
 export function useLoadQuestion({ form, isTeacher, route, externalTree, fileContents, hasUploaded, studentSubmission, assignmentId, questionId, editorContainerRef, resetModels, initMonaco, openFile, ensureCheckerState }) {
@@ -38,7 +39,8 @@ async function loadQuestion() {
           if (treeRes.data?.contents) Object.entries(treeRes.data.contents).forEach(([p, c]) => fileContents.set(p, c));
           hasUploaded.value = true;
           await nextTick(); await new Promise(res => setTimeout(res, 300));
-          if (editorContainerRef.value) await initMonaco();
+          // ★W1-r2（t4）：编辑器挂了 ≠ 题目加载失败 —— 只提示一次 + 骨架降级
+          if (editorContainerRef.value) await safeInitMonaco(initMonaco, { tag: 'project/useLoadQuestion.js 教师' });
           const first = findFirstFile(treeRes.data.tree);
           if (first) openFile(first.path, first.name, first.language);
         }
@@ -69,7 +71,8 @@ async function loadQuestion() {
         if (q.files.contents) Object.entries(q.files.contents).forEach(([p, c]) => fileContents.set(p, c));
         hasUploaded.value = true;
         await nextTick(); await new Promise(res => setTimeout(res, 300));
-        if (editorContainerRef.value) await initMonaco();
+        // ★W1-r2（t4）：同上（学生侧）
+        if (editorContainerRef.value) await safeInitMonaco(initMonaco, { tag: 'project/useLoadQuestion.js 学生' });
         const first = findFirstFile(q.files.tree);
         if (first) openFile(first.path, first.name, first.language);
       }
