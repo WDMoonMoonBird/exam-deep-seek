@@ -104,7 +104,18 @@ setInterval(() => app.locals.rateLimiter.cleanup(), 600000);
 
 // 请求日志
 app.use((req, _res, next) => {
-  logger.info({ method: req.method, url: req.url }, '→');
+  // ★L3（W2-P2）：**不落原始 req.url** —— query 可能携带 token/口令/手机号等敏感值，日志一旦落盘即成外泄面。
+  //   口径：只记 path（去 query）+ query 的**键名集合** + 原始 query 的 sha256 前 12 位（可关联、不可还原）。
+  const raw = String(req.originalUrl || req.url || '');
+  const qIdx = raw.indexOf('?');
+  const reqPath = qIdx === -1 ? raw : raw.slice(0, qIdx);
+  const queryKeys = Object.keys(req.query || {});
+  logger.info({
+    method: req.method,
+    path: reqPath,
+    queryKeys,
+    queryHash: qIdx === -1 ? undefined : crypto.createHash('sha256').update(raw.slice(qIdx)).digest('hex').slice(0, 12),
+  }, '→');
   next();
 });
 
@@ -167,8 +178,17 @@ if (process.env.NODE_ENV === 'production') {
   const distDir = path.join(__dirname, '../../client/dist');
   app.use(express.static(distDir));
   // SPA fallback（Express 5 兼容）
+  // ★M16（W2-P2）：**软 404 收敛** —— 原实现除 /api 外一切路径都回 index.html（200 外壳）：
+  //   扫描器打 /admin、/.env、/wp-login.php 也会拿到 200，既污染索引又掩盖真实 404。
+  //   口径与 nginx 侧对齐（nginx-exam.conf 的公开入口短名单）⇒ 只对**已知前端前缀**回退外壳，其余交给 404；
+  //   ★与 nginx 的协同：公网请求通常先由 nginx 判定（非白名单直接 404），本层只在"直连 Node"时兜底 ⇒ 不双重处理。
+  const SPA_PREFIXES = ['/login', '/doc', '/teacher', '/student', '/admin', '/exam'];
   app.use((req, res, next) => {
-    if (req.path.startsWith('/api')) return next();
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    const p = req.path || '/';
+    if (p.startsWith('/api')) return next();
+    const known = p === '/' || SPA_PREFIXES.some((pre) => p === pre || p.startsWith(pre + '/'));
+    if (!known) return next();   // ★M16：未知路径 ⇒ 走 404（不再软 200）
     res.sendFile(path.join(distDir, 'index.html'));
   });
 }

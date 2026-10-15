@@ -83,7 +83,10 @@ function resolveTempDir(tempId) {
 /** GET / — 分页查询任务列表 */
 export const listProjects = async (req, res) => {
   try {
-    const { page = 1, pageSize = 20, keyword, status } = req.query;
+    // ★L8（W2-P2）：分页夹紧（pageSize 无上限 ⇒ 可一次拉全表；page 可为负 ⇒ skip 为负）。
+    const { keyword, status } = req.query;
+    const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 20));
     const where = { teacherId: req.user.id, deletedAt: null };
     if (keyword) where.title = { contains: keyword };
     if (status) where.status = status;
@@ -98,8 +101,8 @@ export const listProjects = async (req, res) => {
           _count: { select: { submissions: true } },
         },
         orderBy: { createdAt: 'desc' },
-        skip: (+page - 1) * +pageSize,
-        take: +pageSize,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
       }),
       prisma.project.count({ where }),
     ]);

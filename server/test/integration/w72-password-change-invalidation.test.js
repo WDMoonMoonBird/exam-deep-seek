@@ -15,6 +15,8 @@ import prisma from '../../src/utils/prisma.js';
 import { getJwtSecret } from '../../src/config/jwtSecret.js';
 import { request, authReq, loginAsTeacher, loginAsStudent, getTestData } from './helpers.js';
 
+// ★H6：管理员重置教师后的新口令（首登强制改密 ⇒ W72-4 首条用例末尾自行改密，后续用例沿用）
+const NEW_TEACHER_PWD = 'W72-teacher-New-1';
 const U1 = 'w72_pwd_a';
 const U2 = 'w72_pwd_b';
 const U3 = 'w72_pwd_legacy';
@@ -80,25 +82,40 @@ describe('W72-1/2/3 自助改密：旧令牌失效、新令牌可用、他人不
 });
 
 describe('W72-4 重置场景：管理员重置教师 / 教师重置学生 ⇒ 被重置者旧令牌失效', () => {
-  test('★管理员重置教师密码：教师旧令牌 401；重置后新密码（=工号）可登录', async () => {
-    const teacherToken = await loginAsTeacher();                              // 种子教师（密码=工号，重置幂等）
+  test('★管理员重置教师密码：教师旧令牌 401；重置后**随机临时口令**可登录（首登须改密）', async () => {
+    const teacherToken = await loginAsTeacher();                              // 种子教师
     await ageToken();                                                         // 同上：让教师旧令牌落在更早的秒
     const me = getTestData().teacherId;
     const reset = await authReq(tokenU1).put('/api/admin/teachers/' + me + '/reset-password', {});
     expect(reset.status).toBe(200);
+    // ★H6：重置回传**一次性临时口令**（旧语义=口令即刻变成工号）
+    const temp = reset.body.data?.initialPassword;
+    expect(typeof temp).toBe('string');
+    expect(temp).not.toBe('test_teacher');                                    // ★判别力：不再是工号
     const denied = await authReq(teacherToken).get(PROBE.teacher);
     expect(denied.status).toBe(401);
     expect(denied.body.code).toBe(1002);
-    const relogin = await login('test_teacher', 'test_teacher');
-    expect((await authReq(relogin.body.data.token).get(PROBE.teacher)).status).toBe(200);   // 新令牌可用
+    // ★H6：临时口令可登录，但带 mustChangePassword 标志 ⇒ 业务接口被闸门拦住（403/1101）
+    const relogin = await login('test_teacher', temp);
     expect(relogin.status).toBe(200);
+    expect(relogin.body.data.user.mustChangePassword).toBe(true);
+    const gated = await authReq(relogin.body.data.token).get(PROBE.teacher);
+    expect(gated.status).toBe(403);
+    // 闸门实际响应口径（middleware/auth.js:58）：403 + code 1005 + 「请先修改初始密码后再使用其它功能」
+    expect(gated.body.code).toBe(1005);
+    expect(String(gated.body.message || '')).toContain('修改初始密码');
+    // ★H6 两步闭环：改密端点属白名单（闸门放行）⇒ 改密后新令牌可用（否则即"双向锁死"）
+    const changed = await authReq(relogin.body.data.token).put('/api/auth/password', { oldPassword: temp, newPassword: NEW_TEACHER_PWD });
+    expect(changed.status).toBe(200);
+    const relogin2 = await login('test_teacher', NEW_TEACHER_PWD);
+    expect((await authReq(relogin2.body.data.token).get(PROBE.teacher)).status).toBe(200);   // 新令牌可用
   });
 
   test('★教师重置学生密码：学生旧令牌 401', async () => {
     const studentToken = await loginAsStudent('test_stu_01');
     // ★注意：不能用 loginAsTeacher()（模块级缓存）——上一条刚重置教师密码 ⇒ 缓存令牌已按本批规则失效；
     //   这里显式重新登录拿新令牌（这本身也是「重置后旧令牌确实作废」的一条侧证）。
-    const teacherToken = (await login('test_teacher', 'test_teacher')).body.data.token;
+    const teacherToken = (await login('test_teacher', NEW_TEACHER_PWD)).body.data.token;   // ★H6：上一条已改密，种子口令不再可用
     await ageToken();                                                         // 同上：让学生旧令牌落在更早的秒
     const sid = getTestData().studentIds[0];
     const reset = await authReq(teacherToken).put('/api/teacher/students/' + sid + '/reset-password?schoolId=' + getTestData().schoolId, {});
@@ -145,11 +162,11 @@ describe('W72-5 ★秒级边界（iat 秒 + 严格小于；NULL 列不判定）'
 describe('W72-6 静态核对：四条设密路径全部写列 + 计数不变式', () => {
   const read = (rel) => fs.readFileSync(path.join(SRC, rel), 'utf8');
   const pathOne = [
-    ['① 自助改密', 'controllers/authController.js', 'data: { password: hashed, passwordChangedAt: new Date() }'],
-    ['② 管理员重置教师', 'controllers/adminController.js', 'data: { password: newPassword, passwordChangedAt: new Date() }'],
-    ['③ 教师重置学生', 'interface/http/controllers/teacher/students.js', 'data: { password: newPassword, passwordChangedAt: new Date() }'],
-    ['④ 建号初始口令（管理员建教师）', 'controllers/adminController.js', "password: bcrypt.hashSync(username, 10), role: 'teacher',"],
-    ['④ 建号初始口令（管理员建学生）', 'controllers/adminController.js', 'password: bcrypt.hashSync(username, 10),\n        passwordChangedAt: new Date()'],
+    ['① 自助改密', 'controllers/authController.js', 'data: { password: hashed, passwordChangedAt: new Date(), mustChangePassword: false }'],
+    ['② 管理员重置教师', 'controllers/adminController.js', 'data: { password: newPassword, passwordChangedAt: new Date(), mustChangePassword: true }'],
+    ['③ 教师重置学生', 'interface/http/controllers/teacher/students.js', 'data: { password: newPassword, passwordChangedAt: new Date(), mustChangePassword: true }'],
+    ['④ 建号初始口令（管理员建教师）', 'controllers/adminController.js', "password: bcrypt.hashSync(initialPassword, 10), role: 'teacher',"],
+    ['④ 建号初始口令（管理员建学生）', 'controllers/adminController.js', 'password: bcrypt.hashSync(initialPassword, 10),\n        passwordChangedAt: new Date()'],
     ['④ 建号初始口令（教师建学生）', 'interface/http/controllers/teacher/students.js', 'passwordChangedAt: new Date(), // ★R2-B67：设密路径④——建号初始口令'],
     ['④ 变更学号即改密', 'interface/http/controllers/teacher/students.js', 'data.passwordChangedAt = new Date(); // ★R2-B67：改学号即改密'],
     ['④ 补全姓名即重置密码', 'interface/http/controllers/teacher/students.js', 'data.passwordChangedAt = new Date(); // ★R2-B67：补全姓名即重置密码'],
@@ -172,8 +189,14 @@ describe('W72-6 静态核对：四条设密路径全部写列 + 计数不变式'
       }
     };
     walk(SRC);
-    // app.js 的「明文口令→bcrypt」是一次性历史修补（本任务 out of scope，非"设新口令"）⇒ 明确排除
-    const withHash = files.filter((p) => fs.readFileSync(p, 'utf8').includes('bcrypt.hashSync') && !p.endsWith(path.sep + 'app.js'));
+    // app.js 的「明文口令→bcrypt」是一次性历史修补（本任务 out of scope，非"设新口令"）⇒ 明确排除。
+    // ★H6：initial-password.js 是**口令生成原语**（纯函数，不落库、不写任何列）；其文本里的
+    //   `bcrypt.hashSync(username, 10)` 只出现在文档注释（用来对照被替换掉的旧反模式），不是真实调用 ⇒
+    //   一并排除。**排除不削弱本不变式**：真正"设新口令"的落点（authController / adminController /
+    //   teacher/students.js）仍在扫描集内，且下方另有 mustChangePassword 计数不变式同集合校验。
+    const PURE_HELPERS = [path.sep + 'app.js', path.join('infrastructure', 'security', 'initial-password.js')];
+    const withHash = files.filter((p) => fs.readFileSync(p, 'utf8').includes('bcrypt.hashSync')
+      && !PURE_HELPERS.some((suffix) => p.endsWith(suffix)));
     expect(withHash.length).toBeGreaterThan(0);
     for (const p of withHash) {
       const src = fs.readFileSync(p, 'utf8');
@@ -183,6 +206,38 @@ describe('W72-6 静态核对：四条设密路径全部写列 + 计数不变式'
     }
     // app.js 的「明文口令→bcrypt」是一次性历史修补（本任务 out of scope）：它不是"设新口令"，故不写列。
     expect(fs.readFileSync(path.join(SRC, 'app.js'), 'utf8')).toContain('已迁移明文密码');
+  });
+
+  // ★H6（W2-C12）新增两条防回归锁（与上一条同型：把"新落点漏写列/漏置标志"变成可机器验证的不变式）
+  test('★H6 不变式：凡出现 bcrypt.hashSync 的源文件，mustChangePassword 出现次数 ≥ hashSync 次数', () => {
+    const files = [];
+    const walk = (dir) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) walk(p);
+        else if (p.endsWith('.js')) files.push(p);
+      }
+    };
+    walk(SRC);
+    const PURE_HELPERS = [path.sep + 'app.js', path.join('infrastructure', 'security', 'initial-password.js')];
+    const withHash = files.filter((p) => fs.readFileSync(p, 'utf8').includes('bcrypt.hashSync')
+      && !PURE_HELPERS.some((suffix) => p.endsWith(suffix)));
+    expect(withHash.length).toBeGreaterThan(0);
+    for (const p of withHash) {
+      const src = fs.readFileSync(p, 'utf8');
+      // 计数口径：排除**空口令占位**（teacher/students.js 的 `bcrypt.hashSync('', 10)` 两处）——
+      //   那些账号无口令可改、根本无法登录，按设计不需要 mustChangePassword（H6 报告 §1 已列明"占位建号不改"）。
+      const hashes = (src.match(/bcrypt\.hashSync\((?!'')/g) || []).length;
+      const flags = (src.match(/mustChangePassword/g) || []).length;
+      expect({ file: path.relative(SRC, p), ok: flags >= hashes }).toEqual({ file: path.relative(SRC, p), ok: true });
+    }
+  });
+
+  test('★H6 白名单不变式：强制改密闸门必须放行改密端点（否则「必须先改密」×「改密端点也被拦」= 双向锁死，不可自愈）', () => {
+    const mw = fs.readFileSync(path.join(SRC, 'middleware', 'auth.js'), 'utf8');
+    expect(mw).toContain('/api/auth/password');       // 挂载点下的完整路径形态
+    expect(mw).toContain('/auth/password');           // 子挂载点下的相对路径形态（两种挂载方式都放行）
+    expect(mw).toMatch(/mustChangePassword\s*===?\s*true/);   // 闸门判定本体在场
   });
 });
 

@@ -14,7 +14,10 @@ const PROJECTS_UPLOAD_DIR = path.join(__dirname, '../../uploads/projects');
 export const listSubmissions = async (req, res) => {
   try {
     const projectId = +req.params.id;
-    const { page = 1, pageSize = 20, status } = req.query;
+    const { status } = req.query;
+    // ★L8（W2-P2）：**分页夹紧** —— 原实现把 pageSize 直接送进 take（无上限 ⇒ 可一次拉全表）与 skip（可为负）。
+    const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 20));
 
     // 验证任务存在
     const project = await prisma.project.findFirst({
@@ -37,8 +40,8 @@ export const listSubmissions = async (req, res) => {
           student: { select: { id: true, username: true, realName: true } },
         },
         orderBy: { submittedAt: 'desc' },
-        skip: (+page - 1) * +pageSize,
-        take: +pageSize,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
       }),
       prisma.projectSubmission.count({ where }),
     ]);
@@ -158,7 +161,10 @@ export const getFileContent = async (req, res) => {
     const fullPath = path.resolve(submissionDir, safePath);
 
     // 再次验证在 submissionDir 内
-    if (!fullPath.startsWith(path.resolve(submissionDir))) {
+    // ★L7（W2-P2）：改用 **path.relative** 判定 —— startsWith(resolve(dir)) 缺 path.sep 边界，
+    //   形如 <dir>-evil/x 的同前缀兄弟目录会被误放行（与 projectController.resolveTempDir 同口径）。
+    const rel = path.relative(path.resolve(submissionDir), fullPath);
+    if (rel !== "" && (rel.startsWith(".." + path.sep) || rel === ".." || path.isAbsolute(rel))) {
       return res.status(400).json({ code: 1001, message: '非法路径', data: null });
     }
 
@@ -216,6 +222,19 @@ export const reviewSubmission = async (req, res) => {
       return res.status(400).json({ code: 1001, message: '请填写最终分数', data: null });
     }
 
+    // ★M3（W2-P2）：**成绩完整性** —— 非有限数字直接拒；合法数字**夹紧 0..100**（与既有评分 clamp 同口径，未改阈值）；
+    //   status 走**枚举白名单**（ProjectSubmissionStatus 里属于「教师审核放分」的两个），其余（draft/submitted/grading/graded）
+    //   是系统态，教师端不得直接写入。
+    const scoreNumRaw = Number(finalScore);
+    if (!Number.isFinite(scoreNumRaw)) {
+      return res.status(400).json({ code: 1001, message: "最终分数必须是数字", data: null });
+    }
+    const scoreNum = Math.min(100, Math.max(0, scoreNumRaw));
+    const ALLOWED_REVIEW_STATUS = ["reviewed", "published"];
+    if (!ALLOWED_REVIEW_STATUS.includes(status)) {
+      return res.status(400).json({ code: 1001, message: "状态不合法", data: null });
+    }
+
     const sub = await prisma.projectSubmission.findFirst({
       where: { id: submissionId, projectId },
     });
@@ -224,7 +243,7 @@ export const reviewSubmission = async (req, res) => {
     const updated = await prisma.projectSubmission.update({
       where: { id: submissionId },
       data: {
-        finalScore: +finalScore,
+        finalScore: scoreNum,
         teacherFeedback: teacherFeedback || null,
         status,
         reviewedAt: status === 'published' || status === 'reviewed' ? new Date() : undefined,

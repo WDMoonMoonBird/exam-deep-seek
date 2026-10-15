@@ -382,17 +382,22 @@ describe('ownership-guards · 归属校验收敛（S-2 写路径 + S-6 学生详
       expect(sc.map(x => x.classId)).toEqual([clsLegit.id]);
     });
 
-    it('T16: 本人学生 resetStudentPassword → 200 且文案/语义不变', async () => {
+    it('T16: 本人学生 resetStudentPassword → 200（★H6：回传随机临时口令 + 标志置位）', async () => {
       const before = await prisma.user.findUnique({ where: { id: stuLegit.id }, select: { password: true } });
       const res = await api(tokenA).put('/api/teacher/students/' + stuLegit.id + '/reset-password?schoolId=' + sA.id);
       expect(res.status).toBe(200);
       expect(res.body.code).toBe(0);
-      expect(res.body.data).toBeNull();
-      expect(res.body.message).toContain('密码已重置为学号');
-      const after = await prisma.user.findUnique({ where: { id: stuLegit.id }, select: { password: true } });
+      // ★H6：data 不再为 null —— 改为携带一次性临时口令（旧断言 data).toBeNull() 已失效）
+      const temp = res.body.data?.initialPassword;
+      expect(typeof temp).toBe('string');
+      expect(res.body.message).toContain(temp);
+      expect(res.body.message).not.toContain('密码已重置为学号');
+      const after = await prisma.user.findUnique({ where: { id: stuLegit.id }, select: { password: true, mustChangePassword: true } });
       expect(after.password).not.toBe(before.password);
-      // 重置口令 = 学号（username 去掉 @学校代码）——本夹具 username = 'to_stu_legit@29941'
-      expect(bcrypt.compareSync('to_stu_legit', after.password)).toBe(true);
+      // ★H6 判别力：重置口令是**随机临时口令**，不再等于学号（本夹具 username = 'to_stu_legit@29941'）
+      expect(temp).not.toBe('to_stu_legit');
+      expect(bcrypt.compareSync(temp, after.password)).toBe(true);
+      expect(after.mustChangePassword).toBe(true);          // ★标志置位（闸门依据）
     });
 
     it('T17: 本人学生 deleteStudent → 200 且级联删除生效', async () => {
@@ -523,13 +528,16 @@ describe('ownership-guards · 归属校验收敛（S-2 写路径 + S-6 学生详
       expect(await prisma.user.count({ where: { username: { startsWith: PREFIX + 'hack_batch' } } })).toBe(0);
     });
 
-    it('R14: 本人班级新增学生 → 200（合法路径与响应形状不变）', async () => {
+    it('R14: 本人班级新增学生 → 200（合法路径放行；★H6：响应回传一次性初始口令）', async () => {
       const res = await api(tokenA).post('/api/teacher/students?schoolId=' + sA.id, {
         username: PREFIX + 'ok_stu', realName: '合法学生', classId: clsA.id,
       });
       expect(res.status).toBe(200);
       expect(res.body.code).toBe(0);
-      expect(res.body.message).toBe('新增成功');
+      // ★H6：文案改为带初始口令（旧断言 toBe('新增成功') 已失效）
+      expect(res.body.message).toMatch(/^新增成功/);
+      expect(typeof res.body.data?.initialPassword).toBe('string');
+      expect(res.body.data.initialPassword).not.toBe(PREFIX + 'ok_stu');   // ★不再是学号
       expect(res.body.data.username).toBe(PREFIX + 'ok_stu@' + CODE_A);
     });
   });

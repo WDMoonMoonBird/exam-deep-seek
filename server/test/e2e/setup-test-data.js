@@ -3,6 +3,7 @@
 // 注意：本脚本经 HTTP 打被测服务，需与被测服务共用同一 DATABASE_URL（缺省读 server/.env）。
 import { ensureAdminAccount } from '../fixtures/admin.js';
 import { E2E_API_BASE } from './e2e-env.js';
+import { E2E_SEED_TEACHER, ensureLoginable } from './e2e-accounts.js';
 
 // ★W1-C6：基址随端口可配置（默认 3000 不变）；下方 schoolId 拼接语义保持原样
 const BASE = E2E_API_BASE;
@@ -28,15 +29,17 @@ async function api(method, path, body, token) {
     const adminLogin = await api('POST', '/auth/login', { username: adminCreds.username, password: adminCreds.password });
     const adminToken = adminLogin.token;
 
-    // 2. 创建测试教师1
-    console.log('2. 创建测试教师1...');
-    let t1;
-    try {
-      t1 = await api('POST', '/admin/teachers', { username: 'testteacher1', realName: '测试教师1', schoolIds: [2749] }, adminToken);
-    } catch (e) {
-      if (e.message.includes('已存在')) console.log('   已存在，跳过');
-    }
-    console.log('   ✅ 测试教师1 (testteacher1 / testteacher1)');
+    // 2. 创建/复用测试教师1（★W2-C15：H6 之后口令是**一次性随机临时口令** ⇒ 必须走
+    //    「建号/重置 → 临时口令登录 → 首登改密 → 已知口令」，统一由 e2e-accounts.js 实现；
+    //    严禁再按"口令=用户名"取 —— 那等于把 H6 修掉的缺陷种回测试）
+    console.log('2. 创建测试教师1（H6：首登改密流程）...');
+    const t1Ready = await ensureLoginable({
+      request: (method, path, body, token) => api(method, path, body, token)
+        .then((d) => ({ code: 0, data: d }), (err) => ({ code: -1, message: String(err && err.message) })),
+      kind: 'teacher', username: E2E_SEED_TEACHER.username, password: E2E_SEED_TEACHER.password,
+      adminToken, schoolId: 2749, realName: '测试教师1',
+    });
+    console.log('   ✅ 测试教师1（已知口令，经首登改密：' + t1Ready.viaChange + '）');
 
     // 3. 创建测试教师2
     console.log('3. 创建测试教师2...');
@@ -48,9 +51,9 @@ async function api(method, path, body, token) {
     }
     console.log('   ✅ 测试教师2 (testteacher2 / testteacher2)');
 
-    // 4. 登录测试教师1
+    // 4. 登录测试教师1（口令来自上一步的 H6 首登改密结果）
     console.log('4. 登录测试教师1...');
-    const t1Login = await api('POST', '/auth/login', { username: 'testteacher1', password: 'testteacher1' });
+    const t1Login = await api('POST', '/auth/login', { username: E2E_SEED_TEACHER.username, password: E2E_SEED_TEACHER.password });
     const t1Token = t1Login.token;
     const t1UserId = t1Login.user.id;
     console.log('   测试教师1 userId=' + t1UserId);

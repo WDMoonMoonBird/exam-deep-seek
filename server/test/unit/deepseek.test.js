@@ -90,8 +90,8 @@ describe('gradeSubmission — 提示词构建', () => {
     expect(userContent).not.toContain('## 题目材料');
   });
 
-  // D4: 默认评分标准
-  it('D4: 未指定 scoringCriteria 时 SystemPrompt 含默认三标准', async () => {
+  // D4: 默认评分标准（★L4：system 完全静态，标准下沉到 user 段的数据围栏内）
+  it('D4: 未指定 scoringCriteria ⇒ system 不含任何标准、默认三标准由 user 段 CRITERIA_DATA 携带', async () => {
     captureFetch();
     await gradeSubmission({
       material: null,
@@ -103,13 +103,21 @@ describe('gradeSubmission — 提示词构建', () => {
     });
     const body = JSON.parse(lastFetchArgs.init.body);
     const systemContent = body.messages[0].content;
-    expect(systemContent).toContain('代码正确性（60%）');
-    expect(systemContent).toContain('代码效率（20%）');
-    expect(systemContent).toContain('代码可读性（20%）');
+    const userContent = body.messages[1].content;
+    // 旧语义（本用例原本固化）：默认三标准出现在 **system** —— L4 已移除，不得回归
+    expect(systemContent).not.toContain('代码正确性（60%）');
+    expect(systemContent).not.toContain('代码效率（20%）');
+    expect(systemContent).not.toContain('代码可读性（20%）');
+    // 新语义：默认标准在 **user** 段，且被数据围栏包裹（含"非指令"声明）
+    expect(userContent).toContain('<<<CRITERIA_DATA');
+    expect(userContent).toContain('CRITERIA_DATA>>>');
+    expect(userContent).toContain('代码正确性（60%）');
+    expect(userContent).toContain('代码效率（20%）');
+    expect(userContent).toContain('代码可读性（20%）');
   });
 
-  // D5: 自定义评分标准
-  it('D5: 自定义 scoringCriteria 替换默认标准', async () => {
+  // D5: 自定义评分标准（★L4：仍不进 system；在 user 段**替换**默认标准而非叠加）
+  it('D5: 自定义 scoringCriteria ⇒ system 仍静态、自定义标准进 user 段并替换默认标准', async () => {
     captureFetch();
     await gradeSubmission({
       material: null,
@@ -122,8 +130,14 @@ describe('gradeSubmission — 提示词构建', () => {
     });
     const body = JSON.parse(lastFetchArgs.init.body);
     const systemContent = body.messages[0].content;
-    expect(systemContent).toContain('自定义评分标准');
+    const userContent = body.messages[1].content;
+    // 旧语义：自定义标准出现在 system —— L4 已移除
+    expect(systemContent).not.toContain('自定义评分标准');
     expect(systemContent).not.toContain('代码正确性（60%）');
+    // 新语义：自定义标准进 user 段的数据围栏，且**替换**默认标准
+    expect(userContent).toContain('自定义评分标准：只看正确性');
+    expect(userContent).toContain('<<<CRITERIA_DATA');
+    expect(userContent).not.toContain('代码正确性（60%）');
   });
 
   // D6: 小题标题缺省
@@ -180,8 +194,8 @@ describe('gradeSubmission — API 返回解析', () => {
     expect(result.feedback).toBe('很好');
   });
 
-  // D12: 分数超上限
-  it('D12: 分数超上限 → clamp到maxScore', async () => {
+  // D12: 分数超上限（★M9/H8：越界即拒，不再 clamp）
+  it('★D12: 分数超上限 ⇒ **越界即拒**（ABNORMAL_FEEDBACK），不再 clamp到maxScore', async () => {
     mockFetch(mockJsonRes({
       choices: [{ message: { content: '{"score":150,"feedback":"完美"}' } }],
     }));
@@ -193,11 +207,12 @@ describe('gradeSubmission — API 返回解析', () => {
       studentAnswer: '学生答案',
       maxScore: 100,
     });
-    expect(result.score).toBe(100);
+    expect(result).toEqual({ score: 0, feedback: ABNORMAL_FEEDBACK });
+    expect(result.score).not.toBe(100);   // ★旧语义（clamp 到满分）不得回归
   });
 
-  // D13: 负数分数
-  it('D13: 负数分数 → clamp到0', async () => {
+  // D13: 负数分数（★M9/H8：越界即拒；旧断言只看 score=0，clamp 与 reject 都会得 0 ⇒ 判别力不足，此处钉住拒绝路径）
+  it('★D13: 负数分数 ⇒ **越界即拒**（ABNORMAL_FEEDBACK），不只是"截断到 0"', async () => {
     mockFetch(mockJsonRes({
       choices: [{ message: { content: '{"score":-5,"feedback":"完全错误"}' } }],
     }));
@@ -209,7 +224,8 @@ describe('gradeSubmission — API 返回解析', () => {
       studentAnswer: '学生答案',
       maxScore: 100,
     });
-    expect(result.score).toBe(0);
+    expect(result).toEqual({ score: 0, feedback: ABNORMAL_FEEDBACK });
+    expect(result.feedback).not.toBe('完全错误');
   });
 });
 

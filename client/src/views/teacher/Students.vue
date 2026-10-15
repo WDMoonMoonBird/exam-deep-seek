@@ -101,8 +101,9 @@
           </a-select>
         </a-form-item>
         <a-form-item v-if="isEdit" label="重置密码">
-          <a-popconfirm title="确认将该学生密码重置为学号？" description="重置后旧密码立即失效。" ok-text="重置为学号" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="resetPassword">
-            <a-button :disabled="form._incomplete" type="dashed" danger>重置为学号</a-button>
+          <!-- ★H6（W2-P2d）：口令已改为服务端随机生成并**一次性回传** ⇒ 文案不得再声称口令等于学号（旧语义会误导教师） -->
+          <a-popconfirm title="确认重置该学生的登录口令？" description="重置后旧口令立即失效；系统将生成一次性随机口令，并在结果提示中显示一次。" ok-text="重置口令" :ok-button-props="{ danger: true }" cancel-text="取消" @confirm="resetPassword">
+            <a-button :disabled="form._incomplete" type="dashed" danger>重置口令</a-button>
           </a-popconfirm>
         </a-form-item>
       </a-form>
@@ -170,6 +171,17 @@
           <div v-for="(e, i) in uploadResult.errors" :key="'e'+i" class="err-item">
             <ExclamationCircleOutlined class="icon-danger" />{{ e }}
           </div>
+        </div>
+      </div>
+      <!-- ★H6（W2-P2d）：本次新建账号的一次性初始口令（仅显示一次；请立即转交本人） -->
+      <div v-if="uploadResult.credentials.length" class="result-list cred-list">
+        <p class="result-title mt-3">
+          一次性初始口令（<span class="tone-warning">{{ uploadResult.credentials.length }}</span> 名）——
+          <b>仅显示一次，请立即转交本人</b>，学生首次登录后必须修改。
+        </p>
+        <div v-for="(c, i) in uploadResult.credentials" :key="'c'+i" class="cred-item">
+          <span class="lp-mono">{{ c.username }}</span>
+          <b class="lp-mono">{{ c.initialPassword }}</b>
         </div>
       </div>
     </a-modal>
@@ -274,8 +286,19 @@ const emptyActionText = computed(() => {
 const uploadModalOpen = ref(false);
 const uploadFileList = ref([]);
 const uploading = ref(false);
+/**
+ * ★H6（W2-P2d）：成功提示**统一读服务端 message**（一次性口令由服务端在 message 内回传）；
+ * 当响应携带一次性口令（data.initialPassword）时追加"仅显示一次"提醒 —— 客户端**不得自造口令文案**。
+ */
+function successToast(res, fallback) {
+  const text = (res && res.message) || fallback;
+  const oneTime = !!(res && res.data && res.data.initialPassword);
+  if (oneTime) message.success(text + '（该口令仅显示一次，请立即转交本人）', 8);
+  else message.success(text);
+}
+
 const uploadResultOpen = ref(false);
-const uploadResult = reactive({ success: 0, incomplete: 0, warnings: [], errors: [] });
+const uploadResult = reactive({ success: 0, incomplete: 0, warnings: [], errors: [], credentials: [] });
 
 let timer = null;
 watch(keyword, () => { clearTimeout(timer); timer = setTimeout(fetch, 300); });
@@ -362,7 +385,8 @@ async function handleOk() {
           // ★W1：safeSubmit 不抛 ⇒ 失败已就地提示，弹窗不关、列表不丢
           const r = await safeSubmit(() => request.put(`/teacher/students/${editId.value}`, d), { action: '修改' });
           if (r.error) return;
-          message.success('修改成功');
+          // ★H6（W2-P2d）：改学号会重设口令 ⇒ 口令在响应的 message 内（仅此一次）
+          successToast(r.res, '修改成功');
           visible.value = false; await Promise.all([fetch(), loadClasses()]);
         },
       });
@@ -370,22 +394,25 @@ async function handleOk() {
     }
     const r = await safeSubmit(() => request.put(`/teacher/students/${editId.value}`, d), { action: '修改' });
     if (r.error) return;
-    message.success('修改成功');
+    successToast(r.res, '修改成功');
   } else {
     const r = await safeSubmit(
       () => request.post('/teacher/students', { username: String(form.username).trim(), realName: String(form.realName).trim(), classId: form.classId }),
       { action: '新增' },
     );
     if (r.error) return;
-    message.success('新增成功');
+    // ★H6（W2-P2d）：新增学生返回一次性随机口令（在 message 内）⇒ 必须回显，否则无人知晓口令
+    successToast(r.res, '新增成功');
   }
   visible.value = false; await Promise.all([fetch(), loadClasses()]);
 }
 
 async function resetPassword() {
   try {
-    await request.put(`/teacher/students/${editId.value}/reset-password`);
-    message.success(`密码已重置为学号`);
+    const r = await request.put(`/teacher/students/${editId.value}/reset-password`);
+    // ★H6（W2-P2d）：口令在响应 message 内（随机一次性）；本地**不再自造**任何口令文案
+    const oneTime = !!(r && r.data && r.data.initialPassword);
+    message.success(oneTime ? r.message + '（该口令仅显示一次，请立即转交本人）' : ((r && r.message) || '密码已重置'), 8);
   } catch {}
 }
 
@@ -453,6 +480,7 @@ async function handleUploadFile(file) {
   uploadResult.incomplete = 0;
   uploadResult.warnings = [];
   uploadResult.errors = [];
+  uploadResult.credentials = [];
   uploading.value = true;
 
   try {
@@ -488,6 +516,8 @@ async function handleUploadFile(file) {
     // 发送到后端
     const r = await request.post('/teacher/students/batch', { classId: filterClass.value, students: validStudents });
     uploadResult.success = r.data?.success ?? validStudents.length;
+    // ★H6（W2-P2d）：**新建**账号的一次性口令（服务端 data.credentials）—— 教师必须能看到，否则新生无人知晓口令
+    uploadResult.credentials = Array.isArray(r.data?.credentials) ? r.data.credentials : [];
     uploadResult.incomplete = incompleteCount;
     uploadResult.warnings = warnings;
     if (r.data?.errors?.length) {

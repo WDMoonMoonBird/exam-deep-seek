@@ -115,6 +115,20 @@ export const updateTeam = async (req, res) => {
         return res.status(403).json({ code: 1003, message: '无权操作', data: null });
       }
     }
+    // ★M2（W2-P2）：**权限放大** —— 原实现完全不校验 teacherIds ⇒ 可把任意 userId 拉进自有团队
+    //   （团队数据面对其可见，等同越权授权）。口径：teacherIds 必须 ⊆ **本校教师集合**；
+    //   空数组 = 清空成员（只减不增）⇒ 放行；与 classIds 同层、**前置到全部写库动作之前**。
+    if (teacherIds?.length) {
+      const schoolTeachers = await prisma.teacherSchool.findMany({
+        where: { schoolId: getSchoolId(req) },
+        select: { teacherId: true },
+      });
+      const allowedTeacherIds = new Set(schoolTeachers.map((t) => t.teacherId));
+      if (!teacherIds.every((tid) => allowedTeacherIds.has(+tid))) {
+        return res.status(403).json({ code: 1003, message: "包含非本校教师", data: null });
+      }
+    }
+
     if (name !== undefined) {
       await prisma.team.update({ where: { id }, data: { name } });
     }

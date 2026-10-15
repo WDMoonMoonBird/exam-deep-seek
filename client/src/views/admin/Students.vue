@@ -127,6 +127,11 @@ async function handleOk() {
   const r = await safeSubmit(() => request.post('/admin/students', { ...form }), { action: '新增' });
   if (r.error) return;
   visible.value = false;
+  // ★H6（W2-P2d）：新建学生返回**一次性随机口令**（在响应 message 内）⇒ 必须回显；否则该账号无人知晓口令
+  const text = (r.res && r.res.message) || '新增成功';
+  const oneTime = !!(r.res && r.res.data && r.res.data.initialPassword);
+  if (oneTime) message.success(text + '（该口令仅显示一次，请立即转交本人）', 8);
+  else message.success(text);
   fetch();
 }
 

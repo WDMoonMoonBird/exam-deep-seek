@@ -29,10 +29,11 @@ export const getQuestionPromptPreview = async (req, res) => {
     const subs = (q.subQuestions || []).map(sq => ({
       id: sq.id,
       title: sq.title,
-      system: buildSystemPrompt(sq.scoringCriteria || null),
+      system: buildSystemPrompt(),
       user: buildGradingUserMessage({
         material: q.material || null,
         subQuestionTitle: sq.title || '',
+        scoringCriteria: sq.scoringCriteria || null,   // ★L4：预览与评分同口径
         subQuestionContent: sq.content || '',
         referenceAnswer: sq.referenceAnswer || '',
         studentAnswer: '【学生提交的答案将在此拼接】',
@@ -69,10 +70,11 @@ export const getSubmissionPrompt = async (req, res) => {
     }
 
     const sq = sub.subQuestion || sub.question?.subQuestions?.[0] || {};
-    const system = buildSystemPrompt(sq.scoringCriteria || null);
+    const system = buildSystemPrompt();
     const user = buildGradingUserMessage({
       material: sub.question?.material || null,
       subQuestionTitle: sq.title || '',
+      scoringCriteria: sq.scoringCriteria || null,   // ★L4：预览与评分同口径（此前漏传 ⇒ 预览会静默回落 DEFAULT_CRITERIA）
       subQuestionContent: sq.content || '',
       referenceAnswer: sq.referenceAnswer || '',
       studentAnswer: sub.answer || '',

@@ -7,6 +7,7 @@
  */
 
 import { buildSystemPrompt, buildGradingUserMessage, PARSE_ROLE, PARSE_RULES, buildParseUserMessage, PROJECT_REVIEW_SYSTEM, buildProjectReviewUserMessage } from './prompt-builder.js';
+import { schemaScoreFeedback, schemaQuestions } from '../../domain/services/deepseek/model-output-schema.js';   // ★M9/H8
 
 export const ABNORMAL_FEEDBACK = '请联系老师';
 
@@ -69,7 +70,7 @@ export class DeepSeekGateway {
         const { res, timer } = await this.#request({
           model,
           messages: [
-            { role: 'system', content: buildSystemPrompt(req.scoringCriteria) },
+            { role: 'system', content: buildSystemPrompt() },   // ★L4：静态 system（标准经 buildGradingUserMessage 进 user 段）
             { role: 'user', content: userMessage },
           ],
           temperature: 0.3,
@@ -97,6 +98,7 @@ export class DeepSeekGateway {
         if (!jsonMatch) throw new Error('返回格式不包含有效的 JSON');
 
         const parsed = JSON.parse(jsonMatch[0]);
+        if (!schemaScoreFeedback(parsed, { maxScore: req.maxScore })) throw new Error('返回格式不包含有效的 JSON');   // ★M9/H8：失败走既有重试⇒ABNORMAL_FEEDBACK
         const score = Math.max(0, Math.min(req.maxScore, parseInt(parsed.score) || 0));
         return { score, feedback: parsed.feedback || '无评语' };
       } catch (err) {
@@ -146,6 +148,7 @@ export class DeepSeekGateway {
         if (!jsonMatch) throw new Error('返回格式不包含有效的 JSON');
 
         const parsed = JSON.parse(jsonMatch[0]);
+        if (!schemaQuestions(parsed)) throw new Error('返回格式不包含有效的 JSON');   // ★M9
         const questions = parsed.questions || [];
         this.logger.info({ count: questions.length }, '试卷解析完成');
         return { questions };
@@ -195,6 +198,7 @@ export class DeepSeekGateway {
       const jsonMatch = content.match(/\{[\s\S]*"score"[\s\S]*"feedback"[\s\S]*\}/);
       if (!jsonMatch) throw new Error('返回格式不包含有效的 JSON');
       const parsed = JSON.parse(jsonMatch[0]);
+      if (!schemaScoreFeedback(parsed, { maxScore: 100 })) throw new Error('返回格式不包含有效的 JSON');   // ★M9/H8
       const score = Math.max(0, Math.min(100, parseInt(parsed.score) || 0));
       return { score, feedback: parsed.feedback || '无评语' };
     } catch (err) {

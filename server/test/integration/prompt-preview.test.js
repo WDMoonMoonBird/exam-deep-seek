@@ -10,6 +10,7 @@ import path from 'path';
 import { request, loginAsTeacher, getTestData } from './helpers.js';
 import prisma from '../../src/utils/prisma.js';
 import { standardDir, STANDARDS_ROOT } from '../../src/utils/projectPaths.js';
+import { buildSystemPrompt } from '../../src/infrastructure/ai/prompt-builder.js';   // ★W2-C9：与实评同口径的"真源"
 
 describe('AI 提示词查看（教师）', () => {
   let teacherToken;
@@ -70,10 +71,23 @@ describe('AI 提示词查看（教师）', () => {
     expect(r.body.data.type).toBe('code');
     expect(r.body.data.subs.length).toBe(1);
     const sub = r.body.data.subs[0];
+    // '高校教师' 判定依据（★W2-C9）：来自**静态常量** `ROLE`（src/infrastructure/ai/prompt-builder.js:13），
+    //   与教师输入无关 ⇒ 该断言在新语义下**仍成立**，无需迁移。
     expect(sub.system).toContain('高校教师');
+    // ★L4 / "预览 = 实评"同口径：预览 system 必须与评分侧 buildSystemPrompt() **逐字节一致**
+    expect(sub.system).toBe(buildSystemPrompt());
+    // ★L4 判别力：标准（本夹具为教师自定义 '正确性60% 效率20% 可读性20%'）**不得**出现在 system
+    expect(sub.system).not.toContain('正确性60%');
+    expect(sub.system).not.toContain('代码正确性（60%）');
     expect(sub.user).toContain('实现冒泡排序');
     expect(sub.user).toContain('参考答案');
     expect(sub.user).toContain('学生提交的答案将在此拼接');
+    // ★L4：标准改由 user 段的 CRITERIA_DATA 围栏携带（且落在围栏之内）
+    expect(sub.user).toContain('<<<CRITERIA_DATA');
+    expect(sub.user).toContain('CRITERIA_DATA>>>');
+    expect(sub.user).toContain('正确性60%');
+    const fence = sub.user.slice(sub.user.indexOf('<<<CRITERIA_DATA'), sub.user.indexOf('CRITERIA_DATA>>>'));
+    expect(fence).toContain('正确性60%');
   });
 
   it('实训题模板预览（开放性题目，无标准包）：mode=open + 无「标准答案源码」段', async () => {
@@ -111,8 +125,12 @@ describe('AI 提示词查看（教师）', () => {
     const r = await request().get('/api/teacher/submissions/' + sub.id + '/prompt').set('Authorization', 'Bearer ' + teacherToken);
     expect(r.body.code).toBe(0);
     expect(r.body.data.system).toContain('高校教师');
-    expect(r.body.data.system).toContain('正确性60%');
+    // ★L4：旧断言曾是 `system 含 '正确性60%'` —— 标准已下沉 user 段，故改为"system 不得含 + user 段携带"
+    expect(r.body.data.system).not.toContain('正确性60%');
+    expect(r.body.data.system).toBe(buildSystemPrompt());      // 预览 = 实评（同一构建函数，逐字节一致）
     expect(r.body.data.user).toContain('print(1)');
+    expect(r.body.data.user).toContain('<<<CRITERIA_DATA');
+    expect(r.body.data.user).toContain('正确性60%');
     await prisma.submission.delete({ where: { id: sub.id } });
   });
 

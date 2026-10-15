@@ -5,8 +5,9 @@
 
 import logger from '../../../utils/logger.js';
 import { ABNORMAL_FEEDBACK } from '../../../constants.js';
+import { schemaScoreFeedback } from '../../../domain/services/deepseek/model-output-schema.js';   // ★M9/H8
 import { getBaseUrl, getApiKey, getModel } from './config.js';
-import { buildSystemPrompt } from '../../../domain/services/deepseek/prompts.js';
+import { buildSystemPrompt, buildCriteriaDataBlock, DEFAULT_CRITERIA } from '../../../domain/services/deepseek/prompts.js';
 
 /**
  * 调用 DeepSeek API 评分
@@ -37,6 +38,8 @@ ${studentAnswer}
 ## 评分要求
 满分：${maxScore} 分
 请判断题目类型（编程题/理论题/混合题），选择合适的评分标准，根据参考答案对学生答案进行评分。`);
+  // ★L4：教师自定义标准降为 **user 段数据块**（system 已静态化，不再承载半可信输入）
+  parts.push(buildCriteriaDataBlock(scoringCriteria || DEFAULT_CRITERIA));
   const userMessage = parts.join('\n\n');
 
   let lastError = null;
@@ -56,7 +59,7 @@ ${studentAnswer}
         body: JSON.stringify({
           model: MODEL,
           messages: [
-            { role: 'system', content: buildSystemPrompt(scoringCriteria) },
+            { role: 'system', content: buildSystemPrompt() },   // ★L4：静态 system
             { role: 'user', content: userMessage },
           ],
           temperature: 0.3,
@@ -89,6 +92,9 @@ ${studentAnswer}
       }
 
       const parsed = JSON.parse(jsonMatch[0]);
+      // ★M9/H8：统一 schema 校验（类型 + 区间）。不合法即抛 ⇒ 落进既有重试循环 ⇒ 三次后走既有
+      //   return { score: 0, feedback: ABNORMAL_FEEDBACK } 分支；越界分值**在此被拒**（既有 clamp 保留为第二道，未弱化）
+      if (!schemaScoreFeedback(parsed, { maxScore })) throw new Error('返回格式不包含有效的 JSON');
       const score = Math.max(0, Math.min(maxScore, parseInt(parsed.score) || 0));
 
       return { score, feedback: parsed.feedback || '无评语' };

@@ -144,15 +144,31 @@ describe('W67-4 成功一次即清零', () => {
   });
 });
 
-describe('W67-5 既有流程不受影响（教师重置学生密码仍可用弱密码）', () => {
-  test('PUT /teacher/students/:id/reset-password 重置为纯数字学号 ⇒ 200', async () => {
+describe('W67-5 既有流程：教师重置学生密码 ⇒ **随机临时口令**（★H6：旧语义「重置为学号」已移除）', () => {
+  test('PUT /teacher/students/:id/reset-password ⇒ 200 + 随机临时口令（≠学号）+ 标志置位 + 可用其登录', async () => {
     const data = getTestData();
     expect(data && data.studentIds && data.studentIds.length).toBeTruthy();
     const teacherToken = await loginAsTeacher();
     const sid = data.studentIds[0];
+    const row0 = await prisma.user.findUnique({ where: { id: sid }, select: { username: true } });
+    const stuNo = row0.username.split('@')[0];                 // 该 seed 学生的学号（旧语义下的"口令"）
     const res = await authReq(teacherToken).put('/api/teacher/students/' + sid + '/reset-password?schoolId=' + data.schoolId, {});
     expect(res.status).toBe(200);
-    expect(String(res.body.message || '')).toMatch(/密码已重置为学号/);
+    // ★H6：一次性临时口令**只在响应回传一次**（库里只存哈希）
+    const temp = res.body.data?.initialPassword;
+    expect(typeof temp).toBe('string');
+    expect(temp.length).toBeGreaterThanOrEqual(8);              // 满足自助改密策略下限
+    expect(temp).not.toBe(stuNo);                              // ★核心判别力：不再是学号（旧语义即此）
+    expect(/^[0-9]+$/.test(temp)).toBe(false);                  // ★随机性：不是纯数字学号形态
+    // message 同时回显同一口令（各端已展示 message ⇒ 零前端改动即可转交）
+    expect(String(res.body.message || '')).toContain(temp);
+    expect(String(res.body.message || '')).not.toMatch(/重置为学号/);
+    const row1 = await prisma.user.findUnique({ where: { id: sid }, select: { mustChangePassword: true } });
+    expect(row1.mustChangePassword).toBe(true);                 // ★标志置位（闸门依据）
+    // ★该口令确实可用（且登录响应回带标志 ⇒ 客户端/闸门据此强制改密）
+    const login = await request().post('/api/auth/login').send({ username: stuNo, password: temp });
+    expect(login.body.code).toBe(0);
+    expect(login.body.data.user.mustChangePassword).toBe(true);
   });
 
   test('静态断言：策略函数只在 authController.js 出现（不渗到其它设密路径）', () => {

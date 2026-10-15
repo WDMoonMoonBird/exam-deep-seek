@@ -18,6 +18,7 @@ export const generateReference = async (req, res) => {
     res.json({ code: 0, message: '参考答案已生成', data: { answer } });
   } catch (err) {
     console.error('[generateReference] 失败:', err.message);
-    res.status(500).json({ code: 2001, message: 'AI 生成失败: ' + (err.message || '未知错误'), data: null });
+    // ★M6（W2-P2b）：响应固定文案，err.message 只进日志（上方已记）
+    res.status(500).json({ code: 2001, message: 'AI 生成失败，请稍后重试', data: null });
   }
 };

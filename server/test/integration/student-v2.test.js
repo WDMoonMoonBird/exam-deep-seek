@@ -1,7 +1,36 @@
+import bcrypt from 'bcryptjs';
 import { loginAsTeacher, loginAsStudent, loginAsAdmin, authReq, getTestData, request } from './helpers.js';
+
+/**
+ * ★W2-C16：T15 多校场景的**工件登记**与**无条件自清**。
+ * 为什么必须自清：学生登录按 username startsWith(学号@) 取候选（authController:83-108）⇒ 残留的
+ * 2024001@<第二校 code> 会让**同文件后续/下一轮**的单校登录命中多校分支返回 1002（t52 实测污染 T3补充/T12）。
+ * 用**改名**而非删除：该账号可能被 student_class/submission 以 student_id 外键引用，删除会触发 P2003。
+ */
+const multiSchoolArtifacts = { schoolId: null, classId: null, studentIds: [] };
+
+async function cleanupMultiSchool(prisma) {
+  const a = multiSchoolArtifacts;
+  for (const sid of a.studentIds) {
+    if (!sid) continue;
+    try {
+      await prisma.user.update({
+        where: { id: sid },
+        data: { username: 'zz_leftover_ms_' + Date.now() + '_' + sid + '@99999' },
+      });
+    } catch { /* 已不存在/已改名 ⇒ 视为已清 */ }
+  }
+  if (a.classId) { try { await prisma.class.delete({ where: { id: a.classId } }); } catch { /* 有引用则保留 */ } }
+  if (a.schoolId) { try { await prisma.school.delete({ where: { id: a.schoolId } }); } catch { /* 有引用则保留 */ } }
+  a.studentIds = []; a.classId = null; a.schoolId = null;
+}
 
 describe('学生管理 V2 — 学号@院校代码格式', () => {
   let token, r, schoolId, classId, schoolCode, assignmentId;
+  // ★H6（W2-C12）：经 API 建号/重置后口令为**一次性临时口令** ⇒ 由响应捕获后使用（旧语义=学号/用户名）
+  const initialPwds = {};        // 批量导入：{ '学号@院校代码': 临时口令 }
+  let completedSidPwd = null;    // T8 补全学号后的临时口令（T16 用）
+  let completedNamePwd = null;   // T11 补全姓名后的临时口令（T17 用）
 
   beforeAll(async () => {
     token = await loginAsTeacher();
@@ -11,6 +40,12 @@ describe('学生管理 V2 — 学号@院校代码格式', () => {
     schoolCode = td.schoolCode;
     classId = td.classId;
     assignmentId = td.assignmentId;
+  });
+
+  // ★W2-C16：无条件自清（即使 T15 中途抛错/被中止，也不给后续运行留污染）
+  afterAll(async () => {
+    const { default: prisma } = await import('../../src/utils/prisma.js');
+    await cleanupMultiSchool(prisma);
   });
 
   // ================= 班级人数 =================
@@ -40,6 +75,9 @@ describe('学生管理 V2 — 学号@院校代码格式', () => {
     expect(res.body.code).toBe(0);
     expect(res.body.data.success).toBe(3);
     expect(res.body.data.errors).toHaveLength(0);
+    // ★H6：批量导入**逐个回传**一次性临时口令（只回显一次）⇒ 记录供"导入后登录"用例使用
+    for (const c of res.body.data?.credentials || []) initialPwds[c.username] = c.initialPassword;
+    expect(initialPwds['2024001@' + schoolCode]).toBeTruthy();
   });
 
   it('T3: 导入后列表无待补全标记，username 格式正确', async () => {
@@ -61,10 +99,10 @@ describe('学生管理 V2 — 学号@院校代码格式', () => {
   });
 
   it('T3补充: 完整导入的学生可正常登录', async () => {
-    // 用纯学号登录（不带@code），应命中单校查询
+    // ★H6：口令不再是学号，而是 T2 批量导入回传的一次性临时口令；用纯学号登录（不带@code）命中单校查询
     const res = await request()
       .post('/api/auth/login')
-      .send({ username: '2024001', password: '2024001' });
+      .send({ username: '2024001', password: initialPwds['2024001@' + schoolCode] });
     expect(res.body.code).toBe(0);
     expect(res.body.data.token).toBeTruthy();
     expect(res.body.data.user.role).toBe('student');
@@ -160,6 +198,10 @@ describe('学生管理 V2 — 学号@院校代码格式', () => {
       classId,
     });
     expect(res.body.code).toBe(0);
+    // ★H6：补全学号即重置口令 ⇒ 捕获一次性临时口令（T16 用）
+    completedSidPwd = res.body.data?.initialPassword;
+    expect(typeof completedSidPwd).toBe('string');
+    expect(completedSidPwd).not.toBe(completedSid);
 
     // 验证：列表中学号已更新
     const listRes = await r.get(`/api/teacher/students?schoolId=${schoolId}&classId=${classId}`);
@@ -206,10 +248,10 @@ describe('学生管理 V2 — 学号@院校代码格式', () => {
   });
 
   it('T16: 补全学号后学生可正常登录', async () => {
-    // 补全后密码重置为学号
+    // ★H6：补全学号后口令是**随机临时口令**（不再等于学号）⇒ 用 T8 捕获的口令登录
     const res = await request()
       .post('/api/auth/login')
-      .send({ username: completedSid, password: completedSid });
+      .send({ username: completedSid, password: completedSidPwd });
     expect(res.body.code).toBe(0);
     expect(res.body.data.user.role).toBe('student');
   });
@@ -222,6 +264,10 @@ describe('学生管理 V2 — 学号@院校代码格式', () => {
       classId,
     });
     expect(res.body.code).toBe(0);
+    // ★H6：补全姓名即重置口令 ⇒ 捕获一次性临时口令（T17 用）
+    completedNamePwd = res.body.data?.initialPassword;
+    expect(typeof completedNamePwd).toBe('string');
+    expect(completedNamePwd).not.toBe('2024006');
 
     // 验证：姓名已更新
     const listRes = await r.get(`/api/teacher/students?schoolId=${schoolId}&classId=${classId}`);
@@ -230,10 +276,10 @@ describe('学生管理 V2 — 学号@院校代码格式', () => {
   });
 
   it('T17: 补全姓名后学生可正常登录', async () => {
-    // 补全后密码应重置为学号
+    // ★H6：补全姓名后口令是**随机临时口令**（不再等于学号）⇒ 用 T11 捕获的口令登录
     const res = await request()
       .post('/api/auth/login')
-      .send({ username: '2024006', password: '2024006' });
+      .send({ username: '2024006', password: completedNamePwd });
     expect(res.body.code).toBe(0);
     expect(res.body.data.user.realName).toBe('赵八');
   });
@@ -243,12 +289,16 @@ describe('学生管理 V2 — 学号@院校代码格式', () => {
   it('T12: 重置正常学生密码 → 成功', async () => {
     const res = await r.put(`/api/teacher/students/${importedStudentIds[0]}/reset-password`);
     expect(res.body.code).toBe(0);
-    expect(res.body.message).toMatch(/已重置|学号/);
+    expect(res.body.message).toMatch(/已重置|临时口令/);
+    // ★H6：重置回传一次性临时口令（不再是学号）
+    const temp = res.body.data?.initialPassword;
+    expect(typeof temp).toBe('string');
+    expect(temp).not.toBe('2024001');
 
-    // 验证可用学号登录
+    // 验证可用**该临时口令**登录（旧语义=用学号登录）
     const loginRes = await request()
       .post('/api/auth/login')
-      .send({ username: '2024001', password: '2024001' });
+      .send({ username: '2024001', password: temp });
     expect(loginRes.body.code).toBe(0);
   });
 
@@ -279,9 +329,19 @@ describe('学生管理 V2 — 学号@院校代码格式', () => {
       classId,
     });
     expect(createRes.body.code).toBe(0);
-
-    // 该学生登录
-    const studentToken = await loginAsStudent('2024009');
+    // ★H6：新建账号口令=一次性临时口令（不再等于学号）⇒ 从响应取；且首登须先改密
+    const temp = createRes.body.data?.initialPassword;
+    expect(typeof temp).toBe('string');
+    expect(temp).not.toBe('2024009');
+    const login1 = await request().post('/api/auth/login').send({ username: '2024009', password: temp });
+    expect(login1.body.code).toBe(0);
+    expect(login1.body.data.user.mustChangePassword).toBe(true);
+    // ★H6 两步：改密端点属白名单 ⇒ 改密后重新登录，令牌才可通行业务接口（否则 403/1101）
+    const NEW_STU_PWD = 'Stu-2024009-New1';
+    const ch = await authReq(login1.body.data.token).put('/api/auth/password', { oldPassword: temp, newPassword: NEW_STU_PWD });
+    expect(ch.status).toBe(200);
+    const login2 = await request().post('/api/auth/login').send({ username: '2024009', password: NEW_STU_PWD });
+    const studentToken = login2.body.data.token;
     expect(studentToken).toBeTruthy();
 
     // 查作业列表
@@ -307,69 +367,75 @@ describe('学生管理 V2 — 学号@院校代码格式', () => {
       post: (url, body) => request().post(url).send(body).set('Authorization', `Bearer ${adminToken}`),
     };
 
-    // 创建第二所学校（含院校代码）
-    const schoolRes = await adminReq.post('/api/admin/schools', { name: '多校测试大学' });
-    console.log('  创建学校响应:', schoolRes.body.code, schoolRes.body.message);
-
-    // 更新第二所学校的 officialCode
-    let multiSchoolId;
-    if (schoolRes.body.code === 0) {
-      multiSchoolId = schoolRes.body.data.id;
-    } else {
-      // 查找已存在的学校
-      const schoolsRes = await adminReq.get('/api/admin/schools');
-      const existing = schoolsRes.body.data.find(s => s.name === '多校测试大学');
-      if (existing) multiSchoolId = existing.id;
-    }
-
-    if (!multiSchoolId) {
-      console.log('  ⚠ 无法获取第二所学校，跳过 T15 后续');
-      return;
-    }
-
-    // 用 prisma 直接更新 officialCode
+    // ★W2-C16（方案 A）：原实现调用 POST /api/admin/schools —— **该端点不存在**（实测 1404）⇒
+    //   本用例长期**静默早退**（多校断言从未执行）。现改为 **prisma 直建第二所学校**（与既有 fixture 同型），
+    //   并配合 finally/afterAll 的**工件无条件自清**（cleanupMultiSchool）。
+    //   任一前置条件不成立 ⇒ **显式断言失败**（不再静默 return —— 那正是本任务要消灭的形态）。
     const { default: prisma } = await import('../../src/utils/prisma.js');
-    await prisma.school.update({
-      where: { id: multiSchoolId },
-      data: { officialCode: '99999' },
-    });
+    const prior = await prisma.school.findFirst({ where: { name: '多校测试大学' } });
+    const multiSchool = prior || await prisma.school.create({ data: { name: '多校测试大学', officialCode: '99999' } });
+    multiSchoolArtifacts.schoolId = multiSchool.id;
+    expect(multiSchool.id).toBeTruthy();
 
-    // 在第二所学校创建班级
+    // 在第二所学校创建班级（该端点存在 ✓）
     const classRes = await adminReq.post('/api/admin/classes', {
-      name: 'test_class_multi', schoolId: multiSchoolId,
+      name: 'test_class_multi', schoolId: multiSchool.id,
     });
     const multiClassId = classRes.body.data?.id;
-    if (!multiClassId) {
-      console.log('  ⚠ 无法创建多校班级，code=' + classRes.body.code);
-      return;
-    }
+    multiSchoolArtifacts.classId = multiClassId;
+    expect({ label: '多校班级', id: multiClassId }).toEqual({ label: '多校班级', id: expect.any(Number) });
 
-    // 在第二所学校创建一个相同学号的学生
+    // 在第二所学校创建一个**相同学号**的学生（建号口令=一次性临时口令，见下方归一化）
     const studentRes = await adminReq.post('/api/admin/students', {
       username: '2024001',
       realName: '另一学校的学生',
       classIds: [multiClassId],
     });
-    console.log('  创建多校学生响应:', studentRes.body.code, studentRes.body.message);
+    expect({ code: studentRes.body.code, message: studentRes.body.message }).toMatchObject({ code: 0 });
+    const multiStudentId = studentRes.body.data?.id;
+    multiSchoolArtifacts.studentIds.push(multiStudentId);
+    expect(typeof multiStudentId).toBe('number');
 
-    if (studentRes.body.code !== 0) {
-      console.log('  ⚠ 无法创建多校学生，跳过登录测试');
-      return;
+    // ★W2-C16：多校分支需要**两校同名账号**。完整跑时第一校账号由 T2 批量导入建出，
+    //   但**单独跑本用例时它不存在**（实测 norm.count=1 ⇒ 多校条件不成立）⇒ 这里自行确保（幂等），
+    //   使本用例**自足**：既能在文件内跑，也能被 -t 单独跑。清理阶段同样会改名它（防跨轮残留）。
+    const ensureFirst = await r.post('/api/teacher/students', { username: '2024001', realName: '第一校学生', classId });
+    let firstSchoolStudentId = ensureFirst.body.code === 0 ? ensureFirst.body.data?.id : null;
+    if (!firstSchoolStudentId) {
+      const list = await r.get('/api/teacher/students?schoolId=' + schoolId + '&classId=' + classId);
+      firstSchoolStudentId = (list.body.data || []).find((s) => String(s.username).startsWith('2024001@'))?.id || null;
     }
+    expect(typeof firstSchoolStudentId).toBe('number');
+    multiSchoolArtifacts.studentIds.push(firstSchoolStudentId);
 
-    // 现在 '2024001' 在两个学校都存在
-    const loginRes = await request()
-      .post('/api/auth/login')
-      .send({ username: '2024001', password: '2024001' });
-    console.log('  多校登录响应 code:', loginRes.body.code, 'schools:', loginRes.body.data?.schools?.length);
-    expect(loginRes.body.code).toBe(1002);
-    expect(loginRes.body.data.schools.length).toBeGreaterThanOrEqual(2);
+    // ★H6 适配：两校同名账号的**临时口令各不相同** ⇒ 多校选择分支（按口令匹配候选学校）无法用单一口令触发
+    //   ⇒ 先把两校账号口令归一为同一已知值（测试夹具直改库，与 seed 账号同型；不改生产代码）。
+    const MULTI_PWD = 'Multi-school-1';
+    const norm = await prisma.user.updateMany({
+      where: { username: { startsWith: '2024001@' } },
+      data: { password: bcrypt.hashSync(MULTI_PWD, 10), mustChangePassword: false },
+    });
+    // ★证据①：多校条件**确实成立**（两校同名账号都在）
+    expect(norm.count).toBeGreaterThanOrEqual(2);
 
-    // 选择学校登录
-    const selectRes = await request()
-      .post('/api/auth/login')
-      .send({ username: '2024001', password: '2024001', schoolCode: '10001' });
-    expect(selectRes.body.code).toBe(0);
-    expect(selectRes.body.data.token).toBeTruthy();
+    try {
+      const loginRes = await request()
+        .post('/api/auth/login')
+        .send({ username: '2024001', password: MULTI_PWD });
+      console.log('  多校登录响应 code:', loginRes.body.code, 'schools:', loginRes.body.data?.schools?.length);
+      // ★证据②：命中多校分支并回学校名单（断言确实执行，而非早退）
+      expect(loginRes.body.code).toBe(1002);
+      expect(loginRes.body.data.schools.length).toBeGreaterThanOrEqual(2);
+
+      // 选择学校登录
+      const selectRes = await request()
+        .post('/api/auth/login')
+        .send({ username: '2024001', password: MULTI_PWD, schoolCode: '10001' });
+      expect(selectRes.body.code).toBe(0);
+      expect(selectRes.body.data.token).toBeTruthy();
+    } finally {
+      // ★工件无条件自清（无论断言是否失败）
+      await cleanupMultiSchool(prisma);
+    }
   });
 });

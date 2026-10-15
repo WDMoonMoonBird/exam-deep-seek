@@ -3,14 +3,18 @@
  * 测纯函数 parseCheckerResult（旧脚本结果，保留）：完整 JSON / markdown 围栏 / 截断补全 / 非法输入 / null，
  * 以及归一化逻辑（score 越界截断、非法项丢弃）。
  * 测新纯函数 parseCheckerRules（规则驱动）：完整规则 / 围栏 / id 补缺省 / 截断补全 / 非法输入 / 总和错误（validateRules）。
- * 另附 runCheckerScript 子进程沙箱执行的可选测试（成功 + 运行抛错，旧脚本流程保留）。
+ * ★W2-C7（L6 前置）：原本固化的「子进程沙箱执行任意 checker 脚本」用例已随该能力的移除而**整块删除**
+ *   （那两例保护的正是要移除的能力；测试让位于实现）。取而代之的是文末的「能力已移除」防回归锁。
  * Team B 2026-08-18 新增：findMisplacedSubjective（subjective 分类分项误入 objective_items 的校验）。
  * 不测 generateChecker（真实 LLM 调用）。
  */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parseCheckerResult, parseCheckerRules, runCheckerScript, attachNegativeFeedback, findMisplacedSubjective } from '../../../src/infrastructure/ai/checker/index.js';
+import { fileURLToPath } from 'node:url';
+import { parseCheckerResult, parseCheckerRules, attachNegativeFeedback, findMisplacedSubjective } from '../../../src/infrastructure/ai/checker/index.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** 创建临时目录（测试后清理） */
 function tmpdir() {
@@ -317,42 +321,47 @@ describe('parseCheckerRules — 总和错误（validateRules 校验）', () => {
   });
 });
 
-describe('runCheckerScript — 沙箱执行（可选，子进程真实执行）', () => {
-  it('简单脚本在 rootDir 上执行并返回结果 JSON', async () => {
-    const dir = tmpdir();
-    try {
-      fs.writeFileSync(path.join(dir, 'main.js'), 'export const a = 1;');
-      const script = [
-        'module.exports = {',
-        '  check(rootDir) {',
-        '    const fs = require(\'fs\');',
-        '    const files = fs.readdirSync(rootDir);',
-        '    const hasMain = files.includes(\'main.js\');',
-        '    return {',
-        '      totalScore: hasMain ? 100 : 0,',
-        '      items: [{ item: \'入口文件\', maxScore: 100, score: hasMain ? 100 : 0, evidence: hasMain ? \'\' : \'缺少 main.js\' }],',
-        '      subjective: [],',
-        '    };',
-        '  },',
-        '};',
-      ].join('\n');
-      const result = await runCheckerScript(script, dir);
-      expect(result.totalScore).toBe(100);
-      expect(result.items[0].score).toBe(100);
-      expect(result.subjective).toEqual([]);
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
+// ════════════════════════════════════════════════════════ ★W2-C7（L6 前置）：危险能力「已移除」的防回归锁
+//
+// 为什么有本块：该能力会把**任意脚本**写临时 .cjs 后交子进程执行 ⇒ 一旦接线即**模型驱动 RCE**（台账 L6）。
+// 队长裁定：该导出是**死代码 + 危险能力**，应删除；**测试让位于实现** ⇒ 原先固化它的 2 条用例已整块移除。
+//
+// 本块锁两件**当前即为真**的事（现在绿、长期有效）：
+//   ① 测试面不再 import/调用该能力（防止有人"顺手"把它加回测试、变相续命）；
+//   ② ★**生产路径不可达**（src 下除定义文件与 barrel 再导出外零引用）—— 这才是 L6 的安全本体。
+// 另留一条 `test.todo`：L6 落地（D 删除 barrel 导出）后提升为硬断言并补红/绿对照。
+const CHECKER_BARREL = path.resolve(__dirname, '../../../src/infrastructure/ai/checker/index.js');
+const SRC_ROOT = path.resolve(__dirname, '../../../src');
+const LEGACY_FILE = path.join(SRC_ROOT, 'infrastructure/ai/checker/legacy-script.js');
+
+function walkJsFiles(dir, out = []) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) walkJsFiles(p, out);
+    else if (e.name.endsWith('.js')) out.push(p);
+  }
+  return out;
+}
+
+describe('★W2-C7：runCheckerScript 危险能力已从测试面与生产路径移除（防回归锁）', () => {
+  it('测试文件自身不再 import / 调用该能力', () => {
+    const self = fs.readFileSync(fileURLToPath(import.meta.url), 'utf8');   // ESM 下没有 __filename
+    expect(self).not.toMatch(/import\s*\{[^}]*\brunCheckerScript\b[^}]*\}\s*from/);
+    expect(self).not.toMatch(/\brunCheckerScript\s*\(/);
   });
 
-  it('脚本运行抛错 → 抛错且错误信息含 stderr 片段', async () => {
-    const dir = tmpdir();
-    try {
-      const script = 'module.exports = { check() { throw new Error(\'boom-checker\'); } };';
-      await expect(runCheckerScript(script, dir)).rejects.toThrow(/boom-checker|检查脚本执行失败/);
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
+  it('★生产路径不可达：src 下除定义文件与 barrel 再导出外，零引用', () => {
+    const offenders = walkJsFiles(SRC_ROOT)
+      .filter((f) => f !== LEGACY_FILE && f !== CHECKER_BARREL)
+      .filter((f) => fs.readFileSync(f, 'utf8').includes('runCheckerScript'))
+      .map((f) => path.relative(SRC_ROOT, f));
+    expect(offenders).toEqual([]);
+  });
+
+  // L6 落地后把下面这条 todo 提升为硬断言（一行改动）：
+  //   expect(fs.readFileSync(CHECKER_BARREL, 'utf8')).not.toMatch(/runCheckerScript/);
+  it('L6 落地后：checker barrel（ai/checker/index.js）不得再导出 runCheckerScript', () => {
+    expect(fs.readFileSync(CHECKER_BARREL, 'utf8')).not.toMatch(/runCheckerScript/);
   });
 });
 

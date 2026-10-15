@@ -16,7 +16,10 @@ async function createTempTeacher(adminToken, name) {
   const uname = 'del_teacher_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
   const r = await request().post('/api/admin/teachers').set('Authorization', 'Bearer ' + adminToken).send({ username: uname, realName: name, schoolIds: [] });
   if (r.body.code !== 0) throw new Error('创建教师失败: ' + JSON.stringify(r.body));
-  return { id: r.body.data.id, username: uname, password: uname };
+  // ★H6（W2-C13）：建号口令是**随机一次性临时口令**（旧语义=工号）⇒ 必须从建号响应取，不能再用 uname
+  const initialPassword = r.body.data?.initialPassword;
+  if (typeof initialPassword !== 'string' || !initialPassword) throw new Error('建号响应缺少 initialPassword（H6 之后不得再按"口令=工号"取）');
+  return { id: r.body.data.id, username: uname, password: initialPassword };
 }
 
 describe('管理员删除教师（软删除）', () => {

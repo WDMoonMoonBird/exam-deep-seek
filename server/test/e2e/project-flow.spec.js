@@ -17,7 +17,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const state = JSON.parse(fs.readFileSync(path.join(__dirname, '.e2e-state.json'), 'utf-8'));
 
-const TEACHER = state.teacher; // e2e_teacher / e2e_teacher
+const TEACHER = state.teacher; // 由 global.setup.js 写入（H6：首登改密后的已知口令，见 e2e-accounts.js；不再是 e2e_teacher/e2e_teacher）
 const STUDENT = state.student; // 学生（含 @学校代码 的完整用户名）
 const CLASS_NAME = 'E2E测试班';
 const STD_ZIP = path.join(__dirname, 'fixtures', 'standard-package.zip');

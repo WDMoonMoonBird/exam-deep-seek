@@ -1,5 +1,6 @@
 import { DeepSeekGateway } from '../../../src/infrastructure/ai/deepseek-gateway.js';
 import { CachingAiGateway } from '../../../src/infrastructure/ai/caching-ai-gateway.js';
+import { ABNORMAL_FEEDBACK } from '../../../src/constants.js';
 
 function makeConfigRepo(overrides = {}) {
   return {
@@ -43,25 +44,32 @@ describe('DeepSeekGateway.grade（行为等价迁移自 deepseek.js gradeSubmiss
     expect(r).toEqual({ score: 80, feedback: 'ok' });
   });
 
-  it('AI 分数超过满分 → 截断到 maxScore', async () => {
+  it('★M9/H8：AI 分数超过满分 ⇒ **越界即拒**（重试 3 次 ⇒ ABNORMAL_FEEDBACK），不再截断到 maxScore', async () => {
+    let calls = 0;
     const gw = new DeepSeekGateway({
       configRepo: makeConfigRepo(),
       logger: { warn() {}, error() {}, info() {} },
-      fetchImpl: okFetch('{"score":150,"feedback":"过高"}'),
+      fetchImpl: async () => { calls += 1; return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '{"score":150,"feedback":"过高"}' } }] }) }; },
     });
     const r = await gw.grade({ ...gradeReq, maxScore: 50 });
-    expect(r.score).toBe(50);
-  });
+    expect(calls).toBe(3);                                  // 3 次重试后放弃
+    expect(r).toEqual({ score: 0, feedback: ABNORMAL_FEEDBACK });
+    expect(r.score).not.toBe(50);                           // ★旧语义（clamp 到满分）不得回归
+  }, 30000);
 
-  it('AI 分数为负 → 截断到 0', async () => {
+  it('★M9/H8：AI 分数为负 ⇒ **越界即拒**（落 ABNORMAL_FEEDBACK，而非"截断到 0 且保留评语"）', async () => {
+    let calls = 0;
     const gw = new DeepSeekGateway({
       configRepo: makeConfigRepo(),
       logger: { warn() {}, error() {}, info() {} },
-      fetchImpl: okFetch('{"score":-20,"feedback":"负分"}'),
+      fetchImpl: async () => { calls += 1; return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '{"score":-20,"feedback":"负分"}' } }] }) }; },
     });
     const r = await gw.grade(gradeReq);
-    expect(r.score).toBe(0);
-  });
+    // 旧断言只看 score=0（clamp 与 reject 都会得到 0）⇒ 判别力不足；此处钉住"是拒绝路径"
+    expect(r).toEqual({ score: 0, feedback: ABNORMAL_FEEDBACK });
+    expect(r.feedback).not.toBe('负分');
+    expect(calls).toBe(3);
+  }, 30000);
 
   it('feedback 缺失 → 默认无评语', async () => {
     const gw = new DeepSeekGateway({
@@ -134,15 +142,21 @@ describe('DeepSeekGateway.gradeProject（等价迁移自 projectGrader.gradeAI�
     const r = await gw.gradeProject({ standardFiles: 'a.java', submissionFiles: 'b.java' });
     expect(r).toEqual({ score: 88, feedback: '代码规范' });
   });
-  it('分数超 100 → 截断', async () => {
+  it('★M9/H8：gradeProject 分数超 100 ⇒ **越界即拒**（落 ABNORMAL_FEEDBACK），不再截断到 100', async () => {
+    let calls = 0;
     const gw = new DeepSeekGateway({
       configRepo: makeConfigRepo(),
       logger: { warn() {}, error() {}, info() {} },
-      fetchImpl: okFetch('{"score":150,"feedback":"x"}'),
+      fetchImpl: async () => { calls += 1; return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '{"score":150,"feedback":"x"}' } }] }) }; },
     });
     const r = await gw.gradeProject({ standardFiles: 'a', submissionFiles: 'b' });
-    expect(r.score).toBe(100);
-  });
+    // gradeProject 的既有失败口径：**单次调用、不重试**，catch 后返回显式失败反馈（非 ABNORMAL_FEEDBACK）
+    expect(calls).toBe(1);
+    expect(r.score).toBe(0);
+    expect(r.score).not.toBe(100);                          // ★旧语义（clamp 到 100）不得回归
+    expect(r.feedback).toContain('AI 评审失败');             // 显式报错，而非静默采用非法分数
+    expect(r.feedback).toContain('返回格式不包含有效的 JSON');
+  }, 30000);
   it('未配置 API Key → 返回不可用提示（不抛出）', async () => {
     const gw = new DeepSeekGateway({
       configRepo: makeConfigRepo({ getApiKey: async () => null }),

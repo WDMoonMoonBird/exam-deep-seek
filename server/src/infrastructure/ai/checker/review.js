@@ -62,7 +62,9 @@ export async function confirmChecker(questionId, body) {
   if ((action === 'to_subjective' || action === 'exempt' || action === 'accept') && Array.isArray(itemIds)) {
     const report = meta.report || { items: [] };
     let rules = null;
-    if (script) { try { rules = JSON.parse(script); } catch { rules = null; } }
+    // ★M9：规则脚本也做成 schema 校验（对象 + objective_items 数组）；不合法 ⇒ 走**既有** rules=null 分支
+    //   （顺带修掉一处潜在崩溃：下游 `rules.objective_items.findIndex` 在缺该键时会抛）
+    if (script) { try { const r = JSON.parse(script); rules = (r && typeof r === 'object' && Array.isArray(r.objective_items)) ? r : null; } catch { rules = null; } }
     for (const itemId of itemIds) {
       const rep = report.items.find((i) => String(i.id) === String(itemId));
       if (!rep) continue;

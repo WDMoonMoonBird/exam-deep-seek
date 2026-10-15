@@ -25,6 +25,10 @@ function normalize(urlPath) {
   }
   p = p.replace(/\/+/g, '/');
   if (p.length > 1 && p.endsWith('/')) p = p.slice(0, -1);
+  // ★M7（W2-P2）：**比较前统一小写** —— 前缀比对原本区分大小写，而 Windows/NTFS 大小写不敏感 ⇒
+  //   `/uploads/PROJECTS/xxx` 在开发机（Windows）可绕过封禁（生产 Linux 是否同样取决于文件系统）。
+  //   保留既有 decode / 折叠多斜杠 / 去尾斜杠逻辑，仅追加归一化。
+  p = p.toLowerCase();
   return p;
 }
 

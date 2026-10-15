@@ -6,6 +6,7 @@
  * 全部使用替身 fetch，禁止真实 DeepSeek 调用。
  */
 import { DeepSeekGateway } from '../../../src/infrastructure/ai/deepseek-gateway.js';
+import { ABNORMAL_FEEDBACK } from '../../../src/constants.js';
 import { PARSE_ROLE, PARSE_RULES, PROJECT_REVIEW_SYSTEM } from '../../../src/infrastructure/ai/prompt-builder.js';
 
 const noopLogger = { warn() {}, error() {}, info() {} };
@@ -64,13 +65,29 @@ describe('DeepSeekGateway.grade — 请求形状契约', () => {
     expect(init.signal).toBeDefined(); // 超时 AbortController 挂接
   });
 
-  it('自定义 scoringCriteria → system prompt 采用自定义', async () => {
+  it('★L4：自定义 scoringCriteria **不进 system**（system 完全静态）⇒ 标准下沉到 user 段并包在 CRITERIA_DATA 里', async () => {
     const { fetchImpl, calls } = captureFetch({ respond: () => okContent('{"score":80,"feedback":"ok"}') });
     const gw = new DeepSeekGateway({ configRepo: makeConfigRepo(), logger: noopLogger, fetchImpl });
     await gw.grade({ ...gradeReq, scoringCriteria: '只看正确性' });
     const body = JSON.parse(calls[0].init.body);
-    expect(body.messages[0].content).toContain('只看正确性');
-    expect(body.messages[0].content).not.toContain('代码正确性（60%）');
+    const system = body.messages[0].content;
+    const user = body.messages[1].content;
+
+    // 旧语义（本用例原本固化的行为）：教师标准出现在 system —— L4 已移除，必须**不得**回归
+    expect(system).not.toContain('只看正确性');
+    expect(system).not.toContain('代码正确性（60%）');   // 默认三标准同样不得进 system
+
+    // 新语义：教师标准在 user 段，且被数据围栏包裹 + 带"非指令"声明（提示注入防护）
+    expect(user).toContain('只看正确性');
+    expect(user).toContain('<<<CRITERIA_DATA');
+    expect(user).toContain('CRITERIA_DATA>>>');
+    expect(user).toContain('非指令');
+    // 包裹关系：教师文本必须落在 CRITERIA_DATA 围栏**之内**（而不是围栏之外的自由文本）
+    const fenceStart = user.indexOf('<<<CRITERIA_DATA');
+    const fenceEnd = user.indexOf('CRITERIA_DATA>>>');
+    expect(fenceStart).toBeGreaterThanOrEqual(0);
+    expect(fenceEnd).toBeGreaterThan(fenceStart);
+    expect(user.slice(fenceStart, fenceEnd)).toContain('只看正确性');
   });
 });
 
@@ -93,13 +110,17 @@ describe('DeepSeekGateway.grade — 补充失败路径', () => {
     expect(r.score).toBe(0);
   });
 
-  it('JSON score 为 null（正则命中但 parseInt 失败）→ ||0 → score 0，feedback 保留', async () => {
+  it('★M9/H8：JSON score 为 null ⇒ **解析层即拒**（重试 3 次 ⇒ ABNORMAL_FEEDBACK），不再静默变 0 分', async () => {
     const { fetchImpl, calls } = captureFetch({ respond: () => okContent('{"score":null,"feedback":"只有评语"}') });
     const gw = new DeepSeekGateway({ configRepo: makeConfigRepo(), logger: noopLogger, fetchImpl });
     const r = await gw.grade(gradeReq);
-    expect(r.score).toBe(0);
-    expect(r.feedback).toBe('只有评语');
-    expect(calls).toHaveLength(1); // 首次即成功解析，不重试
+
+    // 新语义：schemaScoreFeedback 拒绝 null（非有限数字）⇒ 走失败重试，不采纳该响应
+    expect(calls).toHaveLength(3);                        // 旧语义是「首次即成功解析，不重试」
+    expect(r).toEqual({ score: 0, feedback: '请联系老师' }); // 落既有 ABNORMAL_FEEDBACK 兜底
+    // ★判别力要点：**不再静默把非法 score 变成 0 分并保留模型评语**
+    expect(r.feedback).not.toBe('只有评语');
+    expect(r.feedback).toBe(ABNORMAL_FEEDBACK);
   });
 
   it('JSON 无 "score" 键（正则失配）→ 重试 3 次后兜底请联系老师', async () => {

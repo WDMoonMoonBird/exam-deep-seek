@@ -5,6 +5,12 @@ import logger from '../utils/logger.js';
 import { getJwtSecret } from '../config/jwtSecret.js';   // ★R2-B60：与中间件共用同一密钥解析（消除两处兜底）
 
 /** ★F-1：登录名/院校代码的**字符白名单**（ASCII，带上界）—— 与 normalizeLoginIdentity 的分工见其注释 */
+// ★H6（W2-P2c）：把基础设施层的**一次性初始口令生成器**转出给 interface 层使用 ——
+//   分层门禁禁止 interface→infrastructure 直连（check-layers: interface-imports-infra），而
+//   controllers→infrastructure 是允许方向；此处仅 **re-export，实现唯一一份**（无副本），
+//   与 t41 的 "prompt-builder 单一真源" 做法同型。
+export { generateInitialPassword, INITIAL_PWD_LEN } from '../infrastructure/security/initial-password.js';
+
 export const LOGIN_USERNAME_RE = /^[A-Za-z0-9_.@-]{1,50}$/;
 export const LOGIN_SCHOOLCODE_RE = /^[A-Za-z0-9_-]{0,32}$/;
 
@@ -81,6 +87,14 @@ export const login = async (req, res) => {
       if (newStudents.length === 1) {
         user = newStudents[0];
       } else if (newStudents.length > 1) {
+        // ★M4（W2-P2）：**先校验口令、再回学校名单** —— 原实现于口令校验前即返回多校清单，
+        //   构成账号枚举（只要知道学号即可确认其存在与所在院校）。失败统一文案，不暴露「该学号存在多校」。
+        const passwordOk = newStudents.some((s) => {
+          try { return bcrypt.compareSync(password, s.password); } catch { return false; }
+        });
+        if (!passwordOk) {
+          return res.status(400).json({ code: 1001, message: '用户名或密码错误', data: null });
+        }
         const codes = [...new Set(newStudents.map(s => s.username.split('@')[1]))];
         const schools = await prisma.school.findMany({
           where: { officialCode: { in: codes } },
@@ -123,9 +137,10 @@ export const login = async (req, res) => {
     if (idKey) limiter.recordSuccess(idKey);   // ★t24：成功登录清权威键（与账号维度"成功即清"口径一致）
 
     const token = jwt.sign(
+      // ★L1（W2-P2）：签发侧同样**显式**指定算法，与 middleware/auth.js 的 verify({algorithms:['HS256']}) 对称
       { id: user.id, username: user.username, role: user.role },
       getJwtSecret(),
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d', algorithm: 'HS256' }   // ★L1（W2-P2）：显式算法
     );
 
     logger.info({ userId: user.id, role: user.role }, '用户登录成功');
@@ -159,6 +174,9 @@ export const login = async (req, res) => {
           role: user.role,
           teacherSchools,
           currentSchool,
+          // ★H6（W2-P2c）：首登强制改密标志（布尔，不回显任何口令信息）—— 前端据此引导用户先改密；
+          //   后端侧由 middleware/auth.js 的闸门拦截其它已认证接口（白名单：PUT /api/auth/password）。
+          mustChangePassword: user.mustChangePassword === true,
         },
       },
     });
@@ -248,7 +266,9 @@ export const changePassword = async (req, res) => {
     // ④ 落库 + 成功清零
     const hashed = bcrypt.hashSync(newPassword, 10);
     // ★R2-B67：设密路径①——自助改密：同时写 password_changed_at ⇒ 本用户所有旧令牌立即失效
-    await prisma.user.update({ where: { id: userId }, data: { password: hashed, passwordChangedAt: new Date() } });
+    // ★H6（W2-P2c）：**同一条 update 内**同时清 must_change_password（原子）—— 两列必须同处落库，否则留下两种半状态：
+    //   ① 只清标志不写时间 ⇒ 旧令牌仍可用（改密形同未生效）；② 只写时间不清标志 ⇒ 本账号被强制改密闸门永久拦截（不可自愈）。
+    await prisma.user.update({ where: { id: userId }, data: { password: hashed, passwordChangedAt: new Date(), mustChangePassword: false } });
     clearOldPasswordFailures(userId);
 
     logger.info({ userId }, '密码修改成功');

@@ -3,6 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import XLSX from 'xlsx';
+// ★W2-C17：夹具口令的唯一事实源（H6 之后口令不再等于用户名 ⇒ 严禁在此硬编码旧值）
+import { E2E_TEACHER } from './e2e-accounts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.join(__dirname, '..', 'fixtures');
@@ -17,7 +19,7 @@ function genExcel(filename, rows) {
 }
 
 // 登录辅助函数
-async function loginAsTeacher(page, username = 'e2e_teacher', password = 'e2e_teacher') {
+async function loginAsTeacher(page, username = E2E_TEACHER.username, password = E2E_TEACHER.password) {
   await page.goto('/exam/login');
   await page.waitForTimeout(500);
   await page.getByPlaceholder(/用户名/).fill(username);
@@ -293,12 +295,12 @@ test.describe('学生管理 E2E', () => {
     }
 
     const studentUser = stateData.student.username;
-    // 密码是学号（去掉 @院校代码）
-    const plainId = studentUser.split('@')[0];
+    // ★W2-C17：口令**取 setup 落盘的已知口令**（H6 之后口令不再等于学号；旧写法的 split('@')[0] 是把已修缺陷种回测试）
+    const studentPwd = stateData.student.password;
     await page.goto('/exam/login');
     await page.waitForTimeout(500);
     await page.getByPlaceholder(/用户名/).fill(studentUser);
-    await page.getByPlaceholder(/密码/).fill(plainId);
+    await page.getByPlaceholder(/密码/).fill(studentPwd);
     await page.locator('.login-form button').click();
     await page.waitForTimeout(2500);
 

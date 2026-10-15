@@ -8,7 +8,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.resolve(__dirname, '../../../client/public/doc-img');
 
 const BASE = E2E_CLIENT_BASE + '/exam';   // ★W1-C6：端口可配置（默认 5173 不变）
-const T = { username: 'testteacher1', password: 'testteacher1' };
+// ★W2-C15：口令唯一事实源（setup-test-data.js 建号后经 H6 首登改密得到的已知口令）
+import { E2E_SEED_TEACHER as T } from './e2e-accounts.js';
 
 async function shot(page, name, fullPage = true) {
   await page.screenshot({ path: path.join(outDir, `${name}.png`), fullPage });

@@ -30,7 +30,9 @@
 
 export { parseCheckerResult, parseCheckerRules, findMisplacedSubjective } from '../../../domain/services/checker/parsers.js';
 export { attachNegativeFeedback } from '../../../domain/services/checker/meta.js';
-export { runCheckerScript } from './legacy-script.js';
+// ★L6（W2-P3）：旧的「执行任意检查脚本」导出与其实现（legacy-script.js）已整体删除 —— 它写临时 .cjs 后
+//   经 `node -e require` 执行**任意脚本**，属死代码 + 危险能力（一旦接线即模型驱动 RCE）。若将来要支持脚本化检查，另立白名单化沙箱任务
+//   （require 白名单 / 无网络 / 无 child_process / 无 eval / 资源限额 / 只读挂载 / 输出 schema），不得恢复任意执行。
 export { buildGenerateUserPrompt } from './prompts.js';
 export { getCheckerState } from './state.js';
 export { generateChecker } from './generator.js';

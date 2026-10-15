@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 
-const T = { username: 'e2e_teacher', password: 'e2e_teacher' };
+// ★W2-C15：口令唯一事实源（H6 首登改密后的已知口令；旧语义「口令=用户名」已随 H6 移除）
+import { E2E_TEACHER as T } from './e2e-accounts.js';
 
 async function login(page) {
   await page.goto('/exam/login', { waitUntil: 'networkidle' });

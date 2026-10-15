@@ -25,7 +25,8 @@ export const parseExam = async (req, res) => {
     res.json({ code: 0, message: `解析完成，共提取 ${result.questions.length} 道题`, data: result });
   } catch (err) {
     console.error('[parseExam] 失败:', err.message);
-    res.status(500).json({ code: 2001, message: 'AI 解析失败: ' + (err.message || '未知错误'), data: null });
+    // ★M6（W2-P2b）：响应**固定文案**，err.message 只进日志（上方 console.error 已记）
+    res.status(500).json({ code: 2001, message: 'AI 解析失败，请稍后重试', data: null });
   }
 };
 
@@ -52,7 +53,8 @@ export const parseExamStream = async (req, res) => {
     send({ phase: 'done', questions: result.questions, count: result.questions.length });
   } catch (err) {
     console.error('[parseExamStream] 失败:', err.message);
-    send({ phase: 'error', message: 'AI 解析失败: ' + (err.message || '未知错误') });
+    // ★M6：SSE 分支同属响应面 ⇒ 固定文案（细节见上方 console.error）
+    send({ phase: 'error', message: 'AI 解析失败，请稍后重试' });
   } finally {
     res.end();
   }

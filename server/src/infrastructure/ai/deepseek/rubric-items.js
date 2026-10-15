@@ -4,6 +4,7 @@
  */
 
 import logger from '../../../utils/logger.js';
+import { schemaItemList } from '../../../domain/services/deepseek/model-output-schema.js';   // ★M9
 import { getBaseUrl, getApiKey, getModel } from './config.js';
 import { AUTOMATION_LEVELS, RUBRIC_ROLE } from '../../../domain/services/deepseek/prompts.js';
 
@@ -110,6 +111,8 @@ export async function summarizeRubricItems(rubricText, maxScore = 100) {
         const cleaned = content.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim();
         try { parsed = JSON.parse(cleaned.slice(cleaned.indexOf('{'), cleaned.lastIndexOf('}') + 1)); } catch { parsed = null; }
       }
+      // ★M9：形状校验（条目数组）不通过则置空 ⇒ 由**既有** normalizeRubricItems/throw 分支收口（不新造降级路径）
+      if (parsed && !schemaItemList(parsed, { key: 'items' })) parsed = null;
       const items = normalizeRubricItems(parsed?.items, maxScore);
       if (!items) throw new Error('分项解析失败');
       logger.info({ items: items.length }, '评分标准分项提炼完成');

@@ -22,6 +22,10 @@ model User {
   // ★R2-B67（WAVE2）：密码**最近一次设置/重置**的时间（nullable：历史行未写过 ⇒ 不参与失效判定）。
   // 语义 = 该口令的生效时刻；鉴权中间件用它比对 JWT iat ⇒ 改密/重置后**所有旧令牌**在下一次请求即 401。
   passwordChangedAt DateTime?   @map("password_changed_at")
+  // ★H6（W2-P4 / t34）：首登强制改密标记。`@default(false)` ⇒ **现存行（本机 exam_system 1264 行）一律 false**，
+  // 既有登录 / 改密 / 令牌链路行为**零变化**；由建号 / 重置口令链路置 true，改密成功后置 false。
+  // 应用侧（随机临时口令、强制改密中间件、前端跳转）见 W2-P5 / t35。
+  mustChangePassword Boolean @default(false) @map("must_change_password")
 
   // 关系
   questions            Question[]         @relation("TeacherQuestions")

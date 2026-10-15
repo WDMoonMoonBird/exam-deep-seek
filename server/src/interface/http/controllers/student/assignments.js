@@ -117,7 +117,8 @@ export const getAssignments = async (req, res) => {
     res.json({ code: 0, message: 'ok', data: { list, total, page: +page, pageSize: +pageSize } });
   } catch (err) {
     logger.error({ err }, '获取作业列表失败');
-    res.status(500).json({ code: 2001, message: "服务器错误: " + (err.message || "未知"), data: null });
+    // ★M6（W2-P2b）：响应固定文案，err.message 只进日志
+    res.status(500).json({ code: 2001, message: "服务器内部错误", data: null });
   }
 };
 
@@ -174,6 +175,7 @@ export const getAssignmentDetail = async (req, res) => {
     res.json({ code: 0, message: 'ok', data: { assignment, submissions: safeSubmissions } });
   } catch (err) {
     logger.error({ err }, '获取作业详情失败');
-    res.status(500).json({ code: 2001, message: "服务器错误: " + (err.message || "未知"), data: null });
+    // ★M6（W2-P2b）：响应固定文案，err.message 只进日志
+    res.status(500).json({ code: 2001, message: "服务器内部错误", data: null });
   }
 };

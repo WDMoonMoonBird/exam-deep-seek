@@ -5,7 +5,7 @@
 
 import logger from '../../../utils/logger.js';
 import { getBaseUrl, getApiKey, getModel } from './config.js';
-import { OPEN_PROJECT_ROLE, PROJECT_ROLE, buildOpenProjectGradePrompt, buildProjectGradePrompt } from '../../../domain/services/deepseek/prompts.js';
+import { OPEN_PROJECT_ROLE, PROJECT_ROLE, PROJECT_SECURITY_CLAUSE, buildOpenProjectGradePrompt, buildProjectGradePrompt } from '../../../domain/services/deepseek/prompts.js';
 import { extractFilesJson, extractProjectGradeJson } from '../../../domain/services/deepseek/json-extract.js';
 
 /**
@@ -148,7 +148,9 @@ export async function gradeSubjectiveItems({ title, scoringRubric, standardFiles
         body: JSON.stringify({
           model: MODEL,
           messages: [
-            { role: 'system', content: '你是一名高校教师。根据评分标准与确定性检查证据，对学生的代码质量分项给出公正评分。' },
+            // ★W2-D3（t44）：内联 system 原先**不含安全条款**（同文件 :54 的 gradeProject 却有 ⇒ 同链内有/无防护并存）；
+            //   条款一律用 domain 单一真源（禁止手抄，t41 刚消除过同类双份分叉）。
+            { role: 'system', content: '你是一名高校教师。根据评分标准与确定性检查证据，对学生的代码质量分项给出公正评分。' + PROJECT_SECURITY_CLAUSE },
             { role: 'user', content: userMessage },
           ],
           // 2026-08-17 检查器方案：主观分项尽量确定性，温度 0

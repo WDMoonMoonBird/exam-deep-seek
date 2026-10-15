@@ -1,6 +1,8 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
+// ★H6（W2-P2c）：一次性初始口令的**唯一生成器**（随机 + 去混淆字符集；调用方只回显一次、绝不落日志）
+import { generateInitialPassword } from '../infrastructure/security/initial-password.js';
 
 // ===================== 学校管理 =====================
 
@@ -162,16 +164,20 @@ export const createTeacher = async (req, res) => {
     const { username, realName, schoolIds } = req.body;
     if (!username || !realName) return res.status(400).json({ code: 1001, message: '参数错误', data: null });
 
+    // ★H6（W2-P2c）：初始口令 = **一次性随机口令**（不再等于工号 ⇒ 消除可猜解初始口令）；与 mustChangePassword 成对。
+    const initialPassword = generateInitialPassword();
     const teacher = await prisma.user.create({
       data: {
-        username, realName, password: bcrypt.hashSync(username, 10), role: 'teacher',
+        username, realName, password: bcrypt.hashSync(initialPassword, 10), role: 'teacher',
         passwordChangedAt: new Date(), // ★R2-B67：设密路径④——建号初始口令
+        mustChangePassword: true,      // ★H6：首登强制改密（改密成功即清零）
         teacherSchools: schoolIds?.length ? { create: schoolIds.map(sid => ({ schoolId: +sid })) } : undefined,
       },
       select: { id: true, username: true, realName: true, role: true, createdAt: true },
     });
-    logger.info({ teacherId: teacher.id }, '教师已创建');
-    res.json({ code: 0, message: '创建成功', data: teacher });
+    logger.info({ teacherId: teacher.id }, '教师已创建');   // ★H6：日志只记 id，**绝不记 initialPassword**
+    // ★H6：口令只在本响应**回显一次** —— message 供各端既有提示直接展示，data.initialPassword 供程序消费
+    res.json({ code: 0, message: `创建成功，初始口令：${initialPassword}（首次登录须修改）`, data: { ...teacher, initialPassword } });
   } catch (err) {
     if (err.code === 'P2002') return res.status(400).json({ code: 1001, message: '工号已存在', data: null });
     logger.error({ err }, '创建教师失败');
@@ -212,11 +218,13 @@ export const resetTeacherPassword = async (req, res) => {
     const teacher = await prisma.user.findFirst({ where: { id: +id, role: 'teacher' } });
     if (!teacher) return res.status(404).json({ code: 1004, message: '教师不存在', data: null });
 
-    const newPassword = bcrypt.hashSync(teacher.username, 10);
+    // ★H6（W2-P2c）：重置口令 = 一次性随机口令（不再等于工号）+ 置强制改密标志；与 password_changed_at 同处落库
+    const initialPassword = generateInitialPassword();
+    const newPassword = bcrypt.hashSync(initialPassword, 10);
     // ★R2-B67：设密路径②——管理员重置教师密码
-    await prisma.user.update({ where: { id: +id }, data: { password: newPassword, passwordChangedAt: new Date() } });
-    logger.info({ teacherId: id }, '教师密码已重置');
-    res.json({ code: 0, message: `密码已重置为工号（${teacher.username}）`, data: null });
+    await prisma.user.update({ where: { id: +id }, data: { password: newPassword, passwordChangedAt: new Date(), mustChangePassword: true } });
+    logger.info({ teacherId: id }, '教师密码已重置');   // ★H6：日志不落 initialPassword
+    res.json({ code: 0, message: `密码已重置，临时口令：${initialPassword}（首次登录须修改）`, data: { initialPassword } });
   } catch (err) {
     logger.error({ err }, '重置教师密码失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
@@ -282,12 +290,15 @@ export const createStudent = async (req, res) => {
       }
     }
 
+    // ★H6（W2-P2c）：初始口令 = **一次性随机口令**（不再等于学号）+ 首登强制改密
+    const initialPassword = generateInitialPassword();
     const student = await prisma.user.create({
       data: {
         username: fullUsername,
         realName,
-        password: bcrypt.hashSync(username, 10),
+        password: bcrypt.hashSync(initialPassword, 10),
         passwordChangedAt: new Date(), // ★R2-B67：设密路径④——建号初始口令
+        mustChangePassword: true,      // ★H6：首登强制改密（改密成功即清零）
         role: 'student',
         studentClasses: classIds?.length
           ? { create: classIds.map((cid) => ({ classId: +cid })) }
@@ -295,8 +306,8 @@ export const createStudent = async (req, res) => {
       },
       select: { id: true, username: true, realName: true, role: true, createdAt: true },
     });
-    logger.info({ studentId: student.id }, '学生已创建');
-    res.json({ code: 0, message: '创建成功', data: student });
+    logger.info({ studentId: student.id }, '学生已创建');   // ★H6：日志不落 initialPassword
+    res.json({ code: 0, message: `创建成功，初始口令：${initialPassword}（首次登录须修改）`, data: { ...student, initialPassword } });
   } catch (err) {
     if (err.code === 'P2002') return res.status(400).json({ code: 1001, message: '学号已存在', data: null });
     logger.error({ err }, '创建学生失败');
@@ -359,13 +370,51 @@ export const getMonitor = async (_req, res) => {
       if (fs.existsSync(logDir)) {
         const allFiles = fs.readdirSync(logDir).filter(f => f.endsWith('.log'));
         const logLines = [];
+        // ★L2（W2-P2b）：**日志脱敏 + 体积上限** —— 原实现把 pm2 日志尾部原样回给前端：
+        //   ① 日志里可能带 token / 口令 / 手机号（学生与教师的敏感数据）⇒ 必须脱敏；
+        //   ② 单文件无上限读取 + 无总量上限 ⇒ 内存/响应体积与侦察面风险。
+        //   实现刻意**不用正则字面量**（避免转义歧义），全部走字符串操作，便于逐条复核。
+        const SENSITIVE_KEYS = ['token', 'password', 'passwd', 'pwd', 'authorization', 'secret', 'apikey', 'api_key'];
+        const MAX_LOG_BYTES = 256 * 1024;   // 单文件最多读尾部 256KB
+        const MAX_TOTAL_LINES = 200;        // 响应内日志总行数上限
+        const APOS = String.fromCharCode(39);
+        function redactLogLine(line) {
+          let s = String(line == null ? '' : line);
+          const lower = s.toLowerCase();
+          for (const k of SENSITIVE_KEYS) {
+            const idx = lower.indexOf(k);
+            if (idx === -1) continue;
+            let i = idx + k.length;
+            while (i < s.length && (s[i] === '"' || s[i] === APOS || s[i] === ' ' || s[i] === ':' || s[i] === '=')) i += 1;
+            let j = i;
+            while (j < s.length && s[j] !== ' ' && s[j] !== '"' && s[j] !== APOS && s[j] !== ',' && s[j] !== '}') j += 1;
+            if (j > i) s = s.slice(0, i) + '<redacted>' + s.slice(j);
+          }
+          const out = [];
+          let buf = '';
+          const flush = () => {
+            if (buf.length === 11 && buf[0] === '1') out.push(buf.slice(0, 3) + '****' + buf.slice(7));
+            else out.push(buf);
+            buf = '';
+          };
+          for (const ch of s) {
+            if (ch >= '0' && ch <= '9') buf += ch;
+            else { flush(); out.push(ch); }
+          }
+          flush();
+          return out.join('');
+        }
+        const readTail = (file, maxLines) => {
+          const buf = fs.readFileSync(path.join(logDir, file));
+          const slice = buf.length > MAX_LOG_BYTES ? buf.slice(buf.length - MAX_LOG_BYTES) : buf;
+          return String(slice).split('\n').filter((l) => l.trim()).slice(-maxLines).map(redactLogLine);
+        };
         // 先读错误日志
         const errFiles = allFiles.filter(f => f.includes('error'));
         for (const file of errFiles.slice(0, 3)) {
           try {
-            const content = fs.readFileSync(path.join(logDir, file), 'utf-8');
-            const lines = content.split('\n').filter(l => l.trim()).slice(-30);
-            logLines.push(`--- ${file} (最近 ${lines.length} 行) ---`);
+            const lines = readTail(file, 30);
+            logLines.push('--- ' + file + ' (最近 ' + lines.length + ' 行，已脱敏) ---');
             logLines.push(...lines);
           } catch {}
         }
@@ -373,13 +422,16 @@ export const getMonitor = async (_req, res) => {
         const outFiles = allFiles.filter(f => f.includes('out'));
         for (const file of outFiles.slice(0, 3)) {
           try {
-            const content = fs.readFileSync(path.join(logDir, file), 'utf-8');
-            const lines = content.split('\n').filter(l => l.trim()).slice(-20);
-            logLines.push(`--- ${file} (最近 ${lines.length} 行) ---`);
+            const lines = readTail(file, 20);
+            logLines.push('--- ' + file + ' (最近 ' + lines.length + ' 行，已脱敏) ---');
             logLines.push(...lines);
           } catch {}
         }
-        result.logs = logLines.join('\n') || '(日志为空)';
+        if (logLines.length > MAX_TOTAL_LINES) {
+          result.logs = logLines.slice(0, MAX_TOTAL_LINES).join('\n') + '\n…（已按体积上限截断）';
+        } else {
+          result.logs = logLines.join('\n') || '(日志为空)';
+        }
       } else {
         result.logs = '(日志目录不存在)';
       }
@@ -406,14 +458,10 @@ export const getSettings = async (_req, res) => {
     });
     const map = Object.fromEntries(rows.map(r => [r.key, r.value]));
 
-    // API Key 脱敏：只显示前4后4
-    let maskedKey = '';
+    // ★I1（W2-P2b）：**密钥不回显** —— 原实现回显「前 4 + **** + 后 4」（首尾字符同样可用于形态确认/口令猜测），
+    //   且短密钥还会退化到「前 2 + ****」。口径：**只回布尔**「已配置 / 未配置」。
     const rawKey = map.deepseek_api_key || process.env.DEEPSEEK_API_KEY || '';
-    if (rawKey.length > 8) {
-      maskedKey = rawKey.slice(0, 4) + '****' + rawKey.slice(-4);
-    } else if (rawKey) {
-      maskedKey = rawKey.slice(0, 2) + '****';
-    }
+    const apiKeyConfigured = !!rawKey;
 
     const cpus = os.cpus().length;
     const totalMemGB = +(os.totalmem() / 1024 / 1024 / 1024).toFixed(1);
@@ -426,7 +474,7 @@ export const getSettings = async (_req, res) => {
     res.json({
       code: 0,
       data: {
-        deepseek_api_key: maskedKey,
+        deepseek_api_key_configured: apiKeyConfigured,   // ★I1：不再回显密钥（含掩码形态）；前端如需展示请读该布尔
         llm_prices: prices.table,
         llm_prices_source: prices.source,
         llm_prices_invalid_reason: prices.invalid_reason || null,
@@ -474,7 +522,10 @@ export const updateSettings = async (req, res) => {
       items.push({ key: 'deepseek_model', value: deepseek_model });
     }
     if (deepseek_base_url) {
-      items.push({ key: 'deepseek_base_url', value: deepseek_base_url });
+      // ★M1（W2-P2）：**落库前校验** —— 原实现把任意 URL 直接写库 ⇒ 后续 testConnection/评分链路可被指向内网或云元数据。
+      const chk = assertSafeAiBaseUrl(deepseek_base_url);
+      if (!chk.ok) return res.status(400).json({ code: 1001, message: "AI Base URL 不合法：" + chk.reason, data: null });
+      items.push({ key: "deepseek_base_url", value: chk.url });
     }
     if (ai_concurrency !== undefined) {
       const c = +ai_concurrency;
@@ -510,6 +561,36 @@ export const updateSettings = async (req, res) => {
   }
 };
 
+/**
+ * ★M1（W2-P2）：AI Base URL **白名单校验** —— 拒绝非 https、私有/环回/链路本地/**云元数据**地址。
+ *   命中条件：域名 ∈ AI_ALLOWED_HOSTS（逗号分隔，缺省仅 api.deepseek.com）；IP/内网主机名一律拒。
+ *   与“落库前校验 + 使用前校验”双点配合（见 saveAIConfig / testConnection）。
+ * @returns {{ok: true, url: string} | {ok: false, reason: string}}
+ */
+function assertSafeAiBaseUrl(raw) {
+  let u;
+  try { u = new URL(String(raw)); } catch { return { ok: false, reason: "URL 格式非法" }; }
+  if (u.protocol !== "https:") return { ok: false, reason: "必须使用 https" };
+  const host = String(u.hostname || "").toLowerCase();
+  if (!host) return { ok: false, reason: "缺少主机名" };
+  const isIpv4 = /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+  const isIpv6 = host.includes(":");
+  if (isIpv4) {
+    if (host.startsWith("127.") || host.startsWith("10.") || host.startsWith("192.168.") || host.startsWith("169.254.") || host === "203.0.113.10" || /^172\.(1[6-9]|2\d|3[01])\./.test(host)) {
+      return { ok: false, reason: "禁止内网/环回/元数据地址" };
+    }
+  }
+  if (isIpv6 && (host === "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80"))) {
+    return { ok: false, reason: "禁止内网/环回地址" };
+  }
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".internal") || host.endsWith(".local")) {
+    return { ok: false, reason: "禁止内网主机名" };
+  }
+  const allow = String(process.env.AI_ALLOWED_HOSTS || "api.deepseek.com").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  if (!allow.includes(host)) return { ok: false, reason: "域名不在白名单" };
+  return { ok: true, url: u.origin };
+}
+
 export const testConnection = async (_req, res) => {
   const start = Date.now();
   try {
@@ -522,10 +603,16 @@ export const testConnection = async (_req, res) => {
     const model = map.deepseek_model || process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash';
 
     if (!apiKey) {
-      return res.json({ code: 0, data: { ok: false, error: '未配置 API Key', latency: null } });
+      return res.json({ code: 0, data: { ok: false, error: "未配置 API Key", latency: null } });
     }
 
-    const resp = await fetch(`${baseUrl}/v1/chat/completions`, {
+    // ★M1（W2-P2）：**使用前再校验一次**（存量库值可能早于本次校验存在；此处拒绝即不发出请求）。
+    const urlCheck = assertSafeAiBaseUrl(baseUrl);
+    if (!urlCheck.ok) {
+      return res.json({ code: 0, data: { ok: false, latency: null, error: "AI Base URL 未通过安全校验" } });
+    }
+
+    const resp = await fetch(`${urlCheck.url}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
@@ -541,11 +628,17 @@ export const testConnection = async (_req, res) => {
       res.json({ code: 0, data: { ok: true, latency: `${latency}ms`, error: null } });
     } else {
       const text = await resp.text().catch(() => '');
-      res.json({ code: 0, data: { ok: false, latency: `${latency}ms`, error: `HTTP ${resp.status}: ${text.slice(0, 200)}` } });
+      // ★M1（W2-P2）：**错误回显改固定文案** —— 原实现把上游响应体前 200 字符回给前端（可探测内网服务/泄露上游细节）。
+      logger.warn({ status: resp.status, snippet: String(text).slice(0, 120) }, "AI 连通性测试失败（细节仅日志）");
+      res.json({ code: 0, data: { ok: false, latency: `${latency}ms`, error: `上游返回 HTTP ${resp.status}` } });
     }
   } catch (err) {
     const latency = Date.now() - start;
-    res.json({ code: 0, data: { ok: false, latency: latency ? `${latency}ms` : '—', error: err.message || '连接失败' } });
+    // ★M1（W2-P2，队长复核补漏）：**catch 分支同样不得到回显 err.message** —— 该端点的 baseUrl 来自库值，
+    //   而 assertSafeAiBaseUrl 拒绝内网/非白名单地址时抛出的消息里会带**主机名/URL** ⇒ 等于把 200-char snippet
+    //   的回显面换成异常消息。⇒ 细节只进日志；latency 保留（排障有用且不敏感）。
+    logger.warn({ err: err && err.message, baseUrlChecked: true }, "AI 连通性测试异常（细节仅日志）");
+    res.json({ code: 0, data: { ok: false, latency: latency ? `${latency}ms` : "—", error: "连接失败（细节见服务端日志）" } });
   }
 };
 

@@ -48,7 +48,10 @@ export function multerErrorResponse(err) {
   if (err && err.code === 'LIMIT_FILE_SIZE') {
     return { status: 413, body: { code: 1403, message: '文件超过大小限制', data: null } };
   }
-  const message = (err && err.message) ? String(err.message) : '上传失败';
+  // ★M6（W2-P2b）：**只放行本仓库自定义的文案**（multer 原生消息带英文与字段/实现细节），其余一律固定文案。
+  const KNOWN_UPLOAD_MESSAGES = ['仅支持 zip 文件'];
+  const raw = err && err.message ? String(err.message) : '';
+  const message = KNOWN_UPLOAD_MESSAGES.includes(raw) ? raw : '上传失败';
   return { status: 400, body: { code: 1001, message, data: null } };
 }
 

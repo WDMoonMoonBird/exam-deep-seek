@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { ensureAdminAccount } from '../fixtures/admin.js';
 import { E2E_API_BASE } from './e2e-env.js';
+import { E2E_TEACHER, E2E_STUDENT_PASSWORD, ensureLoginable } from './e2e-accounts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // ★W1-C6：API 基址随端口可配置（默认 3000 不变）——否则全局 setup 会死打 3000，而 webServer 可能跑在备用端口
@@ -33,6 +34,16 @@ async function get(url, token) {
   return res.json();
 }
 
+async function put(url, body, token) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${API}${url}`, { method: 'PUT', headers, body: JSON.stringify(body) });
+  return res.json();
+}
+
+/** 统一请求适配器：供 e2e-accounts.ensureLoginable 复用（它需要 (method,url,body,token) 形态） */
+const request = (method, url, body, token) => (method === 'GET' ? get(url, token) : method === 'PUT' ? put(url, body, token) : post(url, body, token));
+
 export default async function () {
   // 1. 管理员登录（W0-C 夹具：环境变量优先，缺省自建/复用专用测试管理员；
   //    不再依赖 C1 已移除的「启动期默认超管」）
@@ -58,17 +69,15 @@ export default async function () {
     console.log('E2E setup: school officialCode set to 20001');
   }
 
-  // 3. 确保教师存在
-  let teacherToken;
-  const teacherLogin = await post('/auth/login', { username: 'e2e_teacher', password: 'e2e_teacher' });
-  if (teacherLogin.code === 0) {
-    teacherToken = teacherLogin.data.token;
-  } else {
-    await post('/admin/teachers', { username: 'e2e_teacher', realName: 'E2E教师', schoolIds: [schoolId] }, adminToken);
-    const login = await post('/auth/login', { username: 'e2e_teacher', password: 'e2e_teacher' });
-    teacherToken = login.data.token;
-  }
-  console.log('E2E setup: teacher ready');
+  // 3. 确保教师存在且**可用已知口令登录**
+  //    ★W2-C15（H6）：经 API 建号返回的是**一次性随机临时口令**，且首登被强制改密闸门拦住
+  //    ⇒ 必须走「建号/重置 → 临时口令登录 → 首登改密 → 已知口令重登」。严禁再按「口令=用户名」取。
+  const teacherReady = await ensureLoginable({
+    request, kind: 'teacher', username: E2E_TEACHER.username, password: E2E_TEACHER.password,
+    adminToken, schoolId, realName: 'E2E教师',
+  });
+  const teacherToken = teacherReady.token;
+  console.log('E2E setup: teacher ready（' + (teacherReady.viaChange ? '走了 H6 首登改密流程' : '已知口令直登') + '）');
 
   // 4. 确保班级存在（固定名 E2E测试班）
   let classes = await get(`/teacher/classes?schoolId=${schoolId}`, teacherToken);
@@ -82,14 +91,23 @@ export default async function () {
   // 5. 确保学生存在
   let students = await get(`/teacher/students?schoolId=${schoolId}&classId=${classId}`, teacherToken);
   let studentUsername;
+  let studentId;
   if (!students.data?.length) {
-    await post('/teacher/students', { username: 'e2e_stu_01', realName: 'E2E学生甲', classId }, teacherToken);
+    const s1 = await post('/teacher/students', { username: 'e2e_stu_01', realName: 'E2E学生甲', classId }, teacherToken);
+    studentId = s1.data?.id;
     await post('/teacher/students', { username: 'e2e_stu_02', realName: 'E2E学生乙', classId }, teacherToken);
     studentUsername = 'e2e_stu_01';
   } else {
     studentUsername = students.data[0].username;
+    studentId = students.data[0].id;
   }
   console.log('E2E setup: student =', studentUsername);
+  // ★W2-C15（H6）：学生同样必须走「临时口令 → 首登改密 → 已知口令」，否则登录后会被闸门拦 403/1005
+  const studentLoginName = studentUsername.includes('@') ? studentUsername.split('@')[0] : studentUsername;
+  await ensureLoginable({
+    request, kind: 'student', username: studentLoginName, password: E2E_STUDENT_PASSWORD,
+    teacherToken, schoolId, classId, userId: studentId, realName: 'E2E学生',
+  });
 
   // 6. 创建题目
   const q = await post('/teacher/questions', {
@@ -112,12 +130,11 @@ export default async function () {
   }, teacherToken);
   const assignmentId = a.data?.id;
 
-  // 学生密码 = 学号（@ 前部分），而非完整用户名（用户名含 @学校代码）
-  const studentPassword = studentUsername.includes('@') ? studentUsername.split('@')[0] : studentUsername;
+  // ★W2-C15（H6）：口令一律取**首登改密后的已知口令**（旧语义「口令 = 学号/用户名」已随 H6 移除，不得恢复）
   const state = {
     admin: { username: adminCreds.username, password: adminCreds.password },
-    teacher: { username: 'e2e_teacher', password: 'e2e_teacher' },
-    student: { username: studentUsername, password: studentPassword },
+    teacher: { username: E2E_TEACHER.username, password: E2E_TEACHER.password },
+    student: { username: studentUsername, password: E2E_STUDENT_PASSWORD },
     schoolId, schoolName, classId, questionId, assignmentId,
   };
 
