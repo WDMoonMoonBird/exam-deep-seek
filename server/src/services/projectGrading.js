@@ -34,7 +34,7 @@ import { parseProjectAnswer, serializeProjectAnswer } from '../domain/services/p
 // ★R3-S5（t30）：breakdown 项统一规范化（补齐 title/status，status 缺失时按 score/maxScore 推导）——
 //   原实现只写 { item, score, maxScore, comment, kind }（legacy 形状）⇒ 读取侧按 status 聚合时全落 unknown
 import { buildLossBreakdown } from '../domain/services/lossBreakdownItem.js';
-import { loadAssignmentSnapshot, resolveSnapshot } from './assignmentSnapshot.js';
+import { loadAssignmentSnapshot, resolveSnapshot, snapshotSourceOf } from './assignmentSnapshot.js';
 import { textSha256, standardPackSha256 } from '../utils/snapshotHash.js';
 
 import { acquire, release, refreshConcurrency } from '../infrastructure/worker/projectGradingConcurrency.js';
@@ -321,8 +321,17 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
         // W3（R2-B2）：本次评分依据的评分标准/标准包哈希（口径 = scripts/dsh-checker/validate.py），
         // 重评时与当前值比对 → stale（标准已变）并需教师确认；历史成绩不因比对而重算。
         rubricHash: textSha256(std.rubric),
-        standardHash: std.standardHash || standardPackSha256(sub.question.id),
-        snapshotOrigin: std.origin || (std.fromSnapshot ? 'publish' : null),
+        // ★W3-D3（t59 · A 方案）：standardHash 改为**忠实记录"本次评分实际读取的包目录哈希"**（活值）。
+        //   为什么：标准包**文件**本就不随发布冻结（评分/复核读的都是当前文件 ⇒ 见 DEPLOY-CHECKLIST D8），
+        //   原实现却优先记发布快照的冻结值 ⇒ "记的"与"读的"脱节 ⇒ 换包后重评**静默漏报**（t58 已登记为已知限制）。
+        //   ⚠ 改的是 **submissions.answer 信封字段**，不是发布快照列 AssignmentQuestion.standard_hash
+        //     （后者是 DSH 复用/ruler/run-meta 的冻结锚点，语义不得改动）。
+        standardHash: standardPackSha256(sub.question.id),
+        // A 之后的**来源标记**（读取侧据此与发布快照口径的历史行区分；缺省=历史行）
+        standardHashSource: 'live',
+        // snapshotOrigin 自 A 起仅描述 rubric/material 的来源（standardHash 与快照无关）
+        // t59 完成 t58 计划的"单一真源切换"：来源标签与读取侧同源（snapshotSourceOf）
+        snapshotOrigin: snapshotSourceOf(std),
       };
       return env;
     });

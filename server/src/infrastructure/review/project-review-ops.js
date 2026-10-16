@@ -95,24 +95,45 @@ export async function regradeProjectSubmissionCore({
   // W3（R2-B2）：重评前 stale 判定 —— 本次评分依据的标准（哈希）与当前活值不一致时要求显式确认
   const snapRow = await loadAssignmentSnapshot(prisma, sub.assignmentId, sub.questionId);
   const std = resolveSnapshot(snapRow, sub.question);
+  // ★W3-D2（N12）：两侧**来源**一起比 —— 来源不同（冻结快照值 vs 活值）时的比较不可比 ⇒ decideStale 会跳过（不误报）。
+  // ★W3-D3（t59 · A 方案）：**当前值恒为活值**（standardPackSha256），故当前侧来源恒为 null；stored 侧见下。
   const stale = decideStale({
     storedRubricHash: curEnv.grading?.rubricHash,
     storedStandardHash: curEnv.grading?.standardHash,
     currentRubricHash: textSha256(std.rubric),
-    currentStandardHash: std.standardHash || standardPackSha256(sub.questionId),
+    // ★W3-D3（t59 · A 方案）：与写入侧**同口径**（活值）—— 读取侧不再优先取发布快照的冻结值，
+    //   否则"写入=活值、读取=冻结值"会再次不可比（两侧同口径是 A 生效的前提）。
+    //   来源映射：A 之后写入的行带 standardHashSource='live' ⇒ 视为活值（传 null，与 t58 的"null=活值"口径一致）；
+    //   历史行（无该标记）沿用 t58 的来源标签（snapshotOrigin ⇒ 'publish'/'backfill' 视为冻结 ⇒ 与活值不可比 ⇒ 跳过，不误报）。
+    currentStandardHash: standardPackSha256(sub.questionId),
+    storedStandardSource: ((curEnv.grading?.standardHashSource ?? null) === 'live')
+      ? null
+      : (curEnv.grading?.snapshotOrigin ?? null),
+    currentStandardSource: null,
   });
   if (stale.stale && !confirm) {
-    logger.warn({ submissionId, reasons: stale.reasons }, '重评被拦：评分标准已变化（stale）');
+    logger.warn({ submissionId, reasons: stale.reasons, skipped: stale.skipped }, '重评被拦：评分标准已变化（stale）');
     return json(409, {
       code: 1010,
-      message: '该题评分标准已在评分后发生变化，重新评分会使用新标准（历史成绩不可比）。确认重评请加 ?confirm=1（将记录审计日志）。',
-      data: { requiresConfirmation: true, code: 'RUBRIC_STALE_REQUIRES_CONFIRMATION', stale_reason: stale.reasons },
+      // ★W3-D2（N12）· 口径修正：原文案「重新评分会使用新标准」把两种口径混在一句里 ——
+      //   ① 评分标准文本 / 题目材料：按【发布快照】冻结 ⇒ 重评用的仍是快照值（不是"新标准"）；
+      //   ② 标准工程包文件：不随发布冻结，按【当前文件】读取（见 :121 的已知限制）。
+      message: '该题评分标准已在评分后发生变化：评分标准文本与题目材料按【发布快照】冻结（重评仍用快照值），'
+        + '标准工程包文件按【当前文件】读取。如需使用更新后的标准包，请先重新发布作业再重评。'
+        + '确认重评请加 ?confirm=1（将记录审计日志）。',
+      data: { requiresConfirmation: true, code: 'RUBRIC_STALE_REQUIRES_CONFIRMATION', stale_reason: stale.reasons, stale_skipped: stale.skipped || null },
     });
   }
   if (stale.stale) {
     logger.warn({ submissionId, actorId, reasons: stale.reasons, confirm: true }, '重评放行（confirm=1）：标准已变，留痕');
   }
 
+  // ★W3-D2（N12）· **已知限制（显式登记，与 N10 同根因；处置见 t59）**：
+  //   标准工程包的**文件**不随发布冻结（快照只冻结 rubric/material/standard_hash，见 services/assignmentSnapshot.js 头注
+  //   与 infrastructure/review/project.js:88 的自注）⇒ 教师"换包但未重新发布"时，本判定的两个哈希仍相等
+  //   ⇒ **不会提示 stale**，而重评实际读取的是**换包后的新文件**。
+  //   ⇒ 本任务（t58）按要求只做"判定口径正确 + 显式登记"；让 grading.standardHash **忠实记录实际读取的包文件哈希**
+  //     属 **t59（A 方案）**，与 N10（attachmentUrl 透传活值）一并处置。
   // 重置版本信封的评分任务态，记录重评前状态（Worker 完成后恢复）
   const env = parseProjectAnswer(sub.answer);
   env.grading = {
