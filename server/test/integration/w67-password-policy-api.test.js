@@ -144,8 +144,8 @@ describe('W67-4 成功一次即清零', () => {
   });
 });
 
-describe('W67-5 既有流程：教师重置学生密码 ⇒ **随机临时口令**（★H6：旧语义「重置为学号」已移除）', () => {
-  test('PUT /teacher/students/:id/reset-password ⇒ 200 + 随机临时口令（≠学号）+ 标志置位 + 可用其登录', async () => {
+describe('W67-5 既有流程：教师重置学生密码 ⇒ **口令 = 学号**（★W3 回退：用户裁定，测试期）', () => {
+  test('PUT /teacher/students/:id/reset-password ⇒ 200 + 口令重置为学号 + 不置标志 + 可用其登录', async () => {
     const data = getTestData();
     expect(data && data.studentIds && data.studentIds.length).toBeTruthy();
     const teacherToken = await loginAsTeacher();
@@ -154,21 +154,19 @@ describe('W67-5 既有流程：教师重置学生密码 ⇒ **随机临时口令
     const stuNo = row0.username.split('@')[0];                 // 该 seed 学生的学号（旧语义下的"口令"）
     const res = await authReq(teacherToken).put('/api/teacher/students/' + sid + '/reset-password?schoolId=' + data.schoolId, {});
     expect(res.status).toBe(200);
-    // ★H6：一次性临时口令**只在响应回传一次**（库里只存哈希）
-    const temp = res.body.data?.initialPassword;
-    expect(typeof temp).toBe('string');
-    expect(temp.length).toBeGreaterThanOrEqual(8);              // 满足自助改密策略下限
-    expect(temp).not.toBe(stuNo);                              // ★核心判别力：不再是学号（旧语义即此）
-    expect(/^[0-9]+$/.test(temp)).toBe(false);                  // ★随机性：不是纯数字学号形态
-    // message 同时回显同一口令（各端已展示 message ⇒ 零前端改动即可转交）
+    // ★W3 回退（用户裁定，测试期）：学生重置口令 = **学号** ⇒ 响应不回传口令（data 为 null，学号在 message 文本里）
+    expect(res.body.data).toBeNull();
+    const temp = stuNo;
+    // message 明确告知"已重置为学号"（各端展示 message ⇒ 零前端改动即可转告学生）
+    expect(String(res.body.message || '')).toMatch(/重置为学号/);
     expect(String(res.body.message || '')).toContain(temp);
-    expect(String(res.body.message || '')).not.toMatch(/重置为学号/);
+    // ★W3 回退的反向锁：不再给学生置强制改密标志（否则闸门会拦学生，而前端零消费该标志 ⇒ 无改密引导）
     const row1 = await prisma.user.findUnique({ where: { id: sid }, select: { mustChangePassword: true } });
-    expect(row1.mustChangePassword).toBe(true);                 // ★标志置位（闸门依据）
-    // ★该口令确实可用（且登录响应回带标志 ⇒ 客户端/闸门据此强制改密）
+    expect(row1.mustChangePassword).toBe(false);
+    // ★判别力：重置后**确实能用「学号/学号」登录**（回退后的应然语义）
     const login = await request().post('/api/auth/login').send({ username: stuNo, password: temp });
     expect(login.body.code).toBe(0);
-    expect(login.body.data.user.mustChangePassword).toBe(true);
+    expect(login.body.data.user.mustChangePassword).toBe(false);
   });
 
   test('静态断言：策略函数只在 authController.js 出现（不渗到其它设密路径）', () => {

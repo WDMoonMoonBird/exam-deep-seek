@@ -164,10 +164,13 @@ describe('W72-6 静态核对：四条设密路径全部写列 + 计数不变式'
   const pathOne = [
     ['① 自助改密', 'controllers/authController.js', 'data: { password: hashed, passwordChangedAt: new Date(), mustChangePassword: false }'],
     ['② 管理员重置教师', 'controllers/adminController.js', 'data: { password: newPassword, passwordChangedAt: new Date(), mustChangePassword: true }'],
-    ['③ 教师重置学生', 'interface/http/controllers/teacher/students.js', 'data: { password: newPassword, passwordChangedAt: new Date(), mustChangePassword: true }'],
+    // ★W3 回退（用户裁定，测试期）：学生侧四条设密路径的 H6 语义已回退（口令=学号、不置标志）⇒
+    //   锚点改为**该路径仍然成立的那部分**（写 passwordChangedAt「设密即失效旧令牌」列，R2-B67 语义未回退），
+    //   标志位不再作为学生路径的锚点（教师路径仍锚定标志，见下方两条）。
+    ['③ 教师重置学生', 'interface/http/controllers/teacher/students.js', 'const newPassword = bcrypt.hashSync(sid, 10);'],
     ['④ 建号初始口令（管理员建教师）', 'controllers/adminController.js', "password: bcrypt.hashSync(initialPassword, 10), role: 'teacher',"],
-    ['④ 建号初始口令（管理员建学生）', 'controllers/adminController.js', 'password: bcrypt.hashSync(initialPassword, 10),\n        passwordChangedAt: new Date()'],
-    ['④ 建号初始口令（教师建学生）', 'interface/http/controllers/teacher/students.js', 'passwordChangedAt: new Date(), // ★R2-B67：设密路径④——建号初始口令'],
+    ['④ 建号初始口令（管理员建学生）', 'controllers/adminController.js', 'password: bcrypt.hashSync(username, 10),'],
+    ['④ 建号初始口令（教师建学生）', 'interface/http/controllers/teacher/students.js', "username: fullUsername, realName, password: bcrypt.hashSync(username, 10), role: 'student',"],
     ['④ 变更学号即改密', 'interface/http/controllers/teacher/students.js', 'data.passwordChangedAt = new Date(); // ★R2-B67：改学号即改密'],
     ['④ 补全姓名即重置密码', 'interface/http/controllers/teacher/students.js', 'data.passwordChangedAt = new Date(); // ★R2-B67：补全姓名即重置密码'],
     ['④ 批量导入建号（占位口令 ×2）', 'interface/http/controllers/teacher/students.js', 'passwordChangedAt: new Date(), // ★R2-B67：建号即设密（占位口令）'],
@@ -229,6 +232,18 @@ describe('W72-6 静态核对：四条设密路径全部写列 + 计数不变式'
       //   那些账号无口令可改、根本无法登录，按设计不需要 mustChangePassword（H6 报告 §1 已列明"占位建号不改"）。
       const hashes = (src.match(/bcrypt\.hashSync\((?!'')/g) || []).length;
       const flags = (src.match(/mustChangePassword/g) || []).length;
+      // ★W3 回退（用户裁定，测试期）：**学生侧**不再置强制改密标志（口令=学号）⇒ 本不变式按
+      //   **显式标记**豁免，而不是按文件名/角色正则猜（猜法易误伤：authController.js 不建员工但含学生数据）。
+      //   契约：凡出现 R2-B67 里那条「学生侧回退」标记的文件，豁免 flags≥hashes；其余文件一律不豁免。
+      //   ⇒ 将来若有人把某处重新写成"给学生置标志"，该文件不含标记 ⇒ 本不变式照旧生效（不会漏检）。
+      // ★W3 回退（用户裁定，测试期）：**学生侧**不再置强制改密标志（口令 = 学号）⇒ 本不变式按
+      //   **显式豁免清单**处理（不按文件名/注释正则猜 —— 实测猜法会误伤含学生数据的非学生文件）。
+      //   豁免判据（三者同时成立，缺一即不再豁免、恢复原不变式）：
+      //     ① 文件里存在学生侧回退标记；② 该文件确实还有设密点；③ 其标志数为 0（= 回退后应然状态）。
+      //   ⇒ 将来若有人把某处改回"给学生置标志"，③ 不成立 ⇒ 该文件落到下方原不变式，若数量不匹配即红。
+      const STUDENT_SIDE_OPT_OUT = '★W3 回退（用户裁定，测试期）';
+      const revertedStudentSide = src.includes(STUDENT_SIDE_OPT_OUT) && flags === 0;
+      if (revertedStudentSide) continue;
       expect({ file: path.relative(SRC, p), ok: flags >= hashes }).toEqual({ file: path.relative(SRC, p), ok: true });
     }
   });

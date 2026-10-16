@@ -76,8 +76,9 @@ describe('学生管理 V2 — 学号@院校代码格式', () => {
     expect(res.body.data.success).toBe(3);
     expect(res.body.data.errors).toHaveLength(0);
     // ★H6：批量导入**逐个回传**一次性临时口令（只回显一次）⇒ 记录供"导入后登录"用例使用
-    for (const c of res.body.data?.credentials || []) initialPwds[c.username] = c.initialPassword;
-    expect(initialPwds['2024001@' + schoolCode]).toBeTruthy();
+    // ★W3 回退（用户裁定，测试期）：批量导入不再回传 credentials（口令 = 学号）⇒ 由用户名推出
+    expect(res.body.data.credentials).toBeUndefined();
+    initialPwds['2024001@' + schoolCode] = '2024001';
   });
 
   it('T3: 导入后列表无待补全标记，username 格式正确', async () => {
@@ -199,9 +200,10 @@ describe('学生管理 V2 — 学号@院校代码格式', () => {
     });
     expect(res.body.code).toBe(0);
     // ★H6：补全学号即重置口令 ⇒ 捕获一次性临时口令（T16 用）
-    completedSidPwd = res.body.data?.initialPassword;
+    // ★W3 回退（用户裁定，测试期）：补全学号即重置口令 ⇒ 口令 = **新学号**
+    expect(res.body.data?.initialPassword).toBeUndefined();
+    completedSidPwd = completedSid;
     expect(typeof completedSidPwd).toBe('string');
-    expect(completedSidPwd).not.toBe(completedSid);
 
     // 验证：列表中学号已更新
     const listRes = await r.get(`/api/teacher/students?schoolId=${schoolId}&classId=${classId}`);
@@ -265,9 +267,10 @@ describe('学生管理 V2 — 学号@院校代码格式', () => {
     });
     expect(res.body.code).toBe(0);
     // ★H6：补全姓名即重置口令 ⇒ 捕获一次性临时口令（T17 用）
-    completedNamePwd = res.body.data?.initialPassword;
+    // ★W3 回退（用户裁定，测试期）：补全姓名即重置口令 ⇒ 口令 = **学号**
+    expect(res.body.data?.initialPassword).toBeUndefined();
+    completedNamePwd = '2024006';
     expect(typeof completedNamePwd).toBe('string');
-    expect(completedNamePwd).not.toBe('2024006');
 
     // 验证：姓名已更新
     const listRes = await r.get(`/api/teacher/students?schoolId=${schoolId}&classId=${classId}`);
@@ -291,9 +294,9 @@ describe('学生管理 V2 — 学号@院校代码格式', () => {
     expect(res.body.code).toBe(0);
     expect(res.body.message).toMatch(/已重置|临时口令/);
     // ★H6：重置回传一次性临时口令（不再是学号）
-    const temp = res.body.data?.initialPassword;
-    expect(typeof temp).toBe('string');
-    expect(temp).not.toBe('2024001');
+    // ★W3 回退（用户裁定，测试期）：重置后口令 = **学号**（data 为 null，学号在 message 文本里）
+    expect(res.body.data).toBeNull();
+    const temp = '2024001';
 
     // 验证可用**该临时口令**登录（旧语义=用学号登录）
     const loginRes = await request()
@@ -329,14 +332,14 @@ describe('学生管理 V2 — 学号@院校代码格式', () => {
       classId,
     });
     expect(createRes.body.code).toBe(0);
-    // ★H6：新建账号口令=一次性临时口令（不再等于学号）⇒ 从响应取；且首登须先改密
-    const temp = createRes.body.data?.initialPassword;
-    expect(typeof temp).toBe('string');
-    expect(temp).not.toBe('2024009');
+    // ★W3 回退（用户裁定，测试期）：新建账号口令 = **学号**、不置强制改密标志、响应不回显口令
+    expect(createRes.body.data?.initialPassword).toBeUndefined();
+    const temp = '2024009';
     const login1 = await request().post('/api/auth/login').send({ username: '2024009', password: temp });
     expect(login1.body.code).toBe(0);
-    expect(login1.body.data.user.mustChangePassword).toBe(true);
-    // ★H6 两步：改密端点属白名单 ⇒ 改密后重新登录，令牌才可通行业务接口（否则 403/1101）
+    // ★回退的反向锁：学生不再被要求首登改密（闸门亦按角色收窄，学生不在作用域内）
+    expect(login1.body.data.user.mustChangePassword).toBe(false);
+    // 学生可**自助改密**（该能力在回退后保留）⇒ 改密后重新登录，令牌可用
     const NEW_STU_PWD = 'Stu-2024009-New1';
     const ch = await authReq(login1.body.data.token).put('/api/auth/password', { oldPassword: temp, newPassword: NEW_STU_PWD });
     expect(ch.status).toBe(200);

@@ -1,14 +1,18 @@
 /**
  * e2e-accounts.js —— E2E 夹具账号的**唯一事实源**（★W2-C15）
  *
- * 背景（H6：随机临时口令 + 首登强制改密）：
- *   · 经 API 建号（/admin/teachers、/teacher/students…）返回的是**一次性随机临时口令**（`data.initialPassword`）；
- *   · 首次用它登录后，除 /api/auth/login 与 /api/auth/password 外的接口一律 403/code 1005（强制改密闸门）。
- * ⇒ E2E 夹具必须走「**临时口令登录 → 改密为已知口令 → 用已知口令重新登录**」，spec 才能用稳定口令登录；
- *   这条路径同时**真实覆盖 H6 的首登改密流程**，并顺带验证「改密端点属白名单」的防双向锁死设计。
- *
- * **红线**：严禁再按「口令 = 用户名/学号」取（那等于把 H6 修掉的缺陷种回测试）。
+ * ★W3 回退（用户裁定，测试期）：**学生侧** H6 已回退 ⇒
+ *   · **教师**：建号/重置仍返回**一次性随机临时口令**（`data.initialPassword`）⇒ 走「临时口令登录 → 改密为已知口令 → 重登」，
+ *     这条路径同时真实覆盖 H6 的首登改密流程（含闸门 403/1005 与改密白名单）；
+ *   · **学生**：初始口令 = **学号**（`PUT /teacher/students/:id/reset-password` 现在只把它写进 **message 文本**、
+ *     `data` 为 null）⇒ 夹具按「口令 = 用户名 @ 前部分」取，**无需改密**（学生已不在闸门作用域内）。
+ * ⇒ 分叉点见 §②；教师分支的"红线"仍然有效：**教师侧**严禁按「口令 = 工号」取。
  */
+
+/** 取用户名主体（@ 前部分）—— 学生的初始口令语义（★W3 回退后） */
+function sidOf(username) {
+  return String(username || '').split('@')[0];
+}
 
 /** 已知（改密后）口令：spec 与夹具共用；口令=用户名是**被 H6 移除的缺陷**，故这里刻意取不同的强口令 */
 export const E2E_TEACHER = { username: 'e2e_teacher', password: 'E2e-Teacher-2026' };
@@ -64,21 +68,39 @@ export async function ensureLoginable(o) {
     else {
       if (!id) throw new Error('E2E 夹具：学生已存在但未提供 id，无法重置 ⇒ ' + JSON.stringify(created));
       const reset = await request('PUT', '/teacher/students/' + id + '/reset-password' + (o.schoolId ? '?schoolId=' + o.schoolId : ''), {}, o.teacherToken);
-      temp = reset?.data?.initialPassword;
+      trace.reset = reset;
+      // ★W3 回退：学生重置后口令 = 学号，而该端点**只把学号写进 message、data 为 null**
+      //   ⇒ 既兼容旧实现（data.initialPassword），也兼容新实现（message 文本）。
+      temp = reset?.data?.initialPassword
+        || (typeof reset?.message === 'string' && reset.message.match(/为学号[：:]\s*(\S+)/)?.[1])
+        || null;
     }
+    // ★W3 回退兜底：学生的口令语义 = 学号（@ 前部分）⇒ 建号/重置后均可直接推出，
+    //   无需依赖响应回显（e2e_admin_stu_* 这类"建号后只拿到 id"的路径也据此可用）。
+    if (typeof temp !== 'string' || !temp) temp = sidOf(username);
   }
   if (typeof temp !== 'string' || !temp) {
-    throw new Error('E2E 夹具：未拿到一次性临时口令（H6 之后不得再按"口令=用户名"取）:: ' + username + ' :: ' + JSON.stringify(trace));
+    throw new Error('E2E 夹具：未拿到可用口令（教师须为一次性临时口令；学生应可由学号推出）:: ' + username + ' :: ' + JSON.stringify(trace));
   }
 
-  // ③ 临时口令登录 → 首登改密（白名单放行改密端点）
+  // ③ 用 temp 登录
   const tempLogin = await request('POST', '/auth/login', { username, password: temp });
-  if (tempLogin?.code !== 0) throw new Error('E2E 夹具：临时口令登录失败 :: ' + JSON.stringify(tempLogin));
-  if (tempLogin.data?.user?.mustChangePassword !== true) {
-    throw new Error('E2E 夹具：H6 标志未置位（预期 mustChangePassword=true）:: ' + username);
+  if (tempLogin?.code !== 0) throw new Error('E2E 夹具：口令登录失败 :: ' + JSON.stringify(tempLogin));
+
+  if (kind === 'teacher') {
+    // ★教师侧（H6 保留）：首登改密闸门生效 ⇒ 必须先改密才能用其它接口
+    if (tempLogin.data?.user?.mustChangePassword !== true) {
+      throw new Error('E2E 夹具：H6 标志未置位（教师预期 mustChangePassword=true）:: ' + username);
+    }
+    const changed = await request('PUT', '/auth/password', { oldPassword: temp, newPassword: password }, tempLogin.data.token);
+    if (changed?.code !== 0) throw new Error('E2E 夹具：首登改密失败（白名单是否放行？）:: ' + JSON.stringify(changed));
+  } else {
+    // ★学生侧（W3 回退）：无强制改密 ⇒ 若 temp 已等于目标已知口令，则无需改密；
+    //   否则（如 temp=学号 而目标是 E2E_STUDENT_PASSWORD）主动改密一次，让 spec 能用稳定口令登录。
+    if (temp === password) return { token: tempLogin.data.token, id, password, viaChange: false };
+    const changed = await request('PUT', '/auth/password', { oldPassword: temp, newPassword: password }, tempLogin.data.token);
+    if (changed?.code !== 0) throw new Error('E2E 夹具：学生改密失败 :: ' + JSON.stringify(changed));
   }
-  const changed = await request('PUT', '/auth/password', { oldPassword: temp, newPassword: password }, tempLogin.data.token);
-  if (changed?.code !== 0) throw new Error('E2E 夹具：首登改密失败（白名单是否放行？）:: ' + JSON.stringify(changed));
 
   // ④ 已知口令重新登录（改密后旧令牌失效）
   const relogin = await request('POST', '/auth/login', { username, password });
