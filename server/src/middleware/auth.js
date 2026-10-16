@@ -54,7 +54,12 @@ const auth = async (req, res, next) => {
     //   （建号/重置置 1；改密成功与 password_changed_at **同一条 update** 清 0，见 authController.changePassword）。
     //   白名单只放行改密端点本身（isPasswordChangeAllowed）⇒ 拦截期间用户仍能完成改密、自解拦截。
     //   不改既有未登录语义：缺令牌/坏令牌/用户不存在仍走上方 401 分支（未认证者不进入本判定）。
-    if (user.mustChangePassword === true && !isPasswordChangeAllowed(req)) {
+    //   ★W3 回退（用户裁定，测试期）：闸门**只对非学生生效** —— 学生初始口令已按用户裁定回到「口令 = 学号」
+    //   （见 teacher/students.js 与 adminController 的学生落点），故学生不存在「待强制改密」状态；
+    //   教师/管理员仍走随机临时口令 + 强制改密（H6 的收益保留在员工账号上）。
+    //   为何按 role 判定而非"学生不置标志即可"：标志是**数据**、闸门是**代码** —— 若只靠数据自觉，
+    //   任何一处未来又给角色写标志就会让学生被拦在一个前端零消费该标志、因而没有改密引导的界面上。
+    if (user.role !== 'student' && user.mustChangePassword === true && !isPasswordChangeAllowed(req)) {
       return res.status(403).json({ code: 1005, message: '请先修改初始密码后再使用其它功能', data: null });
     }
     next();

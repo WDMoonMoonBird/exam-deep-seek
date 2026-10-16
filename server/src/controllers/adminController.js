@@ -290,15 +290,13 @@ export const createStudent = async (req, res) => {
       }
     }
 
-    // ★H6（W2-P2c）：初始口令 = **一次性随机口令**（不再等于学号）+ 首登强制改密
-    const initialPassword = generateInitialPassword();
+    // ★W3 回退（用户裁定，测试期）：学生初始口令 = **学号**（与修复前逐字等价）
     const student = await prisma.user.create({
       data: {
         username: fullUsername,
         realName,
-        password: bcrypt.hashSync(initialPassword, 10),
+        password: bcrypt.hashSync(username, 10),
         passwordChangedAt: new Date(), // ★R2-B67：设密路径④——建号初始口令
-        mustChangePassword: true,      // ★H6：首登强制改密（改密成功即清零）
         role: 'student',
         studentClasses: classIds?.length
           ? { create: classIds.map((cid) => ({ classId: +cid })) }
@@ -306,8 +304,8 @@ export const createStudent = async (req, res) => {
       },
       select: { id: true, username: true, realName: true, role: true, createdAt: true },
     });
-    logger.info({ studentId: student.id }, '学生已创建');   // ★H6：日志不落 initialPassword
-    res.json({ code: 0, message: `创建成功，初始口令：${initialPassword}（首次登录须修改）`, data: { ...student, initialPassword } });
+    logger.info({ studentId: student.id }, '学生已创建');
+    res.json({ code: 0, message: '创建成功', data: student });
   } catch (err) {
     if (err.code === 'P2002') return res.status(400).json({ code: 1001, message: '学号已存在', data: null });
     logger.error({ err }, '创建学生失败');

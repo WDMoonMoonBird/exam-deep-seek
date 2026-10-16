@@ -43,7 +43,7 @@ export function initSocket(server) {
       const payload = jwt.verify(token, getJwtSecret(), { algorithms: ['HS256'] });
       const user = await prisma.user.findFirst({
         where: { id: payload.id, deletedAt: null },
-        select: { id: true, passwordChangedAt: true, mustChangePassword: true },
+        select: { id: true, role: true, passwordChangedAt: true, mustChangePassword: true },
       });
       if (!user) return next(new Error('unauthorized'));
       if (user.passwordChangedAt) {
@@ -54,7 +54,9 @@ export function initSocket(server) {
       // ★H6（W2-P2c）：强制改密期间**实时通道同样拒绝建连** —— HTTP 侧已拦而 socket 放行等于留一条
       //   绕过强制改密的旁路（改密前仍能经实时通道取数据）。改密成功（同一条 update 清标志）后重连即通。
       //   不记任何凭据；复用既有 'unauthorized' 文案（与其余拒绝路径一致，不额外暴露账号状态）。
-      if (user.mustChangePassword === true) {
+      //   ★W3 回退（用户裁定，测试期）：与 middleware/auth.js 的闸门同口径 —— **只对非学生生效**
+      //   （学生口令 = 学号、无待改密状态；教师/管理员仍强制改密）。两处必须同步，否则一侧放行即构成旁路。
+      if (user.role !== 'student' && user.mustChangePassword === true) {
         logger.warn({ socketId: socket.id }, 'WebSocket 握手拒绝：该账号处于强制改密状态');
         return next(new Error('unauthorized'));
       }

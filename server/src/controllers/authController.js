@@ -176,7 +176,9 @@ export const login = async (req, res) => {
           currentSchool,
           // ★H6（W2-P2c）：首登强制改密标志（布尔，不回显任何口令信息）—— 前端据此引导用户先改密；
           //   后端侧由 middleware/auth.js 的闸门拦截其它已认证接口（白名单：PUT /api/auth/password）。
-          mustChangePassword: user.mustChangePassword === true,
+          //   ★W3 回退（用户裁定，测试期）：只对**非学生**返回 —— 学生口令 = 学号、无待改密状态，
+          //   前端亦零消费该标志 ⇒ 给学生返回它只会在响应里留下一个无人处理的字段。
+          mustChangePassword: user.role !== 'student' && user.mustChangePassword === true,
         },
       },
     });

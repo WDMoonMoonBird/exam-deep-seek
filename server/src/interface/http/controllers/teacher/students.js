@@ -10,7 +10,6 @@ import logger from '../../../../utils/logger.js';
 import { getVisibleClassIds } from '../../../../controllers/teamController.js';
 // ★H6（W2-P2c）：一次性初始口令的**唯一生成器** —— 经 controllers 层转出（分层门禁禁 interface→infrastructure
 //   直连）；实现仍是唯一一份，adminController 与 authController 用的是同一个函数对象。
-import { generateInitialPassword } from '../../../../controllers/authController.js';
 import { getSchoolId, canTeacherManageClass, canTeacherManageStudent } from './guards.js';
 import { parsePaging, shapeList, pagingArgs } from './paging.js';
 
@@ -100,9 +99,6 @@ export const updateStudent = async (req, res) => {
 
     const data = {};
     if (realName !== undefined) data.realName = realName;
-    // ★H6（W2-P2c）：本次若发生"重设口令"，这里持有**回显给操作者**的那一份（只回显一次；不落库明文、不进日志）
-    let initialPassword = null;
-
     // 补全临时学号：如果当前用户名含 tmp_，且传入了新学号
     if (newUsername && student.username.startsWith('tmp_')) {
       const code = student.username.split('@')[1]; // 保留原学校代码
@@ -115,22 +111,17 @@ export const updateStudent = async (req, res) => {
       }
 
       data.username = fullNew;
-      // ★H6（W2-P2c）：改学号即改密 ⇒ 改**一次性随机口令**（不再由学号派生，消除可猜解口令）
-      initialPassword = initialPassword || generateInitialPassword();
-      data.password = bcrypt.hashSync(initialPassword, 10);
+      // ★W3 回退（用户裁定，测试期）：改学号即改密 ⇒ 口令 = **新学号**（与修复前逐字等价）
+      data.password = bcrypt.hashSync(newUsername.includes('@') ? newUsername.split('@')[0] : newUsername, 10);
       data.passwordChangedAt = new Date(); // ★R2-B67：改学号即改密 ⇒ 旧令牌失效
-      data.mustChangePassword = true;      // ★H6：首登强制改密（改密成功即清零）
     }
 
     // 如果姓名从"(待补全)"变为真实姓名，重置密码
     if (realName && student.realName === '(待补全)' && realName !== '(待补全)') {
       const sid = (data.username || student.username).split('@')[0];
       if (!sid.startsWith('tmp_')) {
-        // ★H6（W2-P2c）：同上 —— 补全姓名即重置口令 ⇒ 一次性随机口令 + 强制改密
-        initialPassword = initialPassword || generateInitialPassword();
-        data.password = bcrypt.hashSync(initialPassword, 10);
+        data.password = bcrypt.hashSync(sid, 10);
         data.passwordChangedAt = new Date(); // ★R2-B67：补全姓名即重置密码 ⇒ 旧令牌失效
-        data.mustChangePassword = true;      // ★H6：首登强制改密（改密成功即清零）
       }
     }
 
@@ -140,12 +131,7 @@ export const updateStudent = async (req, res) => {
       await prisma.studentClass.deleteMany({ where: { studentId: +id } });
       await prisma.studentClass.create({ data: { studentId: +id, classId: +classId } });
     }
-    res.json({
-      code: 0,
-      // ★H6：本次确实重设了口令 ⇒ 一次性口令随响应回显（message 双通道；无设密时**保持** message/data 原样，不改既有契约）
-      message: initialPassword ? `更新成功，临时口令：${initialPassword}（首次登录须修改）` : '更新成功',
-      data: initialPassword ? { initialPassword } : null,
-    });
+    res.json({ code: 0, message: '更新成功', data: null });
   } catch (err) {
     if (err.code === 'P2002') return res.status(400).json({ code: 1001, message: '学号已存在', data: null });
     logger.error({ err }, '更新学生失败');
@@ -191,12 +177,12 @@ export const resetStudentPassword = async (req, res) => {
     }
 
     // ★H6（W2-P2c）：重置口令 = 一次性随机口令（不再等于学号）+ 置强制改密标志；与 password_changed_at 同处落库
-    const initialPassword = generateInitialPassword();
-    const newPassword = bcrypt.hashSync(initialPassword, 10);
+    // ★W3 回退（用户裁定，测试期）：重置口令 = **学号**（与修复前逐字等价）
+    const newPassword = bcrypt.hashSync(sid, 10);
     // ★R2-B67：设密路径③——教师重置学生密码
-    await prisma.user.update({ where: { id: +id }, data: { password: newPassword, passwordChangedAt: new Date(), mustChangePassword: true } });
-    logger.info({ studentId: id }, '学生密码已重置');   // ★H6：日志不落 initialPassword
-    res.json({ code: 0, message: `密码已重置，临时口令：${initialPassword}（首次登录须修改）`, data: { initialPassword } });
+    await prisma.user.update({ where: { id: +id }, data: { password: newPassword, passwordChangedAt: new Date() } });
+    logger.info({ studentId: id }, '学生密码已重置');
+    res.json({ code: 0, message: `密码已重置为学号：${sid}`, data: null });
   } catch (err) {
     logger.error({ err }, '重置学生密码失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
@@ -220,19 +206,17 @@ export const addStudent = async (req, res) => {
     const code = cls.school.officialCode || `school${cls.school.id}`;
     const fullUsername = username.includes('@') ? username : `${username}@${code}`;
 
-    // ★H6（W2-P2c）：初始口令 = **一次性随机口令**（不再等于学号）+ 首登强制改密
-    const initialPassword = generateInitialPassword();
+    // ★W3 回退（用户裁定，测试期）：初始口令 = **学号**（与修复前逐字等价）
     const student = await prisma.user.create({
       data: {
-        username: fullUsername, realName, password: bcrypt.hashSync(initialPassword, 10), role: 'student',
+        username: fullUsername, realName, password: bcrypt.hashSync(username, 10), role: 'student',
         passwordChangedAt: new Date(), // ★R2-B67：设密路径④——建号初始口令
-        mustChangePassword: true,      // ★H6：首登强制改密（改密成功即清零）
         studentClasses: { create: { classId: +classId } },
       },
       select: { id: true, username: true, realName: true, role: true, createdAt: true },
     });
-    logger.info({ studentId: student.id }, '学生已新增');   // ★H6：日志不落 initialPassword
-    res.json({ code: 0, message: `新增成功，初始口令：${initialPassword}（首次登录须修改）`, data: { ...student, initialPassword } });
+    logger.info({ studentId: student.id }, '学生已新增');
+    res.json({ code: 0, message: '新增成功', data: student });
   } catch (err) {
     if (err.code === 'P2002') return res.status(400).json({ code: 1001, message: '学号已存在', data: null });
     logger.error({ err }, '新增学生失败');
@@ -258,8 +242,6 @@ export const batchAddStudents = async (req, res) => {
 
     let success = 0;
     let errors = [];
-    // ★H6（W2-P2c）：新建账号的一次性口令明细（只回显一次；绝不进日志/不落库明文）
-    const credentials = [];
 
     for (const s of students) {
       try {
@@ -310,24 +292,18 @@ export const batchAddStudents = async (req, res) => {
 
         // 完整的学号+姓名
         const fullUsername = sid.includes('@') ? sid : `${sid}@${code}`;
-        // ★H6（W2-P2c）：只有**新建**这一支会设口令 ⇒ 先探存在性，避免对已存在账号回显一个"并未生效的口令"。
-        //   （upsert 的 update 支只改 realName、不碰口令；代价 = 一次按唯一键的索引查询。）
-        //   竞态边界：并发下若探到不存在而 upsert 走了 update 支，则回显的口令未生效 —— 下一次重置即自愈，已在报告披露。
-        const existed = await prisma.user.findUnique({ where: { username: fullUsername }, select: { id: true } });
-        const initialPassword = generateInitialPassword();
+        // ★W3 回退（用户裁定，测试期）：初始口令 = **学号**（与修复前逐字等价）
         const user = await prisma.user.upsert({
           where: { username: fullUsername },
           update: { realName: name },
           create: {
             username: fullUsername,
             realName: name,
-            password: bcrypt.hashSync(initialPassword, 10),
+            password: bcrypt.hashSync(sid, 10),
             passwordChangedAt: new Date(), // ★R2-B67：建号初始口令
-            mustChangePassword: true,      // ★H6：首登强制改密（改密成功即清零）
             role: 'student',
           },
         });
-        if (!existed) credentials.push({ username: fullUsername, initialPassword });
         await prisma.studentClass.upsert({
           where: { studentId_classId: { studentId: user.id, classId: +classId } },
           update: {},
@@ -340,14 +316,7 @@ export const batchAddStudents = async (req, res) => {
     }
 
     logger.info({ classId, success, errors: errors.length }, '批量导入学生完成');   // ★H6：日志不落任何口令
-    res.json({
-      code: 0,
-      // ★H6：新建账号的一次性口令随响应回显（message 给提示，data.credentials 给结构化明细）
-      message: credentials.length
-        ? `成功导入 ${success} 名，失败 ${errors.length} 名；新建 ${credentials.length} 名的一次性口令见 data.credentials（首次登录须修改）`
-        : `成功导入 ${success} 名，失败 ${errors.length} 名`,
-      data: { success, errors, credentials },
-    });
+    res.json({ code: 0, message: `成功导入 ${success} 名，失败 ${errors.length} 名`, data: { success, errors } });
   } catch (err) {
     logger.error({ err }, '批量导入学生失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
