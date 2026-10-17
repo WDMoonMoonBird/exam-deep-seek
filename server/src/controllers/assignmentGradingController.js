@@ -1,8 +1,10 @@
 /**
  * assignmentGradingController.js —— R2-B3（W7）作业级批改触发。
  *
- * 幂等：唯一键 (assignmentId, checkerId, status='pending') ⇒ 同作业重复触发只产生一个 pending job；
- * 并发/竞态由唯一键兜底（P2002 时返回既有 job）；**不**插入逐份提交入口（studentController:745 保持原样）。
+ * 幂等（★R1 起 **DB 强制**）：活动态（pending/running）每 assignmentId 至多一行
+ *   （迁移 20261017123000_r1_grading_jobs_active_assignment：生成列 active_assignment_key + UNIQUE；
+ *    旧 active_key（assignment,checker）保留）⇒ 同作业重复触发（含并发、不同 checker）只可能留下一个活动 job。
+ * 并发/竞态由 DB 唯一键兜底（P2002 时返回既有 job）；**不**插入逐份提交入口（studentController:745 保持原样）。
  */
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
@@ -124,7 +126,7 @@ export const triggerAssignmentGrading = async (req, res) => {
     try {
       job = await prisma.gradingJob.create({ data: key, select: { id: true } });
     } catch (err) {
-      if (err?.code === 'P2002') { // 竞态：唯一键兜底
+      if (err?.code === 'P2002') { // 竞态：DB 唯一键兜底（R1 active_assignment_key / 旧 active_key 任一命中）
         const again = await prisma.gradingJob.findFirst({ where: activeWhere, orderBy: { id: 'desc' }, select: { id: true, checkerId: true } });
         return res.json({
           code: 0,

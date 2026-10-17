@@ -98,9 +98,10 @@ export async function scanDueAssignments({ prisma, enabled = true, lookbackDays 
   let enqueued = 0;
   for (const row of found.rows) {
     try {
-      // ★R1（A1 复核）缓解：建之前再按**作业**查一次活动 job，缩小「扫描与手动触发同时各建一个」的窗口。
-      //   DB 唯一键只覆盖 (assignment, checker)（见 20261012030000_r2b12_grading_jobs_active_key）；
-      //   跨 checker 的「每作业一个活动 job」DB 无法表达，最终仍以应用层判重为准 ⇒ 见 AUTO-FLOW §2.3 已知限制。
+      // ★R1（Wave 3）：DB 已强制「每作业一个活动 job」（生成列 active_assignment_key + UNIQUE，
+      //   迁移 20261017123000_r1_grading_jobs_active_assignment；旧 active_key 保留）。
+      //   这里先按作业查一次只是**优化**（少打一次 P2002、少写一行日志），并发窗口由 DB 兜底；
+      //   下面的 P2002 分支即 DB 约束命中时的正常路径（skipped=active_job_exists）。
       if (prisma.gradingJob && typeof prisma.gradingJob.findFirst === 'function') {
         const active = await prisma.gradingJob.findFirst({
           where: { assignmentId: row.assignmentId, status: { in: ['pending', 'running'] } },

@@ -43,7 +43,9 @@
 - job 以 **assignmentId** 为唯一作用域；assignment 本身带 `teacherId` 与班级关联。
 - worker 领取后先打印 `SESSION_SCOPE assignment=… teacher=… classes=… title=… job=…`（F7）。
 - 物料目录是 `<materialsRoot>/<assignmentId>`，run-root 是 `r2b4-job-<jobId>-…`，会话只看到该作业的物料。
-- 不新增表/迁移：用既有 `grading_jobs` + `grading_job_runs` 作为会话记录；哨兵 checker_id 只用于在拿真尺前占住活动键。
+- 不新增业务表：用既有 `grading_jobs` + `grading_job_runs` 作为会话记录；哨兵 checker_id 只用于在拿真尺前占住活动键。
+- R1（Wave 3）只给 `grading_jobs` 加 **生成列 + 唯一索引**（迁移 `20261017123000_r1_grading_jobs_active_assignment`，无新表），
+  使「每作业一个活动 job」由 DB 强制（见 §2.3）。
 
 ### 2.2 幂等与边界
 
@@ -59,13 +61,21 @@
 - **--reuse-checker 不影响自动 job 造尺**：该开关只约束普通 job（只许复用）；自动造尺 job 仍走 build 流程
   （否则峰谷窗口形态 `--reuse-checker` 下新作业永远造不出尺）。启动日志 `AUTO_GRADE_BUILD_OVERRIDE=on` 会显式提示。
 
-### 2.3 已知限制（A1 复核 R1，需 A2 判是否加迁移）
+### 2.3 活动键：DB 级强制（★R1 已落地，Wave 3）
 
-- DB 级唯一键仍只覆盖 **(assignment, checker_id)**（迁移 `20261012030000_r2b12_grading_jobs_active_key` 的 `active_key` 生成列）；
-  「每作业一个活动 job」目前是**应用层**语义：手动触发按作业 findFirst 判重、扫描器建 job 前也按作业复查活动行。
-- 残余竞态：扫描器 SELECT 与控制器 findFirst **同时**读到「无活动 job」时，可能各建一个（哨兵 + 真实 checker），
-  得到**两个**活动 job。两者最终都按 `content_key` 复用同一把尺、回写同一批提交（幂等），不会写错分/错人；
-  代价是重复量尺/重复总评的少量成本。彻底消除需要 DB 约束（生成列改成按 assignment 唯一）或加锁，**不在 D1 范围**。
+- **两层唯一约束（都在 DB）**：
+  1. 旧 `active_key = CONCAT(assignment_id, ':', checker_id)`（迁移 `20261012030000_r2b12_grading_jobs_active_key`）：
+     活动态每 `(assignment, checker)` 至多一行；**保留，不删除**。
+  2. ★R1 新 `active_assignment_key = CASE WHEN status IN ('pending','running') THEN assignment_id ELSE NULL END STORED`
+     + UNIQUE `uniq_grading_jobs_active_assignment`（迁移 `20261017123000_r1_grading_jobs_active_assignment`）：
+     活动态**每 assignment 至多一行**（终态为 NULL ⇒ 可多行共存）。
+- **并发竞态已消除**：扫描器与手动触发即使同时读到「无活动 job」，第二个 INSERT 也会被 DB 拒绝（P2002）：
+  控制器返回既有 job（`reused=true`），扫描器记 `skipped=active_job_exists`。应用层 findFirst / 建前复查保留，
+  仅作为「少打一次 P2002」的优化（不再是正确性依赖）。
+- **迁移防呆**：migration 先建临时表 `_r1_active_guard(assignment_id PK)` 并 `INSERT ... SELECT` 活动态 assignment_id；
+  库中已有重复 ⇒ 1062 失败，**结构零改动**（临时表随连接关闭消失）；干净才继续 ADD COLUMN + CREATE UNIQUE INDEX。
+- **前置检查 / 重复处置**：`node server/scripts/check-r1-active-jobs.mjs`（只读；`--json`；0=干净 / 1=有重复 / 2=错误）；
+  有重复时保留最新一条、其余置 `failed`（`last_error='superseded_by_r1_migration'`）后重试。
 - 自动 job 若在 `job.checker_id` 对齐真实尺子时失败（DB 异常），会重试一次；仍失败则 `last_error` 记录
   `ruler_job_checker_align_failed:<reason>（打分已完成；真实 checker=…，job.checker_id 仍为 __AUTO_BUILD__）`，
   管理员端按「自动造尺」兜底显示（D2）。
@@ -206,6 +216,28 @@ JOIN assignment_question_rulers b ON b.ruler_id=r.id WHERE r.status='ready';
 ```
 页面验收：管理员登录 → /admin/grading-runs → 列表出现「运行类型=造尺（build）/复用（reuse）」行；实验2 的 15/16 能看到作业/老师/班级/尺子/已写分；点开详情可见老师、班级、逐份结果（无答题全文）。
 
+### 5.6 R1 迁移（Wave 3）：preflight → apply → 回滚
+
+> 目标：把「每作业一个活动 job」升级为 DB 强制（迁移 `20261017123000_r1_grading_jobs_active_assignment`）。
+> **生产库只读 preflight；apply 由授权窗口执行**（本仓只承诺测试库 `exam_system_test` 已应用）。
+
+```bash
+# ① preflight（只读；默认读 server/.env 的 DATABASE_URL，也可 --db-url）
+node server/scripts/check-r1-active-jobs.mjs            # exit 0=干净 / 1=有重复 / 2=参数或连接错误
+node server/scripts/check-r1-active-jobs.mjs --json     # 机器可读（active/duplicate_groups/schema.column/schema.index）
+
+# ② 应用（测试库示例；生产先把 URL 换成生产并确认 preflight=0）
+cd server
+DATABASE_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2- | sed 's#/exam_system#/exam_system_test#')" npx prisma migrate deploy
+
+# ③ 回滚（停 worker 后执行；旧 active_key 不受影响）
+DATABASE_URL="…" npx prisma db execute --file prisma/migrations/20261017123000_r1_grading_jobs_active_assignment/rollback.sql --schema prisma/schema.prisma
+```
+
+- 迁移防呆：guard 冲突（已有重复活动 assignment）⇒ 1062 失败、**结构零改动**；按 preflight 输出归并后重试。
+- 测试库预置：若 `prisma migrate deploy` 提示其它「列已存在但未登记」的历史迁移（本地手工同步过），
+  可用 `npx prisma migrate resolve --applied <name>` 基线化（只动测试库的 `_prisma_migrations`）。
+
 ## 6. 存量 80 份（实验 2）的一次性状态回填
 
 实验 2 的两班 80 份在 10-13 已由 ruler 4 写分，但 status 仍是 submitted。只改状态、不改分：
@@ -227,6 +259,12 @@ node scripts/backfill-ruler-status.mjs --db-url 'mysql://…/exam_system' --appl
 - 关闭自动触发：`DSH_AUTO_GRADE=0` 后重启 worker（无需迁移回滚）。
 - 回填不可自动撤销（只改了 status）；如需回退：`UPDATE submissions SET status='submitted' WHERE id IN (…)`（人工确认名单）。
 - 自动造尺 job 新建的行：`grading_jobs` 里 `checker_id='__AUTO_BUILD__'` 的失败行可人工置 `failed`。
+- R1 迁移回滚（逆序删唯一索引 + 生成列；旧 active_key 不受影响；应用回滚前先停 worker）：
+  ```bash
+  cd server
+  DATABASE_URL="…" npx prisma db execute --file prisma/migrations/20261017123000_r1_grading_jobs_active_assignment/rollback.sql --schema prisma/schema.prisma
+  ```
+  > 回滚不会重跑历史数据；迁移记录仍在 `_prisma_migrations`，如确需重放请按 Prisma 官方流程处理。
 
 ## 8. 改动文件
 
@@ -246,10 +284,15 @@ node scripts/backfill-ruler-status.mjs --db-url 'mysql://…/exam_system' --appl
 | `server/src/interface/http/controllers/admin/grading-runs/list.js` | D2：`run_kind` 筛选参数 |
 | `client/src/views/admin/GradingRuns.vue` | D2：运行类型/老师/班级/尺子列 + 详情无归档提示 + 逐份 DB 兜底说明 |
 | `server/scripts/backfill-admin-grading-runs.mjs` | D2：可选物化旧任务运行记录（dry-run / --apply，只补记录不改分） |
+| `server/prisma/migrations/20261017123000_r1_grading_jobs_active_assignment/` | R1：`migration.sql`（guard + 生成列 + 唯一索引）/ `rollback.sql`（逆序回滚） |
+| `server/prisma/schema.prisma` | R1：`GradingJob` 注释（两个生成列由 raw SQL 管理；旧 active_key 保留） |
+| `server/scripts/check-r1-active-jobs.mjs` | R1：只读 preflight（`--json`；重复 exit 1 / 干净 0 / 错误 2；导出纯函数） |
+| `server/src/controllers/assignmentGradingController.js` | R1：注释/文案（DB 强制每作业一个活动 job；P2002 兜底措辞） |
+| `server/src/infrastructure/dsh/worker/dueAssignmentScanner.js` | R1：注释（建前复查降级为优化；P2002 是 DB 约束的正常路径） |
 
 ## 9. 本轮明确不做
 
 - 不调分数、不做校准（「分对不对」不在本轮）。
 - 不做前端新按钮（流程是截止自动触发；教师端只消费「待审核」列表）。
 - 不改 `grading_rulers` 的内容键口径（跨班/跨教师复用保持不变）。
-- 不新增 DB 迁移（活动键跨 checker 的唯一性限制见 §2.3，交 A2 判定）。
+- 不新增业务表：R1 只给 `grading_jobs` 加生成列 + 唯一索引（§2.3）；不改分数口径、不改 `grading_rulers.content_key`。

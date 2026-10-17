@@ -543,7 +543,12 @@ model GradingJob {
   // R2-B12②：原「状态入键」唯一约束已由活动键方案替代：
   //   活动态（pending/running）每 (assignment, checker) 至多一行、终态可多行共存。
   //   实现见迁移 20261012030000_r2b12_grading_jobs_active_key（生成列 active_key + UNIQUE）。
-  //   注意：生成列未写进本 schema（Prisma 无法表达 GENERATED ALWAYS AS）⇒ 该列由原始 SQL 迁移管理。
+  //   ★R1（Wave 3 / 迁移 20261017123000_r1_grading_jobs_active_assignment）：再加一层 **DB 级「每作业一个活动 job」**：
+  //     生成列 active_assignment_key = CASE WHEN status IN ('pending','running') THEN assignment_id ELSE NULL END STORED，
+  //     唯一索引 uniq_grading_jobs_active_assignment(active_assignment_key)（终态为 NULL ⇒ 可多行共存）。
+  //     ★旧 active_key 保留（不删除）；应用层 findFirst / 建前复查仍保留，只作为「少打一次 P2002」的优化。
+  //   注意：两个生成列都未写进本 schema（Prisma 无法表达 GENERATED ALWAYS AS）⇒ 由原始 SQL 迁移管理；
+  //     prisma migrate dev 可能报这两列 drift（预期，勿用 db push），请用 prisma migrate deploy 应用迁移。
   @@index([assignmentId])
   @@index([contentKey])
   @@map("grading_jobs")
