@@ -249,16 +249,6 @@ async function publishSubmission() {
   }, 500);
 }
 
-function goCode() {
-  const query = queryAssignmentId.value ? { assignmentId: queryAssignmentId.value } : {};
-  router.push({ path: '/m/teacher/review/' + submissionId.value + '/code', query });
-}
-
-function goDiff() {
-  const query = queryAssignmentId.value ? { assignmentId: queryAssignmentId.value } : {};
-  router.push({ path: '/m/teacher/review/' + submissionId.value + '/diff', query });
-}
-
 onMounted(loadDetail);
 </script>
 
@@ -397,16 +387,6 @@ onMounted(loadDetail);
             <div v-if="quoteApplied" class="banner banner--info mt8">
               <MIcon name="message" />
               <div>已从代码页引用选中内容到教师评语。</div>
-            </div>
-          </div>
-
-          <div class="card mt12">
-            <div class="card-title">代码与参考</div>
-            <p class="help mt8">{{ isProject ? '查看学生提交文件与标准工程包；手机端只读。' : '只读查看学生作答；手机端不提供代码编辑。' }}</p>
-            <div class="row g8 mt12">
-              <button type="button" class="btn btn--sm btn--secondary" @click="goCode"><MIcon name="code" />查看代码</button>
-              <button v-if="isProject" type="button" class="btn btn--sm btn--secondary" @click="goDiff"><MIcon name="file" />代码差异</button>
-              <button type="button" class="btn btn--sm btn--ghost" @click="router.push(backTo)">返回队列</button>
             </div>
           </div>
 
