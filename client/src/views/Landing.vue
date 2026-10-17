@@ -43,6 +43,8 @@ const consoleHref = computed(() => {
   return withBase('/m/403?reason=admin');
 });
 const docHref = computed(() => withBase(isMobileEntry.value ? '/m/doc' : '/doc'));
+/** Android APK：使用公网 IP + IP 证书，避开当前网络对 deadpan.asia 的 SNI 阻断 */
+const androidApkHref = 'https://203.0.113.10/exam/download/deadpan-1.0.apk';
 /** 开源仓库地址：外链（不走 BASE 前缀），页脚最底部展示 */
 const REPO_URL = 'https://gitee.com/WD_MoonMoonBird/exam-deep-seek';
 
@@ -212,6 +214,7 @@ const rubricPublished = ref(false);
               <a class="btn btn-ghost btn-lg" :href="docHref" target="_blank" rel="noopener">
                 <svg class="icon" aria-hidden="true"><use href="#lg-book" /></svg>查看使用文档
               </a>
+              <a class="btn btn-ghost btn-lg" :href="androidApkHref" download>安卓版下载</a>
             </div>
             <ul class="trust">
               <li><svg class="icon" aria-hidden="true"><use href="#lg-check" /></svg>客观题自动批改</li>

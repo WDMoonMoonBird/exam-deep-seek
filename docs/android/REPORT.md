@@ -248,3 +248,15 @@ cd android
 - 新 SHA-256：cc8361ca9c42e366e68fc5cb1fb37e5ce9c762c57fea9e5346a0e0d7aa3a53fa
 - 证书有效期：2026-10-24（6 天，Let's Encrypt 短周期 IP 证书）
 - 已配置 lego 续期 + nginx 重载脚本（每日自动执行）
+
+
+## 13. v1.8 启动页与欢迎页下载按钮（2026-10-18 06:19）
+
+- APK 启动地址由 /exam/m 改为 **/exam/m/login**；新安装/清数据后第一时间进入登录页（登录态存在时仍由路由守卫自动回角色首页）。
+- 欢迎页（Landing）新增「安卓版下载」按钮，链接指向：
+  https://203.0.113.10/exam/download/deadpan-1.0.apk
+- 已重新构建并部署 Web：线上 /exam/m 实测按钮存在、无控制台错误
+- 已重新构建 Release APK 并覆盖下载文件：
+  - 新 SHA-256：00aa8e4f291f5baefeaaaaa9592d628d3e682ae071ccc12a47fc13b07e057f91
+  - BlueStacks 直接安装（无代理）后启动页面为登录页，截图 docs/android/shots/apk-login-start.png
+  - 欢迎页按钮截图 docs/android/shots/welcome-download-button.png
