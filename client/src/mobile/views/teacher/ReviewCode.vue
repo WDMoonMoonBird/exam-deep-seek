@@ -6,7 +6,7 @@
  * 数据：
  *   · GET /teacher/submissions/:id           通用题：学生作答 answer + 小题参考答案
  *   · GET /teacher/submissions/:id/project   实训题：studentFiles / standardFiles 文件树与正文
- * 无 Monaco、无新接口；长按/点按行选中后「引用到评语」带 quote 回到审核详情。
+ * 无 Monaco、无新接口；点按行选中后可复制该行；长行支持自动换行。
  */
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -320,17 +320,6 @@ function goUnsupported() {
   router.push({ path: '/m/teacher/code/unsupported', query });
 }
 
-function quoteSelected() {
-  if (!selectedText.value) {
-    toast.show('请先点按一行代码选中');
-    return;
-  }
-  const quote = '第 ' + (selectedLine.value + 1) + ' 行：' + selectedText.value.trim();
-  const query = { quote };
-  if (assignmentId.value) query.assignmentId = assignmentId.value;
-  router.push({ path: '/m/teacher/review/' + submissionId.value, query });
-}
-
 onMounted(loadDetail);
 </script>
 
@@ -370,7 +359,7 @@ onMounted(loadDetail);
                 <small>{{ treeFileCount }} 个文件</small>
                 <MIcon name="chevron-right" class="tree-head-chev" :class="{ open: treeOpen }" />
               </button>
-              <Transition name="m-collapse">
+              <Transition name="m-height">
                 <div v-if="treeOpen" class="file-tree-body" role="group" aria-label="工程文件树">
                   <button
                     v-for="row in treeRows"
@@ -448,8 +437,8 @@ onMounted(loadDetail);
               </div>
 
               <p class="select-hint" role="status">
-                <template v-if="selectedLine >= 0">已选中第 {{ selectedLine + 1 }} 行 · 可引用到教师评语</template>
-                <template v-else>点按代码行选中，可复制或引用到评语；长行可左右滑动查看。</template>
+                <template v-if="selectedLine >= 0">已选中第 {{ selectedLine + 1 }} 行 · 可复制该行</template>
+                <template v-else>点按代码行选中后可复制该行；长行可左右滑动查看。</template>
               </p>
 
               <div class="quote-row">
@@ -466,7 +455,6 @@ onMounted(loadDetail);
 
     <div class="actionbar">
       <button type="button" class="btn btn--secondary" @click="router.push(backTo)">返回审核</button>
-      <button type="button" class="btn btn--primary" :disabled="selectedLine < 0" @click="quoteSelected">引用选中行</button>
     </div>
   </MobileLayout>
 </template>
@@ -480,6 +468,11 @@ onMounted(loadDetail);
 .tree-head-chev { width: 16px !important; height: 16px !important; margin-left: 4px; color: var(--text-tertiary) !important; transition: transform var(--m-duration-fast); }
 .tree-head-chev.open { transform: rotate(90deg); }
 .file-tree-body { max-height: 250px; overflow: auto; border-top: 1px solid var(--border-subtle); padding: 4px 0; }
+.m-height-enter-active,
+.m-height-leave-active { overflow: hidden; transition: max-height .22s var(--m-ease-out), padding .22s var(--m-ease-out), border-color .22s var(--m-ease-out); }
+.m-height-enter-from,
+.m-height-leave-to { max-height: 0; padding-top: 0; padding-bottom: 0; border-top-color: transparent; }
+
 .tree-row { display: flex; align-items: center; width: 100%; min-height: 40px; padding-right: 10px; text-align: left; color: var(--text-primary); font-size: 13px; }
 .tree-row.is-dir { color: var(--text-secondary); }
 .tree-row.active { background: var(--bg-active); color: var(--text-brand); }

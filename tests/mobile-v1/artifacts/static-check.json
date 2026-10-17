@@ -172,6 +172,7 @@
     },
     "changedPaths": {
       "tracked": [
+        "client/src/mobile/views/teacher/ReviewCode.vue",
         "client/src/mobile/views/teacher/ReviewDetail.vue"
       ],
       "untracked": [

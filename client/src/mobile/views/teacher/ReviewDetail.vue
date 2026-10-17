@@ -50,7 +50,6 @@ const publishing = ref(false);
 const confirmOpen = ref(false);
 const publishConfirmOpen = ref(false);
 const actionError = ref('');
-const quoteApplied = ref(false);
 
 const question = computed(() => (submission.value && submission.value.question) || {});
 const isProject = computed(() => question.value.type === 'project');
@@ -124,17 +123,6 @@ function displayNo(no) {
   return at > 0 ? text.slice(0, at) : text;
 }
 
-function applyQuoteFromRoute() {
-  const quote = route.query.quote;
-  if (typeof quote !== 'string' || !quote.trim()) return;
-  const text = quote.trim();
-  feedback.value = feedback.value ? feedback.value.replace(/\s+$/, '') + '\n' + text : text;
-  quoteApplied.value = true;
-  const nextQuery = { ...route.query };
-  delete nextQuery.quote;
-  router.replace({ path: route.path, query: nextQuery });
-}
-
 async function loadDetail() {
   loading.value = true;
   loadError.value = '';
@@ -149,7 +137,6 @@ async function loadDetail() {
     ? String(submission.value.finalScore)
     : (submission.value && submission.value.aiScore != null ? String(submission.value.aiScore) : '');
   feedback.value = (submission.value && submission.value.teacherFeedback) || '';
-  applyQuoteFromRoute();
   if (isProject.value) loadProject();
 }
 
@@ -252,11 +239,6 @@ async function publishSubmission() {
 function goCode() {
   const query = queryAssignmentId.value ? { assignmentId: queryAssignmentId.value } : {};
   router.push({ path: '/m/teacher/review/' + submissionId.value + '/code', query });
-}
-
-function goDiff() {
-  const query = queryAssignmentId.value ? { assignmentId: queryAssignmentId.value } : {};
-  router.push({ path: '/m/teacher/review/' + submissionId.value + '/diff', query });
 }
 
 onMounted(loadDetail);
@@ -369,10 +351,9 @@ onMounted(loadDetail);
               <div class="card-title">学生工程代码</div>
               <MStatusTag type="accent">文件树</MStatusTag>
             </div>
-            <p class="help mt8">查看学生提交文件与标准工程包；手机端只读，可引用代码行到教师评语。</p>
+            <p class="help mt8">查看学生提交文件与标准工程包；手机端只读，可复制代码内容。</p>
             <div class="row g8 mt12">
               <button type="button" class="btn btn--sm btn--secondary" @click="goCode"><MIcon name="code" />查看代码</button>
-              <button type="button" class="btn btn--sm btn--secondary" @click="goDiff"><MIcon name="file" />代码差异</button>
             </div>
           </div>
 
@@ -406,10 +387,6 @@ onMounted(loadDetail);
               ></textarea>
             </MField>
             <div class="counter">{{ feedback.length }} / 1000</div>
-            <div v-if="quoteApplied" class="banner banner--info mt8">
-              <MIcon name="message" />
-              <div>已从代码页引用选中内容到教师评语。</div>
-            </div>
           </div>
 
           <div v-if="actionError" class="banner banner--danger mt12" role="alert">
