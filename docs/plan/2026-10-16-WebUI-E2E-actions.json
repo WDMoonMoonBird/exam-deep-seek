@@ -3,11 +3,11 @@
   "meta": {
     "title": "Deadpan 判题 · Web UI 端到端测试动作列表",
     "project": "Exam-DeepSeek",
-    "version": "1.3.0-draft2",
-    "status": "待审核",
+    "version": "1.6.0",
+    "status": "已执行（Wave 4 PASS；E2E 数据保留）",
     "generatedAt": "2026-10-16",
     "targetEnvironment": "cloud（https://deadpan.asia/exam/）",
-    "note": "本文件是「测试计划」的机器可读部分：只描述在浏览器 DOM 上做什么，不包含任何后端接口调用。v1.1 起目标改为云端；v1.3 按代码复核结果修正评分语义（提交即触发评分，非截止触发）、清除失效的本地夹具 id、补齐 use 宏动作与用例前置条件。",
+    "note": "v1.6（2026-10-17）：按 D5 部署后生产语义修正——提交不出分；截止后 worker 建 AUTO_BUILD job，DSH 造尺/复用/回写；手动重评仅兜底。旧 v1.3「提交即触发」/project-submit.js:167 引用作废。",
     "ironRules": [
       "R1 驱动真实浏览器（Playwright Chromium，headless）完成全部页面操作。已实测云端可达：HTTP 200 / title=Deadpan 判题。",
       "R2 禁止调用后端接口：动作词表不含 api/request 类型；执行器禁止使用 page.request、APIRequestContext、route()、mock()。页面自身的 XHR 由页面发起，属被测行为，不被测试代码调用。上传走页面自带的 input[type=file]（uploadFile），不是接口调用。",
@@ -20,6 +20,13 @@
       "cases": 68,
       "steps": 573,
       "note": "v1.3 实测计数（删除多学校分支用例后）"
+    },
+    "v16": {
+      "decidedAt": "2026-10-17",
+      "buildEvidence": "接受 job-29（D5 前 build，cost 1.065）；D5 未改 scanner/build，A10/C15 覆盖；D6 后 job-31/32/33/34 全 reuse 同尺、cost 0",
+      "planVersion": "1.6.0",
+      "dataPolicy": "E2E 数据保留，不清理（用户 2026-10-17 决定）",
+      "wave4": "CONDITIONAL PASS 经用户裁定 build/v1.6/no-cleanup 后为 PASS（保留数据）"
     }
   },
   "environment": {
@@ -485,85 +492,23 @@
     }
   },
   "gradingSemantics": {
-    "_comment": "【v1.5 探针实测】已用 1 人探针在云端跑通完整链路，结论以实测为准。",
-    "confirmed": "autoGradedAfterSubmit",
+    "_comment": "【v1.6 · D5 截止造尺口径】",
+    "confirmed": "deadlineAutoBuild",
     "evidence": [
-      "server/src/interface/http/controllers/student/project-submit.js:167 —— 提交写库成功后立即调 enqueueProjectGrade(saved.id)（fire-and-forget，不阻塞响应）。",
-      "server/src/services/projectGrading.js 铁律 R5：「评分在提交后异步触发」；enqueueProjectGrade 内 setImmediate -> gradeProjectSubmission，信号量并发 3（D6）。",
-      "server/src/infrastructure/worker/grading-worker.js:165 scanProjectSubmissions 只按 ProjectSubmission.status=submitted 取件，不含任何 endTime 条件（该文件的 endTime 分支只作用于「到期草稿自动提交」）。",
-      "server 全域搜索 deadline / cron / 评分调度器 = 0 命中；唯一的 setInterval 是 rateLimiter.cleanup（app.js:103）。",
-      "client/src/views/Doc.vue:125：「学生提交后系统自动触发 AI 评分（异步，通常 1-2 分钟）」。"
+      "D5 commit e990bb7：project-submit 删除 enqueueProjectGrade；提交只入库 submitted/aiScore=null",
+      "D6：worker AUTO_GRADE=on；15:11:18 AUTO_GRADE_ENQUEUE 24/25 -> jobs 29/30；job29 RULER_BUILT cost1.065；job30 RULER_REUSE_HIT model_calls=0",
+      "C16：assignment 26 3 分钟窗口；截止前待评分无分；截止后 job31 reuse/written8/cost0；admin 可见",
+      "C11c：79/80；job32/33 reuse 同尺 cost0；C17 job34 reuse 同尺"
     ],
-    "meaning": "实训题提交后，**评分是否开始取决于云端评分链路（worker / 装置 / 判据）是否就绪**，与作业截止时间无关；教师端「重新评分」与后端 POST /teacher/assignments/:id/grade 是现有的人工触发手段。",
-    "whyStudentSeesNothing": "学生端提交后看不到分数的原因是**可见性门禁**：server/src/domain/services/project-view.js 的 canStudentSeeScore(status) 仅 published 放行，未发布一律下发 score=null / feedback=null；toStudentView 还把 ai_graded 映射为 submitted，避免状态泄露「AI 已打分」。（探针实测：提交后页面只显示「评分完成后将在此显示成绩」。）",
+    "meaning": "提交不触发评分；截止后自动扫描建 AUTO_BUILD job，DSH 造尺/复用/回写；同题再次布置复用同尺（零 LLM）。",
     "consequences": [
-      "TC-CLD-05/09 恢复为「提交后轮询直到 AI状态=已评分」，实测耗时 < 2 分钟/份；40 人并发 3 预计数分钟到十几分钟。",
-      "反向断言「截止前不得出分」仍然**不成立**（探针在截止前 8 分钟就出分了）——保留删除状态。",
-      "TC-CLD-06/10 的「逐学生 AI 分与分项」在评分完成后可正常读取（探针的作业 21 已具备该条件）。",
-      "学生端「未发布不见分」断言（TC-CONS-02）与评分是否完成无关，独立成立。"
-    ],
-    "stillTrue": "「教师端没有作业级批量批改入口」这个观察仍然成立（client/src/api/projects.js 只有逐份 regradeProjectSubmission），但它不能用来论证「自动评分」——后端确实存在 POST /teacher/assignments/:id/grade（server/src/routes/teacher.js:76，W7），只是前端未接入口。真正的自动触发点是提交。",
-    "cloudObservation": {
-      "_method": "2026-10-16 20:0x 用真实 Chromium 登录 test_teacher，只读浏览作业管理页与评分审核页（未点审核、未改分、未提交、未触发批改）",
-      "measuredAt": "2026-10-16（距提交已约 3 天）",
-      "rows": [
-        {
-          "assignment": "【实验2·测试1班 A/B/C】《Spring MVC 数据绑定和响应》期末实践考试",
-          "class": "测试 1 班",
-          "progress": "40/40",
-          "deadline": "2026-10-20 23:59",
-          "aiStatus": "待评分 40 人",
-          "reviewStatus": "待审核 0 人"
-        },
-        {
-          "assignment": "【实验2·测试2班 D/E/F】《Spring MVC 数据绑定和响应》期末实践考试",
-          "class": "测试 2 班",
-          "progress": "40/40",
-          "deadline": "2026-10-20 23:59",
-          "aiStatus": "待评分 40 人",
-          "reviewStatus": "待审核 0 人"
-        },
-        {
-          "assignment": "Python 测试 / C++测试 / 500 压力测试（远端500人测试班，2026-06 提交）",
-          "aiStatus": "已评分",
-          "note": "这三场是人工触发批改后出的分（对应「作业级批改」路径）"
-        }
-      ],
-      "kpi": "作业管理页 KPI「AI 评分中：无异常」",
-      "conclusion": "80 份实训题提交（10-13 提交）在 3 天后仍是「待评分 40 人」、且没有任何评分任务在跑 ⇒ **提交不触发评分**。这与 v1.3 依代码得出的推断相反，与用户 2026-10-16 的说法一致。"
-    },
-    "codeVsCloud": {
-      "_note": "仓库代码与云端行为不一致，两种解释都成立，执行前需二选一确认：",
-      "codeSide": "仓库里 project-submit.js:167 在提交成功后调 enqueueProjectGrade（projectGrading.js 铁律 R5）；PRD R5 也写明「提交即触发评分」。",
-      "cloudSide": "云端 80 份提交 3 天未评、无 queued/running 任务 ⇒ 该路径在云端未生效（旧部署 / 评分 worker 未运行 / 判据未就绪）。",
-      "codeSearch": "全仓无 deadline/cron/定时评分调度器（唯一 setInterval 是限流清理）：grep -rn \"cron\" server/src = 0。",
-      "peakValley": "代码与文档中**不存在**「峰谷时间」「错峰评分」「低峰排队」等机制；唯一的时间维度是评分并发信号量（D6，并发 3）与 AI 配置页的并发数。因此「等峰谷时间再评分」不是本系统的行为。"
-    },
-    "mustConfirmBeforeRun": [
-      "已由本探针完成（2026-10-16 23:24~23:26），评分链路确认可用，可按计划全量开跑。"
-    ],
-    "probe": {
-      "_what": "1 份真实作业 + 1 名学生真实提交（全程 UI 点击，无接口调用）",
-      "assignment": "E2E-UI-探针-SpringMVC-20261016232243（作业 id=21，题目 id=15，测试 1 班，窗口 23:23:43 ~ 23:32:43）",
-      "student": "test_s1_01（口令 123456）",
-      "submittedAt": "2026-10-16 23:24:04（A.zip，19MB，前端过滤 3.0s）",
-      "observed": [
-        "+0.2min（约 23:26）教师端评分审核：AI状态 = **已评分**，审核状态 = 待审核 1 人，进度 1/40",
-        "+2.3min 再次读取：仍为「已评分」（状态稳定，不是瞬时抖动）",
-        "学生端提交后（23:24:04）：状态「已提交，待评分」+「评分完成后将在此显示成绩」——**无分数、无评语**（可见性门禁生效）"
-      ],
-      "conclusion": "实训题提交后**会自动评分**，本探针在截止时刻（23:32:43）**之前**就已评完 ⇒ 评分**不依赖截止事件**，而是提交后的异步链路自动完成；单份 19MB 包从提交到「已评分」< 2 分钟。"
-    },
-    "backlogAnomaly": {
-      "_what": "与探针形成对照的存量异常（不是机制问题）",
-      "observed": "两场 40/40 的作业（10-13 提交，截止 10-20）在 2026-10-16 23:2x 仍是「待评分 40 人」；同一时刻探针提交 2 分钟内即「已评分」",
-      "meaning": "评分链路本身可用（探针证明），这 80 份未评属**存量积压 / 环境历史问题**（提交时评分链路不可用，或该批提交未被入队）。",
-      "actionForRun": "本轮测试**不受影响**：新建作业的学生提交会立即进入评分并很快出分。但**不要**把这两场旧作业当成「自动评分」的证据；它们的 40/40 提交也不能复用。"
-    },
-    "peakValley": "仍确认：代码与文档中**不存在**「峰谷/错峰/低峰排队」机制（grep cron/deadline 调度器 = 0；唯一时间维度是评分并发信号量）。评分是「提交后异步、尽快完成」，不是「挑时间跑」。"
+      "TC-CLD-05/09 改为：截止前确认无分；截止后等待 AUTO_BUILD/reuse job 与已评分",
+      "G10 记录 job/ruler/费用/admin 行；build 证据接受 job-29 或补新题探针",
+      "8 并发；同班二次布置复用"
+    ]
   },
   "deadlinePlan": {
-    "_comment": "【决策 B】窗口由人数推算，先跑 TC-CAL-01 拿到 N 再定。注意：窗口只影响「何时不能再交」，不影响评分启动（评分在提交时已触发）。",
+    "_comment": "【决策 B·v1.6】窗口只决定「何时不能再交」；提交不出分，截止后 worker 扫描造尺/复用。",
     "formula": {
       "submitSecondsPerStudent": 90,
       "concurrency": 8,
@@ -604,7 +549,7 @@
       "fallback": "若 #assign-range 的 id 落在外层容器，改用 #assign-range input 的 nth(0)/nth(1)",
       "avoidPreset": "不要用快捷项「今天 18:00 ~ 一周后 23:59」—— 一周后截止会拖太久，且 18:00 在当前时刻已成过去。"
     },
-    "gradingUnaffected": "窗口只决定提交截止；评分自提交起即开始，等窗口期间 AI 早已评完。",
+    "gradingUnaffected": "窗口只决定提交截止；提交不出分；截止后 worker 扫描造尺/复用/评分。",
     "whyNotPreset": "不使用快捷项「今天 18:00 ~ 一周后 23:59」：一周后截止会让本轮无法观察「截止后不可提交」；而「今天 18:00」在 18:00 之后执行时已属过去（原论据只对下午执行成立，故作废，结论保留）。"
   },
   "actionVocabulary": {
@@ -5127,13 +5072,13 @@
       "id": "TC-CLD-05",
       "group": "G10 云端双班实训题实战（写流程）",
       "priority": "P0",
-      "title": "等截止 + 教师端评分状态核对（纯 DOM 轮询；评分由提交触发）",
+      "title": "等截止 + 教师端评分状态核对（提交不出分；截止后造尺/复用）",
       "mutates": false,
-      "why": "v1.2 原文疑「改卷很可能是提交即触发」，这个怀疑是对的：project-submit.js:167 提交成功即 enqueueProjectGrade，server 无截止调度器。本用例据此重写：主路径 = 观察「待评分 N 人 -> 已评分」并记录耗时；学生端防泄分交给 TC-CONS-02/TC-CLD-04。",
+      "why": "v1.6：提交只入库不出分；截止后 worker 建 AUTO_BUILD job，DSH 造尺/复用/回写。本用例观察截止前无分、截止后 job/已评分。",
       "steps": [
         {
           "action": "annotate",
-          "value": "【v1.3 更正】评分触发点是提交（enqueueProjectGrade，并发 3），不是截止时刻。原「截止前不得出分」反向断言会立刻把正确实现判成 FAIL，已删除。"
+          "value": "【v1.6】提交后截止前必须保持待评分/无分；截止后等待 AUTO_BUILD/reuse job 与已评分，记录耗时。"
         },
         {
           "action": "use",
@@ -5161,7 +5106,7 @@
         },
         {
           "action": "annotate",
-          "value": "记录本行 AI状态 文案与 已交/未交 进度作为基线（可能是「待评分 N 人」也可能是「已评分」，取决于提交与本步的间隔，两种都如实记录）"
+          "value": "【v1.6】提交后截止前必须保持待评分/无分；截止后等待 AUTO_BUILD/reuse job 与已评分，记录耗时。"
         },
         {
           "action": "poll",
@@ -5172,7 +5117,7 @@
           "assert": "visible",
           "timeoutMs": 1800000,
           "intervalMs": 20000,
-          "note": "主路径：提交即入队，40 人 x 并发 3 应在十几分钟内评完。记录「TC-CLD-04 最后一人提交 -> 本处转已评分」的耗时，作为评分吞吐的实测证据"
+          "note": "主路径：截止后 worker 扫描建 job；同题走 reuse，等待全部转「已评分」。记录截止到评分耗时。"
         },
         {
           "action": "goto",
@@ -5189,7 +5134,7 @@
         },
         {
           "action": "annotate",
-          "value": "【观察项，不作断言】顺便记录该作业的截止时刻是否已过；过与不过都不影响评分是否完成（评分在提交时已启动）"
+          "value": "【v1.6】提交后截止前必须保持待评分/无分；截止后等待 AUTO_BUILD/reuse job 与已评分，记录耗时。"
         }
       ],
       "precondition": "fixtures.teacher + TC-CLD-02 已布置、TC-CLD-04 已提交",
@@ -5543,7 +5488,7 @@
       "id": "TC-CLD-09",
       "group": "G10 云端双班实训题实战（写流程）",
       "priority": "P0",
-      "title": "测试 2 班评分核对：观察自动完成；如有个别异常才点「重新评分」兜底",
+      "title": "测试 2 班评分核对：提交不出分；截止后自动造尺/复用",
       "mutates": true,
       "mutationRisk": "默认路径为纯等待（评分已由提交触发）。仅当出现「评分异常」时才点「重新评分」，那会再次调用模型并产生费用，每次重评单独记录。",
       "steps": [
@@ -5581,7 +5526,7 @@
           "assert": "visible",
           "timeoutMs": 1800000,
           "intervalMs": 20000,
-          "note": "主路径：提交即入队，等待全部转「已评分」"
+          "note": "主路径：截止后 worker 扫描建 job；同题走 reuse，等待全部转「已评分」。"
         },
         {
           "action": "goto",
@@ -5598,14 +5543,14 @@
         },
         {
           "action": "annotate",
-          "value": "若存在状态为「评分异常」的学生：进入其审核详情，点「重新评分」（2 字按钮，需 nameLoose），等待转「AI 已评分」；每次重评都要单独记录，便于费用核算"
+          "value": "【v1.6】提交不出分；截止后等待 AUTO_BUILD/reuse job 与已评分；异常才手动重评，单独记录。"
         },
         {
           "action": "annotate",
-          "value": "【v1.3 删除】原末步 pageTextNotContains「评分异常」会把「如实记录异常数」与「判红」混为一谈；异常数改为报告里的计数项，不再作为断言"
+          "value": "【v1.6】提交不出分；截止后等待 AUTO_BUILD/reuse job 与已评分；异常才手动重评，单独记录。"
         }
       ],
-      "why": "同 TC-CLD-05：评分在提交时触发；本用例只核对结果状态与异常兜底。"
+      "why": "v1.6：截止后 worker 扫描建 job；同题走 reuse；本用例核对结果与异常兜底。"
     },
     {
       "id": "TC-CLD-10",
@@ -5844,7 +5789,7 @@
     "【v1.4 实测更正】gradingSemantics 不再断言「提交即触发评分」：云端 80 份提交 3 天未评，实测支持「提交不触发评分」；同时确认代码/文档中不存在峰谷调度机制。新增 cloudObservation（逐行实测数据）与 mustConfirmBeforeRun（开跑前 1 人探针）。",
     "【v1.4 实测修正】表格行定位由 `table tbody tr` 改为 `table tbody tr.ant-table-row`：云端实测 antd 表格首行是 aria-hidden 的 .ant-table-measure-row，Playwright 点不到（not visible）⇒ 原有 5 处「点整行」步骤会直接超时。",
     "【v1.4 探针实测】写入 secrets/assignmentProfile/projectSubmitObserved/actionVocabulary 四处实测更正：①学生口令=123456（同学号会失败）；②布置弹窗只有 1 个开关，计分口径/答案可见性是 a-select，时间 input 用 placeholder 定位；③「立即布置」无确认框；④实训题「提交答案」无二次确认，19MB 包前端过滤仅 ~3 秒；⑤表格行必须用 tr.ant-table-row。",
-    "【v1.5 探针实测更正】gradingSemantics 定为 autoGradedAfterSubmit：1 人探针（作业 21 / test_s1_01 / A.zip）在截止**前** 8 分钟即已「已评分」，单份 < 2 分钟 ⇒ 评分由提交后的异步链路完成，与截止无关，也不存在峰谷调度。同时新增 backlogAnomaly 记录两场 40/40 作业 3 天未评的存量异常。"
+    "【v1.5 历史备注，已被 v1.6 取代】gradingSemantics 曾定为 autoGradedAfterSubmit：1 人探针（作业 21 / test_s1_01 / A.zip）在截止**前** 8 分钟即已「已评分」，单份 < 2 分钟 ⇒ 评分由提交后的异步链路完成，与截止无关，也不存在峰谷调度。同时新增 backlogAnomaly 记录两场 40/40 作业 3 天未评的存量异常。"
   ],
   "knownRisks": [
     {
