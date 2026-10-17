@@ -1,0 +1,189 @@
+/* ============================================================================
+ * Exam-DeepSeek · Mobile Design Tokens（生产版 · v1）
+ * 迁移自 docs/mobile-app/02-design-tokens.css（设计稿只读资产）。
+ *
+ * 与设计稿的差异（有意为之）：
+ *   1) 全部变量定义在 .m-screen 作用域内（不是 :root），移动令牌不会进入桌面 DOM，
+ *      也不会覆盖桌面令牌；teleport 的浮层一律不离开 .m-screen（本套组件不使用 body teleport）；
+ *   2) 不伪造状态栏：--m-safe-top / --m-safe-bottom 只取 env(safe-area-inset-*)，
+ *      浏览器内通常为 0（index.html 未声明 viewport-fit=cover），刘海屏 / 壳内自动生效；
+ *   3) 删除设计稿的 html[data-platform="android"] 假状态栏高度块（等壳内由系统给真实 env 值）；
+ *   4) 深色主题沿用桌面 tokens.css 的 html[data-theme="dark"] 约定，只覆盖 --m-* 与移动端
+ *      需要的 --text-tertiary（浅色加深一档，来自设计稿评审 P1-2）。
+ *
+ * 依赖：必须在 client/src/styles/tokens.css（桌面令牌）之后加载 ——
+ *       mobile.css 由 MobileLayout.vue 引入，属于 /m 路由 chunk，天然晚于入口 CSS。
+ * 规则：业务样式只使用 var(--m-*) 与桌面语义令牌，不写死 hex（本文件本身是令牌定义层）。
+ * 兼容底线 Chrome 69：只用 CSS 变量 / env() / calc() / grid-gap；不用 color-mix/oklch/:is()/min()/max()。
+ * ==========================================================================*/
+
+.m-screen {
+  /* ---------------------------------------------------------------- 1. 安全区与 App 骨架 */
+  /* 先用 0 兜底（env 不可用 / 浏览器内不会覆盖浏览器工具栏），再取真实安全区 */
+  --m-safe-top: 0px;
+  --m-safe-top: env(safe-area-inset-top, 0px);
+  --m-safe-bottom: 0px;
+  --m-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --m-appbar-h: 52px;          /* 标准导航栏 */
+  --m-tabbar-h: 56px;          /* 底部 Tab 内容高（不含安全区） */
+  --m-actionbar-h: 64px;       /* 底部固定动作条内容高（不含安全区） */
+  --m-tabbar-total: calc(var(--m-tabbar-h) + var(--m-safe-bottom));
+  --m-actionbar-total: calc(var(--m-actionbar-h) + var(--m-safe-bottom));
+  --m-page-bottom-tabbar: calc(var(--m-tabbar-total) + 16px);
+  --m-page-bottom-actionbar: calc(var(--m-actionbar-total) + 16px);
+
+  /* ---------------------------------------------------------------- 2. 触控与布局 */
+  --m-touch-min: 44px;         /* 最小触控目标（WCAG 2.5.5 / Apple HIG） */
+  --m-touch-comfort: 48px;
+  --m-gutter: 16px;            /* 页面左右留白 */
+  --m-card-pad: 16px;
+  --m-section-gap: 24px;       /* 区块间距 */
+  --m-stack: 12px;             /* 卡片之间 */
+  --m-row-h: 56px;             /* 列表行最小高度 */
+  --m-control-h: 48px;         /* 输入框 / 选择器 */
+  --m-btn-h: 50px;             /* 主按钮（拇指热区中心） */
+  --m-btn-h-sm: 38px;
+  --m-icon-btn: 44px;
+  --m-grabber-w: 36px;
+
+  /* ---------------------------------------------------------------- 3. 圆角与描边 */
+  --m-radius-card: 16px;
+  --m-radius-card-sm: 12px;
+  --m-radius-sheet: 24px;
+  --m-radius-btn: 14px;
+  --m-radius-input: 12px;
+  --m-radius-chip: 999px;
+  --m-hairline: 1px;
+
+  /* ---------------------------------------------------------------- 4. 移动端字号（中文） */
+  --m-fs-display: 28px;  --m-lh-display: 1.25;   /* 首页问候 / 成绩总分 */
+  --m-fs-title-1: 22px;  --m-lh-title-1: 1.3;    /* 页面大标题 */
+  --m-fs-title-2: 18px;  --m-lh-title-2: 1.4;    /* 区块标题 / 导航栏标题 */
+  --m-fs-title-3: 16px;  --m-lh-title-3: 1.45;   /* 卡片标题 */
+  --m-fs-body: 15px;     --m-lh-body: 1.6;       /* 正文（手机不低于 15px） */
+  --m-fs-body-sm: 13px;  --m-lh-body-sm: 1.55;   /* 辅助说明 */
+  --m-fs-caption: 12px;  --m-lh-caption: 1.5;    /* 时间 / 计数 / 标签 */
+  --m-fs-micro: 10.5px;                          /* Tab 文字 / 极小标签 */
+  --m-fs-code: 12.5px;   --m-lh-code: 1.75;      /* 只读代码面板 */
+  --m-fw-regular: 400; --m-fw-medium: 500; --m-fw-semibold: 600; --m-fw-bold: 700;
+  --m-tracking-tight: -0.01em;
+  --m-tracking-wide: 0.04em;
+
+  /* ---------------------------------------------------------------- 5. 移动端表面与浮层 */
+  /* 支持 backdrop-filter 时走半透明毛玻璃；不支持时由文件末尾 @supports 回落为实色 */
+  --m-appbar-bg: rgba(246, 247, 249, 0.86);
+  --m-appbar-solid: var(--bg-canvas);
+  --m-tabbar-bg: rgba(255, 255, 255, 0.92);
+  --m-tabbar-solid: var(--bg-surface);
+  --m-sheet-bg: var(--bg-surface);
+  --m-actionbar-bg: var(--bg-surface);
+  --m-scrim: rgba(11, 15, 22, 0.45);
+  --m-pressed: rgba(11, 15, 22, 0.06);
+  --m-hairline-color: var(--border-subtle);
+
+  /* ---------------------------------------------------------------- 6. 阴影（移动端靠描边分层，阴影仅浮层） */
+  --m-shadow-appbar: 0 1px 0 var(--border-subtle);
+  --m-shadow-tabbar: 0 -1px 0 var(--border-subtle);
+  --m-shadow-sheet: 0 -12px 48px -12px rgba(16, 24, 40, 0.28);
+  --m-shadow-toast: 0 8px 28px -6px rgba(16, 24, 40, 0.32);
+  --m-shadow-fab: 0 8px 20px -6px rgba(0, 102, 204, 0.45);
+
+  /* ---------------------------------------------------------------- 7. 动效（手势优先） */
+  --m-duration-press: 90ms;
+  --m-duration-fast: 160ms;
+  --m-duration-base: 220ms;
+  --m-duration-sheet: 320ms;
+  --m-duration-page: 300ms;
+  --m-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --m-ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+  --m-ease-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
+
+  /* ---------------------------------------------------------------- 8. 移动端语义色补充 */
+  --m-bg-gutter: var(--bg-canvas);
+  --m-bg-elevated: var(--bg-surface);
+  --m-bg-sunken: var(--bg-sunken);
+  --m-bg-tint-brand: var(--brand-50);
+  --m-text-strong: var(--text-strong);
+  --m-text: var(--text-primary);
+  --m-text-muted: var(--text-secondary);
+  --m-text-subtle: var(--text-tertiary);
+  --m-border: var(--border-default);
+  --m-border-strong: var(--border-strong);
+  --m-brand: var(--brand-600);
+  --m-brand-strong: var(--brand-700);
+  --m-brand-tint: var(--brand-50);
+  --m-on-brand: var(--text-on-brand);
+
+  /* ---------------------------------------------------------------- 9. 移动端层级 */
+  --m-z-appbar: 40;
+  --m-z-tabbar: 50;
+  --m-z-actionbar: 50;
+  --m-z-sheet-mask: 70;
+  --m-z-sheet: 80;
+  --m-z-toast: 90;
+  --m-z-toast-above-sheet: 95;
+}
+
+/* 深色主题的移动端表面（桌面令牌的深色变量仍从 tokens.css 继承） */
+html[data-theme="dark"] .m-screen {
+  --m-appbar-bg: rgba(11, 15, 22, 0.82);
+  --m-appbar-solid: var(--bg-canvas);
+  --m-tabbar-bg: rgba(20, 25, 34, 0.92);
+  --m-tabbar-solid: var(--gray-900);
+  --m-sheet-bg: var(--gray-900);
+  --m-actionbar-bg: var(--gray-900);
+  --m-scrim: rgba(0, 0, 0, 0.62);
+  --m-pressed: rgba(255, 255, 255, 0.08);
+  --m-hairline-color: rgba(255, 255, 255, 0.10);
+  --m-shadow-sheet: 0 -12px 48px -12px rgba(0, 0, 0, 0.65);
+  --m-shadow-toast: 0 8px 28px -6px rgba(0, 0, 0, 0.65);
+  --m-shadow-fab: 0 8px 20px -6px rgba(0, 0, 0, 0.6);
+  --m-bg-elevated: var(--gray-900);
+  --m-bg-sunken: #0f131a;
+  --m-bg-tint-brand: rgba(31, 122, 224, 0.18);
+  --m-border: rgba(255, 255, 255, 0.12);
+  --m-border-strong: rgba(255, 255, 255, 0.20);
+  --m-brand: var(--brand-400);
+  --m-brand-strong: var(--brand-300);
+  --m-on-brand: #06121f;
+  /* 骨架屏：桌面 tokens.css 深色块只覆盖了 sheen、未覆盖 bg（浅灰骨架在深色卡片上过亮），
+     移动端在作用域内补一对深色值，保证 /m 深色主题下 loading 态不发白。 */
+  --skeleton-bg: var(--gray-800);
+  --skeleton-sheen: rgba(255, 255, 255, 0.10);
+}
+
+/* 浅色主题：三级文字加深一档，满足 brand-50 / sunken 底上的 WCAG AA（设计稿评审 P1-2）。
+   只作用于 .m-screen，不改桌面全局 --text-tertiary。 */
+html:not([data-theme="dark"]) .m-screen {
+  --text-tertiary: #5f6773;
+}
+
+/* 不支持毛玻璃时用实色，避免文字压在滚动内容上不可读 */
+@supports not (backdrop-filter: blur(1px)) {
+  @supports not (-webkit-backdrop-filter: blur(1px)) {
+    .m-screen {
+      --m-appbar-bg: var(--m-appbar-solid);
+      --m-tabbar-bg: var(--m-tabbar-solid);
+    }
+  }
+}
+
+/* 小屏（360 档）：左右留白收一档，不缩正文 */
+@media (max-width: 374px) {
+  .m-screen {
+    --m-gutter: 14px;
+    --m-card-pad: 14px;
+    --m-fs-display: 26px;
+  }
+}
+
+/* 降级动效 */
+@media (prefers-reduced-motion: reduce) {
+  .m-screen {
+    --m-duration-press: 0ms;
+    --m-duration-fast: 0ms;
+    --m-duration-base: 0ms;
+    --m-duration-sheet: 0ms;
+    --m-duration-page: 0ms;
+  }
+}

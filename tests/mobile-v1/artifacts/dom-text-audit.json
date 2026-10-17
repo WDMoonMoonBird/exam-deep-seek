@@ -1,0 +1,24 @@
+{
+  "checked": [
+    "/m/student/home",
+    "/m/student/assignments",
+    "/m/student/assignments/1",
+    "/m/student/scores",
+    "/m/student/scores/1",
+    "/m/student/profile",
+    "/m/student/assignments/1/done",
+    "/m/teacher/home",
+    "/m/teacher/assignments",
+    "/m/teacher/assignments/1",
+    "/m/teacher/review",
+    "/m/teacher/review/101",
+    "/m/teacher/batch",
+    "/m/teacher/batch/confirm",
+    "/m/teacher/questions",
+    "/m/teacher/classes/1",
+    "/m/teacher/profile",
+    "/m/doc"
+  ],
+  "visibleHits": [],
+  "hiddenHits": []
+}

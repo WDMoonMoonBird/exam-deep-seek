@@ -1,7 +1,7 @@
 # Exam-DeepSeek 移动端设计 · Phase 1 设计简报（Design Brief）
 
 > 分支 `feat/mobile-app`（独立 worktree）· 方法 skill `afrexai-ui-design-system` Phase 1–10 · 阶段：**设计稿先行**
-> **本阶段不改 `client/` 任何生产代码**：只产出 37 屏高保真设计稿 + 11 篇设计文档（见 §7）。
+> **本阶段不改 `client/` 任何生产代码**：只产出 37 屏高保真设计稿 + 12 篇设计文档（见 §7）。
 >
 > 事实来源：`docs/mobile-app/preview/SCREENS.md`（37 屏唯一契约）· `docs/mobile-app/02-design-tokens.css`（移动令牌层 `--m-*`）· `client/src/styles/tokens.css`（桌面令牌）· `client/src/**` 实测（2026-10-17，命令见 §2）。
 > 上游参考：`docs/ui-redesign/00-design-brief.md`（桌面端深度参照）· `docs/ui-redesign/teacher-app/design.md` · `docs/ui-redesign/teacher-app/mobile-plan.md`（上一轮教师端手机稿与计划：卡片替代表格 / 逐份审核 / 代码只读 / ≥768 回退桌面 / Android 优先，本节继承并扩展）。
@@ -21,7 +21,7 @@ design_brief:
   project: "Exam-DeepSeek / Deadpan 判题 · 移动端"
   branch: "feat/mobile-app（基于 master 的独立 worktree；桌面端文件零改动）"
   type: "responsive_saas_product + progressive_web_app + android_shell（规划）"
-  phase: "设计稿先行：37 屏高保真 + 11 篇设计文档；生产代码零改动"
+  phase: "设计稿先行：37 屏高保真 + 12 篇设计文档；生产代码零改动"
 
   platform_targets:
     web_mobile: { status: "now —— 设计稿完成，待实施 /m 路由区", primary: true }
@@ -205,7 +205,7 @@ design_brief:
 | 维度 | Web 移动端（现在做） | Android（现在规划 + 后续做） | iOS（只规划，暂不出包） |
 |---|---|---|---|
 | 载体 | 浏览器打开 `/m/*`（同一套 Vue 产物） | Capacitor 壳内加载同一 Web 产物 + 原生能力桥 | 理论同上，当前不排期 |
-| 本次交付 | 37 屏设计稿 + 11 篇文档（**本分支**） | 平台策略与实施计划（06 / 07，**设计稿**） | 仅平台策略章节（06，**规划**） |
+| 本次交付 | 37 屏设计稿 + 12 篇文档 + v1 实现（**本分支**） | 平台策略与实施计划（06 / 07，**设计稿**） | 仅平台策略章节（06，**规划**） |
 | 入口 | 手机宽度自动进 /m；可手动切换 | APK 启动屏 → 工作台；PWA 可作为过渡 | PWA「添加到主屏」是唯一当前可用路径 |
 | 状态栏/安全区 | `viewport-fit=cover` + `env()`；`?platform=android` 参数在预览中模拟 24px 状态栏 | 系统栏插件提供真实高度；启动屏 `platform-splash` | 刘海/HIG 安全区，若解禁再评估 |
 | 离线 | 不承诺离线数据；PWA 只承诺壳与静态资源（M4） | 壳可离线打开，数据仍需网络 | PWA 缓存限制更严，不承诺 |
