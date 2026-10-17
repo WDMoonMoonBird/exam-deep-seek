@@ -55,7 +55,7 @@ export async function loadRulerContentIndex({ contentKeys = [], prisma: prismaCl
   if (!keys.length) return out;
   try {
     const rows = await prismaClient.$queryRawUnsafe(
-      'SELECT content_key, source_run_id, status, checker_id FROM grading_rulers WHERE content_key IN (' + keys.map(() => '?').join(',') + ')',
+      'SELECT id, content_key, source_run_id, status, checker_id FROM grading_rulers WHERE content_key IN (' + keys.map(() => '?').join(',') + ')',
       ...keys,
     );
     for (const raw of rows || []) { const r = normalizeRawRow(raw); out.set(String(r.content_key), r); }

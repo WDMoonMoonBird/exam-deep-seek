@@ -28,7 +28,7 @@ export function createListRuns({ prisma: prismaClient, logger: loggerClient, usa
       const where = [];
       const params = [];
       if (assignmentId && Number.isFinite(assignmentId)) { where.push('assignment_id = ?'); params.push(assignmentId); }
-      if (status) { where.push('status = ?'); params.push(status); }
+      // ★D5：status 不是 grading_job_runs 的列（强塞进 SQL 会 1054 ⇒ 整表退化为空）⇒ 统一在合并后按 grading_jobs.status 过滤
       const sel = await selectJobRuns({
         whereSql: where.length ? ' WHERE ' + where.join(' AND ') : '',
         params, orderBy: order, dir, limit: 500, prisma: prismaClient, log: loggerClient,
@@ -50,14 +50,23 @@ export function createListRuns({ prisma: prismaClient, logger: loggerClient, usa
     const jobIds = [...new Set([...rows.map((r) => Number(r.job_id)), ...jobById.keys()])].filter((n) => Number.isFinite(n));
     const runRefs = archives.filter((a) => a.type === 'build').map((a) => usageKeyFor({ type: 'build', assignmentId: a.assignmentId, archive: a.archive })).filter(Boolean);
     const { index: usageIndex, info: usageInfo } = await loadUsageIndex({ jobIds, runRefs, prisma: prismaClient, log: loggerClient });
+    /** ★D5：归档/job_runs 行没有 status/content_key；与 grading_jobs 行合并（运行表优先计数/计时，任务表补 status/content_key/checker） */
+    const mergeJobRows = (runRow, jobRow) => (!runRow && !jobRow ? null : { ...(jobRow || {}), ...(runRow || {}) });
+    const rulerOf = (contentKey) => (contentKey ? (rulerByContent.get(String(contentKey)) || null) : null);
     const items = [];
     for (const a of archives) {
       if (a.type === 'worker') {
-        const row = byJob.get(String(a.jobId)) || jobById.get(Number(a.jobId)) || { job_id: a.jobId };
+        const runRow = byJob.get(String(a.jobId)) || null;
+        const jobRow = jobById.get(Number(a.jobId)) || null;
+        const row = mergeJobRows(runRow, jobRow) || { job_id: a.jobId };
+        const contentKey = row.content_key || null;
+        const ruler = rulerOf(contentKey);
         items.push(shapeRow(row, {
           teardown: parseTeardown(a.archive), type: 'worker', archive: a.archive, archivePresent: true,
-          runKind: classifyJobKind({ jobId: a.jobId, checkerId: row.checker_id, contentKey: row.content_key, rulerByContent }),
+          runKind: classifyJobKind({ jobId: a.jobId, checkerId: row.checker_id, contentKey, rulerByContent }),
           usage: usageIndex.get('job:' + a.jobId) || null,
+          contentKey, rulerId: ruler ? ruler.id : null, rulerStatus: ruler ? ruler.status : null,
+          historicalArchiveOnly: !runRow && !jobRow,
         }));
         byJob.delete(String(a.jobId));
       } else {
@@ -67,12 +76,16 @@ export function createListRuns({ prisma: prismaClient, logger: loggerClient, usa
         }));
       }
     }
-    for (const row of byJob.values()) {
-      const archive = String(row.job_id);
+    for (const runRow of byJob.values()) {
+      const row = mergeJobRows(runRow, jobById.get(Number(runRow.job_id)) || null) || runRow;
+      const archive = String(runRow.job_id);
+      const contentKey = row.content_key || null;
+      const ruler = rulerOf(contentKey);
       items.push(shapeRow(row, {
         teardown: null, type: 'worker', archive, archivePresent: fs.existsSync(path.join(runsRootDir(), archive)),
-        runKind: classifyJobKind({ jobId: row.job_id, checkerId: row.checker_id, contentKey: (jobById.get(Number(row.job_id)) || {}).content_key, rulerByContent }),
-        usage: usageIndex.get('job:' + row.job_id) || null,
+        runKind: classifyJobKind({ jobId: runRow.job_id, checkerId: row.checker_id, contentKey, rulerByContent }),
+        usage: usageIndex.get('job:' + runRow.job_id) || null,
+        contentKey, rulerId: ruler ? ruler.id : null, rulerStatus: ruler ? ruler.status : null,
       }));
     }
     // ★D2：旧任务（有 grading_jobs 行，但没有 run 行 / 没有归档）—— 实验2 的 80 份就是这一类的兜底可见性
@@ -80,6 +93,7 @@ export function createListRuns({ prisma: prismaClient, logger: loggerClient, usa
     for (const job of jobById.values()) {
       if (seenJobIds.has(String(job.id))) continue;
       if (status && String(job.status || '') !== String(status)) continue;
+      const legacyRuler = rulerOf(job.content_key);
       items.push(shapeRow({
         job_id: job.id, assignment_id: job.assignment_id, checker_id: job.checker_id, status: job.status,
         written: job.written_count, skipped: job.skipped_count, measured: null, unmeasurable: null, failed: null, device_exit: null,
@@ -88,6 +102,8 @@ export function createListRuns({ prisma: prismaClient, logger: loggerClient, usa
         teardown: null, type: 'worker', archive: null, archivePresent: false,
         runKind: classifyJobKind({ jobId: job.id, checkerId: job.checker_id, contentKey: job.content_key, rulerByContent }),
         usage: usageIndex.get('job:' + job.id) || null,
+        contentKey: job.content_key || null,
+        rulerId: legacyRuler ? legacyRuler.id : null, rulerStatus: legacyRuler ? legacyRuler.status : null,
       }));
       legacyJobs += 1;
     }
@@ -104,11 +120,14 @@ export function createListRuns({ prisma: prismaClient, logger: loggerClient, usa
       }, {
         teardown: null, type: 'ruler', id: 'ruler-' + r.assignment_id + '-' + r.ruler_id, archive: null, archivePresent: false,
         runKind: 'ruler', source: 'ruler', usage: null,
+        contentKey: r.content_key || null, rulerId: r.ruler_id, rulerStatus: r.status,
       }));
       rulerRecords += 1;
     }
     let list = items;
     if (assignmentId && Number.isFinite(assignmentId)) list = list.filter((x) => Number(x.assignment_id) === assignmentId);
+    // ★D5：status 过滤统一在合并后做（job_runs 无 status 列；归档/旧任务/尺子记录同样适用）
+    if (status) list = list.filter((x) => String(x.status || '') === String(status));
     if (archiveType) list = list.filter((x) => x.type === archiveType);
     if (runKind) list = list.filter((x) => x.run_kind === runKind);
     if (purgeFlag === 'no') list = list.filter((x) => x.sessions_purged === false);

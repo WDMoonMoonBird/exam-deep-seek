@@ -4,8 +4,10 @@
  * 关键语义（与拆分前逐字一致）：
  *   - R2-B61：超限 413 + code1403；其它 multer 错误 400 + 可读 message；
  *   - R7：每次提交生成**新版本目录**，绝不删除历史版本；解压失败/含穿越路径整包拒收并回滚；
- *   - 同步返回文件树，AI 评分 fire-and-forget（enqueueProjectGrade）；
- *   - 并发串行化经 ./locks.js 的模块级单例锁表。
+ *   - ★D5（t39）：提交只入库（submitted + aiScore=null），**不再** fire-and-forget 触发 AI 评分；
+ *     评分统一由「作业截止后 dueAssignmentScanner 建 __AUTO_BUILD__ job → dsh-grader-worker 造尺/复用/评分」完成；
+ *     教师手动重评（review-ops）仍保留 enqueueProjectGrade 作为兜底，不在本路径自动触发；
+ *   - 同步返回文件树，并发串行化经 ./locks.js 的模块级单例锁表。
  */
 
 import fs from 'fs';
@@ -16,7 +18,6 @@ import logger from '../../../../utils/logger.js';
 import { submissionDir } from '../../../../utils/projectPaths.js';
 import { toStudentView, parseProjectAnswer, serializeProjectAnswer } from '../../../../domain/services/project-view.js';
 import { extractZipSafely, decodeUploadName } from '../../../../utils/projectArchive.js';
-import { enqueueProjectGrade } from '../../../../services/projectGrading.js';
 import { withSubmitLock } from './locks.js';
 import { assertStudentInAssignment, findProjectQuestionInAssignment } from './project-question.js';
 import { buildTreeSafe, readVersionContents } from './version-files.js';
@@ -28,7 +29,7 @@ import { buildTreeSafe, readVersionContents } from './version-files.js';
  *
  * 关键语义：
  *   - R7：每次提交生成**新版本目录**，绝不删除历史版本
- *   - 同步返回文件树，**不等待 AI 评分**（评分触发属于 T03）
+ *   - 同步返回文件树，**不等待也不触发 AI 评分**（★D5：评分只在作业截止后由 DSH 会话统一进行）
  *   - 解压失败 / 含穿越路径 → 整包拒收并回滚已创建的版本目录
  */
 export const submitProject = (req, res) => {
@@ -163,10 +164,12 @@ export async function submitProjectCore(req, res) {
           '实训题已提交'
         );
 
-        // ---- 异步触发 AI 评分（R5：fire-and-forget，不阻塞返回）----
-        enqueueProjectGrade(saved.id);
+        // ---- ★D5（t39）：这里**不再**触发 AI 评分 ----
+        //   提交只入库（submitted / aiScore=null）；截止后由 dsh-grader-worker 的截止扫描建
+        //   __AUTO_BUILD__ job，统一造尺（首次）/复用（同内容）并回写 ai_graded。
+        //   这样「截止前不产生 AI 分」与「同一把尺复用」才成立；教师手动重评仍可兜底。
 
-        // ---- 同步返回文件树，AI 评分在后台进行 ----
+        // ---- 同步返回文件树（评分要等截止后的 DSH 会话）----
         res.json({
           code: 0,
           message: '提交成功',

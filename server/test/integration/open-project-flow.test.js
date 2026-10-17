@@ -26,6 +26,7 @@ import {
 import {
   PROJECT_ROLE, OPEN_PROJECT_ROLE, buildOpenProjectGradePrompt,
 } from '../../src/infrastructure/ai/deepseek/index.js';
+import { enqueueProjectGrade } from '../../src/services/projectGrading.js';
 
 /** 学生提交的单个源文件（单文件保证上下文文本确定，便于逐字节断言） */
 const STUDENT_FILE = 'src/main.js';
@@ -197,7 +198,7 @@ describe('开放性实训题全链路（建题无包 → 布置确认 → 提交
     expect(typeof assignmentId).toBe('number');
   });
 
-  it('③ 学生提交 zip → 提交成功并返回文件树（评分异步进行）', async () => {
+  it('③ 学生提交 zip → 提交成功并返回文件树（D5：不触发评分）', async () => {
     const res = await studentReq
       .post('/api/student/assignments/' + assignmentId + '/project/' + qid + '/submit')
       .attach('file', buildStudentZip(), 'project.zip');
@@ -207,14 +208,27 @@ describe('开放性实训题全链路（建题无包 → 布置确认 → 提交
     expect(res.body.data.files.tree.length).toBeGreaterThan(0);
     submissionId = res.body.data.submission.id;
     expect(typeof submissionId).toBe('number');
+    // ★D5：提交只入库（submitted / aiScore=null），截止前不得直接出分
+    const sub = await prisma.submission.findUnique({ where: { id: submissionId } });
+    expect(sub.status).toBe('submitted');
+    expect(sub.aiScore).toBeNull();
+    expect(gradeCalls()).toHaveLength(0);
   });
 
-  it('④ 评价式评分：实评 prompt 无标准答案段、system 为 OPEN_PROJECT_ROLE、逐字节等于开放性构建函数', async () => {
-    // 等待异步评分落库（enqueueProjectGrade 走 setImmediate，轮询到 ai_graded）
+  it('④ ★D5：提交后不自动评分；手动重评兜底才评分且 prompt 无标准答案段/逐字节一致', async () => {
+    // D5：即使等 1.5s，也不得自动出分（旧实现 enqueueProjectGrade 会 setImmediate 触发）
+    await new Promise((r) => setTimeout(r, 1500));
+    const before = await prisma.submission.findUnique({ where: { id: submissionId } });
+    expect(before.status).toBe('submitted');
+    expect(before.aiScore).toBeNull();
+    expect(gradeCalls()).toHaveLength(0);
+
+    // 教师手动重评兜底仍保留：显式 enqueue 后才评分（本用例只验证评分 prompt 链路，不点 UI）
+    enqueueProjectGrade(submissionId);
     const done = await waitFor(async () => {
       const r = await prisma.submission.findUnique({ where: { id: submissionId } });
       return r.status === 'ai_graded' ? r : null;
-    }, { label: 'ai_graded 状态' });
+    }, { label: 'manual regrade ai_graded 状态' });
 
     expect(done.aiScore).toBe(MOCK_AI_RESULT.totalScore);
     const feedback = JSON.parse(done.aiFeedback);

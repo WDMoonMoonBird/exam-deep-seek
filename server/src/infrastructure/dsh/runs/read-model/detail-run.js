@@ -35,27 +35,30 @@ export function createGetRunDetail({
     if (type !== 'ruler' && !safeArchiveDir(archive)) return { status: 'bad_archive' };
     let row = null; let rowFromDb = false;   // ★R2-B34（O-1）：区分「库里有行」与「仅为渲染用的占位」
     if (type === 'worker') {
+      let runRow = null;
       try {
         const sel = await selectJobRuns({ whereSql: ' WHERE job_id = ?', params: [jobId], orderBy: 'job_id', dir: 'DESC', single: true, prisma: prismaClient, log: loggerClient });
         const rs = (sel.rows || []).map(normalizeRawRow);
-        if (rs && rs[0]) { row = rs[0]; rowFromDb = true; }
-      } catch (err) { row = null; }
-      if (!row) {
-        // ★D2：没有 grading_job_runs 行的旧任务（实验2 80 份）—— 详情直接从 grading_jobs 读（只读，不改分）
-        try {
-          const rs = await prismaClient.$queryRawUnsafe(
-            'SELECT id AS job_id, assignment_id, checker_id, status, written_count, skipped_count, content_key, created_at, updated_at, last_error '
-            + 'FROM grading_jobs WHERE id = ? LIMIT 1', jobId,
-          );
-          if (rs && rs[0]) {
-            row = normalizeRawRow(rs[0]);
-            row.started_at = row.created_at; row.finished_at = row.updated_at;
-            row.written = row.written_count; row.skipped = row.skipped_count;
-            rowFromDb = true;
-          }
-        } catch { /* grading_jobs 表缺失 ⇒ 保持占位行 */ }
-      }
-      if (!row) row = { job_id: jobId };
+        if (rs && rs[0]) runRow = rs[0];
+      } catch { runRow = null; }
+      // ★D5：grading_job_runs 没有 status/content_key（job 状态与内容键只在 grading_jobs）⇒ 总是合并任务行。
+      //   旧任务（实验2 80 份）可能没有 run 行，也能从 grading_jobs 得到 status/content_key（只读，不改分）。
+      let jobRow = null;
+      try {
+        const rs = await prismaClient.$queryRawUnsafe(
+          'SELECT id AS job_id, assignment_id, checker_id, status, written_count, skipped_count, content_key, created_at, updated_at, last_error '
+          + 'FROM grading_jobs WHERE id = ? LIMIT 1', jobId,
+        );
+        if (rs && rs[0]) {
+          jobRow = normalizeRawRow(rs[0]);
+          if (jobRow.started_at === undefined) jobRow.started_at = jobRow.created_at;
+          if (jobRow.finished_at === undefined) jobRow.finished_at = jobRow.updated_at;
+          if (jobRow.written === undefined) jobRow.written = jobRow.written_count;
+          if (jobRow.skipped === undefined) jobRow.skipped = jobRow.skipped_count;
+        }
+      } catch { /* grading_jobs 表缺失 ⇒ 仅 run 行/占位行 */ }
+      row = (runRow || jobRow) ? { ...(jobRow || {}), ...(runRow || {}) } : { job_id: jobId };
+      rowFromDb = !!(runRow || jobRow);
     } else if (type === 'ruler') {
       try {
         const rs = await prismaClient.$queryRawUnsafe(
@@ -75,7 +78,7 @@ export function createGetRunDetail({
           binding: (bind && bind[0]) || null,
         };
         rowFromDb = true;
-      } catch (err) {
+      } catch {
         return { status: 'not_found' };
       }
     } else {
@@ -88,6 +91,8 @@ export function createGetRunDetail({
     if (!dirExists && !hasRow) {
       return { status: 'not_found' };
     }
+    // ★D5：只有归档、DB 行已被清理的历史目录（管理员页不能伪装成一次有作业/班级的正常运行）
+    const historicalArchiveOnly = type === 'worker' && dirExists && !rowFromDb;
     const teardown = parseTeardown(archive);
     const summary = readJsonSafe(archive, 'evidence-summary.json');
     const stdout = readArchiveFile(archive, 'device.stdout.log', { maxLines: logLineLimit });
@@ -101,12 +106,13 @@ export function createGetRunDetail({
     } catch { /* 标题可选 */ }
     // ★D2：build/reuse 判定（只读；ruler 表缺失 ⇒ 退化为 worker，不影响页面）
     let runKind = type === 'build' ? 'build' : (type === 'ruler' ? 'ruler' : 'worker');
+    let rulerRow = null;
     if (type === 'worker' && row) {
       let rulerByContent = null;
       if (row.content_key) {
         try {
-          const rr = await prismaClient.$queryRawUnsafe('SELECT content_key, source_run_id FROM grading_rulers WHERE content_key = ? LIMIT 1', String(row.content_key));
-          if (rr && rr[0]) rulerByContent = new Map([[String(rr[0].content_key), normalizeRawRow(rr[0])]]);
+          const rr = await prismaClient.$queryRawUnsafe('SELECT id, content_key, source_run_id, status FROM grading_rulers WHERE content_key = ? LIMIT 1', String(row.content_key));
+          if (rr && rr[0]) { rulerRow = normalizeRawRow(rr[0]); rulerByContent = new Map([[String(rulerRow.content_key), rulerRow]]); }
         } catch { /* 分类可选 */ }
       }
       runKind = classifyJobKind({ jobId: row.job_id, checkerId: row.checker_id, contentKey: row.content_key, rulerByContent });
@@ -150,10 +156,17 @@ export function createGetRunDetail({
       teardown, type, archive, assignmentTitle: title,
       usage: usageRow || (teardownUsage ? { cost_total: teardownUsage.cost_total, cost_currency: teardownUsage.cost_currency, cache_hit_rate: teardownUsage.cache_hit_rate, no_model_session: teardownUsage.no_model_session ? 1 : 0, model_calls: teardownUsage.model_calls } : null),
       runKind, archivePresent: type === 'ruler' ? false : dirExists, source: type === 'ruler' ? 'ruler' : null,
+      contentKey: row && row.content_key ? String(row.content_key) : null,
+      rulerId: rulerRow ? rulerRow.id : null,
+      rulerStatus: rulerRow ? rulerRow.status : null,
+      historicalArchiveOnly,
     });
     run.content_key = row && row.content_key ? String(row.content_key) : null;
     run.last_error = row && row.last_error ? String(row.last_error).slice(0, 300) : null;
-    run.notice = type !== 'ruler' && !dirExists ? 'archive_missing（归档已清理或旧运行；逐份结果优先来自数据库，不含答题全文）' : null;
+    run.notice = type === 'ruler' ? null
+      : historicalArchiveOnly
+        ? 'historical_archive_only（DB 运行行已清理，仅归档可见；无作业/班级元信息，不是一次新的批改）'
+        : (!dirExists ? 'archive_missing（归档已清理或旧运行；逐份结果优先来自数据库，不含答题全文）' : null);
     if (meta) {
       run.teacher_id = meta.teacher ? meta.teacher.id : null;
       run.teacher_name = meta.teacher ? meta.teacher.name : null;

@@ -19,7 +19,7 @@
 
 ```
 教师布置作业（既有）
-  → 学生提交（既有）
+  → 学生提交（★D5：只入库 status=submitted / aiScore=null，**不触发评分**）
   → 作业截止
   → dsh-grader-worker 常驻循环（runWorkerLoop）按 DSH_AUTO_GRADE_SCAN_MS（默认 60s）调用 scanDueAssignments
        SELECT 已截止（UTC_TIMESTAMP）/ 7 天回看 / 恰好一道 project 题 / standard_hash 非空 /
@@ -50,6 +50,8 @@
 ### 2.2 幂等与边界
 
 - **每个作业最多自动跑一次**：扫描条件含 `NOT EXISTS (SELECT 1 FROM grading_jobs WHERE assignment_id=a.id)`（含失败/终态行）。
+- **提交不直接评分（D5）**：学生提交实训题只入库（`submitted` / `aiScore=null`），**不再** `enqueueProjectGrade`；
+  统一在**截止后**由扫描器建 `__AUTO_BUILD__` job → DSH 造尺/复用/评分。教师/管理员手动重评仍是兜底（review-ops 显式触发）。
 - **失败不自动重试**（★含义）：造尺失败/装置超时/物料导出失败后，扫描器不会再次自动建 job；需教师/运维显式重试：
   `POST /teacher/assignments/:id/grade`（无可用尺子时会自动建 build job，不再 409）。
 - 回看窗口默认 **7 天**（`DSH_AUTO_GRADE_LOOKBACK_DAYS`），避免首次部署把历史作业一次性全排。
@@ -189,6 +191,9 @@ node scripts/r2b5-worker.mjs \
 
 - **run_kind 判定**（只读）：`grading_rulers.source_run_id = job.id` ⇒ `build`；同 content_key 的尺子由别的运行造出 ⇒ `reuse`；无内容键的旧任务 ⇒ `worker`；合成尺子记录 ⇒ `ruler`。
 - **A1-R2 兜底**：`job.checker_id` 仍是 `__AUTO_BUILD__`（对齐失败）时，列表/详情显示「自动造尺（未对齐）」，不显示裸哨兵、不崩。
+- **D5 补列（管理员可验收）**：`status` 来自 `grading_jobs.status`（`grading_job_runs` 无 status 列，D2-D5 期间显示空白）；`content_key` / `ruler_id` / `ruler_status` 来自任务行 + `grading_rulers`；
+  只有归档、DB 行已清理的历史目录标记 `historical_archive_only=true`（详情 `notice` 说明），不再伪装成一次新的批改。
+  status 过滤改为合并后在内存过滤（此前把 status 塞进 `grading_job_runs` SQL 会 1054 导致整表退化为空）。
 - **详情**：老师/班级/作业/尺子/会话 teardown/用量/逐份结果；归档被清理（旧运行）时提示「无归档」，逐份结果从数据库按 `(assignment, checker)` 兜底（**只取学生名/分数/尺子归属，不含答题全文**），并标注 `submissions_source=db_by_checker`。
 - **不泄露/不改分**：页面无写操作；读模型只 SELECT；逐份结果不含 answer；DB 兜底只读 `submissions.ai_score`。
 
@@ -237,6 +242,31 @@ DATABASE_URL="…" npx prisma db execute --file prisma/migrations/20261017123000
 - 迁移防呆：guard 冲突（已有重复活动 assignment）⇒ 1062 失败、**结构零改动**；按 preflight 输出归并后重试。
 - 测试库预置：若 `prisma migrate deploy` 提示其它「列已存在但未登记」的历史迁移（本地手工同步过），
   可用 `npx prisma migrate resolve --applied <name>` 基线化（只动测试库的 `_prisma_migrations`）。
+
+### 5.7 提交不再自动评分（D5 / t39）
+
+**旧行为（D5 前，违反需求）**：`POST /student/assignments/:id/project/:questionId/submit` 在写库后调用
+`enqueueProjectGrade(saved.id)` ⇒ 提交即异步 AI 评分（生产 24/25 在截止前 15:04 已有 86/97/94/90）。
+
+**现行为（D5 起）**：
+
+| 阶段 | 学生提交 | submissions | grading_jobs | DSH 会话 |
+|---|---|---|---|---|
+| 截止前 | 200 + 文件树（只落盘/写库） | `status=submitted`、`ai_score=null`、`ai_feedback=null` | 无 | 无 |
+| 截止后（≤60s 扫描） | — | 仍 submitted（待评分） | 新增 1 个 `__AUTO_BUILD__` job（每作业一个活动 job，R1 DB 强制） | 首次：build-and-measure 造尺；同 content_key：reuse（零 LLM） |
+| 评分完成 | — | `status=ai_graded` + ai_score/ai_feedback/checker_id | job `done` + `grading_job_runs` | 管理员页可见（作业/老师/班级/尺子/状态/计数/费用） |
+
+- 代码点：`server/src/interface/http/controllers/student/project-submit.js`（已删除 enqueue 调用/import）；评分只走 worker。
+- 手动兜底：教师/管理员「重新评分」链路（`infrastructure/review/project-review-ops.js`）仍调用 `enqueueProjectGrade`，但那是显式人工动作。
+- 历史数据：D5 前「提交即评分」写入的旧分不会被自动清除；如某作业仍需重新走 DSH，可让教师手动重评，或由运维按流程处理（不在本任务范围）。
+- 验证（截止前/后）：
+  ```sql
+  -- 截止前：应无 AI 分
+  SELECT id,status,ai_score,checker_id FROM submissions WHERE assignment_id=?;
+  -- 截止后 job done：应为 ai_graded 且 checker_id = grading_rulers.checker_id
+  SELECT j.id,j.status,j.written_count,r.checker_id FROM grading_jobs j
+  LEFT JOIN grading_rulers r ON r.content_key=j.content_key WHERE j.assignment_id=?;
+  ```
 
 ## 6. 存量 80 份（实验 2）的一次性状态回填
 
@@ -289,6 +319,11 @@ node scripts/backfill-ruler-status.mjs --db-url 'mysql://…/exam_system' --appl
 | `server/scripts/check-r1-active-jobs.mjs` | R1：只读 preflight（`--json`；重复 exit 1 / 干净 0 / 错误 2；导出纯函数） |
 | `server/src/controllers/assignmentGradingController.js` | R1：注释/文案（DB 强制每作业一个活动 job；P2002 兜底措辞） |
 | `server/src/infrastructure/dsh/worker/dueAssignmentScanner.js` | R1：注释（建前复查降级为优化；P2002 是 DB 约束的正常路径） |
+| `server/src/interface/http/controllers/student/project-submit.js` | D5：删除提交即评分（`enqueueProjectGrade`）；提交只入库，截止后 DSH 统一评分 |
+| `server/src/infrastructure/dsh/runs/read-model.js` | D5：`shapeRow` 补 `content_key/ruler_id/ruler_status/historical_archive_only` |
+| `server/src/infrastructure/dsh/runs/read-model/list-runs.js` | D5：合并 `grading_jobs`（status/content_key）+ ruler/历史归档标记；status 过滤移到合并后（修 1054） |
+| `server/src/infrastructure/dsh/runs/read-model/detail-run.js` | D5：详情同样合并任务行 + 尺子字段 + 历史归档 notice |
+| `server/src/infrastructure/dsh/runs/read-model/legacy-jobs.js` | D5：ruler 索引 select `id`（列表显示 ruler_id） |
 
 ## 9. 本轮明确不做
 

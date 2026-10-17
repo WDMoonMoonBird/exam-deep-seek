@@ -39,6 +39,7 @@ import { createGetRunDetail } from './read-model/detail-run.js';
 function shapeRow(row, {
   teardown = null, type = 'worker', archive = null, assignmentTitle = null, usage = null,
   runKind = null, archivePresent = null, id = null, source = null,
+  contentKey = null, rulerId = null, rulerStatus = null, historicalArchiveOnly = false,
 } = {}) {
   const ev = teardown || {};
   const u = usageListFields(usage);
@@ -61,6 +62,12 @@ function shapeRow(row, {
     checker_id: sentinel ? null : (rawChecker ? maskSecrets(rawChecker).slice(0, 24) : null),
     checker_id_raw: rawChecker ? maskSecrets(rawChecker).slice(0, 80) : null,
     checker_label: sentinel ? '自动造尺（未对齐）' : null,
+    // ★D5：内容键 + 尺子（管理员页需要看到 job → 尺子 的对应关系；content_key 非机密）
+    content_key: contentKey || (row && row.content_key ? String(row.content_key) : null),
+    ruler_id: rulerId === null || rulerId === undefined ? null : Number(rulerId),
+    ruler_status: rulerStatus || null,
+    // ★D5：只有归档、DB 运行行已被清理的历史目录 ⇒ 页面显示「历史归档」而不是空白行
+    historical_archive_only: !!historicalArchiveOnly,
     run_kind: runKind || (type === 'build' ? 'build' : (type === 'ruler' ? 'ruler' : 'worker')),
     status: row ? row.status || null : null,
     measured: row ? Number(row.measured) : (ev.session_files_before === undefined ? null : null),
