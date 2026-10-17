@@ -365,53 +365,59 @@
   </PageShell>
 </template>
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import 'ant-design-vue';
 import request from '../../api/request.js';
 import PageShell from '../../components/PageShell.vue';
 import StatusTag from '../../components/StatusTag.vue';
 import LossDistributionDrawer from '../../components/LossDistributionDrawer.vue';   // ★R2-B68：按班失分项分布抽屉
+// ★B3 拆分（纯搬运）：表格列/筛选选项 → ./gradingRuns/columns.js；中文化标签/格式化 → composables/admin/gradingRuns/useGradingRunsLabels.js；
+//   列表取数 → useGradingRunsList.js；详情抽屉/三块面板/日志 → useGradingRunsDetail.js。模板与行为不变。
+import { cols, subCols, toolCols } from './gradingRuns/columns.js';
+import {
+  tierLabel, typeLabel, runKindLabel, runKindTone, checkerLabel, sourceLabel, homePolicyLabel, statusLabel,
+  runRefLabel, fmtLocalTime, utcTooltip, fmtBytes, exitLabel, fmtRate, fmtRateNa, jsonText, fmtTokens, fmtElapsed,
+  purgeTone, purgeText, stateTone, stateText,
+} from '../../composables/admin/gradingRuns/useGradingRunsLabels.js';
+import { useGradingRunsList } from '../../composables/admin/gradingRuns/useGradingRunsList.js';
+import { useGradingRunsDetail } from '../../composables/admin/gradingRuns/useGradingRunsDetail.js';
 
-const loading = ref(false);
+/** 读模型端口（列表/详情/日志同源；本页不引入任何裸根资源路径） */
+const API = '/admin/grading-runs';
 const lossOpen = ref(false);   // ★R2-B68：失分项分布抽屉（需 assignmentId；空/错态由抽屉兜底）
-const items = ref([]);
-const total = ref(0);
-const page = ref(1);
-const pageSize = ref(20);
-const filters = reactive({ assignmentId: null, type: undefined, runKind: undefined, status: undefined, sessions_purged: undefined });
-const detailOpen = ref(false);
-const detailLoading = ref(false);
-const detail = ref(null);
-const detailError = ref('');
-const logText = ref('');
-const logMissing = ref('');
-const logDownloading = ref(false);   // ★R2-B38：全量日志下载中（走既有 axios 实例 + Blob，不产生裸根 URL）
 
-/** ★R2-B37b 中文化映射（中文为主；英文原键放 tooltip，便于与日志/DB 对照） */
-const TYPE_LABELS = { worker: '批改运行', build: '造尺运行', ruler: '存量尺子记录' };
-/** ★D2：运行类型（自动造尺链路的 build/reuse 是作业级记录的关键口径） */
-const RUN_KIND_LABELS = { build: '造尺（build）', reuse: '复用（reuse）', worker: '普通批改', ruler: '存量尺子（ruler）' };
-const SOURCE_LABELS = { worker: '批改 worker', build: '造尺脚本' };
-const HOME_POLICY_LABELS = { 'sessions+credentials': '会话文件 + 凭据（保留 home 骨架）' };
-const STATUS_LABELS = { done: '完成', failed: '失败', pending: '排队中', running: '运行中', needs_rerun: '需重跑', ready: '就绪（ready）' };
-const TIER_LABELS = { peak: '高峰', idle: '空闲', mixed: '跨时段', na: '不适用（无模型调用）' };
-/** ★R2-B38：时段档中文化 —— 零 LLM 时后端给 na ⇒ 与命中率 na 口径统一显示「不适用（无模型调用）」 */
-function tierLabel(t) { return TIER_LABELS[t] || (t || '—'); }
-function typeLabel(t) { return TYPE_LABELS[t] || (t || '—'); }
-/** ★D2：运行类型中文化 + 兜底（checker_id 仍是 __AUTO_BUILD__ 哨兵时显示「自动造尺（未对齐）」） */
-function runKindLabel(k) { return RUN_KIND_LABELS[k] || (k || '—'); }
-function runKindTone(k) {
-  if (k === 'build' || k === 'reuse') return 'success';
-  if (k === 'ruler') return 'neutral';
-  return 'neutral';
+const typeOptions = [{ value: 'worker', label: '批改运行' }, { value: 'build', label: '造尺运行' }, { value: 'ruler', label: '存量尺子记录' }];
+const runKindOptions = [
+  { value: 'build', label: '造尺（build）' },
+  { value: 'reuse', label: '复用（reuse）' },
+  { value: 'worker', label: '普通批改' },
+  { value: 'ruler', label: '存量尺子（ruler）' },
+];
+const purgeOptions = [{ value: 'yes', label: '已销毁' }, { value: 'no', label: '未销毁（需关注）' }];
+const statusOptions = [{ value: 'done', label: 'done' }, { value: 'failed', label: 'failed' }, { value: 'pending', label: 'pending' }, { value: 'running', label: 'running' }, { value: 'needs_rerun', label: 'needs_rerun' }, { value: 'ready', label: 'ready' }];
+
+// ★B3：列表（状态/筛选/分页/取数）与详情（抽屉/三块面板/日志）逻辑已拆到 composables（依赖注入 request；URL 仍由 API 常量同源，行为不变）
+const {
+  loading, items, total, filters, load, reload, reset, onTableChange, pagination,
+} = useGradingRunsList({ request, basePath: API });
+const {
+  detailOpen, detailLoading, detail, detailError, logText, logMissing, logDownloading,
+  openDetail, loadLog, downloadLog,
+  usage, usageInfo, meta, tools, toolsInfo, toolsAvailable,
+  usageAlertType, usageEmptyText, manifestText,
+  ev, submissions, filesText, purgeAlertType, purgeHeadline, purgeHint,
+} = useGradingRunsDetail({ request, basePath: API });
+
+/** 费用：¥ + 4 位小数（原键 cost_total/cost_currency）；null ⇒ '—'（不显示假 0） */
+function fmtCost4(v, currency) {
+  if (v === null || v === undefined || v === '') return '—';
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '—';
+  const cur = (currency || 'CNY').toUpperCase();
+  const sym = cur === 'CNY' ? '¥' : cur + ' ';
+  return sym + n.toFixed(4);
 }
-function checkerLabel(run) {
-  if (!run) return '—';
-  return run.checker_label || run.checker_id || '—';
-}
-function sourceLabel(s) { return SOURCE_LABELS[s] || (s || '—'); }
-function homePolicyLabel(v) { return HOME_POLICY_LABELS[v] || (v || '—'); }
-function statusLabel(s) { return STATUS_LABELS[s] || (s || '—'); }
+
 /** 销毁策略人话化：purge_home=1 keep_days=3 exit=0 ⇒ 成功即销毁会话；失败保留现场 3 天；装置退出码 0 */
 function purgePolicyText(v) {
   const s = String(v || '');
@@ -427,99 +433,15 @@ function purgePolicyText(v) {
   if (exit !== null) parts.push('装置退出码 ' + exit);
   return parts.length ? parts.join('；') : s;
 }
-/** 运行标识：job:<id> ⇒ 批改任务 #id；build:<作业ID>:<目录> ⇒ 造尺（作业 #ID） */
-function runRefLabel(key) {
-  const s = String(key || '');
-  if (!s) return '—';
-  if (s.startsWith('job:')) return '批改任务 #' + s.slice(4);
-  if (s.startsWith('build:')) {
-    const seg = s.split(':');
-    return '造尺（作业 #' + (seg[1] || '?') + (seg[2] ? '，目录 ' + seg[2] : '') + '）';
-  }
-  return s;
-}
-/** 本地时间（北京时间，浏览器本地）显示；原 UTC 串放 tooltip */
-function fmtLocalTime(v) {
-  if (!v) return '—';
-  const t = new Date(v);
-  if (!Number.isFinite(t.getTime())) return String(v);
-  const p = (n) => String(n).padStart(2, '0');
-  return t.getFullYear() + '-' + p(t.getMonth() + 1) + '-' + p(t.getDate()) + ' ' + p(t.getHours()) + ':' + p(t.getMinutes()) + ':' + p(t.getSeconds());
-}
-function utcTooltip(v) {
-  if (!v) return '';
-  const t = new Date(v);
-  return Number.isFinite(t.getTime()) ? 'UTC: ' + t.toISOString() : String(v);
-}
-/** 字节数：≥1024 显示 KB/MB */
-function fmtBytes(v) {
-  if (v === null || v === undefined || v === '') return '—';
-  const n = Number(v);
-  if (!Number.isFinite(n)) return '—';
-  if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(2) + ' MB';
-  if (n >= 1024) return (n / 1024).toFixed(1) + ' KB';
-  return n + ' B';
-}
-/** 装置退出码：0=正常，其余标注（原键 device_exit） */
-function exitLabel(v) {
-  if (v === null || v === undefined) return '—';
-  const n = Number(v);
-  if (!Number.isFinite(n)) return String(v);
-  return n === 0 ? '0（正常）' : String(n);
-}
 
-const typeOptions = [{ value: 'worker', label: '批改运行' }, { value: 'build', label: '造尺运行' }, { value: 'ruler', label: '存量尺子记录' }];
-const runKindOptions = [
-  { value: 'build', label: '造尺（build）' },
-  { value: 'reuse', label: '复用（reuse）' },
-  { value: 'worker', label: '普通批改' },
-  { value: 'ruler', label: '存量尺子（ruler）' },
-];
-const purgeOptions = [{ value: 'yes', label: '已销毁' }, { value: 'no', label: '未销毁（需关注）' }];
-const statusOptions = [{ value: 'done', label: 'done' }, { value: 'failed', label: 'failed' }, { value: 'pending', label: 'pending' }, { value: 'running', label: 'running' }, { value: 'needs_rerun', label: 'needs_rerun' }, { value: 'ready', label: 'ready' }];
+/** 评语生成方式的人话标签（三态可辨：命中缓存 / 本次生成 / 生成方式未记录） */
+function summaryStateLabel(ss) {
+  if (!ss || !ss.generated) return '未生成评语';
+  if (ss.state === 'cached_hit' || ss.cache_hit === true) return '缓存命中（未新增模型调用）';
+  if (ss.cache_hit === false) return '本次会话生成';
+  return '生成方式未记录（旧数据）';
+};
 
-// ★R2-B37b：表头中文化（英文原键放列 tooltip，便于与日志/DB 字段对照）
-const cols = [
-  { title: '归档 / 运行', key: 'archive', width: 200, tooltip: '原键：archive / id' },
-  { title: '类型', key: 'type', width: 110, tooltip: '原键：type（worker=批改运行 / build=造尺运行 / ruler=存量尺子记录）' },
-  { title: '运行类型', key: 'run_kind_col', width: 130, tooltip: '原键：run_kind（build=本次造尺 / reuse=复用量尺 / worker=普通批改 / ruler=存量尺子）' },
-  { title: '作业', key: 'assignment', width: 150, tooltip: '原键：assignment_id / assignment_title' },
-  { title: '老师', key: 'teacher', width: 120, tooltip: '原键：teacher_name / teacher_id（列表按作业归属补齐）' },
-  { title: '班级', key: 'classes', width: 170, tooltip: '原键：classes[].name / class_count（作业关联班级）' },
-  { title: '尺子', key: 'checker', width: 150, tooltip: '原键：checker_id；__AUTO_BUILD__ ⇒ 自动造尺（未对齐）' },
-  { title: '状态', key: 'status_col', width: 100, tooltip: '原键：status' },
-  { title: '已量尺', key: 'measured', width: 80, tooltip: '原键：measured（成功量尺份数）' },
-  { title: '不可量', key: 'unmeasurable', width: 80, tooltip: '原键：unmeasurable（C8 预检/量尺判不可量）' },
-  { title: '无法评分', key: 'failed', width: 90, tooltip: '原键：failed' },
-  { title: '未写分', key: 'skipped', width: 80, tooltip: '原键：skipped（未写入分数的份数）' },
-  { title: '已写分', key: 'written', width: 80, tooltip: '原键：written（实际写入分数行数）' },
-  { title: '费用', key: 'cost', width: 110, tooltip: '原键：cost_total / cost_currency（按 system_configs.llm_prices 分档）' },
-  { title: '命中率', key: 'cache_hit_rate_col', width: 110, tooltip: '原键：cache_hit_rate = cache_read/(cache_read+uncached_input)' },
-  { title: '会话销毁', key: 'sessions_purged', width: 130, tooltip: '原键：sessions_purged' },
-  { title: '时间', key: 'created_at_col', width: 190, tooltip: '原键：created_at（本地时间；UTC 见悬浮提示）' },
-];
-const subCols = [
-  { title: 'slug', key: 'slug', width: 200 },
-  { title: '状态', key: 'state', width: 160 },
-  { title: '分数', dataIndex: 'score', width: 80 },
-  { title: '命中', dataIndex: 'hits', width: 70 },
-  { title: '原因', dataIndex: 'reason', width: 220 },
-  { title: '学生', dataIndex: 'student', width: 120 },
-];
-
-/** ★R2-B37：三块面板数据（不可得 ⇒ null + 明确语义，不显示假 0） */
-const usage = computed(() => (detail.value && detail.value.usage) || null);
-const usageInfo = computed(() => (detail.value && detail.value.usage_info) || {});
-const meta = computed(() => (detail.value && detail.value.meta) || null);
-const tools = computed(() => (detail.value && detail.value.tools) || []);
-const toolsInfo = computed(() => (detail.value && detail.value.tools_info) || {});
-const toolsAvailable = computed(() => toolsInfo.value.available === true && Array.isArray(detail.value && detail.value.tools));
-const toolCols = [
-  { title: '工具', dataIndex: 'name', width: 160, tooltip: '原键：tools[].name（会话日志 tool/call + 内层 dispatch）' },
-  { title: '次数', dataIndex: 'count', width: 80, tooltip: '原键：tools[].count' },
-  { title: '耗时', key: 'ms', width: 110, tooltip: '原键：tools[].ms（调用→返回墙钟差累计）' },
-  { title: '失败', dataIndex: 'errors', width: 70, tooltip: '原键：tools[].errors（isError 计数）' },
-];
 /** ★R2-B49：判据会话与评语会话分开陈述（口径：尺子零 LLM；评语按需生成、单独计量、可关） */
 const usageAlert = computed(() => {
   if (!detail.value) return '';
@@ -534,186 +456,12 @@ const usageAlert = computed(() => {
   return '';
 });
 
-/** 评语生成方式的人话标签（三态可辨：命中缓存 / 本次生成 / 生成方式未记录） */
-function summaryStateLabel(ss) {
-  if (!ss || !ss.generated) return '未生成评语';
-  if (ss.state === 'cached_hit' || ss.cache_hit === true) return '缓存命中（未新增模型调用）';
-  if (ss.cache_hit === false) return '本次会话生成';
-  return '生成方式未记录（旧数据）';
-};
-const usageAlertType = computed(() => {
-  if (usage.value && usage.value.no_model_session === true) return 'info';
-  return usage.value ? 'success' : 'warning';
-});
-const usageEmptyText = computed(() => '用量不可得（reason=' + (usageInfo.value.reason || 'unknown') + '）：该运行没有落库的用量记录（旧运行，或迁移未落地）');
 const usageNote = computed(() => {
   const u = usage.value || {};
   if (u.no_model_session === true) return '口径：本次运行无模型会话（复用命中/量尺等零 LLM 路径）⇒ token 全 0、费用 0；不伪造费用。';
   return '口径：数据在 teardown 销毁会话**之前**抽取（<run-root>/out/session-usage.json）；命中率 = cache_read/(cache_read+uncached_input)；费用按 system_configs.llm_prices 分档计算（' + (u.price_tier || '—') + ' 档）。'
     + (usageInfo.value.source === 'teardown_json' ? '（本行来自 run-teardown.json 摘要：旧运行无逐次分桶，calls 不可得）' : '');
 });
-const manifestText = computed(() => JSON.stringify((meta.value && meta.value.standard_package && meta.value.standard_package.manifest) || {}, null, 2));
-const ev = computed(() => (detail.value && detail.value.teardown_json) || {});
-const submissions = computed(() => (detail.value && detail.value.submissions) || []);
-const filesText = computed(() => {
-  const e = ev.value;
-  return `${e.session_files_before ?? '—'} → ${e.session_files_after ?? '—'}`;
-});
-const purgeAlertType = computed(() => {
-  if (ev.value.sessions_purged === true) return 'success';
-  if (ev.value.sessions_purged === false) return 'warning';
-  return 'info';
-});
-const purgeHeadline = computed(() => {
-  if (ev.value.sessions_purged === true) return '会话已销毁（sessions_purged=true）';
-  if (ev.value.sessions_purged === false) return '会话未销毁（sessions_purged=false）—— 关注：失败保留现场，或未执行 teardown';
-  return '无销毁证据（旧运行，或装置侧未产出证据）';
-});
-const purgeHint = computed(() => {
-  const e = ev.value;
-  return `home_exists_after=${e.home_exists_after ?? '—'} ｜ credentials_removed=${e.credentials_removed ?? '—'} ｜ session_files ${e.session_files_before ?? '—'} → ${e.session_files_after ?? '—'} ｜ bytes=${e.session_bytes ?? '—'} ｜ source=${e.source || '—'}`;
-});
-
-function purgeTone(v) { return v === true ? 'success' : (v === false ? 'danger' : 'neutral'); }
-function purgeText(v) { return v === true ? '已销毁' : (v === false ? '未销毁' : '无证据'); }
-function stateTone(r) {
-  if (r.failed === true) return 'danger';
-  if (r.measurable === false) return 'warning';
-  return 'success';
-}
-function stateText(r) {
-  if (r.failed === true) return '无法评分（failed）';
-  if (r.measurable === false) return '不可量';
-  return '已量尺';
-}
-/** 命中率：null ⇒ '—'（无输入时不得显示 0%/100% 假值） */
-function fmtRate(v) {
-  if (v === null || v === undefined || v === '') return '—';
-  const n = Number(v);
-  if (!Number.isFinite(n)) return '—';
-  return (n * 100).toFixed(2) + '%';
-}
-/** 费用：¥ + 4 位小数（原键 cost_total/cost_currency）；null ⇒ '—'（不显示假 0） */
-function fmtCost4(v, currency) {
-  if (v === null || v === undefined || v === '') return '—';
-  const n = Number(v);
-  if (!Number.isFinite(n)) return '—';
-  const cur = (currency || 'CNY').toUpperCase();
-  const sym = cur === 'CNY' ? '¥' : cur + ' ';
-  return sym + n.toFixed(4);
-}
-/** 命中率（中文化 na 语义）：无模型调用 ⇒ 「不适用（无模型调用）」 */
-function fmtRateNa(v, noModelSession) {
-  if (v === null || v === undefined || v === '') return noModelSession === true ? '不适用（无模型调用）' : '—';
-  return fmtRate(v);
-}
-/** 原始 JSON 展开文本（只读展示，不改写字段名） */
-function jsonText(v) {
-  if (v === null || v === undefined) return '（无数据）';
-  try { return JSON.stringify(v, null, 2); } catch { return String(v); }
-}
-/** token 数：null ⇒ '—'；否则千分位 */
-function fmtTokens(v) {
-  if (v === null || v === undefined) return '—';
-  const n = Number(v);
-  if (!Number.isFinite(n)) return '—';
-  return n.toLocaleString('en-US');
-}
-function fmtElapsed(ms) {
-  if (ms === null || ms === undefined) return '—';
-  const s = Math.round(Number(ms) / 1000);
-  return s >= 60 ? `${Math.floor(s / 60)}m${s % 60}s` : `${s}s`;
-}
-
-const pagination = computed(() => ({
-  current: page.value, pageSize: pageSize.value, total: total.value, showSizeChanger: true,
-  showTotal: (t) => `共 ${t} 条`,
-}));
-
-async function load() {
-  loading.value = true;
-  try {
-    const params = { page: page.value, pageSize: pageSize.value };
-    if (filters.assignmentId) params.assignmentId = filters.assignmentId;
-    if (filters.type) params.type = filters.type;
-    if (filters.runKind) params.run_kind = filters.runKind;
-    if (filters.status) params.status = filters.status;
-    if (filters.sessions_purged) params.sessions_purged = filters.sessions_purged;
-    const res = await request.get('/admin/grading-runs', { params });
-    const data = (res && res.data) || res;
-    items.value = (data && data.items) || [];
-    total.value = (data && data.total) || 0;
-  } catch (err) {
-    items.value = []; total.value = 0;
-  } finally {
-    loading.value = false;
-  }
-}
-function reload() { page.value = 1; load(); }
-function reset() {
-  filters.assignmentId = null; filters.type = undefined; filters.runKind = undefined; filters.status = undefined; filters.sessions_purged = undefined;
-  reload();
-}
-function onTableChange(pg) { page.value = pg.current || 1; pageSize.value = pg.pageSize || 20; load(); }
-
-async function openDetail(record) {
-  detailOpen.value = true; detailLoading.value = true; detailError.value = ''; detail.value = null; logText.value = ''; logMissing.value = '';
-  try {
-    const res = await request.get(`/admin/grading-runs/${encodeURIComponent(record.id)}`);
-    const data = (res && res.data) || res;
-    if (!data || !data.run) detailError.value = '该运行没有可展示的详情（归档缺失或已被清理）';
-    else detail.value = data;
-  } catch (err) {
-    // ★R2-B54：UI 只放固定友好文案；原始错误进 console（不得透出到界面）
-    console.error('[R2-B54] admin/GradingRuns.vue 读取运行详情失败', err);
-    detailError.value = '读取详情失败，请重试';
-  } finally {
-    detailLoading.value = false;
-  }
-}
-
-async function loadLog(kind) {
-  logText.value = ''; logMissing.value = '';
-  const id = detail.value && detail.value.run ? detail.value.run.id : null;
-  if (!id) return;
-  try {
-    const res = await request.get(`/admin/grading-runs/${encodeURIComponent(id)}/log`, { params: { kind }, responseType: 'text', transformResponse: [(d) => d] });
-    const text = typeof res === 'string' ? res : ((res && res.data) || '');
-    if (String(text).indexOf('# 日志缺失') === 0) logMissing.value = (String(text).match(/reason=([^\s]+)/) || [])[1] || 'missing';
-    else logText.value = String(text).slice(-8000);
-  } catch (err) {
-    console.error('[R2-B54] admin/GradingRuns.vue 读取日志失败', err);
-    logMissing.value = '日志暂不可得，请稍后重试';
-  }
-}
-
-/** ★R2-B38（t6）：下载**全量**日志（后端 download=1 + 不带窗口参数 ⇒ 整份文件；脱敏在服务端完成）。
- *  走既有 axios 实例（带鉴权头），Blob + 临时 objectURL 触发下载 ⇒ 不引入任何裸根资源路径。 */
-async function downloadLog(kind) {
-  const id = detail.value && detail.value.run ? detail.value.run.id : null;
-  if (!id) return;
-  logDownloading.value = true;
-  try {
-    const res = await request.get(`/admin/grading-runs/${encodeURIComponent(id)}/log`, {
-      params: { kind, download: 1 }, responseType: 'blob',
-    });
-    const blob = (res && res.data) || (res && res instanceof Blob ? res : null);
-    if (!blob) { logMissing.value = 'download_failed:empty'; return; }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = String(id) + '.' + kind + '.log';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-  } catch (err) {
-    console.error('[R2-B54] admin/GradingRuns.vue 下载日志失败', err);
-    logMissing.value = '日志下载失败，请稍后重试';
-  } finally {
-    logDownloading.value = false;
-  }
-}
 
 onMounted(load);
 </script>

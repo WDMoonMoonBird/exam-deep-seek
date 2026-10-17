@@ -1,0 +1,1335 @@
+{
+  "schema": "c6-regression/1",
+  "note": "B3 拆分前抓取（read-model.js 781 行）；比较对象=归一化后的 HTTP 响应体",
+  "captured": {
+    "read_model_sha256": "1ed574eead0f8fac0fc4fc94e4ae44c9c0848b6f1e8799009e3b1958c740cae0",
+    "read_model_lines": 781,
+    "captured_at": "2026-10-17T03:58:19.838Z"
+  },
+  "responses": {
+    "list": {
+      "code": 0,
+      "message": "ok",
+      "data": {
+        "items": [
+          {
+            "id": "archive-build-<a>-<ts>",
+            "type": "build",
+            "archive": "build-<a>-<ts>",
+            "archive_present": true,
+            "job_id": null,
+            "assignment_id": "<n>",
+            "assignment_title": "c6reg-作业",
+            "teacher_id": "<n>",
+            "teacher_name": "测试教师",
+            "classes": [
+              {
+                "id": "<n>",
+                "name": "test_class"
+              }
+            ],
+            "class_count": 1,
+            "checker_id": null,
+            "checker_id_raw": null,
+            "checker_label": null,
+            "run_kind": "build",
+            "status": null,
+            "measured": null,
+            "unmeasurable": null,
+            "skipped": null,
+            "written": null,
+            "failed": null,
+            "elapsed_ms": null,
+            "sessions_purged": true,
+            "keep_scene": false,
+            "home_policy": "sessions+credentials",
+            "source": "build",
+            "cost_total": null,
+            "cost_currency": null,
+            "cache_hit_rate": null,
+            "no_model_session": null,
+            "model_calls": null
+          },
+          {
+            "id": "job-<id>",
+            "type": "worker",
+            "archive": null,
+            "archive_present": false,
+            "job_id": "<n>",
+            "assignment_id": "<n>",
+            "assignment_title": "c6reg-作业",
+            "teacher_id": "<n>",
+            "teacher_name": "测试教师",
+            "classes": [
+              {
+                "id": "<n>",
+                "name": "test_class"
+              }
+            ],
+            "class_count": 1,
+            "checker_id": "c6chk-a",
+            "checker_id_raw": "c6chk-a",
+            "checker_label": null,
+            "run_kind": "build",
+            "status": "done",
+            "measured": 0,
+            "unmeasurable": 0,
+            "skipped": 0,
+            "written": 2,
+            "failed": null,
+            "device_exit": null,
+            "elapsed_ms": "<elapsed>",
+            "sessions_purged": null,
+            "keep_scene": null,
+            "home_policy": null,
+            "source": "worker",
+            "created_at": "<ts>",
+            "cost_total": null,
+            "cost_currency": null,
+            "cache_hit_rate": null,
+            "no_model_session": null,
+            "model_calls": null
+          },
+          {
+            "id": "job-<id>",
+            "type": "worker",
+            "archive": null,
+            "archive_present": false,
+            "job_id": "<n>",
+            "assignment_id": "<n>",
+            "assignment_title": "c6reg-作业",
+            "teacher_id": "<n>",
+            "teacher_name": "测试教师",
+            "classes": [
+              {
+                "id": "<n>",
+                "name": "test_class"
+              }
+            ],
+            "class_count": 1,
+            "checker_id": "c6chk-a",
+            "checker_id_raw": "c6chk-a",
+            "checker_label": null,
+            "run_kind": "reuse",
+            "status": "done",
+            "measured": 0,
+            "unmeasurable": 0,
+            "skipped": 0,
+            "written": 1,
+            "failed": null,
+            "device_exit": null,
+            "elapsed_ms": "<elapsed>",
+            "sessions_purged": null,
+            "keep_scene": null,
+            "home_policy": null,
+            "source": "worker",
+            "created_at": "<ts>",
+            "cost_total": null,
+            "cost_currency": null,
+            "cache_hit_rate": null,
+            "no_model_session": null,
+            "model_calls": null
+          },
+          {
+            "id": "job-<id>",
+            "type": "worker",
+            "archive": null,
+            "archive_present": false,
+            "job_id": "<n>",
+            "assignment_id": "<n>",
+            "assignment_title": "c6reg-作业",
+            "teacher_id": "<n>",
+            "teacher_name": "测试教师",
+            "classes": [
+              {
+                "id": "<n>",
+                "name": "test_class"
+              }
+            ],
+            "class_count": 1,
+            "checker_id": "legacy-c6reg",
+            "checker_id_raw": "legacy-c6reg",
+            "checker_label": null,
+            "run_kind": "worker",
+            "status": "failed",
+            "measured": 0,
+            "unmeasurable": 0,
+            "skipped": 2,
+            "written": 2,
+            "failed": null,
+            "device_exit": null,
+            "elapsed_ms": "<elapsed>",
+            "sessions_purged": null,
+            "keep_scene": null,
+            "home_policy": null,
+            "source": "worker",
+            "created_at": "<ts>",
+            "cost_total": null,
+            "cost_currency": null,
+            "cache_hit_rate": null,
+            "no_model_session": null,
+            "model_calls": null
+          },
+          {
+            "id": "job-<id>",
+            "type": "worker",
+            "archive": null,
+            "archive_present": false,
+            "job_id": "<n>",
+            "assignment_id": "<n>",
+            "assignment_title": "c6reg-作业",
+            "teacher_id": "<n>",
+            "teacher_name": "测试教师",
+            "classes": [
+              {
+                "id": "<n>",
+                "name": "test_class"
+              }
+            ],
+            "class_count": 1,
+            "checker_id": null,
+            "checker_id_raw": "__AUTO_BUILD__",
+            "checker_label": "自动造尺（未对齐）",
+            "run_kind": "build",
+            "status": "pending",
+            "measured": 0,
+            "unmeasurable": 0,
+            "skipped": 0,
+            "written": 0,
+            "failed": null,
+            "device_exit": null,
+            "elapsed_ms": "<elapsed>",
+            "sessions_purged": null,
+            "keep_scene": null,
+            "home_policy": null,
+            "source": "worker",
+            "created_at": "<ts>",
+            "cost_total": null,
+            "cost_currency": null,
+            "cache_hit_rate": null,
+            "no_model_session": null,
+            "model_calls": null
+          },
+          {
+            "id": "job-undefined",
+            "type": "worker",
+            "archive": "<n>",
+            "archive_present": true,
+            "assignment_id": "<n>",
+            "assignment_title": "c6reg-作业",
+            "teacher_id": "<n>",
+            "teacher_name": "测试教师",
+            "classes": [
+              {
+                "id": "<n>",
+                "name": "test_class"
+              }
+            ],
+            "class_count": 1,
+            "checker_id": "c6chk-a",
+            "checker_id_raw": "c6chk-a",
+            "checker_label": null,
+            "run_kind": "worker",
+            "status": "done",
+            "measured": null,
+            "unmeasurable": null,
+            "skipped": null,
+            "written": null,
+            "failed": null,
+            "elapsed_ms": null,
+            "sessions_purged": true,
+            "keep_scene": false,
+            "home_policy": "sessions+credentials",
+            "source": "worker",
+            "created_at": "<ts>",
+            "cost_total": null,
+            "cost_currency": null,
+            "cache_hit_rate": null,
+            "no_model_session": null,
+            "model_calls": null
+          },
+          {
+            "id": "ruler-<a>-<r>",
+            "type": "ruler",
+            "archive": null,
+            "archive_present": false,
+            "job_id": null,
+            "assignment_id": "<n>",
+            "assignment_title": "c6reg-作业",
+            "teacher_id": "<n>",
+            "teacher_name": "测试教师",
+            "classes": [
+              {
+                "id": "<n>",
+                "name": "test_class"
+              }
+            ],
+            "class_count": 1,
+            "checker_id": "c6chk-b",
+            "checker_id_raw": "c6chk-b",
+            "checker_label": null,
+            "run_kind": "ruler",
+            "status": "ready",
+            "measured": 0,
+            "unmeasurable": 0,
+            "skipped": 0,
+            "written": 2,
+            "failed": null,
+            "device_exit": null,
+            "elapsed_ms": null,
+            "sessions_purged": null,
+            "keep_scene": null,
+            "home_policy": null,
+            "source": "ruler",
+            "created_at": "<ts>",
+            "cost_total": null,
+            "cost_currency": null,
+            "cache_hit_rate": null,
+            "no_model_session": null,
+            "model_calls": null
+          }
+        ],
+        "total": 7,
+        "page": 1,
+        "pageSize": 100,
+        "source": {
+          "table": "grading_job_runs",
+          "jobs_table": "grading_jobs",
+          "rulers_table": "grading_rulers",
+          "archives_root": "<runsRoot>",
+          "legacy_jobs": "<count>",
+          "ruler_records": "<count>",
+          "usage_table": "grading_run_usage",
+          "usage_note": null
+        }
+      }
+    },
+    "list_build": {
+      "code": 0,
+      "message": "ok",
+      "data": {
+        "items": [
+          {
+            "id": "archive-build-<a>-<ts>",
+            "type": "build",
+            "archive": "build-<a>-<ts>",
+            "archive_present": true,
+            "job_id": null,
+            "assignment_id": "<n>",
+            "assignment_title": "c6reg-作业",
+            "teacher_id": "<n>",
+            "teacher_name": "测试教师",
+            "classes": [
+              {
+                "id": "<n>",
+                "name": "test_class"
+              }
+            ],
+            "class_count": 1,
+            "checker_id": null,
+            "checker_id_raw": null,
+            "checker_label": null,
+            "run_kind": "build",
+            "status": null,
+            "measured": null,
+            "unmeasurable": null,
+            "skipped": null,
+            "written": null,
+            "failed": null,
+            "elapsed_ms": null,
+            "sessions_purged": true,
+            "keep_scene": false,
+            "home_policy": "sessions+credentials",
+            "source": "build",
+            "cost_total": null,
+            "cost_currency": null,
+            "cache_hit_rate": null,
+            "no_model_session": null,
+            "model_calls": null
+          },
+          {
+            "id": "job-<id>",
+            "type": "worker",
+            "archive": null,
+            "archive_present": false,
+            "job_id": "<n>",
+            "assignment_id": "<n>",
+            "assignment_title": "c6reg-作业",
+            "teacher_id": "<n>",
+            "teacher_name": "测试教师",
+            "classes": [
+              {
+                "id": "<n>",
+                "name": "test_class"
+              }
+            ],
+            "class_count": 1,
+            "checker_id": "c6chk-a",
+            "checker_id_raw": "c6chk-a",
+            "checker_label": null,
+            "run_kind": "build",
+            "status": "done",
+            "measured": 0,
+            "unmeasurable": 0,
+            "skipped": 0,
+            "written": 2,
+            "failed": null,
+            "device_exit": null,
+            "elapsed_ms": "<elapsed>",
+            "sessions_purged": null,
+            "keep_scene": null,
+            "home_policy": null,
+            "source": "worker",
+            "created_at": "<ts>",
+            "cost_total": null,
+            "cost_currency": null,
+            "cache_hit_rate": null,
+            "no_model_session": null,
+            "model_calls": null
+          },
+          {
+            "id": "job-<id>",
+            "type": "worker",
+            "archive": null,
+            "archive_present": false,
+            "job_id": "<n>",
+            "assignment_id": "<n>",
+            "assignment_title": "c6reg-作业",
+            "teacher_id": "<n>",
+            "teacher_name": "测试教师",
+            "classes": [
+              {
+                "id": "<n>",
+                "name": "test_class"
+              }
+            ],
+            "class_count": 1,
+            "checker_id": null,
+            "checker_id_raw": "__AUTO_BUILD__",
+            "checker_label": "自动造尺（未对齐）",
+            "run_kind": "build",
+            "status": "pending",
+            "measured": 0,
+            "unmeasurable": 0,
+            "skipped": 0,
+            "written": 0,
+            "failed": null,
+            "device_exit": null,
+            "elapsed_ms": "<elapsed>",
+            "sessions_purged": null,
+            "keep_scene": null,
+            "home_policy": null,
+            "source": "worker",
+            "created_at": "<ts>",
+            "cost_total": null,
+            "cost_currency": null,
+            "cache_hit_rate": null,
+            "no_model_session": null,
+            "model_calls": null
+          }
+        ],
+        "total": 3,
+        "page": 1,
+        "pageSize": 100,
+        "source": {
+          "table": "grading_job_runs",
+          "jobs_table": "grading_jobs",
+          "rulers_table": "grading_rulers",
+          "archives_root": "<runsRoot>",
+          "legacy_jobs": "<count>",
+          "ruler_records": "<count>",
+          "usage_table": "grading_run_usage",
+          "usage_note": null
+        }
+      }
+    },
+    "detail_archived": {
+      "code": 0,
+      "message": "ok",
+      "data": {
+        "run": {
+          "id": "job-<id>",
+          "type": "worker",
+          "archive": "<n>",
+          "archive_present": true,
+          "job_id": "<n>",
+          "assignment_id": "<n>",
+          "assignment_title": "c6reg-作业",
+          "teacher_id": "<n>",
+          "teacher_name": "测试教师",
+          "classes": [
+            {
+              "id": "<n>",
+              "name": "test_class"
+            }
+          ],
+          "class_count": 1,
+          "checker_id": "c6chk-a",
+          "checker_id_raw": "c6chk-a",
+          "checker_label": null,
+          "run_kind": "worker",
+          "status": "done",
+          "measured": null,
+          "unmeasurable": null,
+          "skipped": 0,
+          "written": 1,
+          "failed": null,
+          "elapsed_ms": "<elapsed>",
+          "sessions_purged": true,
+          "keep_scene": false,
+          "home_policy": "sessions+credentials",
+          "source": "worker",
+          "created_at": "<ts>",
+          "cost_total": null,
+          "cost_currency": null,
+          "cache_hit_rate": null,
+          "no_model_session": null,
+          "model_calls": null,
+          "content_key": null,
+          "last_error": null,
+          "notice": null
+        },
+        "teardown_json": {
+          "isolated_home": "/tmp/x/home",
+          "home_exists_before": "yes",
+          "credentials_removed": "yes",
+          "session_files_before": 4,
+          "session_bytes": "<n>",
+          "sessions_purged": true,
+          "home_exists_after": "yes",
+          "session_files_after": 0,
+          "home_policy": "sessions+credentials",
+          "purge_policy": "purge_home=1 keep_days=3 exit=0",
+          "keep_scene": false,
+          "source": "worker",
+          "ts": "<ts>"
+        },
+        "usage": null,
+        "usage_info": {
+          "available": false,
+          "reason": "no_usage_record",
+          "source": null,
+          "key": "job:<id>",
+          "table": "grading_run_usage",
+          "table_missing": false,
+          "note": null
+        },
+        "meta": {
+          "assignment": {
+            "id": "<n>",
+            "title": "c6reg-作业"
+          },
+          "teacher": {
+            "id": "<n>",
+            "name": "测试教师",
+            "username": "test_teacher"
+          },
+          "classes": [
+            {
+              "id": "<n>",
+              "name": "test_class",
+              "school_id": 1
+            }
+          ],
+          "standard_package": {
+            "sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "short_sha256": "cccccccccccc",
+            "file_name": "标准工程包.zip",
+            "source": "publish_snapshot",
+            "download": false,
+            "manifest": {
+              "source": "snapshot",
+              "standard_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "standard_hash_source": "publish_snapshot",
+              "snapshot_origin": "publish",
+              "captured_at": null,
+              "rubric_sha256": null,
+              "material_chars": 3,
+              "rubric_chars": 3
+            }
+          },
+          "description": {
+            "text": "材料1",
+            "chars": 3,
+            "from_snapshot": true
+          },
+          "rubric": {
+            "text": "标准1",
+            "chars": 3,
+            "from_snapshot": true,
+            "rubric_sha256": null
+          },
+          "questions": [
+            {
+              "question_id": "<n>",
+              "question_title": "c6reg-q1",
+              "question_type": "project",
+              "from_snapshot": true,
+              "snapshot_origin": "publish",
+              "standard_package": {
+                "sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "short_sha256": "cccccccccccc",
+                "file_name": "标准工程包.zip",
+                "source": "publish_snapshot",
+                "download": false,
+                "manifest": {
+                  "source": "snapshot",
+                  "standard_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "standard_hash_source": "publish_snapshot",
+                  "snapshot_origin": "publish",
+                  "captured_at": null,
+                  "rubric_sha256": null,
+                  "material_chars": 3,
+                  "rubric_chars": 3
+                }
+              },
+              "description": {
+                "text": "材料1",
+                "chars": 3,
+                "from_snapshot": true
+              },
+              "rubric": {
+                "text": "标准1",
+                "chars": 3,
+                "from_snapshot": true,
+                "rubric_sha256": null
+              }
+            },
+            {
+              "question_id": "<n>",
+              "question_title": "c6reg-q2",
+              "question_type": "project",
+              "from_snapshot": true,
+              "snapshot_origin": "publish",
+              "standard_package": {
+                "sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "short_sha256": "dddddddddddd",
+                "file_name": "标准工程包.zip",
+                "source": "publish_snapshot",
+                "download": false,
+                "manifest": {
+                  "source": "snapshot",
+                  "standard_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                  "standard_hash_source": "publish_snapshot",
+                  "snapshot_origin": "publish",
+                  "captured_at": null,
+                  "rubric_sha256": null,
+                  "material_chars": 3,
+                  "rubric_chars": 3
+                }
+              },
+              "description": {
+                "text": "材料2",
+                "chars": 3,
+                "from_snapshot": true
+              },
+              "rubric": {
+                "text": "标准2",
+                "chars": 3,
+                "from_snapshot": true,
+                "rubric_sha256": null
+              }
+            }
+          ],
+          "snapshot": {
+            "used": true,
+            "origin": "publish"
+          },
+          "warnings": []
+        },
+        "tools": null,
+        "tools_info": {
+          "available": false,
+          "reason": "no_usage_record",
+          "source": null,
+          "count": null
+        },
+        "submissions": [
+          {
+            "slug": "归档学生甲",
+            "measurable": true,
+            "score": 88
+          },
+          {
+            "slug": "归档学生乙",
+            "measurable": true,
+            "score": 77
+          }
+        ],
+        "submission_counts": {
+          "n": 2,
+          "measurable": 2,
+          "unmeasurable": 0,
+          "skipped_artifacts": null,
+          "skipped_kinds": null
+        },
+        "submissions_source": "archive_evidence_summary",
+        "logs": {
+          "stdout": {
+            "present": true,
+            "tail": "line-0 DEEPSEEK_API_KEY=sk-****\n",
+            "truncated": false,
+            "missing_reason": null
+          },
+          "stderr": {
+            "present": true,
+            "tail": "err-tail\n",
+            "truncated": false,
+            "missing_reason": null
+          }
+        },
+        "read_only": true
+      }
+    },
+    "detail_sentinel": {
+      "code": 0,
+      "message": "ok",
+      "data": {
+        "run": {
+          "id": "job-<id>",
+          "type": "worker",
+          "archive": "<n>",
+          "archive_present": false,
+          "job_id": "<n>",
+          "assignment_id": "<n>",
+          "assignment_title": "c6reg-作业",
+          "teacher_id": "<n>",
+          "teacher_name": "测试教师",
+          "classes": [
+            {
+              "id": "<n>",
+              "name": "test_class"
+            }
+          ],
+          "class_count": 1,
+          "checker_id": null,
+          "checker_id_raw": "__AUTO_BUILD__",
+          "checker_label": "自动造尺（未对齐）",
+          "run_kind": "build",
+          "status": "pending",
+          "measured": null,
+          "unmeasurable": null,
+          "skipped": 0,
+          "written": 0,
+          "failed": null,
+          "elapsed_ms": "<elapsed>",
+          "sessions_purged": null,
+          "keep_scene": null,
+          "home_policy": null,
+          "source": "worker",
+          "created_at": "<ts>",
+          "cost_total": null,
+          "cost_currency": null,
+          "cache_hit_rate": null,
+          "no_model_session": null,
+          "model_calls": null,
+          "content_key": null,
+          "last_error": null,
+          "notice": "archive_missing（归档已清理或旧运行；逐份结果优先来自数据库，不含答题全文）"
+        },
+        "teardown_json": null,
+        "usage": null,
+        "usage_info": {
+          "available": false,
+          "reason": "no_usage_record",
+          "source": null,
+          "key": "job:<id>",
+          "table": "grading_run_usage",
+          "table_missing": false,
+          "note": null
+        },
+        "meta": {
+          "assignment": {
+            "id": "<n>",
+            "title": "c6reg-作业"
+          },
+          "teacher": {
+            "id": "<n>",
+            "name": "测试教师",
+            "username": "test_teacher"
+          },
+          "classes": [
+            {
+              "id": "<n>",
+              "name": "test_class",
+              "school_id": 1
+            }
+          ],
+          "standard_package": {
+            "sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "short_sha256": "cccccccccccc",
+            "file_name": "标准工程包.zip",
+            "source": "publish_snapshot",
+            "download": false,
+            "manifest": {
+              "source": "snapshot",
+              "standard_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "standard_hash_source": "publish_snapshot",
+              "snapshot_origin": "publish",
+              "captured_at": null,
+              "rubric_sha256": null,
+              "material_chars": 3,
+              "rubric_chars": 3
+            }
+          },
+          "description": {
+            "text": "材料1",
+            "chars": 3,
+            "from_snapshot": true
+          },
+          "rubric": {
+            "text": "标准1",
+            "chars": 3,
+            "from_snapshot": true,
+            "rubric_sha256": null
+          },
+          "questions": [
+            {
+              "question_id": "<n>",
+              "question_title": "c6reg-q1",
+              "question_type": "project",
+              "from_snapshot": true,
+              "snapshot_origin": "publish",
+              "standard_package": {
+                "sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "short_sha256": "cccccccccccc",
+                "file_name": "标准工程包.zip",
+                "source": "publish_snapshot",
+                "download": false,
+                "manifest": {
+                  "source": "snapshot",
+                  "standard_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "standard_hash_source": "publish_snapshot",
+                  "snapshot_origin": "publish",
+                  "captured_at": null,
+                  "rubric_sha256": null,
+                  "material_chars": 3,
+                  "rubric_chars": 3
+                }
+              },
+              "description": {
+                "text": "材料1",
+                "chars": 3,
+                "from_snapshot": true
+              },
+              "rubric": {
+                "text": "标准1",
+                "chars": 3,
+                "from_snapshot": true,
+                "rubric_sha256": null
+              }
+            },
+            {
+              "question_id": "<n>",
+              "question_title": "c6reg-q2",
+              "question_type": "project",
+              "from_snapshot": true,
+              "snapshot_origin": "publish",
+              "standard_package": {
+                "sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "short_sha256": "dddddddddddd",
+                "file_name": "标准工程包.zip",
+                "source": "publish_snapshot",
+                "download": false,
+                "manifest": {
+                  "source": "snapshot",
+                  "standard_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                  "standard_hash_source": "publish_snapshot",
+                  "snapshot_origin": "publish",
+                  "captured_at": null,
+                  "rubric_sha256": null,
+                  "material_chars": 3,
+                  "rubric_chars": 3
+                }
+              },
+              "description": {
+                "text": "材料2",
+                "chars": 3,
+                "from_snapshot": true
+              },
+              "rubric": {
+                "text": "标准2",
+                "chars": 3,
+                "from_snapshot": true,
+                "rubric_sha256": null
+              }
+            }
+          ],
+          "snapshot": {
+            "used": true,
+            "origin": "publish"
+          },
+          "warnings": []
+        },
+        "tools": null,
+        "tools_info": {
+          "available": false,
+          "reason": "no_usage_record",
+          "source": null,
+          "count": null
+        },
+        "submissions": [],
+        "submission_counts": null,
+        "submissions_source": null,
+        "logs": {
+          "stdout": {
+            "present": false,
+            "tail": null,
+            "truncated": false,
+            "missing_reason": "missing"
+          },
+          "stderr": {
+            "present": false,
+            "tail": null,
+            "truncated": false,
+            "missing_reason": "missing"
+          }
+        },
+        "read_only": true
+      }
+    },
+    "detail_ruler": {
+      "code": 0,
+      "message": "ok",
+      "data": {
+        "run": {
+          "id": "archive-null",
+          "type": "ruler",
+          "archive": null,
+          "archive_present": false,
+          "job_id": null,
+          "assignment_id": "<n>",
+          "assignment_title": "c6reg-作业",
+          "teacher_id": "<n>",
+          "teacher_name": "测试教师",
+          "classes": [
+            {
+              "id": "<n>",
+              "name": "test_class"
+            }
+          ],
+          "class_count": 1,
+          "checker_id": "c6chk-b",
+          "checker_id_raw": "c6chk-b",
+          "checker_label": null,
+          "run_kind": "ruler",
+          "status": "ready",
+          "measured": null,
+          "unmeasurable": null,
+          "skipped": null,
+          "written": 2,
+          "failed": null,
+          "elapsed_ms": null,
+          "sessions_purged": null,
+          "keep_scene": null,
+          "home_policy": null,
+          "source": "ruler",
+          "created_at": "<ts>",
+          "cost_total": null,
+          "cost_currency": null,
+          "cache_hit_rate": null,
+          "no_model_session": null,
+          "model_calls": null,
+          "content_key": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "last_error": null,
+          "notice": null
+        },
+        "teardown_json": null,
+        "usage": null,
+        "usage_info": {
+          "available": false,
+          "reason": "no_usage_record",
+          "source": null,
+          "key": null,
+          "table": "grading_run_usage",
+          "table_missing": false,
+          "note": null
+        },
+        "meta": {
+          "assignment": {
+            "id": "<n>",
+            "title": "c6reg-作业"
+          },
+          "teacher": {
+            "id": "<n>",
+            "name": "测试教师",
+            "username": "test_teacher"
+          },
+          "classes": [
+            {
+              "id": "<n>",
+              "name": "test_class",
+              "school_id": 1
+            }
+          ],
+          "standard_package": {
+            "sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "short_sha256": "cccccccccccc",
+            "file_name": "标准工程包.zip",
+            "source": "publish_snapshot",
+            "download": false,
+            "manifest": {
+              "source": "snapshot",
+              "standard_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "standard_hash_source": "publish_snapshot",
+              "snapshot_origin": "publish",
+              "captured_at": null,
+              "rubric_sha256": null,
+              "material_chars": 3,
+              "rubric_chars": 3
+            }
+          },
+          "description": {
+            "text": "材料1",
+            "chars": 3,
+            "from_snapshot": true
+          },
+          "rubric": {
+            "text": "标准1",
+            "chars": 3,
+            "from_snapshot": true,
+            "rubric_sha256": null
+          },
+          "questions": [
+            {
+              "question_id": "<n>",
+              "question_title": "c6reg-q1",
+              "question_type": "project",
+              "from_snapshot": true,
+              "snapshot_origin": "publish",
+              "standard_package": {
+                "sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "short_sha256": "cccccccccccc",
+                "file_name": "标准工程包.zip",
+                "source": "publish_snapshot",
+                "download": false,
+                "manifest": {
+                  "source": "snapshot",
+                  "standard_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "standard_hash_source": "publish_snapshot",
+                  "snapshot_origin": "publish",
+                  "captured_at": null,
+                  "rubric_sha256": null,
+                  "material_chars": 3,
+                  "rubric_chars": 3
+                }
+              },
+              "description": {
+                "text": "材料1",
+                "chars": 3,
+                "from_snapshot": true
+              },
+              "rubric": {
+                "text": "标准1",
+                "chars": 3,
+                "from_snapshot": true,
+                "rubric_sha256": null
+              }
+            },
+            {
+              "question_id": "<n>",
+              "question_title": "c6reg-q2",
+              "question_type": "project",
+              "from_snapshot": true,
+              "snapshot_origin": "publish",
+              "standard_package": {
+                "sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "short_sha256": "dddddddddddd",
+                "file_name": "标准工程包.zip",
+                "source": "publish_snapshot",
+                "download": false,
+                "manifest": {
+                  "source": "snapshot",
+                  "standard_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                  "standard_hash_source": "publish_snapshot",
+                  "snapshot_origin": "publish",
+                  "captured_at": null,
+                  "rubric_sha256": null,
+                  "material_chars": 3,
+                  "rubric_chars": 3
+                }
+              },
+              "description": {
+                "text": "材料2",
+                "chars": 3,
+                "from_snapshot": true
+              },
+              "rubric": {
+                "text": "标准2",
+                "chars": 3,
+                "from_snapshot": true,
+                "rubric_sha256": null
+              }
+            }
+          ],
+          "snapshot": {
+            "used": true,
+            "origin": "publish"
+          },
+          "warnings": []
+        },
+        "tools": null,
+        "tools_info": {
+          "available": false,
+          "reason": "no_usage_record",
+          "source": null,
+          "count": null
+        },
+        "submissions": [
+          {
+            "slug": "c6reg-学生3",
+            "score": 66,
+            "hits": null,
+            "reason": "存量记录（无逐份产物；分数来自数据库，不含答题全文）",
+            "student": "c6reg-学生3"
+          },
+          {
+            "slug": "c6reg-学生4",
+            "score": 55,
+            "hits": null,
+            "reason": "存量记录（无逐份产物；分数来自数据库，不含答题全文）",
+            "student": "c6reg-学生4"
+          }
+        ],
+        "submission_counts": {
+          "n": 2,
+          "measurable": 2,
+          "unmeasurable": null,
+          "skipped_artifacts": null,
+          "skipped_kinds": null
+        },
+        "submissions_source": "db_by_checker",
+        "logs": {
+          "stdout": {
+            "present": false,
+            "tail": null,
+            "truncated": false,
+            "missing_reason": "invalid_archive_dir"
+          },
+          "stderr": {
+            "present": false,
+            "tail": null,
+            "truncated": false,
+            "missing_reason": "invalid_archive_dir"
+          }
+        },
+        "read_only": true
+      }
+    },
+    "detail_build_archive": {
+      "code": 0,
+      "message": "ok",
+      "data": {
+        "run": {
+          "id": "archive-build-<a>-<ts>",
+          "type": "build",
+          "archive": "build-<a>-<ts>",
+          "archive_present": true,
+          "job_id": null,
+          "assignment_id": "<n>",
+          "assignment_title": "c6reg-作业",
+          "teacher_id": "<n>",
+          "teacher_name": "测试教师",
+          "classes": [
+            {
+              "id": "<n>",
+              "name": "test_class"
+            }
+          ],
+          "class_count": 1,
+          "checker_id": null,
+          "checker_id_raw": null,
+          "checker_label": null,
+          "run_kind": "build",
+          "status": null,
+          "measured": null,
+          "unmeasurable": null,
+          "skipped": null,
+          "written": null,
+          "failed": null,
+          "elapsed_ms": null,
+          "sessions_purged": true,
+          "keep_scene": false,
+          "home_policy": "sessions+credentials",
+          "source": "build",
+          "cost_total": null,
+          "cost_currency": null,
+          "cache_hit_rate": null,
+          "no_model_session": null,
+          "model_calls": null,
+          "content_key": null,
+          "last_error": null,
+          "notice": null
+        },
+        "teardown_json": {
+          "sessions_purged": true,
+          "session_files_before": 6,
+          "session_files_after": 0,
+          "credentials_removed": "yes",
+          "home_policy": "sessions+credentials",
+          "keep_scene": false,
+          "source": "build",
+          "ts": "<ts>"
+        },
+        "usage": null,
+        "usage_info": {
+          "available": false,
+          "reason": "no_usage_record",
+          "source": null,
+          "key": "build:<a>:build-<a>-<ts>",
+          "table": "grading_run_usage",
+          "table_missing": false,
+          "note": null
+        },
+        "meta": {
+          "assignment": {
+            "id": "<n>",
+            "title": "c6reg-作业"
+          },
+          "teacher": {
+            "id": "<n>",
+            "name": "测试教师",
+            "username": "test_teacher"
+          },
+          "classes": [
+            {
+              "id": "<n>",
+              "name": "test_class",
+              "school_id": 1
+            }
+          ],
+          "standard_package": {
+            "sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "short_sha256": "cccccccccccc",
+            "file_name": "标准工程包.zip",
+            "source": "publish_snapshot",
+            "download": false,
+            "manifest": {
+              "source": "snapshot",
+              "standard_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "standard_hash_source": "publish_snapshot",
+              "snapshot_origin": "publish",
+              "captured_at": null,
+              "rubric_sha256": null,
+              "material_chars": 3,
+              "rubric_chars": 3
+            }
+          },
+          "description": {
+            "text": "材料1",
+            "chars": 3,
+            "from_snapshot": true
+          },
+          "rubric": {
+            "text": "标准1",
+            "chars": 3,
+            "from_snapshot": true,
+            "rubric_sha256": null
+          },
+          "questions": [
+            {
+              "question_id": "<n>",
+              "question_title": "c6reg-q1",
+              "question_type": "project",
+              "from_snapshot": true,
+              "snapshot_origin": "publish",
+              "standard_package": {
+                "sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "short_sha256": "cccccccccccc",
+                "file_name": "标准工程包.zip",
+                "source": "publish_snapshot",
+                "download": false,
+                "manifest": {
+                  "source": "snapshot",
+                  "standard_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                  "standard_hash_source": "publish_snapshot",
+                  "snapshot_origin": "publish",
+                  "captured_at": null,
+                  "rubric_sha256": null,
+                  "material_chars": 3,
+                  "rubric_chars": 3
+                }
+              },
+              "description": {
+                "text": "材料1",
+                "chars": 3,
+                "from_snapshot": true
+              },
+              "rubric": {
+                "text": "标准1",
+                "chars": 3,
+                "from_snapshot": true,
+                "rubric_sha256": null
+              }
+            },
+            {
+              "question_id": "<n>",
+              "question_title": "c6reg-q2",
+              "question_type": "project",
+              "from_snapshot": true,
+              "snapshot_origin": "publish",
+              "standard_package": {
+                "sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "short_sha256": "dddddddddddd",
+                "file_name": "标准工程包.zip",
+                "source": "publish_snapshot",
+                "download": false,
+                "manifest": {
+                  "source": "snapshot",
+                  "standard_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                  "standard_hash_source": "publish_snapshot",
+                  "snapshot_origin": "publish",
+                  "captured_at": null,
+                  "rubric_sha256": null,
+                  "material_chars": 3,
+                  "rubric_chars": 3
+                }
+              },
+              "description": {
+                "text": "材料2",
+                "chars": 3,
+                "from_snapshot": true
+              },
+              "rubric": {
+                "text": "标准2",
+                "chars": 3,
+                "from_snapshot": true,
+                "rubric_sha256": null
+              }
+            }
+          ],
+          "snapshot": {
+            "used": true,
+            "origin": "publish"
+          },
+          "warnings": []
+        },
+        "tools": null,
+        "tools_info": {
+          "available": false,
+          "reason": "no_usage_record",
+          "source": null,
+          "count": null
+        },
+        "submissions": [],
+        "submission_counts": null,
+        "submissions_source": null,
+        "logs": {
+          "stdout": {
+            "present": false,
+            "tail": null,
+            "truncated": false,
+            "missing_reason": "missing"
+          },
+          "stderr": {
+            "present": false,
+            "tail": null,
+            "truncated": false,
+            "missing_reason": "missing"
+          }
+        },
+        "read_only": true
+      }
+    }
+  }
+}

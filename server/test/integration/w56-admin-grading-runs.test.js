@@ -161,7 +161,17 @@ describe('W56 管理员批改记录（只读接口语义）', () => {
       ['src', 'infrastructure', 'dsh', 'runs', 'read-model.js'],
       ['src', 'infrastructure', 'dsh', 'runs', 'archive-fs.js'],
     ];
-    const ctrl = ctrlFiles.map((seg) => fs.readFileSync(path.resolve(process.cwd(), ...seg), 'utf8')).join('\n');
+    // ★B3（t16）纯搬运拆分：read-model.js 781→312，新增 read-model/*.js 子模块。
+    //   目录**动态**纳入只读守卫扫描（不写死清单）⇒ 后续新增子模块无法绕过写路径守卫。
+    const readModelDir = path.resolve(process.cwd(), 'src', 'infrastructure', 'dsh', 'runs', 'read-model');
+    const subModules = fs.existsSync(readModelDir)
+      ? fs.readdirSync(readModelDir).filter((n) => n.endsWith('.js')).sort()
+      : [];
+    // B3 交付 6 个（list-runs/detail-run/legacy-jobs/display-meta/job-runs/json-safe）；至少 5 个才算覆盖拆分产物
+    expect(subModules.length).toBeGreaterThanOrEqual(5);
+    const pieces = ctrlFiles.map((seg) => fs.readFileSync(path.resolve(process.cwd(), ...seg), 'utf8'));
+    for (const name of subModules) pieces.push(fs.readFileSync(path.join(readModelDir, name), 'utf8'));
+    const ctrl = pieces.join('\n');
     // 只禁「数据库写/文件写」，不禁 Map/Set 的 .delete（避免误伤 byJob.delete）
     for (const bad of ['$executeRawUnsafe', '$executeRaw(', 'prisma.assignment.create', '.upsert(', 'fs.writeFileSync', 'fs.rmSync', 'fs.mkdirSync', 'fs.appendFileSync']) {
       expect(ctrl.includes(bad)).toBe(false);
