@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Deadpan 判题</string>
+    <string name="title_activity_main">Deadpan 判题</string>
+    <string name="package_name">asia.deadpan.exam</string>
+    <string name="custom_url_scheme">asia.deadpan.exam</string>
+</resources>

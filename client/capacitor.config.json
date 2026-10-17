@@ -1,0 +1,9 @@
+{
+  "appId": "asia.deadpan.exam",
+  "appName": "Deadpan 判题",
+  "webDir": "dist",
+  "server": {
+    "url": "https://deadpan.asia/exam/m",
+    "cleartext": false
+  }
+}
