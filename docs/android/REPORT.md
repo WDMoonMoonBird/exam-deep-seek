@@ -205,3 +205,11 @@ cd android
 - SHA-256：203536289f0bae7be07ff303ee73baf6264135eafb349aa19872f1e26d289310
 - BlueStacks 当前安装的是同一 Release APK；在本机网络下通过 SSH CONNECT 代理加载生产页面成功
 - 手机直接下载安装后，若也遇到 connection reset，说明该手机所在网络同样被上游阻断，换移动网络/白名单后再试
+
+
+### 11.6 本机联调隧道守护
+
+- 01:47 首次 SSH 隧道被上游断开；已增加自动重连守护进程（ServerAliveInterval/ExitOnForwardFailure + 2s 重试）
+- 手工 kill 隧道后实测自动恢复，代理重新 200
+- BlueStacks 已重启 Release APK 并重新加载生产页面，截图：docs/android/shots/release-final.png
+- 本机直接 443 仍被 reset，属于当前网络到生产的上游阻断；不影响云端部署本身
