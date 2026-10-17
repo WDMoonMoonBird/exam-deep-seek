@@ -103,3 +103,31 @@
 2. **后端**：本计划**不依赖后端改动**（批量改逐条、不做推送、不做 CORS）；若后续上架 iOS 再单独提 CORS
 3. **运维**：PWA 的 `manifest.webmanifest` 与 `sw.js` 需要正确的 MIME 与不缓存策略（nginx 三行配置，届时提供）
 4. **测试设备**：至少一台 Android 真机（Chrome + 微信浏览器各一）
+
+## 九、分支与工作区策略（2026-10-17 核查后补充）
+
+**现状（实测）**
+- 主工作区 `Exam-DeepSeek` 在 **master**（= 生产部署源，最近有 `chore(deploy)` 提交），工作区干净（仅 1 个他人未跟踪文档）
+- 另一个会话的重构在**独立 worktree**：`Exam-DeepSeek-ui` on `feat/ui-redesign` ✓ 已隔离
+- 另有 10 个 `/private/tmp/dsh-deploy-*` 的 **prunable** worktree（陈旧，建议 `git worktree prune` 清理）
+- client/node_modules 456MB；磁盘剩余 32GB（再装一份可接受）
+
+**结论：做手机端要在「独立 worktree + 独立分支」，不要在共享目录里切分支**
+
+原因：一个工作区同时只能检出**一个分支**。在共享目录 `git checkout -b` 会把另一个会话正在重构的文件从他脚下换掉（灾难）。独立 worktree 共享 Git 对象库但目录隔离，互不影响。
+
+**执行步骤**
+1. `git worktree add "../Exam-DeepSeek-mobile" -b feat/mobile-app master`
+2. `cd ../Exam-DeepSeek-mobile/client && npm ci`（Vant 等依赖只装在这份）
+3. 开发端口避开 5173：`npm run dev -- --port 5174`（实测 5173/5174 当前均空闲）
+4. 只在 `feat/mobile-app` 提交；**共享文件改动面很小**（`router/index.js`、`package.json`/`lock`、可能 `main.js`）
+5. 合并时机：等对方重构落地后，把 `feat/mobile-app` rebase 到最新 master 再合（冲突面 = 上述 3 个文件）
+
+**必须先问清的一件事**：`master` 与 `feat/ui-redesign` **谁先合并**？
+- 若对方先合 → 我的分支基于旧 master，合并前 rebase（手机端是纯增量，rebase 成本低）
+- 若我先合 → 我的改动不影响桌面，风险低，但对方 rebase 时会带上我的 router 变更（需知会）
+
+**不建议的做法**
+- 在共享目录切分支 ✗（会打断对方）
+- 直接在 master 上开发手机端 ✗（master 是部署源，未验证的移动端代码不应混在部署线；且 npm 装 Vant 会改动共享 lock）
+- 在对方的 `Exam-DeepSeek-ui` 工作区开发 ✗（两个 agent 同目录 = 冲突）
