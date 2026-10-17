@@ -1,0 +1,5868 @@
+{
+  "schema": "e2e-ui-actions/v1",
+  "meta": {
+    "title": "Deadpan 判题 · Web UI 端到端测试动作列表",
+    "project": "Exam-DeepSeek",
+    "version": "1.3.0-draft2",
+    "status": "待审核",
+    "generatedAt": "2026-10-16",
+    "targetEnvironment": "cloud（https://deadpan.asia/exam/）",
+    "note": "本文件是「测试计划」的机器可读部分：只描述在浏览器 DOM 上做什么，不包含任何后端接口调用。v1.1 起目标改为云端；v1.3 按代码复核结果修正评分语义（提交即触发评分，非截止触发）、清除失效的本地夹具 id、补齐 use 宏动作与用例前置条件。",
+    "ironRules": [
+      "R1 驱动真实浏览器（Playwright Chromium，headless）完成全部页面操作。已实测云端可达：HTTP 200 / title=Deadpan 判题。",
+      "R2 禁止调用后端接口：动作词表不含 api/request 类型；执行器禁止使用 page.request、APIRequestContext、route()、mock()。页面自身的 XHR 由页面发起，属被测行为，不被测试代码调用。上传走页面自带的 input[type=file]（uploadFile），不是接口调用。",
+      "R3 只操作浏览器 DOM：定位一律走 role/label/placeholder/text/id/css，不注入脚本、不改动被测源码。",
+      "R4 不修改任何被测代码：不新增/修改仓库内任何源文件；执行器与产物存放于仓库之外。仓库内仅本计划与动作 JSON 两个文档（由用户在计划阶段新增，不属执行期修改）。",
+      "R5 只出报告：产出 test-results.json + Markdown/HTML 报告，不做修复、不提 PR。"
+    ],
+    "_v13Scope": "本轮修订依据：client/src 与 server/src 逐项比对。核心更正 = 评分触发时机（见 gradingSemantics）；核心清理 = 本地夹具 id 全部作废（见 fixtures.runtimeFixtures 与 fixtureRequirements）。",
+    "_counts": {
+      "cases": 68,
+      "steps": 573,
+      "note": "v1.3 实测计数（删除多学校分支用例后）"
+    }
+  },
+  "environment": {
+    "target": "cloud",
+    "_targetReason": "用户 2026-10-16 明确：对着云端部署的那一套做测试，云端是有数据的。",
+    "baseUrl": "https://deadpan.asia/exam/",
+    "basePath": "/exam/",
+    "reachabilityVerified": {
+      "verifiedAt": "2026-10-16 19:1x",
+      "method": "真实 Chromium（Playwright headless）导航云端登录页",
+      "result": "HTTP 200 / title=\"Deadpan 判题\" / #login-username=1 / #login-password=1 / 失败请求=0",
+      "note": "同机 curl 走 LibreSSL 会 SSL_ERROR_SYSCALL（沙箱出口代理所致），但 Chromium 与 Node fetch 均正常；执行以 Chromium 为准。"
+    },
+    "stack": {
+      "frontend": "云端 nginx 静态 dist（base=/exam/）",
+      "backend": "云端 Express + pm2（由被测页面自行调用，测试代码不直连）",
+      "database": "云端库（**生产数据**；测试不可直连、不可只读查询，一切信息只能经 UI 观察）",
+      "realtime": "socket.io（页面自行连接；测试不拦截、不 mock）"
+    },
+    "browser": {
+      "engine": "chromium",
+      "headless": true,
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "locale": "zh-CN",
+      "timezoneId": "Asia/Shanghai",
+      "viewportNote": "1440x900 是设计宽度（client/src/components/manual/sections/ProjectSection.vue 注释：1440 = 侧栏 260 + 内容内距 96 + 设计 1084）。>=1200px 时审核页右栏「评分面板」常驻、窄屏抽屉不渲染（ReviewDetail.vue 的 narrow 分支）。",
+      "viewportOverrides": {
+        "TC-REV-07": {
+          "width": 900,
+          "height": 900,
+          "why": "该用例专测「<1200px 抽屉化」分支；默认 1440 视口下 .wb-drawer-toggle 根本不渲染。"
+        }
+      }
+    },
+    "harnessLocation": "仓库之外（例：~/.workbuddy/workspace/e2e-exam-ui/），避免污染被测仓库",
+    "evidenceDir": "仓库之外（例：~/.workbuddy/workspace/e2e-exam-ui/artifacts/YYYYMMDD-HHmm/）",
+    "materialsRoot": "/Users/you/My Projects/My Spring/第六章 Spring MVC 数据绑定和响应/第六章实验",
+    "writePolicy": {
+      "cloudIsProduction": true,
+      "warning": "目标为**生产环境**。本计划 v1.1 新增的 G10 是一整条写流程：建题、布置作业、学生提交、触发 AI 评分。会在生产库产生真实数据、占用真实磁盘与带宽，并**产生真实模型费用**。",
+      "prefix": "所有由本测试创建的对象标题一律以 `E2E-UI-` 前缀命名，便于事后检索与清理；执行前后各做一次 UI 侧检索计数（不是查库）。",
+      "cleanup": "清理动作**不在本计划内**（不自动删生产数据），由用户复核报告后人工决定。"
+    },
+    "screenshotPolicy": "默认 fullPage=false（视口截图）：宽表格页面（审核/题库/学生/管理端）存在横向滚动，fullPage 会横向拼接导致画面失真且体积巨大；仅在文案与纵向布局为断言对象时才用 fullPage=true。",
+    "materialsRoot_exists": true
+  },
+  "secrets": {
+    "_comment": "口令规则（v1.4 实测更正）：教师 test_teacher / test_teacher（已验证）；**学生 test_s1_*/test_s2_* 口令 = 123456**（同学号登录会报「用户名或密码错误」）；管理员 admin 用 admin 登录被弹回登录页（口令待确认，G8 相关用例可能 BLOCKED）。",
+    "_rule": "password === username，无需额外变量注入；仍不写入本文件之外任何地方。",
+    "accounts": {
+      "teacher": {
+        "username": "test_teacher",
+        "password": "test_teacher",
+        "realName": "测试教师",
+        "school": "广西农业职业技术大学（officialCode 4145016205）",
+        "expectLanding": "/exam/teacher/assignments",
+        "loginVerified": true,
+        "usedBy": [
+          "G1–G9 只读组",
+          "G10 双班写流程"
+        ]
+      },
+      "admin": {
+        "username": "admin",
+        "password": "admin",
+        "expectLanding": "/exam/admin/schools",
+        "usedBy": [
+          "G1 认证",
+          "G8 管理端"
+        ]
+      },
+      "students": {
+        "class1Pattern": "test_s1_01 … test_s1_40（口令同学号）",
+        "class2Pattern": "test_s2_01 … test_s2_40（口令同学号）",
+        "source": "TC-CLD-00 经 UI 现勘（学生管理页）",
+        "resolved": true,
+        "class1": {
+          "pattern": "test_s1_01 ... test_s1_40",
+          "passwordRule": "口令 = 123456"
+        },
+        "class2": {
+          "pattern": "test_s2_01 ... test_s2_40",
+          "passwordRule": "口令 = 123456"
+        },
+        "unpublishedStudent": {
+          "source": "TC-CAL-01 云端现勘绑定（学生端看不到分数的已提交学生）"
+        },
+        "projectStudent": {
+          "source": "TC-CAL-01 云端现勘绑定（有实训题提交的学生）"
+        },
+        "passwordRule": "**学生口令 = 123456**（2026-10-16 实测：test_s1_01/test_s1_01 被拒，test_s1_01/123456 成功）"
+      }
+    },
+    "_envVars": {
+      "required": [],
+      "note": "口令 = 账号，无必需环境变量。"
+    }
+  },
+  "fixtures": {
+    "_comment": "目标为云端，且铁律禁止直连后端，一切夹具只能经 UI 现勘，不能查库。",
+    "cloudFixtures": {
+      "_status": "2026-10-16 19:26 经真实 Chromium + test_teacher 登录现勘所得（纯 UI，未查库）；TC-CAL-01 执行时会重采一次",
+      "school": {
+        "name": "广西农业职业技术大学",
+        "officialCode": "4145016205"
+      },
+      "classes": [
+        {
+          "name": "测试 1 班",
+          "studentCount": 40,
+          "school": "广西农业职业技术大学",
+          "createdAt": "2026-10-13"
+        },
+        {
+          "name": "测试 2 班",
+          "studentCount": 40,
+          "school": "广西农业职业技术大学",
+          "createdAt": "2026-10-13"
+        },
+        {
+          "name": "测试 3 班",
+          "studentCount": 40,
+          "school": "广西农业职业技术大学",
+          "createdAt": "2026-10-13"
+        },
+        {
+          "name": "远端500人测试班",
+          "studentCount": 500,
+          "school": "广西农业职业技术大学",
+          "createdAt": "2026-06-02"
+        }
+      ],
+      "class1": {
+        "name": "测试 1 班",
+        "studentCount": 40,
+        "students": "test_s1_01 … test_s1_40（学号即口令）",
+        "pageHint": "学生管理页默认每页 20 条，需翻到第 2 页取全量"
+      },
+      "class2": {
+        "name": "测试 2 班",
+        "studentCount": 40,
+        "students": "test_s2_01 … test_s2_40（学号即口令）"
+      },
+      "questionBank": [
+        {
+          "title": "《Spring MVC 数据绑定和响应》期末实践考试",
+          "type": "实训题",
+          "difficulty": "中等",
+          "maxScore": 100,
+          "createdAt": "2026-10-13 10:59",
+          "note": "★本次要用的题，已存在，可直接复用（标准包已上传）"
+        },
+        {
+          "title": "开放性",
+          "type": "实训题",
+          "difficulty": "中等",
+          "maxScore": 100,
+          "createdAt": "2026-10-09 10:43"
+        },
+        {
+          "title": "作业：用户管理系统（前端）",
+          "type": "实训题",
+          "difficulty": "中等",
+          "maxScore": 100,
+          "createdAt": "2026-08-17 00:36"
+        },
+        {
+          "title": "Python 测试",
+          "type": "编程题",
+          "difficulty": "简单",
+          "maxScore": 292,
+          "createdAt": "2026-06-09 23:12"
+        },
+        {
+          "title": "C++测试题目",
+          "type": "编程题",
+          "difficulty": "简单",
+          "maxScore": 100,
+          "createdAt": "2026-06-09 21:43"
+        },
+        {
+          "title": "500 压力测试",
+          "type": "编程题",
+          "difficulty": "简单",
+          "maxScore": 91,
+          "createdAt": "2026-06-02 21:21"
+        }
+      ],
+      "existingAssignments": [
+        {
+          "title": "【实验2·测试1班 | A/B/C】《Spring MVC 数据绑定和响应》期末实践考试",
+          "class": "测试 1 班",
+          "window": "2026-10-13 ~ 2026-10-20 23:59",
+          "progress": "40/40",
+          "aiStatus": "待评分 40 人",
+          "reviewStatus": "待审核 0 人",
+          "note": "★与本实验设计完全一致，且学生已全部提交；仅因截止时间为 10-20 而未开始评分"
+        },
+        {
+          "title": "【实验2·测试2班 | D/E/F】《Spring MVC 数据绑定和响应》期末实践考试",
+          "class": "测试 2 班",
+          "window": "2026-10-13 ~ 2026-10-20 23:59",
+          "progress": "40/40",
+          "aiStatus": "待评分 40 人",
+          "reviewStatus": "待审核 0 人",
+          "note": "同上"
+        },
+        {
+          "title": "《Spring MVC 数据绑定和响应》期末实践考试（测试 2 班）",
+          "class": "测试 2 班",
+          "window": "~2026-10-20 23:59",
+          "progress": "0/40",
+          "aiStatus": "—"
+        },
+        {
+          "title": "《Spring MVC 数据绑定和响应》期末实践考试",
+          "class": "测试 1 班",
+          "window": "~2026-10-20 23:59",
+          "progress": "0/40",
+          "aiStatus": "—"
+        },
+        {
+          "title": "《Spring MVC 数据绑定和响应》期末实践考试",
+          "class": "测试 2 班",
+          "window": "~2026-10-20 23:59",
+          "progress": "0/40",
+          "aiStatus": "—"
+        },
+        {
+          "title": "Python 测试",
+          "class": "远端500人测试班",
+          "window": "2026-06-09 ~ 2026-06-30",
+          "progress": "2/500",
+          "aiStatus": "已评分",
+          "reviewStatus": "待审核 2 人"
+        },
+        {
+          "title": "C++测试",
+          "class": "远端500人测试班",
+          "window": "2026-06-09 ~ 2026-06-16",
+          "progress": "1/500",
+          "aiStatus": "已评分",
+          "reviewStatus": "待审核 1 人"
+        },
+        {
+          "title": "500 压力测试",
+          "class": "远端500人测试班",
+          "window": "2026-06-02 ~ 2026-06-03",
+          "progress": "500/500",
+          "aiStatus": "已评分",
+          "reviewStatus": "待审核 500 人"
+        }
+      ],
+      "keyFinding": "云端已存在两场与本实验设计完全同形的作业（测试1班 A/B/C、测试2班 D/E/F），各 40/40 提交完毕、AI 状态停在「待评分」、截止 2026-10-20 23:59。v1.3 更正：其「待评分」不是因为未到截止，而是那批提交尚未被评分链路取件/完成；本计划新建作业的提交会立即触发评分，据此可对照观察。"
+    },
+    "_localSnapshotRetired": "2026-10-16 对本地 exam_system 的旧快照（teacherClassLocal 117/软件工程1班、publishedLocal 353+357 / 202600006+202600010 / 90+77）已全部删除：本地库既无「测试 1 班/2 班」，也无法据此断言云端任何 id（见 runtimeFixtures.retiredIds）。",
+    "runtimeFixtures": {
+      "_note": "运行时夹具：由 TC-CAL-01 现勘写入 cloud-fixtures.json，后续用例只引用 ${fixtures.*}，禁止硬编码 id。 口令规则：口令 = 账号本身，故所有 studentUsername 对应的 password 与用户名相同，执行器可直接用 studentUsername 同时作为口令，无需额外字段。",
+      "teacher": {
+        "username": "test_teacher",
+        "realName": "测试教师",
+        "school": "广西农业职业技术大学",
+        "landing": "/exam/teacher/assignments"
+      },
+      "admin": {
+        "username": "admin",
+        "landing": "/exam/admin/schools"
+      },
+      "class1": {
+        "name": "测试 1 班",
+        "studentCount": 40,
+        "students": []
+      },
+      "class2": {
+        "name": "测试 2 班",
+        "studentCount": 40,
+        "students": []
+      },
+      "student": {
+        "username": "",
+        "password": "",
+        "note": "class1 第 1 名学生；口令=学号"
+      },
+      "unpublished": {
+        "studentUsername": "",
+        "assignmentId": null,
+        "questionId": null,
+        "submissionStatus": "submitted",
+        "note": "有实训题提交且未发布的学生，供 TC-CONS-02/TC-STU-07 使用",
+        "password": ""
+      },
+      "published": {
+        "studentUsername": "",
+        "assignmentTitle": "",
+        "scoreText": "",
+        "note": "已发布成绩的学生；本轮若无人 publish 则该夹具为空，TC-CONS-01/03 判 BLOCKED（不假红）",
+        "password": ""
+      },
+      "expired": {
+        "studentUsername": "",
+        "assignmentId": null,
+        "note": "endTime 已过且该学生可见的作业；本轮由 TC-CLD-02 建的 10 分钟窗口作业在窗口过后天然满足"
+      },
+      "project": {
+        "studentUsername": "",
+        "assignmentId": null,
+        "questionId": null,
+        "note": "有实训题提交的学生，供 TC-PRJ-01 使用",
+        "password": ""
+      },
+      "submission": {
+        "submissionId": null,
+        "note": "教师端实训题审核详情 id，供 TC-PRJ-02/TC-CONS-03/TC-REV-07 使用"
+      },
+      "questionTitle": {
+        "value": "",
+        "note": "云端既有实训题完整标题，供 TC-CLD-01/02/07 与 TCH-04 选题使用"
+      },
+      "retiredIds": [
+        353,
+        357,
+        352,
+        1070,
+        117,
+        "E2E-S9-202610140404"
+      ],
+      "studentAssignmentId": null,
+      "unsubmittedAssignmentId": null,
+      "_extraNote": "studentAssignmentId / unsubmittedAssignmentId 供 TC-STU-04/05/06 使用，由 TC-CAL-01 现勘绑定；published.password / unpublished.password / project.password 与 studentUsername 相同（口令=学号）。",
+      "assignmentId1": {
+        "value": null,
+        "note": "测试 1 班作业 id（TC-CLD-02 布置成功后从作业管理列表回写），供 TC-CLD-05/06/10 的班级审核页 URL 使用"
+      },
+      "assignmentId2": {
+        "value": null,
+        "note": "测试 2 班作业 id（TC-CLD-07 布置成功后回写），供 TC-CLD-09/10 使用"
+      }
+    }
+  },
+  "materials": {
+    "_comment": "本地素材（不入库、不上传进仓库）；由 G10 经文件选择器上传到云端。",
+    "root": "/Users/you/My Projects/My Spring/第六章 Spring MVC 数据绑定和响应/第六章实验",
+    "standardProject": {
+      "file": "《Spring MVC 数据绑定和响应》期末实践考试.zip",
+      "bytes": 19097426,
+      "role": "标准工程包（教师建实训题时上传）"
+    },
+    "studentSubmissions": {
+      "_comment": "A–F 六份模拟学生答案。每份均含 pom.xml + .mvn + .github + .idea + src/{main/{java/{controller,pojo,convert},resources,webapp/{WEB-INF,pages}}} + target（结构一致，内容有差异）。",
+      "pool": [
+        {
+          "key": "A",
+          "file": "A.zip",
+          "bytes": 19084322
+        },
+        {
+          "key": "B",
+          "file": "B.zip",
+          "bytes": 19085072
+        },
+        {
+          "key": "C",
+          "file": "C.zip",
+          "bytes": 19085328
+        },
+        {
+          "key": "D",
+          "file": "D.zip",
+          "bytes": 19085391
+        },
+        {
+          "key": "E",
+          "file": "E.zip",
+          "bytes": 19085374
+        },
+        {
+          "key": "F",
+          "file": "F.zip",
+          "bytes": 19085436
+        }
+      ]
+    },
+    "prompt": {
+      "descriptionFile": "题目描述.txt",
+      "rubricFile": "评分标准.txt",
+      "descriptionSummary": "《Spring MVC 数据绑定和响应》期末实践考试；满分 100；JDK17 + Spring Framework 6.1.4(spring-webmvc) + Jakarta Servlet 6.0.0 + Jackson 2.16.1；**强制 XML 配置、禁用 Java 配置类与 Spring Boot**；包名/类名/方法名/请求路径/页面文件名/表单字段名为硬性要求；提交内容含 web.xml、spring-mvc.xml、全部 Java 源文件与全部 JSP。十大任务：①web.xml ②spring-mvc.xml ③pojo 实体类 ④请求参数三种获取 ⑤PageController 视图跳转 ⑥POJO 绑定 ⑦日期绑定与自定义转换器 ⑧List/Map/JSON(@RequestBody) 绑定 ⑨DataController 响应输出 ⑩JSP 页面。",
+      "rubricSummary": "六模块共 100 分：模块一 Spring MVC 核心配置 22 分（web.xml + spring-mvc.xml）；模块二 实体类(pojo) 10 分；模块三 PageController 视图跳转与数据传递 16 分；模块四 请求参数与数据绑定 34 分；模块五 DataController 响应数据输出 12 分；模块六 JSP 页面 6 分。细则含逐条否决项（如 url-pattern 写成 /* 不得分、load-on-startup 配了但≠1 得 1 分）。",
+      "usage": "题目描述 → 建实训题时的「题目描述」模态框；评分标准 → 「评分标准」模态框（均经 UI 填写，非接口）。"
+    },
+    "volumeWarning": "标准包 ≈19MB，六份学生包各 ≈19MB，合计 ≈133MB。前端上传前会过滤依赖/构建产物，实际上传体积待观测；若过滤不覆盖 `target/`，单份上传耗时可能较长，务必给足超时。"
+  },
+  "distributionRules": {
+    "_comment": "用户要求「A、B、C 在测试 1 班中均匀分布」「D、E、F 在测试 2 班中均匀分布」。以确定性轮转实现，保证可复现。",
+    "class1": {
+      "class": "测试 1 班",
+      "pool": [
+        "A",
+        "B",
+        "C"
+      ],
+      "strategy": "roundRobin",
+      "formula": "学生序号 i（0-based，按学生管理页列表顺序）→ pool[i % 3]",
+      "example": "3 人 → A,B,C；6 人 → A,B,C,A,B,C；4 人 → A,B,C,A"
+    },
+    "class2": {
+      "class": "测试 2 班",
+      "pool": [
+        "D",
+        "E",
+        "F"
+      ],
+      "strategy": "roundRobin",
+      "formula": "学生序号 i（0-based，按学生管理页列表顺序）→ pool[i % 3]",
+      "example": "3 人 → D,E,F；6 人 → D,E,F,D,E,F；4 人 → D,E,F,D"
+    },
+    "note": "若两个班人数不等（例如 测试1班 4 人、测试2班 5 人），轮转各自独立进行；此项与用户描述一致，无歧义。"
+  },
+  "assignmentProfile": {
+    "_comment": "【决策 A —— 用户 2026-10-16 已同意】两班使用完全相同的期末考口径。",
+    "allowResubmit": false,
+    "maxAttempts": 1,
+    "scorePolicy": "last",
+    "answerVisibility": "after_publish",
+    "note": "一人一次、取最后、发布后才可见答案。两个班完全一致 ⇒ 结果可横向对比。",
+    "uiSteps": {
+      "allowResubmit": "「允许重交」开关保持关闭（默认）",
+      "maxAttempts": "「提交次数上限」输入 1",
+      "scorePolicy": "「计分口径」选「取最后（最新一次）」",
+      "answerVisibility": "「答案可见性」选「发布后可见」",
+      "order": "① 选实训题 -> ② 设次数上限=1 -> ③ 关闭「允许重交」-> ④ 计分口径选「取最后」-> ⑤ 答案可见性选「发布后可见」"
+    },
+    "_note_v13": "顺序约束（实测代码）：实训题默认 allowResubmit=true + maxAttempts=1；而 #assign-max-attempts 带 :disabled 绑定 !switches.allowResubmit（teacher/Assignments.vue:282），必须在「允许重交」仍开启时先设次数上限，再关闭开关；反过来会因输入框禁用而无法回填，表现为「次数上限」被计入还差项、主按钮持续禁用。",
+    "_probeObserved": {
+      "_at": "2026-10-16 23:22（真实 UI：test_teacher 布置 E2E-UI-探针作业，作业 id=21 / 题目 id=15 / 班级 测试 1 班）",
+      "modalInputs": [
+        "#assign-title（input）",
+        "#assign-desc（textarea）",
+        "搜索题目标题（input）",
+        "#assign-range 两个 input：placeholder 分别是「开始日期」「结束日期」",
+        "#assign-max-attempts（ant-input-number-input）",
+        "#assign-score-policy / #assign-answer-visibility —— 注意：这两个 id 落在 .ant-select-selection-search-input 上"
+      ],
+      "fieldCount": "弹窗内只有 **1 个开关**（.ant-modal .ant-switch，允许重交）；计分口径与答案可见性是 a-select，不是开关",
+      "presets": [
+        "今天 18:00 ~ 一周后 23:59",
+        "明天 08:00 ~ 三天后 23:59"
+      ],
+      "modalButtons": [
+        "套用上次班级",
+        "各班按钮（测试 3 班/测试 2 班/测试 1 班/远端500人测试班）",
+        "套用上次时间",
+        "两个时间快捷项",
+        "立即布置",
+        "取 消",
+        "存为草稿并关闭"
+      ],
+      "orderConfirmed": "先把 #assign-max-attempts 填 1、再关「允许重交」⇒ 关闭后输入框 :disabled=true（实测）。反过来会因禁用无法回填。",
+      "readyText": "就绪区文案为「✓ 信息齐了，可以布置」（role=status）；信息不全时为「⚠ 还差：…」",
+      "submitResult": "点「立即布置」后**未弹任何确认框**（标准包已生效 ⇒ 无开放性题目软警告），直接布置成功、列表出现该作业"
+    }
+  },
+  "gradingSemantics": {
+    "_comment": "【v1.5 探针实测】已用 1 人探针在云端跑通完整链路，结论以实测为准。",
+    "confirmed": "autoGradedAfterSubmit",
+    "evidence": [
+      "server/src/interface/http/controllers/student/project-submit.js:167 —— 提交写库成功后立即调 enqueueProjectGrade(saved.id)（fire-and-forget，不阻塞响应）。",
+      "server/src/services/projectGrading.js 铁律 R5：「评分在提交后异步触发」；enqueueProjectGrade 内 setImmediate -> gradeProjectSubmission，信号量并发 3（D6）。",
+      "server/src/infrastructure/worker/grading-worker.js:165 scanProjectSubmissions 只按 ProjectSubmission.status=submitted 取件，不含任何 endTime 条件（该文件的 endTime 分支只作用于「到期草稿自动提交」）。",
+      "server 全域搜索 deadline / cron / 评分调度器 = 0 命中；唯一的 setInterval 是 rateLimiter.cleanup（app.js:103）。",
+      "client/src/views/Doc.vue:125：「学生提交后系统自动触发 AI 评分（异步，通常 1-2 分钟）」。"
+    ],
+    "meaning": "实训题提交后，**评分是否开始取决于云端评分链路（worker / 装置 / 判据）是否就绪**，与作业截止时间无关；教师端「重新评分」与后端 POST /teacher/assignments/:id/grade 是现有的人工触发手段。",
+    "whyStudentSeesNothing": "学生端提交后看不到分数的原因是**可见性门禁**：server/src/domain/services/project-view.js 的 canStudentSeeScore(status) 仅 published 放行，未发布一律下发 score=null / feedback=null；toStudentView 还把 ai_graded 映射为 submitted，避免状态泄露「AI 已打分」。（探针实测：提交后页面只显示「评分完成后将在此显示成绩」。）",
+    "consequences": [
+      "TC-CLD-05/09 恢复为「提交后轮询直到 AI状态=已评分」，实测耗时 < 2 分钟/份；40 人并发 3 预计数分钟到十几分钟。",
+      "反向断言「截止前不得出分」仍然**不成立**（探针在截止前 8 分钟就出分了）——保留删除状态。",
+      "TC-CLD-06/10 的「逐学生 AI 分与分项」在评分完成后可正常读取（探针的作业 21 已具备该条件）。",
+      "学生端「未发布不见分」断言（TC-CONS-02）与评分是否完成无关，独立成立。"
+    ],
+    "stillTrue": "「教师端没有作业级批量批改入口」这个观察仍然成立（client/src/api/projects.js 只有逐份 regradeProjectSubmission），但它不能用来论证「自动评分」——后端确实存在 POST /teacher/assignments/:id/grade（server/src/routes/teacher.js:76，W7），只是前端未接入口。真正的自动触发点是提交。",
+    "cloudObservation": {
+      "_method": "2026-10-16 20:0x 用真实 Chromium 登录 test_teacher，只读浏览作业管理页与评分审核页（未点审核、未改分、未提交、未触发批改）",
+      "measuredAt": "2026-10-16（距提交已约 3 天）",
+      "rows": [
+        {
+          "assignment": "【实验2·测试1班 A/B/C】《Spring MVC 数据绑定和响应》期末实践考试",
+          "class": "测试 1 班",
+          "progress": "40/40",
+          "deadline": "2026-10-20 23:59",
+          "aiStatus": "待评分 40 人",
+          "reviewStatus": "待审核 0 人"
+        },
+        {
+          "assignment": "【实验2·测试2班 D/E/F】《Spring MVC 数据绑定和响应》期末实践考试",
+          "class": "测试 2 班",
+          "progress": "40/40",
+          "deadline": "2026-10-20 23:59",
+          "aiStatus": "待评分 40 人",
+          "reviewStatus": "待审核 0 人"
+        },
+        {
+          "assignment": "Python 测试 / C++测试 / 500 压力测试（远端500人测试班，2026-06 提交）",
+          "aiStatus": "已评分",
+          "note": "这三场是人工触发批改后出的分（对应「作业级批改」路径）"
+        }
+      ],
+      "kpi": "作业管理页 KPI「AI 评分中：无异常」",
+      "conclusion": "80 份实训题提交（10-13 提交）在 3 天后仍是「待评分 40 人」、且没有任何评分任务在跑 ⇒ **提交不触发评分**。这与 v1.3 依代码得出的推断相反，与用户 2026-10-16 的说法一致。"
+    },
+    "codeVsCloud": {
+      "_note": "仓库代码与云端行为不一致，两种解释都成立，执行前需二选一确认：",
+      "codeSide": "仓库里 project-submit.js:167 在提交成功后调 enqueueProjectGrade（projectGrading.js 铁律 R5）；PRD R5 也写明「提交即触发评分」。",
+      "cloudSide": "云端 80 份提交 3 天未评、无 queued/running 任务 ⇒ 该路径在云端未生效（旧部署 / 评分 worker 未运行 / 判据未就绪）。",
+      "codeSearch": "全仓无 deadline/cron/定时评分调度器（唯一 setInterval 是限流清理）：grep -rn \"cron\" server/src = 0。",
+      "peakValley": "代码与文档中**不存在**「峰谷时间」「错峰评分」「低峰排队」等机制；唯一的时间维度是评分并发信号量（D6，并发 3）与 AI 配置页的并发数。因此「等峰谷时间再评分」不是本系统的行为。"
+    },
+    "mustConfirmBeforeRun": [
+      "已由本探针完成（2026-10-16 23:24~23:26），评分链路确认可用，可按计划全量开跑。"
+    ],
+    "probe": {
+      "_what": "1 份真实作业 + 1 名学生真实提交（全程 UI 点击，无接口调用）",
+      "assignment": "E2E-UI-探针-SpringMVC-20261016232243（作业 id=21，题目 id=15，测试 1 班，窗口 23:23:43 ~ 23:32:43）",
+      "student": "test_s1_01（口令 123456）",
+      "submittedAt": "2026-10-16 23:24:04（A.zip，19MB，前端过滤 3.0s）",
+      "observed": [
+        "+0.2min（约 23:26）教师端评分审核：AI状态 = **已评分**，审核状态 = 待审核 1 人，进度 1/40",
+        "+2.3min 再次读取：仍为「已评分」（状态稳定，不是瞬时抖动）",
+        "学生端提交后（23:24:04）：状态「已提交，待评分」+「评分完成后将在此显示成绩」——**无分数、无评语**（可见性门禁生效）"
+      ],
+      "conclusion": "实训题提交后**会自动评分**，本探针在截止时刻（23:32:43）**之前**就已评完 ⇒ 评分**不依赖截止事件**，而是提交后的异步链路自动完成；单份 19MB 包从提交到「已评分」< 2 分钟。"
+    },
+    "backlogAnomaly": {
+      "_what": "与探针形成对照的存量异常（不是机制问题）",
+      "observed": "两场 40/40 的作业（10-13 提交，截止 10-20）在 2026-10-16 23:2x 仍是「待评分 40 人」；同一时刻探针提交 2 分钟内即「已评分」",
+      "meaning": "评分链路本身可用（探针证明），这 80 份未评属**存量积压 / 环境历史问题**（提交时评分链路不可用，或该批提交未被入队）。",
+      "actionForRun": "本轮测试**不受影响**：新建作业的学生提交会立即进入评分并很快出分。但**不要**把这两场旧作业当成「自动评分」的证据；它们的 40/40 提交也不能复用。"
+    },
+    "peakValley": "仍确认：代码与文档中**不存在**「峰谷/错峰/低峰排队」机制（grep cron/deadline 调度器 = 0；唯一时间维度是评分并发信号量）。评分是「提交后异步、尽快完成」，不是「挑时间跑」。"
+  },
+  "deadlinePlan": {
+    "_comment": "【决策 B】窗口由人数推算，先跑 TC-CAL-01 拿到 N 再定。注意：窗口只影响「何时不能再交」，不影响评分启动（评分在提交时已触发）。",
+    "formula": {
+      "submitSecondsPerStudent": 90,
+      "concurrency": 8,
+      "bufferSeconds": 120,
+      "windowSeconds": "max(600, ceil(N / concurrency) * submitSecondsPerStudent + bufferSeconds)",
+      "roundUpTo": 60,
+      "capSeconds": 1500,
+      "startOffsetSeconds": 60
+    },
+    "results": [
+      {
+        "N": "<= 40（本次实况：两班各 40 人）",
+        "window": "10 分钟",
+        "note": "默认档；N=40 时 ceil(40/8)*90+120 = 570s < 600s，故取 10 分钟下限"
+      },
+      {
+        "N": "41-56",
+        "window": "约 12 分钟",
+        "note": "ceil(N/8)*90+120，向上取整到分钟"
+      },
+      {
+        "N": "57-80",
+        "window": "约 17 分钟"
+      },
+      {
+        "N": ">= 96",
+        "window": "封顶 25 分钟（capSeconds=1500）"
+      }
+    ],
+    "example": "布置成功于 19:40 → 开始 = 19:41:00，截止 = 19:51:00（N=40）",
+    "totalWaitEstimate": "两班各一个窗口，串行执行 ⇒ 总等待约 20~35 分钟（不含评分本身耗时）。",
+    "singleZipBudget": "单份 ≈19MB；前端过滤依赖/构建产物后实际上传体积待观测，故每人按 90s 计（含登录、上传、解析、提交）。",
+    "howToSet": {
+      "control": "#assign-range（a-range-picker，show-time=true，可精确到秒）",
+      "format": "YYYY-MM-DD HH:mm:ss",
+      "steps": "click 第 1 个 input → 输入开始时刻 → Enter；click 第 2 个 input → 输入截止时刻 → Enter",
+      "calibrate": true,
+      "fallback": "若 #assign-range 的 id 落在外层容器，改用 #assign-range input 的 nth(0)/nth(1)",
+      "avoidPreset": "不要用快捷项「今天 18:00 ~ 一周后 23:59」—— 一周后截止会拖太久，且 18:00 在当前时刻已成过去。"
+    },
+    "gradingUnaffected": "窗口只决定提交截止；评分自提交起即开始，等窗口期间 AI 早已评完。",
+    "whyNotPreset": "不使用快捷项「今天 18:00 ~ 一周后 23:59」：一周后截止会让本轮无法观察「截止后不可提交」；而「今天 18:00」在 18:00 之后执行时已属过去（原论据只对下午执行成立，故作废，结论保留）。"
+  },
+  "actionVocabulary": {
+    "_comment": "封闭白名单。执行器必须按此校验，出现未列出的 action 一律 BLOCKED（fail-closed），防止误用接口类动作。",
+    "actions": {
+      "goto": {
+        "params": [
+          "path"
+        ],
+        "desc": "导航到 baseUrl + path（相对路径，自动带 /exam 前缀）"
+      },
+      "reload": {
+        "params": [],
+        "desc": "刷新当前页（校验登录态持久化、草稿恢复）"
+      },
+      "click": {
+        "params": [
+          "target",
+          "nth?"
+        ],
+        "desc": "点击元素"
+      },
+      "fill": {
+        "params": [
+          "target",
+          "value",
+          "nth?"
+        ],
+        "desc": "填入文本（先 clear 再 type）"
+      },
+      "clear": {
+        "params": [
+          "target",
+          "nth?"
+        ],
+        "desc": "清空输入框"
+      },
+      "press": {
+        "params": [
+          "target?",
+          "key"
+        ],
+        "desc": "键盘按键，如 Enter / Tab / Escape"
+      },
+      "pickOption": {
+        "params": [
+          "trigger",
+          "option"
+        ],
+        "desc": "antd 下拉两段式：点触发器 → 点选项（不可用 keyboard 时兜底）"
+      },
+      "toggle": {
+        "params": [
+          "target",
+          "state"
+        ],
+        "desc": "a-switch 置位，state ∈ {on, off}，读 aria-checked 幂等"
+      },
+      "hover": {
+        "params": [
+          "target"
+        ],
+        "desc": "悬停（触发 tooltip/下拉）"
+      },
+      "scrollIntoView": {
+        "params": [
+          "target"
+        ],
+        "desc": "滚动到可视区（Monaco 懒加载占位需要）"
+      },
+      "typeInEditor": {
+        "params": [
+          "target",
+          "value"
+        ],
+        "desc": "Monaco 编辑器输入：click 聚焦 + keyboard 输入（不使用 setValue API）"
+      },
+      "uploadFile": {
+        "params": [
+          "trigger",
+          "input",
+          "file"
+        ],
+        "desc": "上传本地素材（zip/txt）。先 click 可见触发按钮（用户可见的鼠标行为），再向页面**自身的** input[type=file] 注入文件路径。属浏览器 DOM 行为，不是接口调用。"
+      },
+      "poll": {
+        "params": [
+          "target",
+          "assert",
+          "value?",
+          "timeoutMs",
+          "intervalMs?"
+        ],
+        "desc": "对 DOM 状态做定时轮询（默认 5s 一次），用于等待 AI 评分这类耗时异步结果的**页面呈现**。禁止用 waitForResponse 代替。"
+      },
+      "waitFor": {
+        "params": [
+          "target",
+          "state?",
+          "timeoutMs?"
+        ],
+        "desc": "显式等待，state ∈ {visible, hidden, attached}"
+      },
+      "expect": {
+        "params": [
+          "assert",
+          "target?",
+          "value?",
+          "nth?",
+          "timeoutMs?"
+        ],
+        "desc": "断言，assert 见 assertions"
+      },
+      "screenshot": {
+        "params": [
+          "name",
+          "fullPage?"
+        ],
+        "desc": "存证截图（产物目录）"
+      },
+      "annotate": {
+        "params": [
+          "value"
+        ],
+        "desc": "人工备注，不产生操作"
+      },
+      "use": {
+        "params": [
+          "macro",
+          "args"
+        ],
+        "desc": "调用 macros 中的复用宏（当前：login / logout）。v1.3 补登记：v1.2 及以前本动作在用例中出现 54 次却未列入白名单，按本节的 fail-closed 规则会导致整份计划 BLOCKED。"
+      }
+    },
+    "assertions": {
+      "visible": "元素可见",
+      "hidden": "元素不可见或不存在",
+      "text": "元素文本（trim 后）等于 value",
+      "containsText": "元素文本包含 value",
+      "notContainsText": "元素文本不包含 value",
+      "value": "输入框 value 等于 value",
+      "url": "当前 URL（去 origin 与 query）等于 value",
+      "urlContains": "当前 URL 包含 value",
+      "count": "匹配元素数量等于 value",
+      "enabled": "元素可用（非 disabled）",
+      "disabled": "元素不可用",
+      "attr": "属性 name 等于 value",
+      "checked": "aria-checked / checked 等于 value",
+      "hasClass": "元素含 class",
+      "pageTextNotContains": "整页可见文本不包含 value（防泄分/防内部错误文本上屏）"
+    },
+    "locator": {
+      "by": [
+        "role",
+        "label",
+        "placeholder",
+        "text",
+        "id",
+        "css"
+      ],
+      "role": {
+        "role": "button|link|heading|menuitem|columnheader|alert|status|note|combobox|textbox|checkbox|radio|tab|tablist|group|dialog|complementary|banner|main|nav",
+        "name": "可访问名",
+        "exact": "bool, 默认 false",
+        "nameLoose": "bool，true 时按「忽略内部空白」匹配"
+      },
+      "notes": [
+        "本项目源码 0 处 data-testid，故不使用 testid 定位（也不允许为此改代码）。",
+        "★【2026-10-16 云端实测发现】ant-design-vue 的 autoInsertSpaceInButton 会给**恰为 2 个中文字**的按钮中间插一个空格：登录 → 渲染成「登 录」。实测 getByRole('button',{name:'登录'}) = 0，{name:'登 录'} = 1。",
+        "  ⇒ 对所有 2 字中文按钮（登录/保存/取消/删除/审核/重置/刷新/编辑/返回/关闭/展开/收起/锁定/解锁 …），一律用 nameLoose:true（实现为 name.split('').join('\\\\s*') 正则）。3 字及以上不受影响（布置作业、新增题目、立即布置、保存审核、发布成绩、提交全部、重新评分 …）。",
+        "antd 会把 aria-label 落到外层 div 而非 role=combobox 的 input，下拉优先用 label 关联或 placeholder。",
+        "StatusTag / 表格单元格 / 空态文案 / message toast 无 role，用 text 定位。",
+        "className 仅在无任何语义锚点时兜底（如 .wb-final-score 改分输入框、.teacher-fb-textarea 评语框、.kind-add-btn 上传按钮）。",
+        "★ 上传类元素：可见触发按钮是 button.kind-add-btn（内容仅一个「+」），真正的接收者是同一容器内 style=display:none 的 input[type=file][accept=.zip] ⇒ 必须用 uploadFile 动作（先 click 触发按钮，再向该 input 注入路径），不能靠点按钮后驱动原生文件选择器。",
+        "★ 严格模式（strict mode）：同一 target 命中多个元素时，若步骤未给 nth，执行器取第一个并记一条 warning；text 定位在多个同名文案共存（如列表 40 行都含「待评分」）时同理。确需唯一命中的（如弹窗标题与侧栏菜单同名），步骤里显式给 nth，或用 css 收窄到 .ant-modal。",
+        "★ 上传触发按钮：button.kind-add-btn 是全站复用构件（ProjectZipUploader），页面里可能同时存在多个；uploadFile 的 trigger 需在现勘阶段确认唯一性，多实例时用容器收窄。",
+        "★ v1.4 实测：antd 表格首行是 aria-hidden 的 .ant-table-measure-row，`table tbody tr` 会命中它而 Playwright 点不动（not visible）。所有「点整行」一律用 `table tbody tr.ant-table-row`。",
+        "★ v1.4 实测：#assign-range 的两个 input 用 placeholder 定位最稳（「开始日期」/「结束日期」），比 nth(0)/nth(1) 更抗布局变化。"
+      ]
+    },
+    "forbidden": [
+      "page.request.* / request.newContext / apiRequest",
+      "page.route / page.unroute / context.route（禁止网络拦截与 mock）",
+      "page.addInitScript / page.evaluate 注入业务脚本（仅允许框架内部快照比对）",
+      "任何**直连后端接口**的行为（含用 fetch/curl 构造业务请求、绕过 UI 造数）",
+      "任何写库/读库操作（Prisma / SQL / mysql CLI）—— 云端为生产库，夹具只能经 UI 现勘",
+      "除 uploadFile 动作外，不得使用 setInputFiles（该动作仅限 G10 声明的素材白名单文件）"
+    ]
+  },
+  "macros": {
+    "login": {
+      "params": [
+        "username",
+        "password"
+      ],
+      "steps": [
+        {
+          "action": "goto",
+          "path": "/login"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "heading",
+            "name": "Deadpan 判题",
+            "note": "登录卡已渲染（v1.3 修正：原写成 by=heading，role 名不能当 by 值用）"
+          },
+          "note": "登录卡已渲染"
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "id",
+            "value": "login-username"
+          },
+          "value": "{{username}}"
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "id",
+            "value": "login-password"
+          },
+          "value": "{{password}}"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "登录"
+          }
+        },
+        {
+          "action": "annotate",
+          "value": "宏结束不校验落点（三角色落点不同，由各用例自己断言 url）；失败态（错误口令）的用例不要用本宏。"
+        }
+      ]
+    },
+    "logout": {
+      "params": [],
+      "steps": [
+        {
+          "action": "annotate",
+          "value": "顶栏用户区是 a-dropdown + div.user-area（无 role/aria-label），只能 css 兜底；三类 Layout（teacher/student/admin）同形。"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "css",
+            "value": ".app-topbar .user-area",
+            "calibrate": true
+          },
+          "note": "打开用户下拉（不是「点击某个 menuitem」，那正是 v1.2 的错法）"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "menuitem",
+            "name": "退出登录"
+          },
+          "note": "antd 下拉项渲染为 li[role=menuitem]，可访问名即「退出登录」"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "menuitem",
+            "name": "退出登录"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "确定退出登录？"
+          }
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "css",
+            "value": ".ant-modal-footer .ant-btn-primary",
+            "nth": 0
+          },
+          "note": "确认框 okText =「退出登录」（Layout.vue 的 useConfirm 调用）；此时下拉项与确认按钮同名，故用 css 收窄避免 strict mode 命中两个"
+        }
+      ]
+    }
+  },
+  "cases": [
+    {
+      "id": "TC-CAL-01",
+      "group": "G0 定位校准（执行前置）",
+      "priority": "P0",
+      "title": "G0：定位校准 + 云端夹具绑定（先跑，产出 locator-report.json 与 cloud-fixtures.json）",
+      "why": "项目 0 处 data-testid，且改分输入框等元素无语义锚点；先校准可避免把「定位失败」误判成「功能缺陷」。同时它承担夹具绑定职责：后续所有用例只引用 fixtures.*，不得硬编码 id。",
+      "mutates": false,
+      "precondition": "无（本用例从空白 context 开始，自行登录 test_teacher）",
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.username}"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "url",
+          "value": "/exam/teacher/assignments"
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/assignments"
+        },
+        {
+          "action": "screenshot",
+          "name": "cal-01-teacher-assignments"
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/review"
+        },
+        {
+          "action": "screenshot",
+          "name": "cal-02-teacher-review"
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/questions"
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "placeholder",
+            "value": "搜索题目标题"
+          },
+          "value": "Spring MVC",
+          "note": "绑定 fixtures.questionTitle（复用路径的题名）"
+        },
+        {
+          "action": "screenshot",
+          "name": "cal-03-teacher-questions"
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/students"
+        },
+        {
+          "action": "pickOption",
+          "trigger": {
+            "by": "css",
+            "value": "#tch-students-class-filter .ant-select-selector"
+          },
+          "option": {
+            "by": "text",
+            "value": "测试 1 班"
+          }
+        },
+        {
+          "action": "annotate",
+          "value": "【夹具写入】逐页读取学生名单（默认 20/页，40 人 2 页），按页面顺序写入 class1.students；同时绑定 student = 第 1 名学生"
+        },
+        {
+          "action": "screenshot",
+          "name": "cal-04-class1-students"
+        },
+        {
+          "action": "goto",
+          "path": "/student/scores"
+        },
+        {
+          "action": "annotate",
+          "value": "【夹具写入】用 student 账号登录学生端，绑定 unpublished（有提交未发布）/ published（已出分）/ expired（已过截止）/ project（有实训题提交）四类夹具；任一为空则记 null，由 gate 判 BLOCKED（不假红）"
+        },
+        {
+          "action": "annotate",
+          "value": "【校准输出】逐个断言本文件用到的全部定位子 count>=1，输出 locator-report.json：命中数、实际 DOM 路径、可访问名、是否需 first() 归一"
+        },
+        {
+          "action": "screenshot",
+          "name": "cal-05-locator-report"
+        }
+      ],
+      "output": "locator-report.json（全量定位子命中情况）+ cloud-fixtures.json（运行时夹具）",
+      "note": "本用例不写库。它对审核详情页等只做登录后的定位子录制，不改分、不保存。夹具绑定只允许通过 UI 读取（铁律 R2）。"
+    },
+    {
+      "id": "TC-AUTH-01",
+      "group": "G1 认证与路由守卫",
+      "priority": "P0",
+      "title": "未登录访问受保护路由 → 重定向登录页",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "goto",
+          "path": "/student/assignments"
+        },
+        {
+          "action": "expect",
+          "assert": "url",
+          "value": "/exam/login"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "登录"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC-AUTH-02",
+      "group": "G1 认证与路由守卫",
+      "priority": "P0",
+      "title": "登录页渲染与可见文案",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "goto",
+          "path": "/login"
+        },
+        {
+          "action": "expect",
+          "assert": "text",
+          "target": {
+            "by": "role",
+            "role": "heading",
+            "name": "Deadpan 判题"
+          },
+          "value": "Deadpan 判题"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "placeholder",
+            "value": "用户名（工号/学号）"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "placeholder",
+            "value": "密码"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "text",
+            "value": "请登录以继续"
+          },
+          "value": "请登录以继续"
+        },
+        {
+          "action": "screenshot",
+          "name": "auth-02-login-page"
+        }
+      ]
+    },
+    {
+      "id": "TC-AUTH-03",
+      "group": "G1 认证与路由守卫",
+      "priority": "P0",
+      "title": "空表单提交 → 客户端校验 + 焦点落用户名",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "goto",
+          "path": "/login"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "登录"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "text",
+          "target": {
+            "by": "id",
+            "value": "login-error"
+          },
+          "value": "请输入用户名和密码"
+        },
+        {
+          "action": "expect",
+          "assert": "attr",
+          "target": {
+            "by": "id",
+            "value": "login-error"
+          },
+          "name": "role",
+          "value": "alert"
+        },
+        {
+          "action": "expect",
+          "assert": "attr",
+          "target": {
+            "by": "id",
+            "value": "login-username"
+          },
+          "name": "aria-invalid",
+          "value": "true"
+        },
+        {
+          "action": "screenshot",
+          "name": "auth-03-empty-submit"
+        }
+      ]
+    },
+    {
+      "id": "TC-AUTH-04",
+      "group": "G1 认证与路由守卫",
+      "priority": "P1",
+      "title": "仅填用户名 → 校验仍拒绝，焦点落密码框",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "goto",
+          "path": "/login"
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "id",
+            "value": "login-username"
+          },
+          "value": "${accounts.student.username}"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "登录"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "text",
+          "target": {
+            "by": "id",
+            "value": "login-error"
+          },
+          "value": "请输入用户名和密码"
+        },
+        {
+          "action": "expect",
+          "assert": "url",
+          "value": "/exam/login",
+          "note": "未发生跳转"
+        }
+      ],
+      "note": "用真实存在的学号（口令故意留空）以命中缺密码分支；不再写死 202600006。"
+    },
+    {
+      "id": "TC-AUTH-05",
+      "group": "G1 认证与路由守卫",
+      "priority": "P0",
+      "title": "错误口令 → 服务端文案上屏，停留登录页",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "goto",
+          "path": "/login"
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "id",
+            "value": "login-username"
+          },
+          "value": "${accounts.student.username}"
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "id",
+            "value": "login-password"
+          },
+          "value": "__definitely_wrong_pw__"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "登录"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "css",
+            "value": "#login-error[role=alert]"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "Prisma",
+          "note": "错误文案不得泄露内部实现"
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "at Object."
+        },
+        {
+          "action": "expect",
+          "assert": "url",
+          "value": "/exam/login"
+        },
+        {
+          "action": "screenshot",
+          "name": "auth-05-wrong-password"
+        }
+      ]
+    },
+    {
+      "id": "TC-AUTH-06",
+      "group": "G1 认证与路由守卫",
+      "priority": "P0",
+      "title": "教师登录成功 → 跳教师作业管理",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "url",
+          "value": "/exam/teacher/assignments"
+        },
+        {
+          "action": "expect",
+          "assert": "text",
+          "target": {
+            "by": "role",
+            "role": "heading",
+            "name": "作业管理"
+          },
+          "value": "作业管理"
+        }
+      ]
+    },
+    {
+      "id": "TC-AUTH-07",
+      "group": "G1 认证与路由守卫",
+      "priority": "P0",
+      "title": "学生登录成功 → 跳学生作业列表",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.student.username}",
+            "password": "${accounts.student.password}"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "url",
+          "value": "/exam/student/assignments"
+        },
+        {
+          "action": "expect",
+          "assert": "text",
+          "target": {
+            "by": "role",
+            "role": "heading",
+            "name": "我的作业"
+          },
+          "value": "我的作业"
+        }
+      ]
+    },
+    {
+      "id": "TC-AUTH-08",
+      "group": "G1 认证与路由守卫",
+      "priority": "P0",
+      "title": "管理员登录成功 → 跳学校管理",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.admin.username}",
+            "password": "${accounts.admin.password}"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "url",
+          "value": "/exam/admin/schools"
+        },
+        {
+          "action": "expect",
+          "assert": "text",
+          "target": {
+            "by": "role",
+            "role": "heading",
+            "name": "学校管理"
+          },
+          "value": "学校管理"
+        }
+      ]
+    },
+    {
+      "id": "TC-AUTH-09",
+      "group": "G1 认证与路由守卫",
+      "priority": "P0",
+      "title": "学生越权访问教师路由 → 弹回登录页",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.student.username}",
+            "password": "${accounts.student.password}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/assignments"
+        },
+        {
+          "action": "expect",
+          "assert": "url",
+          "value": "/exam/login"
+        },
+        {
+          "action": "expect",
+          "assert": "hidden",
+          "target": {
+            "by": "role",
+            "role": "heading",
+            "name": "作业管理"
+          },
+          "note": "教师页面不得渲染"
+        },
+        {
+          "action": "screenshot",
+          "name": "auth-09-student-cross-role"
+        }
+      ]
+    },
+    {
+      "id": "TC-AUTH-10",
+      "group": "G1 认证与路由守卫",
+      "priority": "P1",
+      "title": "已登录再访问 /login → 回各自首页",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/login"
+        },
+        {
+          "action": "expect",
+          "assert": "url",
+          "value": "/exam/teacher/assignments"
+        }
+      ]
+    },
+    {
+      "id": "TC-AUTH-11",
+      "group": "G1 认证与路由守卫",
+      "priority": "P0",
+      "title": "退出登录（含二次确认）→ 回登录页且受保护路由再访被拦",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "use",
+          "macro": "logout",
+          "args": {}
+        },
+        {
+          "action": "expect",
+          "assert": "url",
+          "value": "/exam/login"
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/assignments"
+        },
+        {
+          "action": "expect",
+          "assert": "url",
+          "value": "/exam/login"
+        }
+      ]
+    },
+    {
+      "id": "TC-AUTH-12",
+      "group": "G1 认证与路由守卫",
+      "priority": "P1",
+      "title": "登录态过期提示（?expired=1）常驻上屏",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "goto",
+          "path": "/login?expired=1"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "id",
+            "value": "login-expired"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "text",
+          "target": {
+            "by": "id",
+            "value": "login-expired"
+          },
+          "value": "登录已过期，请重新登录"
+        },
+        {
+          "action": "expect",
+          "assert": "attr",
+          "target": {
+            "by": "id",
+            "value": "login-expired"
+          },
+          "name": "role",
+          "value": "alert"
+        },
+        {
+          "action": "goto",
+          "path": "/login"
+        },
+        {
+          "action": "expect",
+          "assert": "hidden",
+          "target": {
+            "by": "id",
+            "value": "login-expired"
+          },
+          "note": "无 expired 参数时不显示"
+        }
+      ]
+    },
+    {
+      "id": "TC-PUB-01",
+      "group": "G2 公开页",
+      "priority": "P1",
+      "title": "落地页渲染：主标题与「教师登录」主按钮",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "goto",
+          "path": "/"
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "role",
+            "role": "heading",
+            "name": "AI 评分平台",
+            "regex": true
+          },
+          "value": "AI 评分平台",
+          "note": "落地页 h1 为「面向高校编程课的\\nAI 评分平台」，故按正则/子串匹配"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "教师登录"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "pub-01-landing",
+          "fullPage": true
+        }
+      ]
+    },
+    {
+      "id": "TC-PUB-02",
+      "group": "G2 公开页",
+      "priority": "P1",
+      "title": "落地页控制台演示：tablist 切换三视图",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "goto",
+          "path": "/"
+        },
+        {
+          "action": "annotate",
+          "value": "演示窗口侧栏为 button.mini-item，标准 role=tablist + 方向键；此处用文本与 aria 属性断言"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "教师控制台 · 演示"
+          }
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "评分审核"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "教师审核"
+          }
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "题库管理"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "pub-02-landing-tabs"
+        }
+      ]
+    },
+    {
+      "id": "TC-PUB-03",
+      "group": "G2 公开页",
+      "priority": "P2",
+      "title": "使用文档 /doc 免登录可访问",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "goto",
+          "path": "/doc"
+        },
+        {
+          "action": "expect",
+          "assert": "url",
+          "value": "/exam/doc"
+        },
+        {
+          "action": "goto",
+          "path": "/doc/demos"
+        },
+        {
+          "action": "expect",
+          "assert": "url",
+          "value": "/exam/doc/demos"
+        },
+        {
+          "action": "screenshot",
+          "name": "pub-03-doc",
+          "fullPage": true
+        }
+      ]
+    },
+    {
+      "id": "TC-STU-01",
+      "group": "G3 学生端 · 作业列表与作答",
+      "priority": "P0",
+      "title": "作业列表页渲染：标题、搜索、筛选、计数",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.student.username}",
+            "password": "${accounts.student.password}"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "text",
+          "target": {
+            "by": "role",
+            "role": "heading",
+            "name": "我的作业"
+          },
+          "value": "我的作业"
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "text",
+            "value": "查看作业要求与截止时间"
+          },
+          "value": "查看作业要求与截止时间"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "placeholder",
+            "value": "搜索作业标题"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "radio",
+            "name": "全部"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "radio",
+            "name": "未完成"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "radio",
+            "name": "已完成"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "radio",
+            "name": "已出分"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "text",
+            "value": "查看到作业要求与截止时间",
+            "regex": true
+          },
+          "value": "查看到作业要求与截止时间",
+          "note": "v1.2 的 .list-count 在源码中不存在（ListPage.vue:52 输出「第 N 页 · 每页 M 条」）；此处改用学生列表空态真实文案"
+        },
+        {
+          "action": "screenshot",
+          "name": "stu-01-assignments-list",
+          "fullPage": true
+        }
+      ]
+    },
+    {
+      "id": "TC-STU-02",
+      "group": "G3 学生端 · 作业列表与作答",
+      "priority": "P0",
+      "title": "搜索不命中 → 空态文案正确，可清空筛选恢复",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.student.username}",
+            "password": "${accounts.student.password}"
+          }
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "placeholder",
+            "value": "搜索作业标题"
+          },
+          "value": "zzz__不存在的作业__zzz"
+        },
+        {
+          "action": "expect",
+          "assert": "text",
+          "target": {
+            "by": "text",
+            "value": "没有符合条件的作业"
+          },
+          "value": "没有符合条件的作业"
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "text",
+            "value": "换个关键词或清空筛选后再试。"
+          },
+          "value": "换个关键词或清空筛选后再试。"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "清空筛选"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "hidden",
+          "target": {
+            "by": "text",
+            "value": "没有符合条件的作业"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "stu-02-search-empty"
+        }
+      ]
+    },
+    {
+      "id": "TC-STU-03",
+      "group": "G3 学生端 · 作业列表与作答",
+      "priority": "P1",
+      "title": "状态筛选四档切换，列表随之收窄且不报错",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.student.username}",
+            "password": "${accounts.student.password}"
+          }
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "radio",
+            "name": "已出分"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "数据加载失败"
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "Prisma"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "radio",
+            "name": "未完成"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "数据加载失败"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "radio",
+            "name": "全部"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "stu-03-filters",
+          "fullPage": true
+        }
+      ]
+    },
+    {
+      "id": "TC-STU-04",
+      "group": "G3 学生端 · 作业列表与作答",
+      "priority": "P0",
+      "title": "从列表进入已知作业的作答页（只读浏览，不提交）",
+      "mutates": false,
+      "fixture": "fixtures.student + fixtures.studentAssignmentId",
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.student.username}",
+            "password": "${accounts.student.password}"
+          }
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "css",
+            "value": ".assign[role=button]",
+            "nth": 0
+          },
+          "note": "卡片容器带 role=button（Assignments.vue:32 的 canEnter 分支）；不依赖标题文案"
+        },
+        {
+          "action": "expect",
+          "assert": "urlContains",
+          "value": "/student/assignments/"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "题目导航"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "返回"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "stu-04-submit-page",
+          "fullPage": true
+        }
+      ]
+    },
+    {
+      "id": "TC-STU-05",
+      "group": "G3 学生端 · 作业列表与作答",
+      "priority": "P1",
+      "title": "作答页题号方块带 aria-label，可键盘聚焦",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.student.username}",
+            "password": "${accounts.student.password}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/student/assignments/${fixtures.studentAssignmentId}"
+        },
+        {
+          "action": "expect",
+          "assert": "count",
+          "target": {
+            "by": "css",
+            "value": ".sp-nav [role=button]"
+          },
+          "value": 1,
+          "note": "至少 1 个题号方块；实际数量按校准记录"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "css",
+            "value": ".sp-nav [role=button]"
+          },
+          "note": "aria-label 的具体措辞（第 1 小题，已作答/未作答）随夹具而变，故不断言字面值，只断言角色与可聚焦"
+        },
+        {
+          "action": "expect",
+          "assert": "attr",
+          "target": {
+            "by": "css",
+            "value": ".sp-nav [role=button]",
+            "nth": 0
+          },
+          "name": "tabindex",
+          "value": "0"
+        }
+      ],
+      "fixture": "fixtures.student + fixtures.studentAssignmentId（含至少 1 小题）"
+    },
+    {
+      "id": "TC-STU-06",
+      "group": "G3 学生端 · 作业列表与作答",
+      "priority": "P0",
+      "title": "未新增作答直接点「提交全部」→ 确认框/警告，不产生提交",
+      "mutates": true,
+      "mutationRisk": "低：若确认框被点掉会真实提交。执行策略：只断言弹窗出现，然后点「返回继续作答」/关闭，绝不点确认。",
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.student.username}",
+            "password": "${accounts.student.password}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/student/assignments/${fixtures.unsubmittedAssignmentId}"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "提交全部"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "确认提交全部"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "返回继续作答"
+          }
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "返回继续作答"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "hidden",
+          "target": {
+            "by": "text",
+            "value": "确认提交全部"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "stu-06-submit-confirm"
+        }
+      ],
+      "fixture": "fixtures.student + fixtures.unsubmittedAssignmentId"
+    },
+    {
+      "id": "TC-STU-07",
+      "group": "G3 学生端 · 作业列表与作答",
+      "priority": "P1",
+      "title": "已过截止作业：作答页呈现已过期/不可提交语义",
+      "mutates": false,
+      "fixture": "fixtures.expired（endTime 已过且该学生可见的作业）",
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.student.username}",
+            "password": "${accounts.student.password}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/student/assignments/${fixtures.expired.assignmentId}"
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "css",
+            "value": ".sp-page"
+          },
+          "value": "已过期"
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "已提交，改动仅在重新提交时保存"
+        }
+      ],
+      "note": "夹具为空则 BLOCKED。本轮可由 TC-CLD-02 建的 10 分钟窗口作业满足：窗口过后期满，学生再访即命中 .sp-expired-tag（Submit.vue:18）。原 fixture=353 为本地快照 id，云端不存在。"
+    },
+    {
+      "id": "TC-STU-08",
+      "group": "G3 学生端 · 作业列表与作答",
+      "priority": "P0",
+      "title": "成绩页渲染：标题与四列表头",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.student.username}",
+            "password": "${accounts.student.password}"
+          }
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "menuitem",
+            "name": "查看成绩"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "url",
+          "value": "/exam/student/scores"
+        },
+        {
+          "action": "expect",
+          "assert": "text",
+          "target": {
+            "by": "role",
+            "role": "heading",
+            "name": "我的成绩"
+          },
+          "value": "我的成绩"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "作业"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "提交次数"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "分数"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "状态"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "stu-08-scores",
+          "fullPage": true
+        }
+      ]
+    },
+    {
+      "id": "TC-STU-09",
+      "group": "G3 学生端 · 作业列表与作答",
+      "priority": "P1",
+      "title": "成绩页空态与跳转按钮（用无成绩账号或仅断言空态分支存在性）",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "annotate",
+          "value": "若所选账号已有成绩（fixtures.published 非空），本用例只记录实际行数并跳过空态断言，避免假红；空态断言的前提是该学生零已出分记录"
+        },
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.student.username}",
+            "password": "${accounts.student.password}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/student/scores"
+        },
+        {
+          "action": "screenshot",
+          "name": "stu-09-scores-state",
+          "fullPage": true
+        }
+      ]
+    },
+    {
+      "id": "TC-CONS-01",
+      "group": "G4 跨路径口径一致（只读回归）",
+      "priority": "P0",
+      "title": "已发布成绩：成绩页分数 = 记录分，且列表标记「已出分」",
+      "mutates": false,
+      "fixture": "fixtures.published（本轮若无人 publish 则 BLOCKED）",
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${fixtures.published.studentUsername}",
+            "password": "${fixtures.published.studentUsername}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/student/scores"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "${fixtures.published.assignmentTitle}"
+          },
+          "note": "已出分作业出现在成绩页"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "${fixtures.published.scoreText}"
+          },
+          "note": "分数列格式 {{totalScore}}/{{maxScore}}（Scores.vue:38-43）"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "已出分"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/student/assignments"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "${fixtures.published.assignmentTitle}"
+          },
+          "note": "同一作业在列表页也标记已出分"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "已出分"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "cons-01-scores-vs-list"
+        }
+      ],
+      "precondition": "至少一名学生有已发布成绩（本轮需教师执行过「发布成绩」；否则本用例 BLOCKED）"
+    },
+    {
+      "id": "TC-CONS-02",
+      "group": "G4 跨路径口径一致（只读回归）",
+      "priority": "P0",
+      "title": "未发布提交：学生端不得出现分数与 AI 评语（防泄分）",
+      "mutates": false,
+      "fixture": "fixtures.unpublished",
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${fixtures.unpublished.studentUsername}",
+            "password": "${fixtures.unpublished.studentUsername}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/student/assignments/${fixtures.unpublished.assignmentId}/project/${fixtures.unpublished.questionId}"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "评分完成后将在此显示成绩"
+          },
+          "note": "未发布则学生视图只给 pending 提示（ProjectQuestionEdit 的 .ssc-pending-hint）"
+        },
+        {
+          "action": "expect",
+          "assert": "hidden",
+          "target": {
+            "by": "css",
+            "value": ".ssc-score"
+          },
+          "note": "分数块整体不渲染（比断文本更有力）"
+        },
+        {
+          "action": "expect",
+          "assert": "hidden",
+          "target": {
+            "by": "css",
+            "value": ".ssc-feedback"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "教师评语",
+          "note": "未发布时教师评语也不得出现"
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "得分 ",
+          "note": "Submit.vue:17 的「得分 x / y」标签仅在 totalScored>0 时渲染"
+        },
+        {
+          "action": "goto",
+          "path": "/student/scores"
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "已出分",
+          "note": "成绩页只返回已出分行（Scores.vue:48）；未发布则不出现"
+        },
+        {
+          "action": "screenshot",
+          "name": "cons-02-no-leak"
+        }
+      ],
+      "why": "这是本计划最有价值的一条：评分为提交即触发，未发布期间教师侧已有 AI 分，学生侧必须完全不可见（server/src/domain/services/project-view.js 的白名单 + canStudentSeeScore）。"
+    },
+    {
+      "id": "TC-CONS-03",
+      "group": "G4 跨路径口径一致（只读回归）",
+      "priority": "P1",
+      "title": "教师端审核详情：AI 分与评分/审核状态自洽（只读，不保存）",
+      "mutates": false,
+      "fixture": "fixtures.unpublished（教师侧对应行）+ fixtures.submission",
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.username}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/review"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "作业 / 班级"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "AI状态"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "审核状态"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "已交/未交"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/review/project/${fixtures.submission.submissionId}"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "AI 评分"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "css",
+            "value": ".wb-final-score input"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "数据加载失败"
+        },
+        {
+          "action": "screenshot",
+          "name": "cons-03-review-detail"
+        },
+        {
+          "action": "annotate",
+          "value": "【只读】不点「保存审核」「发布成绩」"
+        }
+      ]
+    },
+    {
+      "id": "TC-TCH-01",
+      "group": "G5 教师端 · 作业布置（表单校验为主）",
+      "priority": "P0",
+      "title": "作业管理页渲染：标题、KPI 卡、表头、工具栏",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "text",
+          "target": {
+            "by": "role",
+            "role": "heading",
+            "name": "作业管理"
+          },
+          "value": "作业管理"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "作业总数"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "待审核提交"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "AI 评分中"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "placeholder",
+            "value": "搜索作业名称"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "提交进度"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "截止时间"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "布置作业"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "tch-01-assignments",
+          "fullPage": true
+        }
+      ]
+    },
+    {
+      "id": "TC-TCH-02",
+      "group": "G5 教师端 · 作业布置（表单校验为主）",
+      "priority": "P0",
+      "title": "空表单点「立即布置」→ 逐项校验提示，且按钮本应禁用",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "布置作业"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "css",
+            "value": ".ant-modal-title"
+          },
+          "note": "弹窗标题「布置作业」"
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "text",
+            "value": "还差："
+          },
+          "value": "还差："
+        },
+        {
+          "action": "expect",
+          "assert": "disabled",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "立即布置"
+          },
+          "note": "未就绪时应禁用"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "将布置"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "信息齐了，可以布置"
+          },
+          "note": "若已就绪则该文案可见；两者必居其一，按校准结果固定"
+        },
+        {
+          "action": "screenshot",
+          "name": "tch-02-assign-modal-empty",
+          "fullPage": true
+        }
+      ],
+      "precondition": "全新 browser context（localStorage 无 assign-draft-v1 草稿）；若沿用有草稿的 storageState，恢复的草稿会让「还差：」形态失效",
+      "note": "打开弹窗时 timeForm.timeRange 为空（useAssignmentForm.js:148），故 missing = 题目/班级/作业标题/起止时间 四项，主按钮禁用 —— 该断言与实现一致。"
+    },
+    {
+      "id": "TC-TCH-03",
+      "group": "G5 教师端 · 作业布置（表单校验为主）",
+      "priority": "P0",
+      "title": "次数上限非法值 → 逐字校验文案",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "布置作业"
+          }
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "id",
+            "value": "assign-max-attempts"
+          },
+          "value": "0"
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "css",
+            "value": ".ant-modal"
+          },
+          "value": "次数上限需为不小于 1 的整数（留空 = 不限次）"
+        },
+        {
+          "action": "clear",
+          "target": {
+            "by": "id",
+            "value": "assign-max-attempts"
+          }
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "id",
+            "value": "assign-max-attempts"
+          },
+          "value": "-3"
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "css",
+            "value": ".ant-modal"
+          },
+          "value": "次数上限需为不小于 1 的整数（留空 = 不限次）"
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "id",
+            "value": "assign-max-attempts"
+          },
+          "value": "1.5"
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "css",
+            "value": ".ant-modal"
+          },
+          "value": "次数上限需为不小于 1 的整数（留空 = 不限次）"
+        },
+        {
+          "action": "screenshot",
+          "name": "tch-03-max-attempts-invalid"
+        }
+      ],
+      "precondition": "同上：全新 context；且先选一道实训题再填次数上限。实训题默认 allowResubmit=true + maxAttempts=1；若先关「允许重交」，输入框会被 :disabled 锁死（Assignments.vue:282）。"
+    },
+    {
+      "id": "TC-TCH-04",
+      "group": "G5 教师端 · 作业布置（表单校验为主）",
+      "priority": "P0",
+      "title": "校验提示为 role=alert，成本提示为 role=note（实训题）",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.username}"
+          }
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "布置作业"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "count",
+          "target": {
+            "by": "css",
+            "value": ".ant-modal [role=alert]"
+          },
+          "value": 0
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "placeholder",
+            "value": "搜索题目标题"
+          },
+          "value": "${fixtures.questionTitle.value}"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "css",
+            "value": ".ant-modal table tbody tr",
+            "nth": 0
+          },
+          "note": "表格整行点选（customRow），不是 radio"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "note",
+            "name": "每次提交都会触发评分流程（耗时数分钟并产生模型费用），建议设置次数上限"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "tch-04-modal-roles"
+        }
+      ],
+      "note": "初始无错误则 role=alert 数为 0；选实训题后出现成本提示 role=note。原用例只写了 annotate 没落成断言，v1.3 把「选实训题」写成真实步骤。"
+    },
+    {
+      "id": "TC-TCH-05",
+      "group": "G5 教师端 · 作业布置（表单校验为主）",
+      "priority": "P1",
+      "title": "关闭弹窗 → 放弃确认框文案逐字正确",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "布置作业"
+          }
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "id",
+            "value": "assign-title"
+          },
+          "value": "E2E-UI-草稿-勿留"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "取消"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "放弃这次布置？"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "text",
+            "value": "已填写的内容不会保存"
+          },
+          "value": "已填写的内容不会保存"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "继续编辑"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "放弃"
+          }
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "继续编辑"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "tch-05-discard-confirm"
+        }
+      ]
+    },
+    {
+      "id": "TC-TCH-06",
+      "group": "G5 教师端 · 作业布置（表单校验为主）",
+      "priority": "P1",
+      "title": "作业列表状态筛选四档与重置按钮",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "pickOption",
+          "trigger": {
+            "by": "css",
+            "value": "#tch-assign-status-filter .ant-select-selector"
+          },
+          "option": {
+            "by": "text",
+            "value": "进行中"
+          },
+          "note": "antd 把 aria-label 落在外层 div，故点 .ant-select-selector 而不是 id 本身"
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "数据加载失败"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "重置"
+          },
+          "note": "有筛选时出现"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "重置"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "tch-06-status-filter",
+          "fullPage": true
+        }
+      ]
+    },
+    {
+      "id": "TC-TCH-07",
+      "group": "G5 教师端 · 作业布置（表单校验为主）",
+      "priority": "P2",
+      "title": "锁定/解锁按钮存在（不点击，避免写入）",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "操作"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "count",
+          "target": {
+            "by": "css",
+            "value": "table tbody tr.ant-table-row",
+            "note": "｜v1.4 实测：antd 表格首行是 aria-hidden 的 .ant-table-measure-row，必须用 tbody tr.ant-table-row 才能命中真实数据行"
+          },
+          "value": 1,
+          "note": "至少一行；实际行数按校准记录"
+        },
+        {
+          "action": "annotate",
+          "value": "断言 tbody 内存在文本为「锁定」或「解锁」的按钮，但不触发点击"
+        }
+      ]
+    },
+    {
+      "id": "TC-REV-01",
+      "group": "G6 教师端 · 评分审核",
+      "priority": "P0",
+      "title": "评分审核列表渲染：标题、班级筛选、表头",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "menuitem",
+            "name": "评分审核"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "url",
+          "value": "/exam/teacher/review"
+        },
+        {
+          "action": "expect",
+          "assert": "text",
+          "target": {
+            "by": "role",
+            "role": "heading",
+            "name": "评分审核"
+          },
+          "value": "评分审核"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "AI状态"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "审核状态"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "已交/未交"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "id",
+            "value": "review-class-filter"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "加载失败："
+        },
+        {
+          "action": "screenshot",
+          "name": "rev-01-review-list",
+          "fullPage": true
+        }
+      ]
+    },
+    {
+      "id": "TC-REV-02",
+      "group": "G6 教师端 · 评分审核",
+      "priority": "P0",
+      "title": "按班级筛选 → 列表收窄，切回「所有班级」可恢复",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/review"
+        },
+        {
+          "action": "pickOption",
+          "trigger": {
+            "by": "css",
+            "value": "#review-class-filter .ant-select-selector"
+          },
+          "option": {
+            "by": "text",
+            "value": "测试 1 班"
+          },
+          "note": "v1.2 用「软件工程1班」（本地夹具）且直接点 id；云端班级为「测试 1 班」"
+        },
+        {
+          "action": "pickOption",
+          "trigger": {
+            "by": "css",
+            "value": "#review-class-filter .ant-select-selector"
+          },
+          "option": {
+            "by": "text",
+            "value": "所有班级"
+          },
+          "note": "切回全部可恢复"
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "加载失败："
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "操作"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "rev-02-filter-class",
+          "fullPage": true
+        }
+      ]
+    },
+    {
+      "id": "TC-REV-03",
+      "group": "G6 教师端 · 评分审核",
+      "priority": "P0",
+      "title": "点「审核」进入班级审核页（只读浏览）",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/review"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "审核"
+          },
+          "nth": 0
+        },
+        {
+          "action": "expect",
+          "assert": "urlContains",
+          "value": "/teacher/review/class/"
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "数据加载失败"
+        },
+        {
+          "action": "screenshot",
+          "name": "rev-03-review-class",
+          "fullPage": true
+        }
+      ]
+    },
+    {
+      "id": "TC-REV-04",
+      "group": "G6 教师端 · 评分审核",
+      "priority": "P0",
+      "title": "审核详情页渲染：评分面板（aria-label）、题目导航、底部动作条",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.username}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/review"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "审核"
+          },
+          "nth": 0
+        },
+        {
+          "action": "expect",
+          "assert": "urlContains",
+          "value": "/teacher/review/class/"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "css",
+            "value": "table tbody tr.ant-table-row",
+            "nth": 0,
+            "note": "｜v1.4 实测：antd 表格首行是 aria-hidden 的 .ant-table-measure-row，必须用 tbody tr.ant-table-row 才能命中真实数据行"
+          },
+          "note": "进班级后点某学生行，进入审核详情"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "css",
+            "value": "[aria-label=评分面板]"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "题目导航"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "教师评语"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "保存审核"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "发布成绩"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "rev-04-review-detail"
+        }
+      ]
+    },
+    {
+      "id": "TC-REV-05",
+      "group": "G6 教师端 · 评分审核",
+      "priority": "P0",
+      "title": "改分输入框与教师评语可编辑（输入后不保存）",
+      "mutates": false,
+      "mutationRisk": "低：不点「保存审核」「发布成绩」即不写入。",
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.username}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/review"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "审核"
+          },
+          "nth": 0
+        },
+        {
+          "action": "expect",
+          "assert": "urlContains",
+          "value": "/teacher/review/class/"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "css",
+            "value": "table tbody tr.ant-table-row",
+            "nth": 0,
+            "note": "｜v1.4 实测：antd 表格首行是 aria-hidden 的 .ant-table-measure-row，必须用 tbody tr.ant-table-row 才能命中真实数据行"
+          },
+          "note": "进班级后点某学生行，进入审核详情"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "css",
+            "value": ".wb-final-score input"
+          }
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "css",
+            "value": ".wb-final-score input"
+          },
+          "value": "88"
+        },
+        {
+          "action": "expect",
+          "assert": "value",
+          "target": {
+            "by": "css",
+            "value": ".wb-final-score input"
+          },
+          "value": "88"
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "placeholder",
+            "value": "教师评语（选填）"
+          },
+          "value": "UI-E2E 评语（不保存）"
+        },
+        {
+          "action": "expect",
+          "assert": "value",
+          "target": {
+            "by": "placeholder",
+            "value": "教师评语（选填）"
+          },
+          "value": "UI-E2E 评语（不保存）"
+        },
+        {
+          "action": "screenshot",
+          "name": "rev-05-edit-score-feedback"
+        },
+        {
+          "action": "reload",
+          "note": "刷新丢弃未保存改动，确保零写入"
+        }
+      ],
+      "precondition": "fixtures.teacher + 审核列表至少 1 行（否则进不去详情页）"
+    },
+    {
+      "id": "TC-REV-06",
+      "group": "G6 教师端 · 评分审核",
+      "priority": "P1",
+      "title": "改分越界值被前端钳制或拦截（不保存）",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.username}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/review"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "审核"
+          },
+          "nth": 0
+        },
+        {
+          "action": "expect",
+          "assert": "urlContains",
+          "value": "/teacher/review/class/"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "css",
+            "value": "table tbody tr.ant-table-row",
+            "nth": 0,
+            "note": "｜v1.4 实测：antd 表格首行是 aria-hidden 的 .ant-table-measure-row，必须用 tbody tr.ant-table-row 才能命中真实数据行"
+          },
+          "note": "进班级后点某学生行，进入审核详情"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "css",
+            "value": ".wb-final-score input"
+          }
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "css",
+            "value": ".wb-final-score input"
+          },
+          "value": "999"
+        },
+        {
+          "action": "annotate",
+          "value": "记录输入框实际 value：应为满分钳制或保持输入但提交时拦截；两种都记录为观察项，不由本用例判失败"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "css",
+            "value": ".wb-final-score input"
+          }
+        },
+        {
+          "action": "reload"
+        }
+      ],
+      "precondition": "同 TC-REV-05"
+    },
+    {
+      "id": "TC-REV-07",
+      "group": "G6 教师端 · 评分审核",
+      "priority": "P1",
+      "title": "评分面板抽屉开关（窄屏）与折叠按钮（宽屏）的 aria 属性",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "annotate",
+          "value": "本用例视口切 900x900（<1200px 断点），ReviewDetail 走 narrow 分支：右栏抽屉化，渲染 .wb-drawer-toggle；宽屏下该元素不存在。v1.2 的 [aria-controls=rp-score-panel] 在宽屏会命中常驻的 .wb-collapse-btn，导致最后一步必红。"
+        },
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.username}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/review"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "审核"
+          },
+          "nth": 0
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "css",
+            "value": "table tbody tr.ant-table-row",
+            "nth": 0,
+            "note": "｜v1.4 实测：antd 表格首行是 aria-hidden 的 .ant-table-measure-row，必须用 tbody tr.ant-table-row 才能命中真实数据行"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "css",
+            "value": ".wb-drawer-toggle"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "attr",
+          "target": {
+            "by": "css",
+            "value": ".wb-drawer-toggle"
+          },
+          "name": "aria-expanded",
+          "value": "false",
+          "note": "抽屉默认收起（panelOpen 初值 false，useReviewPage.js:28）"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "css",
+            "value": ".wb-drawer-toggle"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "attr",
+          "target": {
+            "by": "css",
+            "value": ".wb-drawer-toggle"
+          },
+          "name": "aria-expanded",
+          "value": "true"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "css",
+            "value": ".wb-drawer-toggle"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "attr",
+          "target": {
+            "by": "css",
+            "value": ".wb-drawer-toggle"
+          },
+          "name": "aria-expanded",
+          "value": "false"
+        },
+        {
+          "action": "screenshot",
+          "name": "rev-07-drawer-toggle"
+        }
+      ],
+      "precondition": "fixtures.teacher + 审核详情页可达",
+      "viewportOverride": {
+        "width": 900,
+        "height": 900
+      },
+      "note": "宽屏折叠按钮（.wb-collapse-btn，aria-expanded 与 collapsed 反向）单独作为观察项记录，不并入本用例断言，避免两个控件同名属性互相干扰。"
+    },
+    {
+      "id": "TC-Q-01",
+      "group": "G7 教师端 · 题库 / 班级 / 学生 / 团队",
+      "priority": "P1",
+      "title": "题库管理渲染 + 新增题目下拉两项",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/questions"
+        },
+        {
+          "action": "expect",
+          "assert": "text",
+          "target": {
+            "by": "role",
+            "role": "heading",
+            "name": "题库管理"
+          },
+          "value": "题库管理"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "满分"
+          }
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "新增题目"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "编程题"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "实训题"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "BETA"
+          }
+        },
+        {
+          "action": "press",
+          "key": "Escape"
+        },
+        {
+          "action": "screenshot",
+          "name": "q-01-questions",
+          "fullPage": true
+        }
+      ]
+    },
+    {
+      "id": "TC-Q-02",
+      "group": "G7 教师端 · 题库 / 班级 / 学生 / 团队",
+      "priority": "P1",
+      "title": "新建编程题表单渲染（不保存）",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/questions/new"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "placeholder",
+            "value": "大题标题"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "label",
+            "value": "题目难度"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "点击选择题目类型"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "保存"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "取消"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "q-02-question-new",
+          "fullPage": true
+        }
+      ]
+    },
+    {
+      "id": "TC-Q-03",
+      "group": "G7 教师端 · 题库 / 班级 / 学生 / 团队",
+      "priority": "P2",
+      "title": "题目删除确认弹窗文案（点删除后取消，不确认）",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/questions"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "删除"
+          },
+          "nth": 0
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "text",
+            "value": "确认删除该题目？"
+          },
+          "value": "确认删除该题目？"
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "text",
+            "value": "删除后该题目将从题库移除，已布置作业中的历史记录保留。"
+          },
+          "value": "历史记录保留"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "删除题目"
+          }
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "取消"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "q-03-delete-confirm"
+        }
+      ]
+    },
+    {
+      "id": "TC-CLS-01",
+      "group": "G7 教师端 · 题库 / 班级 / 学生 / 团队",
+      "priority": "P1",
+      "title": "班级管理渲染 + 新增班级弹窗空名校验",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/classes"
+        },
+        {
+          "action": "expect",
+          "assert": "text",
+          "target": {
+            "by": "role",
+            "role": "heading",
+            "name": "班级管理"
+          },
+          "value": "班级管理"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "人数"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "测试 1 班"
+          },
+          "note": "v1.2 为「软件工程1班」（本地夹具），云端为「测试 1 班」"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "新增班级"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "id",
+            "value": "tch-class-name"
+          }
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "css",
+            "value": ".ant-modal-footer .ant-btn-primary",
+            "nth": 0
+          },
+          "note": "弹窗内确认按钮 okText =「新增班级」，与工具栏按钮同名，故用 .ant-modal-footer 收窄"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "请输入班级名称"
+          },
+          "note": "message.warn 提示"
+        },
+        {
+          "action": "press",
+          "key": "Escape"
+        },
+        {
+          "action": "screenshot",
+          "name": "cls-01-classes",
+          "fullPage": true
+        }
+      ]
+    },
+    {
+      "id": "TC-STU-10",
+      "group": "G7 教师端 · 题库 / 班级 / 学生 / 团队",
+      "priority": "P1",
+      "title": "学生管理：未选班空态 → 选班后表头与人数",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/students"
+        },
+        {
+          "action": "expect",
+          "assert": "text",
+          "target": {
+            "by": "role",
+            "role": "heading",
+            "name": "学生管理"
+          },
+          "value": "学生管理"
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "text",
+            "value": "请先选择班级"
+          },
+          "value": "请先选择班级"
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "text",
+            "value": "选择班级后即可查看该班学生名单。"
+          },
+          "value": "选择班级后即可查看该班学生名单。"
+        },
+        {
+          "action": "pickOption",
+          "trigger": {
+            "by": "css",
+            "value": "#tch-students-class-filter .ant-select-selector"
+          },
+          "option": {
+            "by": "text",
+            "value": "测试 1 班"
+          },
+          "note": "v1.2 用「软件工程1班」（本地夹具）；云端为「测试 1 班」"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "学号"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "姓名"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "text",
+            "value": "本班人数："
+          },
+          "value": "本班人数："
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "placeholder",
+            "value": "搜索学生姓名"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "stu-10-students",
+          "fullPage": true
+        }
+      ]
+    },
+    {
+      "id": "TC-TEAM-01",
+      "group": "G7 教师端 · 题库 / 班级 / 学生 / 团队",
+      "priority": "P2",
+      "title": "教学团队页渲染",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "menuitem",
+            "name": "教学团队"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "url",
+          "value": "/exam/teacher/teams"
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "数据加载失败"
+        },
+        {
+          "action": "screenshot",
+          "name": "team-01-teams",
+          "fullPage": true
+        }
+      ]
+    },
+    {
+      "id": "TC-ADM-01",
+      "group": "G8 管理端",
+      "priority": "P1",
+      "title": "学校管理渲染：列头、层次标签、分页文案",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.admin.username}",
+            "password": "${accounts.admin.password}"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "text",
+          "target": {
+            "by": "role",
+            "role": "heading",
+            "name": "学校管理"
+          },
+          "value": "学校管理"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "院校代码"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "学校名称"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "省份"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "columnheader",
+            "name": "层次"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "text",
+            "value": "数据来源：教育部全国高等学校名单"
+          },
+          "value": "数据来源：教育部全国高等学校名单"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "label",
+            "value": "每页条数"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "adm-01-schools",
+          "fullPage": true
+        }
+      ]
+    },
+    {
+      "id": "TC-ADM-02",
+      "group": "G8 管理端",
+      "priority": "P1",
+      "title": "学校列表翻页与每页条数切换",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.admin.username}",
+            "password": "${accounts.admin.username}"
+          }
+        },
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.admin.username}",
+            "password": "${accounts.admin.password}"
+          }
+        },
+        {
+          "action": "pickOption",
+          "trigger": {
+            "by": "css",
+            "value": ".ant-pagination-options .ant-select-selector"
+          },
+          "option": {
+            "by": "text",
+            "value": "50"
+          },
+          "note": "「每页条数」下拉由 antd 在 a-pagination 内部渲染，无 id（ListPage.vue:53 注释）"
+        },
+        {
+          "action": "pickOption",
+          "trigger": {
+            "by": "label",
+            "value": "每页条数"
+          },
+          "option": {
+            "by": "text",
+            "value": "50"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "count",
+          "target": {
+            "by": "css",
+            "value": "table tbody tr.ant-table-row",
+            "note": "｜v1.4 实测：antd 表格首行是 aria-hidden 的 .ant-table-measure-row，必须用 tbody tr.ant-table-row 才能命中真实数据行"
+          },
+          "value": 50
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "text",
+            "value": "第 1 页"
+          },
+          "value": "第 1 页"
+        },
+        {
+          "action": "screenshot",
+          "name": "adm-02-page-size",
+          "fullPage": true
+        }
+      ]
+    },
+    {
+      "id": "TC-ADM-03",
+      "group": "G8 管理端",
+      "priority": "P1",
+      "title": "管理员导航七项齐全",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.admin.username}",
+            "password": "${accounts.admin.password}"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "menuitem",
+            "name": "学校管理"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "menuitem",
+            "name": "班级管理"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "menuitem",
+            "name": "教师管理"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "menuitem",
+            "name": "学生管理"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "menuitem",
+            "name": "系统监控"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "menuitem",
+            "name": "批改记录"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "menuitem",
+            "name": "AI 配置"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "css",
+            "value": "nav[aria-label=主导航菜单], ul[aria-label=主导航菜单]"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC-ADM-04",
+      "group": "G8 管理端",
+      "priority": "P2",
+      "title": "管理员逐页冒烟：班级/教师/学生/监控/批改记录/AI 配置",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.admin.username}",
+            "password": "${accounts.admin.username}"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "url",
+          "value": "/exam/admin/schools"
+        },
+        {
+          "action": "goto",
+          "path": "/admin/classes"
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "数据加载失败"
+        },
+        {
+          "action": "screenshot",
+          "name": "adm-04-classes",
+          "fullPage": true
+        },
+        {
+          "action": "goto",
+          "path": "/admin/teachers"
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "数据加载失败"
+        },
+        {
+          "action": "screenshot",
+          "name": "adm-04-teachers",
+          "fullPage": true
+        },
+        {
+          "action": "goto",
+          "path": "/admin/students"
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "数据加载失败"
+        },
+        {
+          "action": "goto",
+          "path": "/admin/monitor"
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "数据加载失败"
+        },
+        {
+          "action": "screenshot",
+          "name": "adm-04-monitor",
+          "fullPage": true
+        },
+        {
+          "action": "goto",
+          "path": "/admin/grading-runs"
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "数据加载失败"
+        },
+        {
+          "action": "goto",
+          "path": "/admin/ai-config"
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "数据加载失败"
+        },
+        {
+          "action": "screenshot",
+          "name": "adm-04-aiconfig",
+          "fullPage": true
+        }
+      ],
+      "precondition": "管理员账号（accounts.admin）"
+    },
+    {
+      "id": "TC-PRJ-01",
+      "group": "G9 实训题 / 无障碍",
+      "priority": "P1",
+      "title": "学生实训题页面：文件树与 Monaco 回看（不提交）",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${fixtures.project.studentUsername}",
+            "password": "${fixtures.project.studentUsername}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/student/assignments"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "css",
+            "value": ".assign[role=button]",
+            "nth": 0
+          },
+          "note": "实训题作业卡片，进入项目作答页"
+        },
+        {
+          "action": "expect",
+          "assert": "urlContains",
+          "value": "/project/"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "资源管理器"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "css",
+            "value": ".zu-tree"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "数据加载失败"
+        },
+        {
+          "action": "screenshot",
+          "name": "prj-01-student-project"
+        }
+      ],
+      "knownRisk": "Monaco 在 headless 下渲染为 canvas + 隐藏 textarea；只读回看不需输入，断言文件树文本即可，不做 typeInEditor。v1.2 只有 annotate 说明路径、没有导航步骤，实际停在作业列表页空过，v1.3 补成真实步骤。",
+      "fixture": "fixtures.project（有实训题提交的学生）"
+    },
+    {
+      "id": "TC-PRJ-02",
+      "group": "G9 实训题 / 无障碍",
+      "priority": "P2",
+      "title": "教师实训题三栏审核页渲染",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.username}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/review/project/${fixtures.submission.submissionId}"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "资源管理器"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "AI 评分"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "数据加载失败"
+        },
+        {
+          "action": "screenshot",
+          "name": "prj-02-teacher-project-review"
+        }
+      ],
+      "fixture": "fixtures.submission（教师端实训题审核详情 id）"
+    },
+    {
+      "id": "TC-A11Y-01",
+      "group": "G9 实训题 / 无障碍",
+      "priority": "P2",
+      "title": "地标与跳转链接：侧栏/页头/main/skip-link",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "complementary",
+            "name": "侧栏"
+          },
+          "note": "v1.2 写成 by:complementary（把 role 名当成了 by 值）"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "banner"
+          },
+          "note": "页头 a-layout-header role=banner（teacher/Layout.vue:51）"
+        },
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.admin.username}",
+            "password": "${accounts.admin.username}"
+          },
+          "note": "v1.2 用教师身份 goto /admin/schools（会被路由守卫弹回登录页）；skip-link 与 main#main-content 在管理员 Layout 同样存在，故换管理员身份"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "跳到主内容"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "css",
+            "value": "main#main-content"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "a11y-01-landmarks"
+        }
+      ]
+    },
+    {
+      "id": "TC-A11Y-02",
+      "group": "G9 实训题 / 无障碍",
+      "priority": "P2",
+      "title": "纯键盘完成登录（Tab 可达 + Enter 提交）",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "goto",
+          "path": "/login"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "id",
+            "value": "login-username"
+          }
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "id",
+            "value": "login-username"
+          },
+          "value": "${accounts.student.username}"
+        },
+        {
+          "action": "press",
+          "target": {
+            "by": "id",
+            "value": "login-username"
+          },
+          "key": "Tab"
+        },
+        {
+          "action": "annotate",
+          "value": "确认焦点落在 password 输入框后再输入"
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "id",
+            "value": "login-password"
+          },
+          "value": "${accounts.student.password}",
+          "note": "口令 = 学号"
+        },
+        {
+          "action": "press",
+          "target": {
+            "by": "id",
+            "value": "login-password"
+          },
+          "key": "Enter"
+        },
+        {
+          "action": "expect",
+          "assert": "url",
+          "value": "/exam/student/assignments"
+        }
+      ]
+    },
+    {
+      "id": "TC-A11Y-03",
+      "group": "G9 实训题 / 无障碍",
+      "priority": "P2",
+      "title": "登录页不出现无地标内容（region 规则）",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "goto",
+          "path": "/login"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "css",
+            "value": "main.login-page"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "a11y-03-login-main"
+        }
+      ],
+      "note": "如需完整 axe 扫描，属可选增强；本用例只做结构断言，不引入新依赖。"
+    },
+    {
+      "id": "TC-CLD-00",
+      "group": "G10 云端双班实训题实战（写流程）",
+      "priority": "P0",
+      "title": "云端只读现勘：两班名单（含翻页取全量）+ 题库现状，写入 cloud-fixtures.json",
+      "mutates": false,
+      "why": "目标改为云端后，本地库勘察结论全部作废（本地根本没有这两个班）。且铁律禁止查库 ⇒ 只能在 UI 上把这批夹具『看出来』，作为后续写流程的输入。",
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.username}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/classes"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "测试 1 班"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "测试 2 班"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "广西农业职业技术大学"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "cld-00-classes"
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/students"
+        },
+        {
+          "action": "pickOption",
+          "trigger": {
+            "by": "css",
+            "value": "#tch-students-class-filter .ant-select-selector"
+          },
+          "option": {
+            "by": "text",
+            "value": "测试 1 班"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "text",
+            "value": "本班人数："
+          },
+          "value": "本班人数："
+        },
+        {
+          "action": "annotate",
+          "value": "【夹具写入】读第 1 页 20 行，点分页「下一页」，读第 2 页，汇总 40 人；按页面顺序写入 class1.students（轮转下标 i 的唯一依据）"
+        },
+        {
+          "action": "screenshot",
+          "name": "cld-00-class1-page1"
+        },
+        {
+          "action": "pickOption",
+          "trigger": {
+            "by": "css",
+            "value": "#tch-students-class-filter .ant-select-selector"
+          },
+          "option": {
+            "by": "text",
+            "value": "测试 2 班"
+          }
+        },
+        {
+          "action": "annotate",
+          "value": "【夹具写入】同上翻页取全量，写入 class2.students"
+        },
+        {
+          "action": "screenshot",
+          "name": "cld-00-class2-page1"
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/questions"
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "placeholder",
+            "value": "搜索题目标题"
+          },
+          "value": "Spring MVC"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "《Spring MVC 数据绑定和响应》期末实践考试"
+          }
+        },
+        {
+          "action": "annotate",
+          "value": "【夹具写入】绑定 fixtures.questionTitle.value = 命中行的完整标题（复用路径）；若题库无该题则记 null，TC-CLD-01 走新建分支"
+        },
+        {
+          "action": "screenshot",
+          "name": "cld-00-existing-question-check"
+        }
+      ],
+      "output": "cloud-fixtures.json 的 class1.students / class2.students / questionTitle",
+      "note": "v1.2 只写了 annotate「逐行读取」，没有翻页步骤；4.1 节自己说 40 人需翻到第 2 页，v1.3 把翻页写成显式动作。"
+    },
+    {
+      "id": "TC-CLD-01",
+      "group": "G10 云端双班实训题实战（写流程）",
+      "priority": "P0",
+      "title": "确认实训题标题与标准包（复用优先；缺失才新建，那一步才写库）",
+      "mutates": true,
+      "mutationRisk": "复用路径（fixtures.questionTitle.value 非空）不写库；仅当题库无该题时降级为新建实训题并保存，此时写入云端题库 1 条 + 1 个标准包。执行器必须先读 fixtures.questionTitle.value 再决定分支，并在报告里注明走了哪条。",
+      "precondition": "fixtures.questionTitle.value（TC-CLD-00 或 TC-CAL-01 已绑定；为空时走新建分支）",
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.username}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/questions"
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "placeholder",
+            "value": "搜索题目标题"
+          },
+          "value": "Spring MVC"
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "text",
+            "value": "《Spring MVC 数据绑定和响应》期末实践考试"
+          },
+          "value": "实训题",
+          "note": "命中行应标「实训题」"
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "text",
+            "value": "《Spring MVC 数据绑定和响应》期末实践考试"
+          },
+          "value": "100",
+          "note": "满分 100"
+        },
+        {
+          "action": "screenshot",
+          "name": "cld-01-question-reuse-check"
+        },
+        {
+          "action": "annotate",
+          "value": "【仅当上面命中为空】降级为新建：goto /teacher/questions/new/project，uploadFile（.kind-add-btn 触发，input[type=file][accept=\".zip\"] 接收）上传标准包，填题目描述与评分标准，点「保 存」（nameLoose），把新标题回写 fixtures.questionTitle.value"
+        },
+        {
+          "action": "screenshot",
+          "name": "cld-01-standard-uploaded"
+        }
+      ],
+      "note": "v1.2 把复用核对与新建写在同一串步骤里，且 mutates:false 与实际写操作矛盾；v1.3 拆成「先核对，必要时新建」的分支描述，并把 mutates 标为 true。原步骤中的 role=radio「选择题目：...」定位在题库与布置页都不存在。"
+    },
+    {
+      "id": "TC-CLD-02",
+      "group": "G10 云端双班实训题实战（写流程）",
+      "priority": "P0",
+      "title": "测试 1 班布置作业（期末考口径：一人一次）",
+      "mutates": true,
+      "mutationRisk": "写入云端生产库一条作业 + 班级关联。",
+      "assumption": "【决策 A 已确认】按期末考：允许重交=关、提交次数上限=1、计分口径=取最后、答案可见性=发布后可见。详见 assignmentProfile。",
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/assignments"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "布置作业"
+          }
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "id",
+            "value": "assign-title"
+          },
+          "value": "E2E-UI-测试1班-SpringMVC-{ts}"
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "placeholder",
+            "value": "例如：第三章 循环与数组"
+          },
+          "value": "期末实践考试（测试 1 班）"
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "placeholder",
+            "value": "要提醒学生注意什么？可留空"
+          },
+          "value": "E2E-UI 自动化测试数据，请勿人工操作"
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "placeholder",
+            "value": "搜索题目标题"
+          },
+          "value": "${fixtures.questionTitle.value}",
+          "note": "v1.2 搜的是 E2E-UI-SpringMVC-标准题-{ts}（只在新建分支才存在），而本流程是复用云端既有题，故改为搜 fixtures.questionTitle.value"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "css",
+            "value": ".ant-modal table tbody tr",
+            "nth": 0
+          },
+          "note": "题目选择是 a-table + rowSelection(type=radio) + customRow 整行点选（Assignments.vue:196-204），没有名为「选择题目：...」的单选控件"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "测试 1 班"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "text",
+            "value": "已选",
+            "regex": true
+          },
+          "value": "已选",
+          "note": "班级区提示「已选 N 个班 · 合计 M 人」（Assignments.vue:241）"
+        },
+        {
+          "action": "annotate",
+          "value": "【决策 B】起止时间精确输入，窗口按 deadlinePlan 计算（默认 N≤24 → 10 分钟）。不点快捷项（一周后截止太久）。"
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "css",
+            "value": "#assign-range input",
+            "nth": 0,
+            "calibrate": true
+          },
+          "value": "{startAt}"
+        },
+        {
+          "action": "press",
+          "target": {
+            "by": "css",
+            "value": "#assign-range input",
+            "nth": 0
+          },
+          "key": "Enter"
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "css",
+            "value": "#assign-range input",
+            "nth": 1
+          },
+          "value": "{endAt}"
+        },
+        {
+          "action": "press",
+          "target": {
+            "by": "css",
+            "value": "#assign-range input",
+            "nth": 1
+          },
+          "key": "Enter"
+        },
+        {
+          "action": "expect",
+          "assert": "containsText",
+          "target": {
+            "by": "text",
+            "value": "截止"
+          },
+          "value": "{endAt}",
+          "note": "右栏摘要的截止文案应回显该时刻"
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "id",
+            "value": "assign-max-attempts"
+          },
+          "value": "1",
+          "note": "必须在「允许重交」仍为开时设置：输入框带 :disabled 绑定 !switches.allowResubmit（Assignments.vue:282）"
+        },
+        {
+          "action": "pickOption",
+          "trigger": {
+            "by": "id",
+            "value": "assign-score-policy"
+          },
+          "option": {
+            "by": "text",
+            "value": "取最后（最新一次）"
+          }
+        },
+        {
+          "action": "pickOption",
+          "trigger": {
+            "by": "id",
+            "value": "assign-answer-visibility"
+          },
+          "option": {
+            "by": "text",
+            "value": "发布后可见"
+          }
+        },
+        {
+          "action": "toggle",
+          "target": {
+            "by": "css",
+            "value": ".ant-modal .ant-switch",
+            "nth": 0
+          },
+          "state": "off",
+          "note": "关闭「允许重交」（决策 A：一人一次）。默认值是开的，若不显式关闭，下面的 aria-checked=false 断言必红；且关闭后 #assign-max-attempts 会被禁用，故本步必须在「设次数上限」之后。"
+        },
+        {
+          "action": "expect",
+          "assert": "attr",
+          "target": {
+            "by": "css",
+            "value": ".ant-modal .ant-switch"
+          },
+          "name": "aria-checked",
+          "value": "false",
+          "note": "允许重交保持关闭"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "status",
+            "name": "信息齐了，可以布置"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "note",
+            "name": "每次提交都会触发评分流程（耗时数分钟并产生模型费用），建议设置次数上限"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "cld-02-assign-modal-ready",
+          "fullPage": true
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "立即布置"
+          }
+        },
+        {
+          "action": "annotate",
+          "value": "若出现「确认按开放性题目布置」软警告 ⇒ 说明标准包未生效，属缺陷，直接判 FAIL 并停止"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "布置成功"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "E2E-UI-测试1班-SpringMVC-{ts}"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "cld-02-assign-success",
+          "fullPage": true
+        }
+      ],
+      "precondition": "fixtures.questionTitle.value 非空（复用路径）；若为空则先完成 TC-CLD-01 的新建分支。全新 context（避免 localStorage 草稿干扰）。开关次序：① 选实训题 -> ② 设次数上限=1 -> ③ 关闭「允许重交」-> ④ 计分口径选「取最后」-> ⑤ 答案可见性选「发布后可见」",
+      "mutatingOrder": "① 选实训题 -> ② 设次数上限=1 -> ③ 关闭「允许重交」-> ④ 计分口径选「取最后」-> ⑤ 答案可见性选「发布后可见」"
+    },
+    {
+      "id": "TC-CLD-03",
+      "group": "G10 云端双班实训题实战（写流程）",
+      "priority": "P0",
+      "title": "测试 1 班学生逐个登录并进入考试（N 人，逐人独立上下文）",
+      "mutates": false,
+      "dataDriven": {
+        "over": "cloudFixtures.class1.students",
+        "as": "student"
+      },
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${student.username}",
+            "password": "${student.password}"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "url",
+          "value": "/exam/student/assignments"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "E2E-UI-测试1班-SpringMVC-{ts}"
+          },
+          "note": "学生能看到该作业 ⇒ 布置与班级关联生效"
+        },
+        {
+          "action": "screenshot",
+          "name": "cld-03-stu{i}-list"
+        }
+      ],
+      "note": "每个学生一个独立 browser context，天然隔离 localStorage 登录态；不使用 API 造 token。"
+    },
+    {
+      "id": "TC-CLD-04",
+      "group": "G10 云端双班实训题实战（写流程）",
+      "priority": "P0",
+      "title": "测试 1 班学生逐个上传工程包并提交（A/B/C 轮转均匀分布）",
+      "mutates": true,
+      "mutationRisk": "每位学生提交一次：写入云端提交记录 + 落盘工程包 + **自动触发 AI 评分（真实模型费用）**。",
+      "dataDriven": {
+        "over": "cloudFixtures.class1.students",
+        "as": "student",
+        "asset": "distributionRules.class1 → pool[i % 3]"
+      },
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${student.username}",
+            "password": "${student.password}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/student/assignments"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "text",
+            "value": "E2E-UI-测试1班-SpringMVC-{ts}"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "urlContains",
+          "value": "/project/"
+        },
+        {
+          "action": "uploadFile",
+          "trigger": {
+            "by": "css",
+            "value": ".kind-add-btn"
+          },
+          "input": {
+            "by": "css",
+            "value": "input[type=file][accept=\".zip\"]"
+          },
+          "file": "${materials.studentSubmissions.pool[assetIndex].path}"
+        },
+        {
+          "action": "poll",
+          "target": {
+            "by": "text",
+            "value": "资源管理器"
+          },
+          "assert": "visible",
+          "timeoutMs": 180000
+        },
+        {
+          "action": "screenshot",
+          "name": "cld-04-stu{i}-{asset}-uploaded",
+          "fullPage": true
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "提交答案"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "评分完成后将在此显示成绩"
+          },
+          "note": "提交后进入待评分态；未发布前不应出现分数"
+        },
+        {
+          "action": "expect",
+          "assert": "hidden",
+          "target": {
+            "by": "css",
+            "value": ".ssc-score"
+          },
+          "note": "替换空洞断言：「AI 评分」在学生端源码中只出现在一条注释里，页面永不渲染该串；改断言分数块整体不渲染，这才是真正的防泄分证据"
+        },
+        {
+          "action": "screenshot",
+          "name": "cld-04-stu{i}-{asset}-submitted",
+          "fullPage": true
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "得分 "
+        }
+      ],
+      "mapping": {
+        "i=0": "A",
+        "i=1": "B",
+        "i=2": "C",
+        "i=3": "A",
+        "i=4": "B",
+        "i=5": "C"
+      },
+      "_gradeingNote": "v1.3：提交即触发评分（enqueueProjectGrade），学生端此后会短暂显示「评分中...」（Submit.vue:108 / ProjectQuestionEdit 的 pending 提示）。「评分完成后将在此显示成绩」在评分前后都可能命中（未发布就一直显示），故它只证明学生看不到分，不能证明评分未完成。"
+    },
+    {
+      "id": "TC-CLD-05",
+      "group": "G10 云端双班实训题实战（写流程）",
+      "priority": "P0",
+      "title": "等截止 + 教师端评分状态核对（纯 DOM 轮询；评分由提交触发）",
+      "mutates": false,
+      "why": "v1.2 原文疑「改卷很可能是提交即触发」，这个怀疑是对的：project-submit.js:167 提交成功即 enqueueProjectGrade，server 无截止调度器。本用例据此重写：主路径 = 观察「待评分 N 人 -> 已评分」并记录耗时；学生端防泄分交给 TC-CONS-02/TC-CLD-04。",
+      "steps": [
+        {
+          "action": "annotate",
+          "value": "【v1.3 更正】评分触发点是提交（enqueueProjectGrade，并发 3），不是截止时刻。原「截止前不得出分」反向断言会立刻把正确实现判成 FAIL，已删除。"
+        },
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.username}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/review"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "E2E-UI-测试1班-SpringMVC-{ts}"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "cld-05-review-baseline"
+        },
+        {
+          "action": "annotate",
+          "value": "记录本行 AI状态 文案与 已交/未交 进度作为基线（可能是「待评分 N 人」也可能是「已评分」，取决于提交与本步的间隔，两种都如实记录）"
+        },
+        {
+          "action": "poll",
+          "target": {
+            "by": "text",
+            "value": "已评分"
+          },
+          "assert": "visible",
+          "timeoutMs": 1800000,
+          "intervalMs": 20000,
+          "note": "主路径：提交即入队，40 人 x 并发 3 应在十几分钟内评完。记录「TC-CLD-04 最后一人提交 -> 本处转已评分」的耗时，作为评分吞吐的实测证据"
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/review/class/${fixtures.class1.id}?assignmentId=${fixtures.assignmentId1}"
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "数据加载失败"
+        },
+        {
+          "action": "screenshot",
+          "name": "cld-05-class1-graded"
+        },
+        {
+          "action": "annotate",
+          "value": "【观察项，不作断言】顺便记录该作业的截止时刻是否已过；过与不过都不影响评分是否完成（评分在提交时已启动）"
+        }
+      ],
+      "precondition": "fixtures.teacher + TC-CLD-02 已布置、TC-CLD-04 已提交",
+      "note": "本用例 mutates 仍为 false：只观察，不点「重新评分」。评分异常的重评兜底在 TC-CLD-09。"
+    },
+    {
+      "id": "TC-CLD-06",
+      "group": "G10 云端双班实训题实战（写流程）",
+      "priority": "P0",
+      "title": "测试 1 班改卷结果只读核对（逐学生 AI 分与分项可见）",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/review/class/{class1.id}?assignmentId={assignmentId1}"
+        },
+        {
+          "action": "annotate",
+          "value": "逐学生进入审核详情（/teacher/review/project/:submissionId），核对：AI 总分、分项清单、优点/问题、AI 总评是否有内容"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "css",
+            "value": "[aria-label=评分面板]"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "AI 评分"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "Prisma"
+        },
+        {
+          "action": "screenshot",
+          "name": "cld-06-class1-review",
+          "fullPage": true
+        },
+        {
+          "action": "annotate",
+          "value": "【只读】本用例不点「保存审核」「发布成绩」，保全 AI 原始结果供用户复核"
+        }
+      ],
+      "precondition": "fixtures.class1.id / assignmentId1（TC-CLD-02 布置成功后回写）"
+    },
+    {
+      "id": "TC-CLD-07",
+      "group": "G10 云端双班实训题实战（写流程）",
+      "priority": "P0",
+      "title": "测试 2 班布置同一份作业（同题同口径）",
+      "mutates": true,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/assignments"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "布置作业"
+          }
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "id",
+            "value": "assign-title"
+          },
+          "value": "E2E-UI-测试2班-SpringMVC-{ts}"
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "placeholder",
+            "value": "搜索题目标题"
+          },
+          "value": "${fixtures.questionTitle.value}",
+          "note": "v1.2 搜的是 E2E-UI-SpringMVC-标准题-{ts}（只在新建分支才存在），而本流程是复用云端既有题，故改为搜 fixtures.questionTitle.value"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "css",
+            "value": ".ant-modal table tbody tr",
+            "nth": 0
+          },
+          "note": "题目选择是 a-table + rowSelection(type=radio) + customRow 整行点选（Assignments.vue:196-204），没有名为「选择题目：...」的单选控件"
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "测试 2 班"
+          }
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "css",
+            "value": "#assign-range input",
+            "nth": 0
+          },
+          "value": "{startAt2}"
+        },
+        {
+          "action": "press",
+          "target": {
+            "by": "css",
+            "value": "#assign-range input",
+            "nth": 0
+          },
+          "key": "Enter"
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "css",
+            "value": "#assign-range input",
+            "nth": 1
+          },
+          "value": "{endAt2}"
+        },
+        {
+          "action": "press",
+          "target": {
+            "by": "css",
+            "value": "#assign-range input",
+            "nth": 1
+          },
+          "key": "Enter"
+        },
+        {
+          "action": "fill",
+          "target": {
+            "by": "id",
+            "value": "assign-max-attempts"
+          },
+          "value": "1",
+          "note": "必须在「允许重交」仍为开时设置：输入框带 :disabled 绑定 !switches.allowResubmit（Assignments.vue:282）"
+        },
+        {
+          "action": "toggle",
+          "target": {
+            "by": "css",
+            "value": ".ant-modal .ant-switch",
+            "nth": 0
+          },
+          "state": "off",
+          "note": "关闭「允许重交」（与 TC-CLD-02 完全同口径：一人一次）。默认值是开的，必须显式关闭；且关闭后 #assign-max-attempts 会被禁用，故本步在设次数上限之后。"
+        },
+        {
+          "action": "expect",
+          "assert": "attr",
+          "target": {
+            "by": "css",
+            "value": ".ant-modal .ant-switch",
+            "nth": 0
+          },
+          "name": "aria-checked",
+          "value": "false",
+          "note": "允许重交=关（与 TC-CLD-02 一致，保证两班口径可比）"
+        },
+        {
+          "action": "pickOption",
+          "trigger": {
+            "by": "id",
+            "value": "assign-score-policy"
+          },
+          "option": {
+            "by": "text",
+            "value": "取最后（最新一次）"
+          }
+        },
+        {
+          "action": "pickOption",
+          "trigger": {
+            "by": "id",
+            "value": "assign-answer-visibility"
+          },
+          "option": {
+            "by": "text",
+            "value": "发布后可见"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "role",
+            "role": "status",
+            "name": "信息齐了，可以布置"
+          }
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "立即布置"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "布置成功"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "cld-07-class2-assigned",
+          "fullPage": true
+        }
+      ],
+      "note": "与 TC-CLD-02 的唯一差别是班级；题目、时间口径、开关保持一致，故两个班结果可直接横向对比。",
+      "precondition": "fixtures.questionTitle.value 非空（复用路径）；若为空则先完成 TC-CLD-01 的新建分支。全新 context（避免 localStorage 草稿干扰）。开关次序：① 选实训题 -> ② 设次数上限=1 -> ③ 关闭「允许重交」-> ④ 计分口径选「取最后」-> ⑤ 答案可见性选「发布后可见」",
+      "mutatingOrder": "① 选实训题 -> ② 设次数上限=1 -> ③ 关闭「允许重交」-> ④ 计分口径选「取最后」-> ⑤ 答案可见性选「发布后可见」"
+    },
+    {
+      "id": "TC-CLD-08",
+      "group": "G10 云端双班实训题实战（写流程）",
+      "priority": "P0",
+      "title": "测试 2 班学生逐个登录、上传并提交（D/E/F 轮转均匀分布）",
+      "mutates": true,
+      "mutationRisk": "同 TC-CLD-04，且**再次产生 AI 评分费用**。",
+      "dataDriven": {
+        "over": "cloudFixtures.class2.students",
+        "as": "student",
+        "asset": "distributionRules.class2 → pool[i % 3]"
+      },
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${student.username}",
+            "password": "${student.password}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/student/assignments"
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "E2E-UI-测试2班-SpringMVC-{ts}"
+          }
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "text",
+            "value": "E2E-UI-测试2班-SpringMVC-{ts}"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "urlContains",
+          "value": "/project/"
+        },
+        {
+          "action": "uploadFile",
+          "trigger": {
+            "by": "css",
+            "value": ".kind-add-btn"
+          },
+          "input": {
+            "by": "css",
+            "value": "input[type=file][accept=\".zip\"]"
+          },
+          "file": "${materials.studentSubmissions.pool[assetIndex].path}"
+        },
+        {
+          "action": "poll",
+          "target": {
+            "by": "text",
+            "value": "资源管理器"
+          },
+          "assert": "visible",
+          "timeoutMs": 180000
+        },
+        {
+          "action": "click",
+          "target": {
+            "by": "role",
+            "role": "button",
+            "name": "提交答案"
+          }
+        },
+        {
+          "action": "expect",
+          "assert": "visible",
+          "target": {
+            "by": "text",
+            "value": "评分完成后将在此显示成绩"
+          }
+        },
+        {
+          "action": "screenshot",
+          "name": "cld-08-stu{i}-{asset}-submitted",
+          "fullPage": true
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "得分 "
+        }
+      ],
+      "mapping": {
+        "i=0": "D",
+        "i=1": "E",
+        "i=2": "F",
+        "i=3": "D",
+        "i=4": "E",
+        "i=5": "F"
+      },
+      "_gradeingNote": "v1.3：提交即触发评分（enqueueProjectGrade），学生端此后会短暂显示「评分中...」（Submit.vue:108 / ProjectQuestionEdit 的 pending 提示）。「评分完成后将在此显示成绩」在评分前后都可能命中（未发布就一直显示），故它只证明学生看不到分，不能证明评分未完成。"
+    },
+    {
+      "id": "TC-CLD-09",
+      "group": "G10 云端双班实训题实战（写流程）",
+      "priority": "P0",
+      "title": "测试 2 班评分核对：观察自动完成；如有个别异常才点「重新评分」兜底",
+      "mutates": true,
+      "mutationRisk": "默认路径为纯等待（评分已由提交触发）。仅当出现「评分异常」时才点「重新评分」，那会再次调用模型并产生费用，每次重评单独记录。",
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.username}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/review"
+        },
+        {
+          "action": "poll",
+          "target": {
+            "by": "text",
+            "value": "E2E-UI-测试2班-SpringMVC-{ts}"
+          },
+          "assert": "visible",
+          "timeoutMs": 60000
+        },
+        {
+          "action": "screenshot",
+          "name": "cld-09-class2-baseline"
+        },
+        {
+          "action": "poll",
+          "target": {
+            "by": "text",
+            "value": "已评分"
+          },
+          "assert": "visible",
+          "timeoutMs": 1800000,
+          "intervalMs": 20000,
+          "note": "主路径：提交即入队，等待全部转「已评分」"
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/review/class/${fixtures.class2.id}?assignmentId=${fixtures.assignmentId2}"
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "数据加载失败"
+        },
+        {
+          "action": "screenshot",
+          "name": "cld-09-class2-graded"
+        },
+        {
+          "action": "annotate",
+          "value": "若存在状态为「评分异常」的学生：进入其审核详情，点「重新评分」（2 字按钮，需 nameLoose），等待转「AI 已评分」；每次重评都要单独记录，便于费用核算"
+        },
+        {
+          "action": "annotate",
+          "value": "【v1.3 删除】原末步 pageTextNotContains「评分异常」会把「如实记录异常数」与「判红」混为一谈；异常数改为报告里的计数项，不再作为断言"
+        }
+      ],
+      "why": "同 TC-CLD-05：评分在提交时触发；本用例只核对结果状态与异常兜底。"
+    },
+    {
+      "id": "TC-CLD-10",
+      "group": "G10 云端双班实训题实战（写流程）",
+      "priority": "P0",
+      "title": "双班同题结果横向对照（A/B/C vs D/E/F）",
+      "mutates": false,
+      "steps": [
+        {
+          "action": "use",
+          "macro": "login",
+          "args": {
+            "username": "${accounts.teacher.username}",
+            "password": "${accounts.teacher.password}"
+          }
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/review/class/{class1.id}?assignmentId={assignmentId1}"
+        },
+        {
+          "action": "screenshot",
+          "name": "cld-10-compare-class1",
+          "fullPage": true
+        },
+        {
+          "action": "goto",
+          "path": "/teacher/review/class/{class2.id}?assignmentId={assignmentId2}"
+        },
+        {
+          "action": "screenshot",
+          "name": "cld-10-compare-class2",
+          "fullPage": true
+        },
+        {
+          "action": "annotate",
+          "value": "产出一张对照表：学生 → 素材(A–F) → AI 总分 → 分项明细 → 是否有总评。用于判断六份答案的分数是否拉开梯度、评语是否言之有物"
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "数据加载失败"
+        },
+        {
+          "action": "expect",
+          "assert": "pageTextNotContains",
+          "value": "Prisma"
+        }
+      ],
+      "output": "双班评分对照表（Markdown 表格，并入最终报告）",
+      "precondition": "fixtures.class1.id / class2.id / assignmentId1 / assignmentId2"
+    }
+  ],
+  "executionPolicy": {
+    "ordering": "按 group 顺序执行；G0（TC-CAL-01）定位校准 + 云端现勘必须先跑，产出 locator-report.json 与 cloud-fixtures.json；命中率 < 90% 或夹具绑定失败则后续标记 BLOCKED。G10 依赖 TC-CAL-01 的 class1/class2 名单与题库现状。",
+    "isolation": "每个 case 使用独立 browser context；同一角色在多用例间可用 storageState 复用。但布置作业草稿存在 localStorage（DRAFT_KEY=assign-draft-v1，useAssignmentForm.js:93）：复用同一 storageState 的用例之间草稿会串味（TC-TCH-02 依赖还空着的表单）。故 G5 的每个用例、以及所有断言「还差：」形态的用例，必须用全新 context，或先清 localStorage。G10 的每个学生必须独立 context（避免登录态串味）。",
+    "nameNormalization": {
+      "_why": "云端实测：ant-design-vue autoInsertSpaceInButton 让 2 字中文按钮渲染成「登 录」。",
+      "rule": "执行器在解析 target 时，若 by=role 且 name 恰为 2 个 CJK 字符，**自动**按忽略内部空白匹配（等价 nameLoose:true）。无需逐条在步骤里标注。",
+      "scope": "role ∈ {button, link, menuitem, tab, radio}",
+      "examples": [
+        "登录→登 录",
+        "保存→保 存",
+        "取消→取 消",
+        "删除→删 除",
+        "审核→审 核",
+        "重置→重 置",
+        "刷新→刷 新",
+        "编辑→编 辑",
+        "返回→返 回",
+        "关闭→关 闭",
+        "锁定→锁 定",
+        "解锁→解 锁",
+        "展开→展 开",
+        "收起→收 起",
+        "放弃→放 弃"
+      ],
+      "unaffected": [
+        "3 字及以上不受影响：布置作业 / 新增题目 / 立即布置 / 保存审核 / 发布成绩 / 提交全部 / 提交答案 / 重新评分 / 清空筛选 / 返回继续作答 / 题目描述 / 评分标准 / 保存描述 / 保存评分标准"
+      ]
+    },
+    "dataDrivenExpansion": "带 dataDriven 的用例由执行器按 cloudFixtures 中的学生列表展开为 N 条子用例（id 形如 TC-CLD-04/stu1），每条独立截图与断言；素材按下标 i % pool.length 从 distributionRules 取值。",
+    "sideEffects": "所有 mutates=false 的用例禁止点「立即布置」「保存审核」「发布成绩」「保存」「删除」「新增」等写操作，只做渲染与校验断言；确需触碰弹窗时一律以「取消/返回继续作答/Escape」收尾。",
+    "mutatingCases": "G10（TC-CLD-01/02/04/07/08/09）为**显式授权的写流程**，会真实写入云端生产库并产生模型费用。G5/G6 内的 TC-STU-06、TC-REV-05、TC-REV-06 仍为「只断言不落库」。任何**计划外**的写入立即记录为事故并停止。",
+    "retries": 0,
+    "timeoutMs": {
+      "case": 900000,
+      "expect": 8000,
+      "navigation": 30000,
+      "upload": 180000,
+      "aiGradingPoll": 1800000
+    },
+    "screenshots": "每 case 至少 1 张；G10 每名学生每步各 1 张；失败时自动补失败态截图与 trace。默认 fullPage=false（见 environment.screenshotPolicy）：宽表格页 fullPage 会横向拼接失真。",
+    "noNetworkAssertions": "不使用 waitForResponse/route 做等待；异步等待一律用 poll 对 DOM 文本轮询（如『评分中』→『已评分』）。",
+    "retriesNote": "retries=0 表示不重试（0 次重试），避免用重试掩盖 flaky 定位。",
+    "dataCuration": {
+      "_note": "夹具持久化是执行器职责（不是页面上能点的动作），此处显式声明，避免「只 annotate 不落地」。",
+      "TC-CAL-01": [
+        "把 fixtures.runtimeFixtures 的每个键写进 cloud-fixtures.json",
+        "tc-cal-01-checks：逐个定位子断言 count>=1 并记录实际命中数、DOM 路径、可访问名",
+        "命中率 = 命中定位子数 / 本文件用到的定位子总数（含 first() 归一后的计数）"
+      ],
+      "TC-CLD-00": [
+        "学生管理页逐班翻页取全量（默认 20 条/页，40 人需第 1、2 页）",
+        "把学生名单按页面顺序写入 class1.students / class2.students（作为轮转下标 i 的唯一依据）",
+        "写入 student.username / project / unpublished 等派生夹具"
+      ]
+    }
+  },
+  "gates": {
+    "blockRun": [
+      "G0（TC-CAL-01）定位校准命中率 < 90% 则停止主流程，先修正定位子。",
+      "TC-CAL-01 未能在云端绑定 class1/class2 名单与 student 夹具，则 G3/G4/G9 相关用例 BLOCKED。",
+      "TC-CLD-00 未在云端找到「测试 1 班」或「测试 2 班」，则 G10 整体 BLOCKED（需用户先在云端把班级与学生准备好）。",
+      "素材路径不可读，或 A–F / 标准包任一缺失，则 G10 BLOCKED。",
+      "用户未确认「在生产环境跑写流程」，则 G10 不启动（G1–G9 只读组可先跑）。",
+      "需要夹具而夹具为空（runtimeFixtures.published / expired / submission 未绑定），对应用例判 BLOCKED，不静默跳过、不降级为假红。"
+    ],
+    "stopRun": [
+      "出现任何**计划外**的数据写入（非 G10 声明对象的增删改，或成绩被改动）。",
+      "页面出现 500，或 Prisma/SQL 内部文本上屏。",
+      "学生端在未发布状态下看到分数或 AI 评语（泄分）。",
+      "G10 中出现「确认按开放性题目布置」软警告 ⇒ 说明标准包未生效，立即停止待查。"
+    ],
+    "costWarning": {
+      "_note": "G10 会触发两轮真实 AI 评分。v1.3 更正：评分在提交时即入队，不等截止。",
+      "estimate": "以 2 个班、每班 N 人计：总计 2N 次实训题评分；并发 3（D6）、单份约数十秒，每班 40 人约 10~15 分钟评完。费用按实际模型与题量计，执行前请预留预算。",
+      "unknowns": "两个班人数在 TC-CLD-00 之前未知，无法给出精确金额；TC-CAL-01 会先报数再开跑。"
+    }
+  },
+  "outOfScope": [
+    "后端 API 契约、数据库断言、并发与性能压测。",
+    "清理/回滚：G10 写入的生产数据不由本计划自动删除，由用户复核报告后人工处置。",
+    "Chrome 69 / legacy 构建分支（另有专项）。",
+    "移动端 H5（当前视口固定桌面 1440x900；仅 TC-REV-07 临时切 900x900 观察抽屉分支）。",
+    "「学生答错时的判据/装置行为」等后端评分正确性判定 —— 本计划只验证页面呈现是否合理，不对 AI 给分是否符合参考答案下结论；也不断言评分触发时机本身（只记录实测耗时）。"
+  ],
+  "_v11ChangeLog": [
+    "目标环境由本地改为**云端** https://deadpan.asia/exam/（用户 2026-10-16 明确：云端有数据）。",
+    "新增 G10『云端双班实训题实战』（11 条用例）：建实训题 → 测试1班布置 → 学生逐个提交(A/B/C轮转) → 改卷 → 测试2班同样(D/E/F轮转)。",
+    "新增 materials 素材段（Spring MVC 标准包 + A–F 六份学生答案 + 题目描述 + 评分标准）。",
+    "新增 distributionRules 分布规则（roundRobin）。",
+    "动作词表新增 uploadFile / poll。",
+    "新增 nameNormalization 全局规则：2 字中文按钮的自动插空格问题（云端实测发现）。",
+    "fixtures 段标记本地快照作废，改为 UI 现勘生成 cloud-fixtures.json。",
+    "G5/G6/G7 中对本地夹具（作业 353/357 等）的断言在云端失效 ⇒ 见 _cloudRecheckNeeded。"
+  ],
+  "_cloudRecheckNeeded": [
+    "TC-CAL-01 执行时重采云端夹具（本次现勘快照仅供参照，不作为断言依据）。",
+    "G4 跨路径口径一致需要「已发布成绩」夹具：本轮若未发布任何成绩，TC-CONS-01/03 判 BLOCKED 而不是拿旧 id 硬跑。",
+    "G7 的班级/学生断言按 cloudFixtures 改为「测试 1 班 / 测试 2 班」。",
+    "G8 学校管理的「每页条数 20->50」需按云端实际分页配置校准。"
+  ],
+  "_v12ChangeLog": [
+    "【决策 A 落定·用户同意】新增 assignmentProfile：允许重交=关、次数上限=1、取最后、发布后可见；TC-CLD-02/07 补齐开关操作步骤。",
+    "【决策 B 落定】新增 deadlinePlan：窗口按人数公式推算（N<=40 取 10 分钟，封顶 25 分钟）；TC-CLD-02/07 改为在 #assign-range 精确输入起止时刻。",
+    "【决策 C（原表述）】新增 gradingSemantics；TC-CLD-05/09 曾按「截止后自动评分」设计 —— v1.3 已按代码更正为提交即触发。"
+  ],
+  "fixtureRequirements": {
+    "_note": "每个用例运行前必须满足的夹具。执行器在夹具缺失时判 BLOCKED（gates.blockRun 第 6 条），严禁改用硬编码 id 或退化成空过断言。",
+    "TC-STU-04": [
+      "fixtures.student",
+      "fixtures.studentAssignmentId"
+    ],
+    "TC-STU-05": [
+      "fixtures.student",
+      "fixtures.studentAssignmentId"
+    ],
+    "TC-STU-06": [
+      "fixtures.student",
+      "fixtures.unsubmittedAssignmentId（未提交态）"
+    ],
+    "TC-STU-07": [
+      "fixtures.expired（由本轮 10 分钟窗口作业在窗口过后天然满足）"
+    ],
+    "TC-CONS-01": [
+      "fixtures.published",
+      "fixtures.published.assignmentTitle / scoreText"
+    ],
+    "TC-CONS-02": [
+      "fixtures.unpublished"
+    ],
+    "TC-CONS-03": [
+      "fixtures.unpublished 或 fixtures.published 的教师侧对应行",
+      "fixtures.submission"
+    ],
+    "TC-REV-01/02/03": [
+      "fixtures.teacher",
+      "审核列表至少 1 行"
+    ],
+    "TC-REV-05/06": [
+      "fixtures.teacher",
+      "审核列表至少 1 行（否则进不去详情页）"
+    ],
+    "TC-REV-07": [
+      "fixtures.teacher",
+      "fixtures.submission"
+    ],
+    "TC-PRJ-01": [
+      "fixtures.project"
+    ],
+    "TC-PRJ-02": [
+      "fixtures.submission"
+    ],
+    "TC-CLD-02/07": [
+      "fixtures.questionTitle（实训题标题，来自 TC-CLD-00 现勘）"
+    ],
+    "TC-CLD-03/04": [
+      "fixtures.class1.students"
+    ],
+    "TC-CLD-08": [
+      "fixtures.class2.students"
+    ],
+    "TC-CLD-05/06/10": [
+      "fixtures.teacher",
+      "fixtures.class1.id",
+      "fixtures.assignmentId1"
+    ],
+    "TC-CLD-09": [
+      "fixtures.teacher",
+      "fixtures.class2.id",
+      "fixtures.assignmentId2"
+    ]
+  },
+  "_v13ChangeLog": [
+    "【核心更正 · 评分语义】gradingSemantics 由 deadlineTriggered 改为 gradeOnSubmit：实训题提交即 enqueueProjectGrade（并发 3），server 无截止调度器；学生端看不到分是 published 可见性门禁所致。TC-CLD-05/09 的「截止前不得出分」反向断言作废，改为「提交->已评分耗时观测」+「学生端防泄分」。",
+    "【合规修复 · fail-closed】actionVocabulary 补登记 use（宏调用）动作 —— 原 54 处使用未登记，按本节规则会整份 BLOCKED。",
+    "【清理 · 失效夹具】删除 fixtures._superseded 本地快照；TC-CONS-01/02/03、TC-STU-04/05/06/07 的硬编码 id 全部改为引用 fixtures.runtimeFixtures；新增 fixtureRequirements 表与 TC-CAL-01 现勘绑定步骤。",
+    "【删除 · 未声明变量】E2E_TEACHER_PASSWORD / E2E_STUDENT_PASSWORD / E2E_ADMIN_PASSWORD / E2E_MULTISCHOOL_* 等全部取消，统一走 secrets.accounts + runtimeFixtures。",
+    "【修正 · 定位子】macro logout 改为点 .app-topbar .user-area 并用 css 收窄确认按钮；TC-A11Y-01 的 by:complementary/banner 改为合法 by:role；TC-STU-01 的 .list-count 换成真实文案；TC-REV-02/TC-CLS-01/TC-STU-10 的「软件工程1班」换成「测试 1 班」；TC-REV-07 加 900x900 视口覆盖并把同名 aria-controls 拆成折叠按钮与抽屉两个显式选择器；TC-CLS-01 弹窗确认按钮用 .ant-modal-footer 收窄。",
+    "【补齐 · 前置步骤】TC-REV-05/06/07 补登录与进详情页；TC-REV-04/TC-PRJ-01/TC-PRJ-02 把「annotate 代替 goto」改成真实导航；TC-CONS-03 改为真正进入审核详情页断言；TC-ADM-02/04 补管理员登录。",
+    "【修正 · 选题】TC-CLD-02/07 的题目搜索串改为 fixtures.questionTitle（云端既有《Spring MVC 数据绑定和响应》期末实践考试），点选方式由不存在的 role=radio 改为表格整行点选（customRow）。",
+    "【订正 · 视口与截图】计划正文 1600x1000 改为 1440x900（与 JSON 及代码设计宽度一致）；新增 screenshotPolicy（宽表格页不用 fullPage）。",
+    "【订正 · 元数据】TC-CLD-01 标注 mutates:true（复用核对失败时会降级为新建）；retries 注释澄清为「0 次重试」。",
+    "【删除 · 用户决定】移除 TC-AUTH-13（多学校账号分支）及其 secrets.multischool / fixtureRequirements 条目：该分支需要「同一学号挂在两所学校」的账号，云端暂无且用户不需要此覆盖。G1 由 13 条减为 12 条，全部用例数 69 -> 68。",
+    "【v1.4 实测更正】gradingSemantics 不再断言「提交即触发评分」：云端 80 份提交 3 天未评，实测支持「提交不触发评分」；同时确认代码/文档中不存在峰谷调度机制。新增 cloudObservation（逐行实测数据）与 mustConfirmBeforeRun（开跑前 1 人探针）。",
+    "【v1.4 实测修正】表格行定位由 `table tbody tr` 改为 `table tbody tr.ant-table-row`：云端实测 antd 表格首行是 aria-hidden 的 .ant-table-measure-row，Playwright 点不到（not visible）⇒ 原有 5 处「点整行」步骤会直接超时。",
+    "【v1.4 探针实测】写入 secrets/assignmentProfile/projectSubmitObserved/actionVocabulary 四处实测更正：①学生口令=123456（同学号会失败）；②布置弹窗只有 1 个开关，计分口径/答案可见性是 a-select，时间 input 用 placeholder 定位；③「立即布置」无确认框；④实训题「提交答案」无二次确认，19MB 包前端过滤仅 ~3 秒；⑤表格行必须用 tr.ant-table-row。",
+    "【v1.5 探针实测更正】gradingSemantics 定为 autoGradedAfterSubmit：1 人探针（作业 21 / test_s1_01 / A.zip）在截止**前** 8 分钟即已「已评分」，单份 < 2 分钟 ⇒ 评分由提交后的异步链路完成，与截止无关，也不存在峰谷调度。同时新增 backlogAnomaly 记录两场 40/40 作业 3 天未评的存量异常。"
+  ],
+  "knownRisks": [
+    {
+      "id": "K-1",
+      "risk": "存量作业可能长期停在「待评分」（环境历史问题）",
+      "evidence": "两场 40/40 的作业提交 3 天后仍待评分；但同一环境下 1 人探针 2 分钟内即已评分。",
+      "impact": "若误把存量作业当作「自动评分不可用」的证据，会错误地取消整轮测试。",
+      "mitigation": "以探针为准（已通过）；存量积压不影响新建作业的评分；报告里如实记录该对照。"
+    }
+  ],
+  "projectSubmitObserved": {
+    "_at": "2026-10-16 23:24（test_s1_01 提交 A.zip，作业 21 / 题目 15）",
+    "entry": "学生作业列表点卡片 → /student/assignments/21/project/15",
+    "uploader": ".kind-add-btn 与 input[type=file][accept=\".zip\"] 各 1 个；点圆钮后 setInputFiles 即被页面消费",
+    "filterTime": "19MB 的 A.zip 前端过滤耗时 ≈ 3.0 秒（远低于计划里 180 秒的上传超时，可下调）",
+    "tree": "过滤完成后出现 .zu-tree（「资源管理器」），首项是包内顶层目录名（A），随后 .github / pom.xml / src/main/java/... 逐级展开",
+    "submit": "点「提交答案」**没有二次确认框**，直接提交成功（原计划 TC-STU-06 假设的确认框属于「提交全部」那条路径，实训题不是）",
+    "afterSubmit": "页面状态变「已提交，待评分」+「提交于 2026-10-16 23:24:04」+「评分完成后将在此显示成绩」；**无分数、无评语**",
+    "studentListStatus": "作业列表卡片显示「已提交」；窗口内显示「（剩 0 小时）」"
+  }
+}
