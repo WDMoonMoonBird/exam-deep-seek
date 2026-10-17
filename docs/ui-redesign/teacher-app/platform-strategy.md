@@ -52,3 +52,36 @@ client/src（现有 Web，桌面不动）
 - Android WebView 版本碎片化 → 移动 UI 只用成熟 CSS（已在设计稿中避免新特性）
 - iOS 若先用 PWA：需"添加到主屏"才有推送（16.4+），且长期不用可能被清存储
 - 真机验收需让手机能访问开发服务：`vite --host` 暴露局域网 IP，或先部署到服务器再看
+
+## 七、小屏自动切换移动版（用户建议 → 采纳，附四条约束）
+
+**结论：采纳**「小屏自动进移动版」，但不能只靠宽度判断，必须配四个机制，否则会踩坑。
+
+| 约束 | 做法 |
+|---|---|
+| **判定信号要组合** | `matchMedia('(max-width: 767px)')` **且** `matchMedia('(pointer: coarse)')`（触摸）→ 才判为手机。宽度单独判会把"桌面端缩窗口"误切；UA 不作主判据（iPad 默认桌面 UA、易伪造） |
+| **只在入口跳一次** | 判定发生在**首次进入/新页面导航**时，写入偏好 `localStorage['ui:layout']`；运行中旋转屏幕或拖窗口**不整页跳走**（否则填一半的表单会丢） |
+| **必须有手动兜底** | 提供「切换到桌面版 / 移动版」开关（写入偏好，优先级高于自动判定）；手机上想用完整表格、或手机连投影时要用得到 |
+| **独立路由 `/m/*`** | 移动端布局结构不同（底部 Tab vs 侧栏），不共用 Layout；`/teacher/xxx` 与 `/m/xxx` 做映射，跳转保留 query/hash；桌面访问 `/m/*` 给一条"这是移动版，去桌面版"提示条 |
+
+**实现草图**
+
+```js
+// composables/useMobileLayout.js
+const mqW = matchMedia('(max-width: 767px)');
+const mqTouch = matchMedia('(pointer: coarse)');
+const pref = ref(localStorage.getItem('ui:layout') || 'auto');   // auto | mobile | desktop
+const isMobile = computed(() =>
+  pref.value === 'mobile' ||
+  (pref.value === 'auto' && mqW.matches && mqTouch.matches));
+
+// router.beforeEach：仅当 pref=auto 且 isMobile 时，把 /teacher/x 映射到 /m/x
+```
+
+**性能与测试**
+
+- 移动版组件与 Vant **路由级动态 import** → 桌面用户不下载移动端 chunk
+- Playwright 双 viewport 断言：手机视口→自动进 `/m`；桌面视口→不跳；手动切桌面版后刷新仍保持
+- **不做服务端 UA 分流**（维护两份 HTML 得不偿失，SPA 内判定已足够且对缓存友好）
+
+**需要产品决策**：手机上做不了的功能（Monaco 写代码、表格批量操作）在移动版里**隐藏**还是**给"请用电脑打开"引导**——这决定移动版的功能边界。
