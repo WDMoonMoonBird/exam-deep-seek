@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>批量审核 · 多选 · 移动端设计稿</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+  .t-batchbar { display: flex; align-items: center; }
+  .t-batch-title { font-size: 15px; font-weight: 650; }
+  .t-batch-title b { color: var(--text-brand); font-variant-numeric: tabular-nums; }
+  .t-batch-sub { margin-top: 2px; font-size: 12px; color: var(--text-tertiary); }
+  .t-batch-actions { display: flex; align-items: center; flex: none; margin-left: 10px; }
+  .t-batch-actions .btn { height: 44px; padding: 0 14px; border-radius: 10px; font-size: 13.5px; }
+  .t-batch-actions .btn + .btn { margin-left: 6px; }
+  .t-listhead { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; margin: 18px 0 8px; font-size: 12px; color: var(--text-tertiary); }
+  .t-label { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+  .t-batchrow { display: flex; align-items: center; width: 100%; text-align: left; min-height: 64px; padding: 10px var(--m-card-pad); background: var(--card-bg); }
+  .t-batchrow + .t-batchrow { box-shadow: inset 0 1px 0 var(--border-subtle); }
+  .t-batchrow:active { background: var(--bg-hover); }
+  .t-batchrow[data-check].on { background: var(--bg-selected); }
+  .t-batchrow .check { margin-right: 12px; }
+  .t-batchrow[data-check].on .check { background: var(--brand-600); border-color: var(--brand-600); color: var(--text-on-brand); }
+  .t-batchrow .avatar { margin-right: 11px; }
+  .t-batch-main { flex: 1; min-width: 0; }
+  .t-batch-name { font-size: 14.5px; font-weight: 500; }
+  .t-batch-meta { margin-top: 2px; font-size: 12px; color: var(--text-tertiary); }
+  .t-batch-score { flex: none; text-align: right; margin-left: 10px; }
+  .t-batch-score b { display: block; font-size: 18px; line-height: 1.2; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .t-batch-score b.is-low { color: var(--status-danger-fg); }
+  .t-batch-score span { font-size: 11px; color: var(--text-tertiary); }
+  .t-batchrow.is-disabled { opacity: .55; }
+  .t-foot-tip { margin-top: 14px; }
+
+  /* 触控目标补足（视觉尺寸保持屏幕契约值，命中区域扩到 ≥44px） */
+  .chip, .seg button, .btn--sm, .btn--xs, .tool, .diffmore, .sheet-close, .t-expand, button.avatar, .switch { position: relative; }
+  .chip::after, .seg button::after, .btn--sm::after, .btn--xs::after, .tool::after, .diffmore::after, .sheet-close::after, .t-expand::after, button.avatar::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%);
+  }
+  .switch::before { content: ""; position: absolute; left: -6px; right: -6px; top: -7px; bottom: -7px; }
+  .searchbar { height: 44px; }
+</style>
+</head>
+<body class="screen" data-screen="teacher-batch-select" data-bottom="actionbar">
+  <div class="app">
+    <header class="appbar appbar--solid appbar--bordered">
+      <div class="appbar-side"><button type="button" class="iconbtn" data-icon="close" aria-label="退出批量审核" data-goto="teacher-review-queue"></button></div>
+      <h1 class="appbar-title">批量审核<small>用户管理系统（前端）实训 · 待审核 12</small></h1>
+      <div class="appbar-actions"><button type="button" class="iconbtn iconbtn--text" data-goto="teacher-review-queue">完成</button></div>
+    </header>
+
+    <main class="scroll">
+      <div class="page mt8">
+        <div class="card t-batchbar">
+          <div class="grow">
+            <div class="t-batch-title">已选 <b>3</b> 项</div>
+            <div class="t-batch-sub">平均 AI 分 85.3 · 本页共 45 人</div>
+          </div>
+          <div class="t-batch-actions">
+            <button type="button" class="btn btn--secondary">全选本页</button>
+            <button type="button" class="btn btn--ghost">取消</button>
+          </div>
+        </div>
+
+        <div class="t-listhead">
+          <span>待审核提交 · 按 AI 分排序</span>
+          <span>已选 3 / 45</span>
+        </div>
+
+        <div class="list" role="group" aria-label="选择要批量审核的提交">
+          <button type="button" class="t-batchrow" data-check aria-pressed="true">
+            <span class="check on" aria-hidden="true"><span data-icon="check"></span></span>
+            <span class="avatar avatar--sm">陈</span>
+            <span class="t-batch-main">
+              <span class="t-batch-name" style="display:block">陈嘉懿</span>
+              <span class="t-batch-meta" style="display:block">2025010101 · 第 2 题 · 10 分钟前提交</span>
+            </span>
+            <span class="t-batch-score"><b>92</b><span>AI 分</span></span>
+          </button>
+          <button type="button" class="t-batchrow" data-check aria-pressed="true">
+            <span class="check on" aria-hidden="true"><span data-icon="check"></span></span>
+            <span class="avatar avatar--sm">周</span>
+            <span class="t-batch-main">
+              <span class="t-batch-name" style="display:block">周予安</span>
+              <span class="t-batch-meta" style="display:block">2025010104 · 第 2 题 · 42 分钟前提交</span>
+            </span>
+            <span class="t-batch-score"><b>88</b><span>AI 分</span></span>
+          </button>
+          <button type="button" class="t-batchrow" data-check aria-pressed="true">
+            <span class="check on" aria-hidden="true"><span data-icon="check"></span></span>
+            <span class="avatar avatar--sm">赵</span>
+            <span class="t-batch-main">
+              <span class="t-batch-name" style="display:block">赵可欣</span>
+              <span class="t-batch-meta" style="display:block">2025010112 · 第 2 题 · 1 小时前提交</span>
+            </span>
+            <span class="t-batch-score"><b>76</b><span>AI 分</span></span>
+          </button>
+          <button type="button" class="t-batchrow" data-check aria-pressed="false">
+            <span class="check" aria-hidden="true"><span data-icon="check"></span></span>
+            <span class="avatar avatar--sm">王</span>
+            <span class="t-batch-main">
+              <span class="t-batch-name" style="display:block">王雨桐</span>
+              <span class="t-batch-meta" style="display:block">2025010115 · 第 2 题 · 3 小时前提交</span>
+            </span>
+            <span class="t-batch-score"><b>94</b><span>AI 分</span></span>
+          </button>
+          <div class="t-batchrow is-disabled">
+            <span class="check" aria-hidden="true"><span data-icon="check"></span></span>
+            <span class="avatar avatar--sm avatar--gray">李</span>
+            <span class="t-batch-main">
+              <span class="t-batch-name muted" style="display:block">李思远</span>
+              <span class="t-batch-meta" style="display:block">2025010107 · 尚未提交，不可选择</span>
+            </span>
+            <span class="t-batch-score"><span class="tag tag--neutral">未提交</span></span>
+          </div>
+        </div>
+
+        <div class="banner banner--warning t-foot-tip">
+          <span data-icon="alert"></span>
+          <div>批量通过会立即发布成绩且不可撤销；分数低于 60 的提交建议逐份复核后再通过。</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="actionbar">
+    <button type="button" class="btn btn--secondary" aria-label="更多批量操作"><span data-icon="more"></span>更多</button>
+    <button type="button" class="btn btn--primary" data-goto="teacher-batch-confirm">审核通过 (3)</button>
+  </div>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

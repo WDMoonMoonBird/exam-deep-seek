@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>评分审核队列 · 移动端设计稿</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+  .t-queuehead { padding: 2px var(--m-gutter) 12px; }
+  .t-progressline { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text-secondary); }
+  .t-progressline b { color: var(--text-primary); font-weight: 650; font-variant-numeric: tabular-nums; }
+  .t-progressline .t-remain { color: var(--text-tertiary); }
+  .t-queuehead .bar { margin-top: 8px; }
+  .t-reviewcard { padding-bottom: 14px; }
+  .t-student { display: flex; align-items: center; }
+  .t-name { font-size: 16px; font-weight: 650; line-height: 1.35; }
+  .t-sub { margin-top: 2px; font-size: 12px; color: var(--text-tertiary); }
+  .t-scoreline { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 14px; }
+  .t-scoreline .score-hero b { font-size: 52px; }
+  .t-scorelabel { font-size: 12px; color: var(--text-tertiary); margin-bottom: 4px; }
+  .t-tier { margin-top: 18px; }
+  .t-metric { display: flex; align-items: center; font-size: 12.5px; }
+  .t-metric + .t-metric { margin-top: 9px; }
+  .t-metric-k { flex: none; width: 62px; color: var(--text-secondary); }
+  .t-metric .bar { flex: 1; margin-right: 10px; }
+  .t-metric-v { flex: none; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+  .t-metric-v small { font-weight: 400; color: var(--text-tertiary); }
+  .t-ainote { margin-top: 16px; }
+  .t-ainote .ai-note { padding: 12px 14px; }
+  .t-expand { display: inline-flex; align-items: center; height: 32px; margin: -6px -6px -6px 0; padding: 0 6px; font-size: 12px; font-weight: 500; color: var(--text-link); }
+  .t-expand .icon { width: 14px; height: 14px; margin-left: 2px; }
+  .t-gesture { display: flex; align-items: center; justify-content: center; margin: 16px 0 12px; font-size: 12px; color: var(--text-tertiary); }
+  .t-gesture .icon { width: 15px; height: 15px; margin-right: 5px; color: var(--text-tertiary); }
+  .t-gesture > span + span { margin-left: 16px; }
+  .t-nextcard { display: flex; align-items: center; width: 100%; text-align: left; padding: 12px var(--m-card-pad); background: var(--card-bg); border: 1px solid var(--card-bd); border-radius: var(--m-radius-card); }
+  .t-nextcard .avatar { margin-right: 11px; }
+  .t-next-main { flex: 1; min-width: 0; }
+  .t-next-title { font-size: 14px; font-weight: 600; }
+  .t-next-sub { margin-top: 2px; font-size: 12px; color: var(--text-tertiary); }
+  .t-next-score { flex: none; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-secondary); margin-right: 8px; }
+  .t-nextcard .chevron { width: 16px; height: 16px; }
+  .t-queuebar { position: fixed; left: 0; right: 0; bottom: var(--m-tabbar-total); z-index: var(--m-z-actionbar); display: flex; align-items: center; padding: 9px var(--m-gutter); background: var(--m-actionbar-bg); box-shadow: 0 -1px 0 var(--border-subtle); }
+  .t-queuebar .btn { flex: 1; }
+  .t-queuebar .btn--secondary { flex: 0 0 34%; }
+  .t-queuebar .btn + .btn { margin-left: 10px; }
+  body[data-screen="teacher-review-queue"] .scroll { padding-bottom: calc(var(--m-tabbar-total) + 72px); }
+
+  /* 触控目标补足（视觉尺寸保持屏幕契约值，命中区域扩到 ≥44px） */
+  .chip, .seg button, .btn--sm, .btn--xs, .tool, .diffmore, .sheet-close, .t-expand, button.avatar, .switch { position: relative; }
+  .chip::after, .seg button::after, .btn--sm::after, .btn--xs::after, .tool::after, .diffmore::after, .sheet-close::after, .t-expand::after, button.avatar::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%);
+  }
+  .switch::before { content: ""; position: absolute; left: -6px; right: -6px; top: -7px; bottom: -7px; }
+  .searchbar { height: 44px; }
+</style>
+</head>
+<body class="screen" data-screen="teacher-review-queue" data-bottom="tabbar">
+  <div data-tabbar="teacher" data-active="review"></div>
+
+  <div class="app">
+    <header class="appbar appbar--solid appbar--bordered">
+      <div class="appbar-side"><button type="button" class="iconbtn" data-icon="close" aria-label="结束本轮审核，返回作业列表" data-goto="teacher-assignments"></button></div>
+      <h1 class="appbar-title">评分审核<small>第 5 份 / 共 12 份</small></h1>
+      <div class="appbar-actions"><button type="button" class="iconbtn iconbtn--text" data-goto="teacher-assignments">完成</button></div>
+    </header>
+
+    <main class="scroll">
+      <div class="t-queuehead">
+        <div class="t-progressline">
+          <span>本轮进度 <b>5 / 12</b></span>
+          <span class="t-remain">已完成 4 · 剩余 7</span>
+        </div>
+        <div class="bar" role="progressbar" aria-valuenow="42" aria-valuemin="0" aria-valuemax="100" aria-label="本轮审核进度 42%"><i style="width:42%"></i></div>
+      </div>
+
+      <div class="page stack">
+        <article class="card t-reviewcard">
+          <div class="t-student">
+            <span class="avatar avatar--lg">陈</span>
+            <div class="grow" style="margin-left:12px">
+              <div class="t-name">陈嘉懿</div>
+              <div class="t-sub">2025010101 · 10-17 16:22 提交</div>
+            </div>
+            <span class="tag tag--info"><i class="dot"></i>AI 建议</span>
+          </div>
+
+          <div class="t-scoreline">
+            <div>
+              <div class="t-scorelabel">AI 建议分 / 100</div>
+              <div class="score-hero"><b>92</b><span class="total">/ 100</span></div>
+            </div>
+            <span class="tag tag--success"><span data-icon="check-circle"></span>高于班均 9.6</span>
+          </div>
+
+          <div class="t-tier">
+            <div class="t-metric"><span class="t-metric-k">功能完整</span><div class="bar bar--sm"><i style="width:90%"></i></div><span class="t-metric-v">45<small>/50</small></span></div>
+            <div class="t-metric"><span class="t-metric-k">代码规范</span><div class="bar bar--sm"><i style="width:88%"></i></div><span class="t-metric-v">22<small>/25</small></span></div>
+            <div class="t-metric"><span class="t-metric-k">异常处理</span><div class="bar bar--sm"><i style="width:100%"></i></div><span class="t-metric-v">25<small>/25</small></span></div>
+          </div>
+
+          <div class="t-ainote">
+            <div class="ai-note">
+              <div class="ai-note-head">
+                <span data-icon="zap"></span>AI 评语
+                <span class="grow"></span>
+                <button type="button" class="t-expand" aria-expanded="false">展开<span data-icon="chevron-down"></span></button>
+              </div>
+              <p class="clamp-2">「思路清晰，边界条件处理到位；建议补充对大数组场景的性能说明。」</p>
+            </div>
+          </div>
+        </article>
+
+        <p class="t-gesture">
+          <span><span data-icon="chevron-up"></span>上下滑切换</span>
+          <span><span data-icon="check-circle"></span>底部按钮审核通过</span>
+        </p>
+
+        <button type="button" class="t-nextcard" data-goto="teacher-review-detail" aria-label="查看下一份：周予安，AI 88 分">
+          <span class="avatar avatar--sm">周</span>
+          <span class="t-next-main">
+            <span class="t-next-title" style="display:block">下一份 · 周予安</span>
+            <span class="t-next-sub" style="display:block">2025010104 · 10-17 15:50 提交</span>
+          </span>
+          <span class="t-next-score">88</span>
+          <span class="chevron" data-icon="chevron-right"></span>
+        </button>
+      </div>
+    </main>
+  </div>
+
+  <div class="t-queuebar">
+    <button type="button" class="btn btn--secondary" data-goto="teacher-review-detail">改分</button>
+    <button type="button" class="btn btn--primary" id="pass-btn">审核通过</button>
+  </div>
+  <div class="toast" id="pass-toast" role="status"><span data-icon="check-circle"></span>已通过 · 自动进入下一份（原型演示）</div>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+  <script>
+    (function () {
+      var b = document.getElementById("pass-btn"), t = document.getElementById("pass-toast");
+      if (!b || !t) return;
+      b.addEventListener("click", function () {
+        t.classList.add("show");
+        setTimeout(function () { t.classList.remove("show"); }, 2200);
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>安装到桌面 · Deadpan 判题</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+/* ============ PWA 安装引导（platform-install）页内样式 ============ */
+/* 平台参数驱动的显隐：?platform=ios|android 由 screen.js 写到 <html data-platform> */
+.pi-only-ios, .pi-only-android { display: none; }
+html[data-platform="ios"] .pi-only-ios { display: block; }
+html[data-platform="android"] .pi-only-android { display: block; }
+
+.pi-hero { display: flex; flex-direction: column; align-items: center; padding: 18px var(--m-gutter) 0; text-align: center; }
+.pi-logo { width: 64px; height: 64px; border-radius: 19px; background: var(--brand-600); color: var(--text-on-brand); display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-md); }
+.pi-logo .icon { width: 33px; height: 33px; stroke-width: 1.9; }
+.pi-name { margin-top: 10px; font-size: var(--m-fs-body-sm); font-weight: var(--m-fw-semibold); color: var(--text-tertiary); letter-spacing: var(--m-tracking-wide); }
+.pi-title { margin-top: 4px; font-size: var(--m-fs-title-1); line-height: 1.3; font-weight: 700; letter-spacing: var(--m-tracking-tight); color: var(--text-strong); }
+.pi-sub { margin-top: 7px; max-width: 300px; font-size: var(--m-fs-body-sm); line-height: 1.6; color: var(--text-secondary); }
+
+/* 安装收益 */
+.pi-benefits { display: grid; grid-template-columns: repeat(3, 1fr); grid-gap: 10px; gap: 10px; margin: 18px var(--m-gutter) 0; }
+.pi-benefit { padding: 13px 11px; background: var(--card-bg); border: 1px solid var(--card-bd); border-radius: 14px; }
+.pi-benefit-ico { width: 32px; height: 32px; border-radius: 10px; background: var(--bg-selected); color: var(--text-brand); display: flex; align-items: center; justify-content: center; }
+.pi-benefit-ico .icon { width: 17px; height: 17px; }
+.pi-benefit b { display: block; margin-top: 9px; font-size: 13px; font-weight: var(--m-fw-semibold); color: var(--text-primary); }
+.pi-benefit span { display: block; margin-top: 2px; font-size: 11px; line-height: 1.45; color: var(--text-tertiary); }
+
+.pi-platform { margin: 14px var(--m-gutter) 0; }
+.pi-platform b { font-weight: var(--m-fw-semibold); }
+
+/* 安装指引 */
+.pi-guides { margin: 16px var(--m-gutter) 0; }
+.pi-guides-title { margin: 0 2px 8px; font-size: var(--m-fs-caption); font-weight: var(--m-fw-semibold); letter-spacing: 0.06em; color: var(--text-tertiary); }
+.pi-guide { padding: 15px var(--m-card-pad); }
+.pi-guide + .pi-guide { margin-top: 10px; }
+html[data-platform="android"] .pi-guide--android,
+html[data-platform="ios"] .pi-guide--ios { border-color: var(--status-info-bd); box-shadow: 0 0 0 1px var(--status-info-bd); }
+.pi-guide-head { display: flex; align-items: center; }
+.pi-mark { width: 36px; height: 36px; border-radius: 11px; display: flex; align-items: center; justify-content: center; flex: none; }
+.pi-mark .icon { width: 19px; height: 19px; }
+.pi-mark--android { background: var(--status-success-bg); color: var(--status-success-fg); }
+.pi-mark--ios { background: var(--bg-sunken); color: var(--text-primary); }
+.pi-guide-main { flex: 1; min-width: 0; margin-left: 11px; }
+.pi-guide-main h2 { font-size: var(--m-fs-title-3); font-weight: var(--m-fw-semibold); color: var(--text-primary); }
+.pi-guide-main p { margin-top: 1px; font-size: var(--m-fs-caption); color: var(--text-tertiary); }
+.pi-guide .pi-current { display: none; }
+html[data-platform="android"] .pi-guide--android .pi-current,
+html[data-platform="ios"] .pi-guide--ios .pi-current { display: inline-flex; }
+.pi-steps { margin-top: 13px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.pi-step { display: flex; align-items: flex-start; }
+.pi-step + .pi-step { margin-top: 12px; }
+.pi-step-ico { width: 28px; height: 28px; border-radius: 9px; background: var(--bg-surface-2); color: var(--text-secondary); display: flex; align-items: center; justify-content: center; flex: none; margin-right: 10px; }
+.pi-step-ico .icon { width: 15px; height: 15px; }
+.pi-step-main { flex: 1; min-width: 0; font-size: var(--m-fs-body-sm); line-height: 1.55; color: var(--text-secondary); }
+.pi-step-main b { color: var(--text-primary); font-weight: var(--m-fw-semibold); }
+.pi-step-main .s { display: block; margin-top: 1px; font-size: 11.5px; color: var(--text-tertiary); }
+.pi-guide-note { display: flex; align-items: flex-start; margin-top: 13px; font-size: 11.5px; line-height: 1.55; color: var(--text-tertiary); }
+.pi-guide-note .icon { width: 13px; height: 13px; margin: 2px 5px 0 0; flex: none; }
+
+.pi-done { display: flex; align-items: center; margin: 14px var(--m-gutter) 0; padding: 13px 14px; }
+.pi-done-main { flex: 1; min-width: 0; margin-left: 11px; }
+.pi-done-main b { display: block; font-size: var(--m-fs-body-sm); font-weight: var(--m-fw-semibold); color: var(--text-primary); }
+.pi-done-main span { display: block; margin-top: 1px; font-size: var(--m-fs-caption); color: var(--text-tertiary); }
+.pi-foot { margin-top: 16px; padding: 0 var(--m-gutter); text-align: center; font-size: 11px; line-height: 1.7; color: var(--text-tertiary); }
+</style>
+</head>
+<body class="screen" data-screen="platform-install" data-bottom="actionbar">
+  <div class="app">
+    <header class="appbar appbar--left appbar--solid appbar--bordered">
+      <div class="appbar-side"><button type="button" class="iconbtn" data-icon="close" aria-label="关闭，返回官网" data-goto="public-landing"></button></div>
+      <h1 class="appbar-title">安装到桌面</h1>
+      <div class="appbar-actions"><span class="tag tag--neutral">PWA</span></div>
+    </header>
+
+    <main class="scroll">
+      <!-- 品牌 -->
+      <div class="pi-hero">
+        <span class="pi-logo" aria-hidden="true"><span data-icon="logo"></span></span>
+        <div class="pi-name">DEADPAN 判题</div>
+        <h1 class="pi-title">把 Deadpan 装到桌面</h1>
+        <p class="pi-sub">像 App 一样打开：少一层地址栏，弱网也能查看已缓存的作业与成绩。</p>
+      </div>
+
+      <!-- 安装收益 3 条 -->
+      <div class="pi-benefits">
+        <div class="pi-benefit">
+          <span class="pi-benefit-ico" aria-hidden="true" data-icon="zap"></span>
+          <b>打开更快</b>
+          <span>桌面图标直达，跳过浏览器白屏</span>
+        </div>
+        <div class="pi-benefit">
+          <span class="pi-benefit-ico" aria-hidden="true" data-icon="wifi-off"></span>
+          <b>弱网可看</b>
+          <span>已加载内容离线可读，恢复后同步</span>
+        </div>
+        <div class="pi-benefit">
+          <span class="pi-benefit-ico" aria-hidden="true" data-icon="grid"></span>
+          <b>全屏体验</b>
+          <span>隐藏地址栏与工具栏，接近原生</span>
+        </div>
+      </div>
+
+      <!-- 当前平台提示（随 ?platform= 切换） -->
+      <div class="banner banner--info pi-platform">
+        <span data-icon="info" aria-hidden="true"></span>
+        <div class="pi-only-ios"><b>当前设备识别为 iOS</b>：请确认使用 Safari 打开本页，再按下方「iOS·Safari」指引添加到主屏幕。</div>
+        <div class="pi-only-android"><b>当前设备识别为 Android</b>：推荐使用 Chrome 安装，Android 端将提供最完整的功能与通知支持。</div>
+      </div>
+
+      <!-- 两种安装指引 -->
+      <div class="pi-guides">
+        <div class="pi-guides-title">选择你的设备</div>
+
+        <!-- Android（优先推荐） -->
+        <article class="card pi-guide pi-guide--android">
+          <div class="pi-guide-head">
+            <span class="pi-mark pi-mark--android" aria-hidden="true" data-icon="grid"></span>
+            <div class="pi-guide-main">
+              <h2>Android · Chrome</h2>
+              <p>菜单 → 安装应用</p>
+            </div>
+            <span class="tag tag--success pi-current"><i class="dot"></i>当前平台</span>
+            <span class="tag tag--info" style="margin-left:6px">推荐</span>
+          </div>
+          <ol class="pi-steps">
+            <li class="pi-step">
+              <span class="pi-step-ico" aria-hidden="true" data-icon="link"></span>
+              <div class="pi-step-main"><b>用 Chrome 打开本页</b><span class="s">在地址栏输入校内网地址，或从通知消息打开。</span></div>
+            </li>
+            <li class="pi-step">
+              <span class="pi-step-ico" aria-hidden="true" data-icon="more"></span>
+              <div class="pi-step-main"><b>点右上角「⋮」菜单</b>，选择「安装应用」或「添加到主屏幕」<span class="s">部分国产浏览器文案为「添加到桌面」，效果相同。</span></div>
+            </li>
+            <li class="pi-step">
+              <span class="pi-step-ico" aria-hidden="true" data-icon="download"></span>
+              <div class="pi-step-main"><b>确认「安装」</b>，等待桌面出现 Deadpan 图标<span class="s">安装后与浏览器共用登录态，不会重复登录。</span></div>
+            </li>
+          </ol>
+        </article>
+
+        <!-- iOS Safari -->
+        <article class="card pi-guide pi-guide--ios">
+          <div class="pi-guide-head">
+            <span class="pi-mark pi-mark--ios" aria-hidden="true" data-icon="share"></span>
+            <div class="pi-guide-main">
+              <h2>iOS · Safari</h2>
+              <p>分享 → 添加到主屏幕</p>
+            </div>
+            <span class="tag tag--success pi-current"><i class="dot"></i>当前平台</span>
+          </div>
+          <ol class="pi-steps">
+            <li class="pi-step">
+              <span class="pi-step-ico" aria-hidden="true" data-icon="link"></span>
+              <div class="pi-step-main"><b>用 Safari 打开本页</b><span class="s">微信 / QQ 内置浏览器不支持「添加到主屏幕」。</span></div>
+            </li>
+            <li class="pi-step">
+              <span class="pi-step-ico" aria-hidden="true" data-icon="share"></span>
+              <div class="pi-step-main"><b>点底部工具栏的「分享」按钮</b><span class="s">若工具栏已收起，向上轻扫屏幕底部即可展开。</span></div>
+            </li>
+            <li class="pi-step">
+              <span class="pi-step-ico" aria-hidden="true" data-icon="plus"></span>
+              <div class="pi-step-main"><b>选择「添加到主屏幕」，点右上角「添加」</b><span class="s">iOS 当前通过主屏幕方式使用，原生 App 仍在规划中。</span></div>
+            </li>
+          </ol>
+          <p class="pi-guide-note"><span data-icon="info" aria-hidden="true"></span>iOS 不提供「安装应用」入口，添加到主屏幕即为官方支持的方式。</p>
+        </article>
+      </div>
+
+      <!-- 已安装提示 -->
+      <div class="card card--tint pi-done">
+        <span class="rowicon rowicon--success" aria-hidden="true" data-icon="check-circle"></span>
+        <div class="pi-done-main">
+          <b>已经安装过？</b>
+          <span>从桌面图标打开即可，仍使用同一工号 / 学号登录。</span>
+        </div>
+      </div>
+
+      <p class="pi-foot">Deadpan 判题 v2.1.0 · 安装后可在离线状态查看已缓存内容<br>遇到问题请联系信息中心（8021）</p>
+    </main>
+
+    <div class="actionbar">
+      <button type="button" class="btn btn--secondary" data-goto="public-landing">稍后再装</button>
+      <button type="button" class="btn btn--primary" data-goto="public-login">已安装，去登录</button>
+    </div>
+  </div>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

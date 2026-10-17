@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>审核详情 · 评分 · 移动端设计稿</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+  body[data-screen="teacher-review-detail"] [data-tabpanel] { display: none; }
+  body[data-screen="teacher-review-detail"] [data-tabpanel].is-active { display: block; }
+  .t-studentbar { display: flex; align-items: center; padding: 14px var(--m-card-pad); }
+  .t-sb-main { flex: 1; min-width: 0; margin-left: 11px; }
+  .t-sb-name { font-size: 15px; font-weight: 600; }
+  .t-sb-sub { margin-top: 2px; font-size: 12px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .t-sb-score { flex: none; text-align: right; margin-left: 10px; }
+  .t-sb-score b { display: block; font-size: 22px; line-height: 1.1; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .t-sb-score span { font-size: 11px; color: var(--text-tertiary); }
+  .t-segwrap { padding: 18px var(--m-gutter) 0; }
+  .t-scorebox { position: relative; }
+  .t-scorebox .input { padding-right: 64px; font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .t-scoreunit { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 13px; color: var(--text-tertiary); pointer-events: none; }
+  .t-tier { margin-top: 16px; }
+  .t-metric { display: flex; align-items: center; font-size: 12.5px; }
+  .t-metric + .t-metric { margin-top: 9px; }
+  .t-metric-k { flex: none; width: 62px; color: var(--text-secondary); }
+  .t-metric .bar { flex: 1; margin-right: 10px; }
+  .t-metric-v { flex: none; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+  .t-metric-v small { font-weight: 400; color: var(--text-tertiary); }
+  .t-qchips { padding: 2px 0 0; }
+  .t-qchips .chip { height: 32px; font-size: 12.5px; }
+  .t-qchips .chip + .chip { margin-left: 8px; }
+  .t-filelist { margin-top: 12px; }
+  .t-file-row { display: flex; align-items: center; padding: 12px var(--m-card-pad); }
+  .t-file-row + .t-file-row { box-shadow: inset 0 1px 0 var(--border-subtle); }
+  .t-file-icon { width: 34px; height: 34px; border-radius: 10px; background: var(--bg-selected); color: var(--text-brand); display: flex; align-items: center; justify-content: center; flex: none; margin-right: 11px; }
+  .t-file-icon .icon { width: 18px; height: 18px; }
+  .t-file-main { flex: 1; min-width: 0; }
+  .t-file-name { font-size: 14px; font-weight: 500; }
+  .t-file-sub { margin-top: 2px; font-size: 12px; color: var(--text-tertiary); }
+  .t-rubric-row { display: flex; align-items: flex-start; padding: 11px 0; font-size: 13.5px; }
+  .t-rubric-row + .t-rubric-row { border-top: 1px solid var(--border-subtle); }
+  .t-rubric-row .k { flex: 1; color: var(--text-secondary); }
+  .t-rubric-row .v { flex: none; margin-left: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .field .label .req { color: var(--status-danger-fg); }
+  .t-reason-chips { display: flex; flex-wrap: wrap; margin: 0 -8px; }
+  .t-reason-chips .chip { margin: 0 8px 8px; }
+
+  /* 触控目标补足（视觉尺寸保持屏幕契约值，命中区域扩到 ≥44px） */
+  .chip, .seg button, .btn--sm, .btn--xs, .tool, .diffmore, .sheet-close, .t-expand, button.avatar, .switch { position: relative; }
+  .chip::after, .seg button::after, .btn--sm::after, .btn--xs::after, .tool::after, .diffmore::after, .sheet-close::after, .t-expand::after, button.avatar::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%);
+  }
+  .switch::before { content: ""; position: absolute; left: -6px; right: -6px; top: -7px; bottom: -7px; }
+  .searchbar { height: 44px; }
+</style>
+</head>
+<body class="screen" data-screen="teacher-review-detail" data-bottom="actionbar">
+  <div class="app">
+    <header class="appbar appbar--solid appbar--bordered">
+      <div class="appbar-side"><button type="button" class="iconbtn" data-icon="back" aria-label="返回评分审核队列" data-goto="teacher-review-queue"></button></div>
+      <h1 class="appbar-title">审核详情<small>陈嘉懿 · 第 2 题</small></h1>
+      <div class="appbar-actions"><button type="button" class="iconbtn iconbtn--text" data-goto="teacher-review-queue">完成</button></div>
+    </header>
+
+    <main class="scroll">
+      <div class="page mt8">
+        <div class="card card--flush t-studentbar">
+          <span class="avatar">陈</span>
+          <div class="t-sb-main">
+            <div class="t-sb-name">陈嘉懿</div>
+            <div class="t-sb-sub">2025010101 · 10-17 16:22 提交</div>
+          </div>
+          <div class="t-sb-score"><b>92</b><span>AI 建议分</span></div>
+        </div>
+      </div>
+
+      <div class="page mt16">
+        <div class="card">
+          <div class="between">
+            <div class="card-title">AI 建议分</div>
+            <span class="tag tag--info"><i class="dot"></i>未发布</span>
+          </div>
+          <div class="score-hero mt8"><b>92</b><span class="total">/ 100</span><span class="tag tag--success">高于班均 9.6</span></div>
+
+          <div class="field mt16">
+            <label class="label" for="score-input">教师评分<span class="req">*</span></label>
+            <div class="t-scorebox">
+              <input class="input" id="score-input" type="text" inputmode="numeric" value="92" aria-describedby="score-help">
+              <span class="t-scoreunit">/ 100</span>
+            </div>
+            <span class="help" id="score-help">可改分；发布前仍可调整，发布后不可撤销。</span>
+          </div>
+
+          <div class="t-tier">
+            <div class="t-metric"><span class="t-metric-k">功能完整</span><div class="bar bar--sm"><i style="width:90%"></i></div><span class="t-metric-v">45<small>/50</small></span></div>
+            <div class="t-metric"><span class="t-metric-k">代码规范</span><div class="bar bar--sm"><i style="width:88%"></i></div><span class="t-metric-v">22<small>/25</small></span></div>
+            <div class="t-metric"><span class="t-metric-k">异常处理</span><div class="bar bar--sm"><i style="width:100%"></i></div><span class="t-metric-v">25<small>/25</small></span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="t-segwrap">
+        <div class="seg" data-tabgroup>
+          <button type="button" class="active" data-tab="score">评分</button>
+          <button type="button" data-tab="code">代码</button>
+          <button type="button" data-tab="reference">参考</button>
+        </div>
+      </div>
+
+      <div class="page mt16">
+        <section data-tabpanel="score" class="is-active">
+          <div class="ai-note">
+            <div class="ai-note-head"><span data-icon="zap"></span>AI 评语 · 第 2 题</div>
+            <p>「思路清晰，边界条件处理到位；建议补充对大数组场景的性能说明。」</p>
+            <div class="ai-foot">基于 368 个文件与 2 次测试运行生成 · 置信度 93%</div>
+          </div>
+
+          <div class="field mt16">
+            <label class="label" for="teacher-comment">教师评语（学生可见）</label>
+            <textarea class="textarea" id="teacher-comment" maxlength="200" placeholder="补充对学生的具体建议，发布后学生可在成绩页看到">分页逻辑正确；补充说明大数组场景下的索引与性能取舍。</textarea>
+            <div class="counter">32 / 200</div>
+          </div>
+
+          <div class="t-qchips mt8">
+            <div class="chips chips--wrap">
+              <button type="button" class="chip active">边界条件</button>
+              <button type="button" class="chip">命名规范</button>
+              <button type="button" class="chip">性能说明</button>
+              <button type="button" class="chip">思路清晰</button>
+            </div>
+          </div>
+
+          <div class="banner banner--info mt12">
+            <span data-icon="info"></span>
+            <div>快捷评语会追加到教师评语输入框，不会覆盖已写内容。</div>
+          </div>
+        </section>
+
+        <section data-tabpanel="code">
+          <div class="list t-filelist">
+            <div class="t-file-row">
+              <span class="t-file-icon" data-icon="code"></span>
+              <span class="t-file-main"><span class="t-file-name">UserTable.vue</span><span class="t-file-sub">12.4 KB · 得分点 45/50</span></span>
+              <span class="tag tag--warning">1 处待复核</span>
+            </div>
+            <div class="t-file-row">
+              <span class="t-file-icon" data-icon="file"></span>
+              <span class="t-file-main"><span class="t-file-name">App.vue</span><span class="t-file-sub">3.1 KB · 得分点 22/25</span></span>
+              <span class="tag tag--neutral">已查看</span>
+            </div>
+          </div>
+          <button type="button" class="btn btn--primary btn--block mt12" data-goto="teacher-review-code"><span data-icon="code"></span>查看代码与选区</button>
+          <p class="readonly-tip mt12"><span data-icon="info"></span>代码只读；长按代码行可引用到评语。</p>
+        </section>
+
+        <section data-tabpanel="reference">
+          <div class="quote">参考答案要点：使用 <span class="mono">LIMIT ? OFFSET ?</span> 或游标分页；对 <span class="mono">created_at</span> 建索引；空结果返回 200 + 空数组。</div>
+          <div class="card mt12">
+            <div class="card-title mb8">评分细则</div>
+            <div class="t-rubric-row"><span class="k">分页 SQL 正确、参数化</span><span class="v">20 / 20</span></div>
+            <div class="t-rubric-row"><span class="k">边界条件（空页、超页）</span><span class="v">15 / 20</span></div>
+            <div class="t-rubric-row"><span class="k">索引与性能说明</span><span class="v">10 / 10</span></div>
+          </div>
+          <p class="readonly-tip mt12"><span data-icon="lock"></span>参考答案由题库管理员维护，移动端不可编辑。</p>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div class="actionbar">
+    <button type="button" class="btn btn--danger-soft" data-open-sheet="reject-sheet">打回</button>
+    <button type="button" class="btn btn--primary" data-goto="teacher-review-queue">通过并继续</button>
+  </div>
+
+  <div class="mask" data-for="reject-sheet"></div>
+  <section class="sheet" id="reject-sheet" role="dialog" aria-modal="true" aria-label="打回并说明原因">
+    <div class="grabber"></div>
+    <div class="sheet-head">
+      <div>
+        <div class="sheet-title">打回这份提交</div>
+        <div class="sheet-sub">学生会收到通知，可修改后重新提交</div>
+      </div>
+      <button type="button" class="sheet-close" data-close-sheet aria-label="关闭"><span data-icon="close"></span></button>
+    </div>
+    <div class="sheet-body">
+      <label class="label" for="reject-reason">打回原因<span class="req">*</span></label>
+      <textarea class="textarea" id="reject-reason" placeholder="例如：工程包缺少依赖，运行时报错"></textarea>
+      <div class="t-reason-chips mt12">
+        <button type="button" class="chip">无法运行</button>
+        <button type="button" class="chip">缺少文件</button>
+        <button type="button" class="chip">疑似抄袭</button>
+        <button type="button" class="chip">答非所问</button>
+      </div>
+      <div class="banner banner--warning mt12"><span data-icon="alert"></span><div>打回会清除当前 AI 评分，重新提交后将重新排队评分。</div></div>
+    </div>
+    <div class="sheet-foot">
+      <button type="button" class="btn btn--secondary btn--block" data-close-sheet>取消</button>
+      <button type="button" class="btn btn--danger btn--block" data-close-sheet>确认打回</button>
+    </div>
+  </section>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

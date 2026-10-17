@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>代码差异 · 移动端设计稿</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+  .t-filechips { display: flex; align-items: center; padding: 12px var(--m-gutter) 0; }
+  .t-filechips .chip { height: 34px; }
+  .t-filechips .t-lock { margin-left: auto; display: inline-flex; align-items: center; font-size: 12px; color: var(--text-tertiary); }
+  .t-filechips .t-lock .icon { width: 14px; height: 14px; margin-right: 4px; }
+  .t-tabs { border-bottom: 0; }
+  .t-tabs button { margin-right: 26px; }
+  .t-tabs button.active { color: var(--text-brand); }
+  .t-switchrow { display: flex; align-items: center; margin-top: 12px; }
+  .t-switch-title { font-size: 14.5px; font-weight: 600; }
+  .t-switch-sub { margin-top: 2px; font-size: 12px; color: var(--text-tertiary); }
+  .t-switchrow .switch { margin-left: 12px; }
+  .t-diffsum { display: flex; align-items: center; margin: 14px 0 10px; }
+  .t-diffsum .tag { font-variant-numeric: tabular-nums; }
+  .t-diffsum > * + * { margin-left: 6px; }
+  .t-diffsub { margin-left: 4px; font-size: 12px; color: var(--text-tertiary); }
+  .t-diffblock + .t-diffblock { margin-top: 12px; }
+  .t-hunk { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .t-hunk-fold { display: inline-flex; align-items: center; flex: none; margin-left: 8px; font-size: 11.5px; color: var(--text-tertiary); }
+  .t-hunk-fold .icon { width: 14px; height: 14px; margin-right: 2px; }
+  .diffline .dln { color: var(--text-tertiary); }
+  .diffline .dsign { flex: none; width: 14px; text-align: center; opacity: .9; }
+  .diffline .t-code { white-space: pre; }
+  .diffmore { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 40px; font-size: 12px; color: var(--text-tertiary); background: var(--bg-surface-2); border: 0; }
+  .diffmore .icon { width: 14px; height: 14px; margin-right: 5px; }
+  .t-behavior { margin-top: 14px; }
+  .t-beh-row { display: flex; align-items: flex-start; padding: 11px 0; }
+  .t-beh-row + .t-beh-row { border-top: 1px solid var(--border-subtle); }
+  .t-beh-index { flex: none; width: 22px; height: 22px; margin-right: 10px; border-radius: 7px; background: var(--status-warning-bg); color: var(--status-warning-fg); font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+  .t-beh-title { font-size: 14px; font-weight: 600; line-height: 1.4; }
+  .t-beh-sub { margin-top: 3px; font-size: 12.5px; color: var(--text-secondary); line-height: 1.55; }
+  .t-tip { margin-top: 14px; }
+
+  /* 触控目标补足（视觉尺寸保持屏幕契约值，命中区域扩到 ≥44px） */
+  .chip, .seg button, .btn--sm, .btn--xs, .tool, .diffmore, .sheet-close, .t-expand, button.avatar, .switch { position: relative; }
+  .chip::after, .seg button::after, .btn--sm::after, .btn--xs::after, .tool::after, .diffmore::after, .sheet-close::after, .t-expand::after, button.avatar::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%);
+  }
+  .switch::before { content: ""; position: absolute; left: -6px; right: -6px; top: -7px; bottom: -7px; }
+  .searchbar { height: 44px; }
+</style>
+</head>
+<body class="screen" data-screen="teacher-review-diff" data-bottom="actionbar">
+  <div class="app">
+    <header class="appbar appbar--solid appbar--bordered">
+      <div class="appbar-side"><button type="button" class="iconbtn" data-icon="back" aria-label="返回代码只读" data-goto="teacher-review-code"></button></div>
+      <h1 class="appbar-title">代码对比<small>陈嘉懿 · 第 2 题 · App.vue</small></h1>
+      <div class="appbar-actions"><button type="button" class="iconbtn iconbtn--text" data-goto="teacher-review-queue">完成</button></div>
+    </header>
+
+    <main class="scroll">
+      <div class="tabs t-tabs" data-tabgroup>
+        <button type="button" data-goto="teacher-review-code">第 1 题</button>
+        <button type="button" data-goto="teacher-review-code">第 2 题</button>
+        <button type="button" class="active">差异</button>
+      </div>
+
+      <div class="t-filechips">
+        <button type="button" class="chip active">App.vue <span class="count">4</span></button>
+        <button type="button" class="chip">UserTable.vue <span class="count">2</span></button>
+        <span class="t-lock"><span data-icon="lock"></span>只读</span>
+      </div>
+
+      <div class="page">
+        <div class="card t-switchrow">
+          <div class="grow">
+            <div class="t-switch-title">只看差异</div>
+            <div class="t-switch-sub">隐藏 10 行未变更内容 · 保留上下文 3 行</div>
+          </div>
+          <button type="button" class="switch on" data-switch role="switch" aria-checked="true" aria-label="只看差异"></button>
+        </div>
+
+        <div class="t-diffsum">
+          <span class="tag tag--success">+ 8 行</span>
+          <span class="tag tag--danger">− 3 行</span>
+          <span class="t-diffsub">4 处差异 · 逐块折叠</span>
+        </div>
+
+        <section class="diffcard t-diffblock" aria-label="差异块 1：路由守卫">
+          <div class="diffhead">
+            <span class="t-hunk">@@ -8,7 +8,9 @@ 路由守卫</span>
+            <span class="t-hunk-fold"><span data-icon="chevron-up"></span>已展开</span>
+          </div>
+          <div class="diffbody">
+            <div class="diffline"><span class="dln" aria-hidden="true">8</span><span class="dsign"></span><span class="t-code">router.beforeEach((to, from, next) =&gt; {</span></div>
+            <div class="diffline del"><span class="dln" aria-hidden="true">9</span><span class="dsign">−</span><span class="t-code">  if (!token) return</span></div>
+            <div class="diffline add"><span class="dln" aria-hidden="true">9</span><span class="dsign">+</span><span class="t-code">  if (!token) {</span></div>
+            <div class="diffline add"><span class="dln" aria-hidden="true">10</span><span class="dsign">+</span><span class="t-code">    next('/login?redirect=' + to.path)</span></div>
+            <div class="diffline add"><span class="dln" aria-hidden="true">11</span><span class="dsign">+</span><span class="t-code">    return</span></div>
+            <div class="diffline add"><span class="dln" aria-hidden="true">12</span><span class="dsign">+</span><span class="t-code">  }</span></div>
+            <div class="diffline"><span class="dln" aria-hidden="true">13</span><span class="dsign"></span><span class="t-code">  next()</span></div>
+            <div class="diffline"><span class="dln" aria-hidden="true">14</span><span class="dsign"></span><span class="t-code">})</span></div>
+          </div>
+          <button type="button" class="diffmore"><span data-icon="chevron-down"></span>相同 6 行 · 点击展开</button>
+        </section>
+
+        <section class="diffcard t-diffblock" aria-label="差异块 2：登录回跳">
+          <div class="diffhead">
+            <span class="t-hunk">@@ -24,5 +27,8 @@ 登录回跳</span>
+            <span class="t-hunk-fold"><span data-icon="chevron-up"></span>已展开</span>
+          </div>
+          <div class="diffbody">
+            <div class="diffline"><span class="dln" aria-hidden="true">27</span><span class="dsign"></span><span class="t-code">const redirect = route.query.redirect</span></div>
+            <div class="diffline del"><span class="dln" aria-hidden="true">28</span><span class="dsign">−</span><span class="t-code">const target = '/dashboard'</span></div>
+            <div class="diffline add"><span class="dln" aria-hidden="true">28</span><span class="dsign">+</span><span class="t-code">const target = redirect || '/dashboard'</span></div>
+            <div class="diffline add"><span class="dln" aria-hidden="true">29</span><span class="dsign">+</span><span class="t-code">router.replace(target)</span></div>
+            <div class="diffline"><span class="dln" aria-hidden="true">30</span><span class="dsign"></span><span class="t-code">}</span></div>
+          </div>
+          <button type="button" class="diffmore"><span data-icon="chevron-down"></span>相同 4 行 · 点击展开</button>
+        </section>
+
+        <div class="card t-behavior">
+          <div class="between">
+            <div class="card-title">行为差异 · 2 处</div>
+            <span class="tag tag--warning"><i class="dot"></i>建议复核</span>
+          </div>
+          <div class="t-beh-row">
+            <span class="t-beh-index">1</span>
+            <div>
+              <div class="t-beh-title">未登录访问不再静默返回</div>
+              <div class="t-beh-sub">改为跳转登录页并携带 redirect 参数，影响全部 12 条路由。</div>
+            </div>
+          </div>
+          <div class="t-beh-row">
+            <span class="t-beh-index">2</span>
+            <div>
+              <div class="t-beh-title">登录成功后回到原页面</div>
+              <div class="t-beh-sub">新增 target 变量覆盖写死的 /dashboard；需确认 redirect 参数白名单。</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="t-tip">
+          <div class="banner banner--info">
+            <span data-icon="zap"></span>
+            <div><b>2 处行为差异</b>，可一键引用到评语。未变更的 10 行已按块折叠，避免在 390px 宽度下并排对比。</div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="actionbar">
+    <button type="button" class="btn btn--secondary" aria-pressed="true"><span data-icon="filter"></span>只看差异</button>
+    <button type="button" class="btn btn--primary" data-goto="teacher-review-detail">引用差异到评语</button>
+  </div>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

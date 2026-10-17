@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>教师 · 我的 · 移动端设计稿</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+  .t-toprow { display: flex; align-items: center; padding: 8px var(--m-gutter) 6px; }
+  .t-toprow h1 { flex: 1; font-size: var(--m-fs-title-1); line-height: var(--m-lh-title-1); font-weight: 700; letter-spacing: var(--m-tracking-tight); }
+  .t-idcard { padding: 18px var(--m-card-pad); }
+  .t-idmain { margin-left: 14px; min-width: 0; }
+  .t-idname { font-size: 20px; font-weight: 700; letter-spacing: var(--m-tracking-tight); }
+  .t-idname .tag { margin-left: 7px; vertical-align: 3px; }
+  .t-idsub { margin-top: 3px; font-size: 12.5px; color: var(--text-secondary); }
+  .t-idstats { display: flex; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
+  .t-idstat { flex: 1; text-align: center; }
+  .t-idstat + .t-idstat { border-left: 1px solid var(--border-subtle); }
+  .t-idstat b { display: block; font-size: 18px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
+  .t-idstat span { display: block; margin-top: 3px; font-size: 11.5px; color: var(--text-tertiary); }
+  .t-list .row-main .row-title { display: block; }
+  .t-list .row-main .row-sub { display: block; }
+  .t-list .rowitem { min-height: 60px; text-align: left; width: 100%; }
+  .t-list .row-side { font-size: 13px; color: var(--text-tertiary); }
+  .t-version { margin: 18px 0 6px; text-align: center; font-size: 11.5px; color: var(--text-tertiary); }
+  .t-font-opts .option { align-items: center; padding: 13px 14px; }
+  .t-font-opts .option .radio { margin-top: 0; }
+
+  /* 触控目标补足（视觉尺寸保持屏幕契约值，命中区域扩到 ≥44px） */
+  .chip, .seg button, .btn--sm, .btn--xs, .tool, .diffmore, .sheet-close, .t-expand, button.avatar, .switch { position: relative; }
+  .chip::after, .seg button::after, .btn--sm::after, .btn--xs::after, .tool::after, .diffmore::after, .sheet-close::after, .t-expand::after, button.avatar::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%);
+  }
+  .switch::before { content: ""; position: absolute; left: -6px; right: -6px; top: -7px; bottom: -7px; }
+  .searchbar { height: 44px; }
+</style>
+</head>
+<body class="screen" data-screen="teacher-profile" data-bottom="tabbar">
+  <div data-tabbar="teacher" data-active="me"></div>
+
+  <div class="app">
+    <main class="scroll">
+      <div class="t-toprow">
+        <h1>我的</h1>
+        <button type="button" class="iconbtn" data-icon="settings" aria-label="设置"></button>
+      </div>
+
+      <div class="page">
+        <div class="card t-idcard">
+          <div class="row">
+            <span class="avatar avatar--xl avatar--brand">周</span>
+            <div class="grow t-idmain">
+              <div class="t-idname">周子轩<span class="tag tag--info">教师</span></div>
+              <div class="t-idsub">工号 T2026001 · 计算机学院</div>
+              <div class="t-idsub">Deadpan 大学</div>
+            </div>
+          </div>
+          <div class="t-idstats">
+            <div class="t-idstat"><b>3</b><span>任教班级</span></div>
+            <div class="t-idstat"><b>128</b><span>学生</span></div>
+            <div class="t-idstat"><b>286</b><span>本学期已评分</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec"><h2>设置</h2></div>
+      <div class="page">
+        <div class="list t-list">
+          <div class="rowitem">
+            <span class="rowicon" data-icon="bell"></span>
+            <span class="row-main"><span class="row-title">通知提醒</span><span class="row-sub">待审核与 AI 评分完成时推送</span></span>
+            <button type="button" class="switch on" data-switch role="switch" aria-checked="true" aria-label="通知提醒"></button>
+          </div>
+          <div class="rowitem">
+            <span class="rowicon rowicon--neutral" data-icon="moon"></span>
+            <span class="row-main"><span class="row-title">深色主题</span><span class="row-sub">切换立即生效，不同步桌面端</span></span>
+            <button type="button" class="switch" id="theme-switch" data-switch data-theme-toggle role="switch" aria-checked="false" aria-label="深色主题"></button>
+          </div>
+          <button type="button" class="rowitem rowitem--tap" data-open-sheet="font-sheet">
+            <span class="rowicon rowicon--neutral" data-icon="book"></span>
+            <span class="row-main"><span class="row-title">字号大小</span><span class="row-sub">影响正文与列表文字</span></span>
+            <span class="row-side">标准</span>
+            <span class="chevron" data-icon="chevron-right"></span>
+          </button>
+          <button type="button" class="rowitem rowitem--tap" data-open-sheet="desktop-sheet">
+            <span class="rowicon rowicon--neutral" data-icon="external"></span>
+            <span class="row-main"><span class="row-title">切换到桌面版</span><span class="row-sub">大屏编辑、批量导出更高效</span></span>
+            <span class="chevron" data-icon="chevron-right"></span>
+          </button>
+          <button type="button" class="rowitem rowitem--tap" data-goto="public-doc">
+            <span class="rowicon rowicon--neutral" data-icon="info"></span>
+            <span class="row-main"><span class="row-title">关于与帮助</span><span class="row-sub">使用文档 · 反馈问题 · 版本 v2.1.0</span></span>
+            <span class="chevron" data-icon="chevron-right"></span>
+          </button>
+        </div>
+
+        <button type="button" class="btn btn--danger-soft btn--block mt16" data-open-sheet="logout-sheet"><span data-icon="logout"></span>退出登录</button>
+        <p class="t-version">Deadpan 判题 · 移动端 v2.1.0 · 2026-10-17</p>
+      </div>
+    </main>
+  </div>
+
+  <div class="mask" data-for="font-sheet"></div>
+  <section class="sheet" id="font-sheet" role="dialog" aria-modal="true" aria-label="字号大小">
+    <div class="grabber"></div>
+    <div class="sheet-head"><div><div class="sheet-title">字号大小</div><div class="sheet-sub">全局生效，无需重启</div></div><button class="sheet-close" data-close-sheet aria-label="关闭"><span data-icon="close"></span></button></div>
+    <div class="sheet-body">
+      <div class="options t-font-opts" data-select-group>
+        <button type="button" class="option selected" data-select><span class="radio on"></span>标准 · 正文 15px</button>
+        <button type="button" class="option" data-select><span class="radio"></span>大 · 正文 17px</button>
+        <button type="button" class="option" data-select><span class="radio"></span>特大 · 正文 19px</button>
+      </div>
+      <p class="help mt12">字号会同步到本次会话；桌面端不受影响。</p>
+    </div>
+    <div class="sheet-foot"><button class="btn btn--primary btn--block" data-close-sheet>完成</button></div>
+  </section>
+
+  <div class="mask" data-for="desktop-sheet"></div>
+  <section class="sheet" id="desktop-sheet" role="dialog" aria-modal="true" aria-label="切换到桌面版">
+    <div class="grabber"></div>
+    <div class="sheet-head"><div><div class="sheet-title">切换到桌面版</div><div class="sheet-sub">deadpan.edu.cn/teacher</div></div><button class="sheet-close" data-close-sheet aria-label="关闭"><span data-icon="close"></span></button></div>
+    <div class="sheet-body">
+      <div class="card--flush"></div>
+      <div class="banner banner--info"><span data-icon="external"></span><div>在电脑浏览器打开同一地址即可，登录状态自动同步；适合批量评分、导出成绩与题目编辑。</div></div>
+      <div class="t-list mt12">
+        <div class="rowitem"><span class="rowicon" data-icon="copy"></span><span class="row-main"><span class="row-title">已复制桌面版地址</span><span class="row-sub">deadpan.edu.cn/teacher</span></span><span class="tag tag--success">已复制</span></div>
+      </div>
+    </div>
+    <div class="sheet-foot"><button class="btn btn--primary btn--block" data-close-sheet>知道了</button></div>
+  </section>
+
+  <div class="mask" data-for="logout-sheet"></div>
+  <section class="sheet" id="logout-sheet" role="dialog" aria-modal="true" aria-label="退出登录">
+    <div class="grabber"></div>
+    <div class="sheet-head"><div><div class="sheet-title">退出登录？</div><div class="sheet-sub">退出后需重新输入账号密码</div></div><button class="sheet-close" data-close-sheet aria-label="关闭"><span data-icon="close"></span></button></div>
+    <div class="sheet-body">
+      <div class="banner banner--warning"><span data-icon="alert"></span><div>还有 12 份待审核提交未处理，退出后不会丢失。</div></div>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn btn--secondary btn--block" data-close-sheet>取消</button>
+      <button class="btn btn--danger btn--block" data-close-sheet>确认退出</button>
+    </div>
+  </section>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+  <script>
+    (function () {
+      var sw = document.getElementById('theme-switch');
+      if (document.documentElement.getAttribute('data-theme') === 'dark') {
+        sw.classList.add('on');
+        sw.setAttribute('aria-checked', 'true');
+      }
+      sw.addEventListener('click', function () {
+        var willBeOn = !sw.classList.contains('on');
+        document.documentElement.setAttribute('data-theme', willBeOn ? 'dark' : 'light');
+        sw.setAttribute('aria-checked', willBeOn ? 'true' : 'false');
+      });
+    })();
+  </script>
+</body>
+</html>

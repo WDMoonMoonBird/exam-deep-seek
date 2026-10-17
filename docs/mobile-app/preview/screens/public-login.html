@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>登录 · Deadpan 判题</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+/* ============ 登录页（public-login）页内样式：只用令牌 ============ */
+.lg-brand { display: flex; flex-direction: column; align-items: center; padding: 18px var(--m-gutter) 0; text-align: center; }
+.lg-logo { width: 58px; height: 58px; border-radius: 17px; display: flex; align-items: center; justify-content: center;
+  background: var(--brand-600); color: var(--text-on-brand); box-shadow: var(--shadow-md); }
+.lg-logo .icon { width: 30px; height: 30px; stroke-width: 1.9; }
+.lg-name { margin-top: 12px; font-size: var(--m-fs-title-2); font-weight: 700; letter-spacing: var(--m-tracking-tight); color: var(--text-strong); }
+.lg-name small { margin-left: 5px; font-size: var(--m-fs-caption); font-weight: 500; color: var(--text-tertiary); }
+.lg-domain { margin-top: 4px; font-size: var(--m-fs-caption); color: var(--text-tertiary); letter-spacing: var(--m-tracking-wide); }
+
+.lg-welcome { padding: 22px var(--m-gutter) 0; }
+.lg-welcome h1 { font-size: var(--m-fs-display); line-height: var(--m-lh-display); font-weight: 700; letter-spacing: var(--m-tracking-tight); }
+.lg-welcome p { margin-top: 5px; font-size: var(--m-fs-body-sm); line-height: 1.55; color: var(--text-secondary); }
+
+.lg-form { padding: 18px var(--m-gutter) 0; }
+.lg-has-eye .input { padding-right: 50px; }
+.lg-eye { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 10px; color: var(--text-tertiary); }
+.lg-eye:active { background: var(--m-pressed); }
+.lg-eye .icon { width: 20px; height: 20px; }
+.lg-remember { display: flex; align-items: center; margin-top: 18px; }
+.lg-remember-main { flex: 1; min-width: 0; margin-left: 10px; }
+.lg-remember .switch { position: relative; }
+.lg-remember .switch::before { content: ""; position: absolute; left: -4px; right: -4px; top: 50%; height: var(--m-touch-min); transform: translateY(-50%); }
+.lg-remember-main b { display: block; font-size: var(--m-fs-body); font-weight: var(--m-fw-medium); color: var(--text-primary); }
+.lg-remember-main span { display: block; margin-top: 1px; font-size: var(--m-fs-caption); color: var(--text-tertiary); }
+.lg-submit { margin-top: 22px; }
+.lg-submit .btn { height: var(--m-btn-h); }
+.lg-doc { display: flex; justify-content: center; margin-top: 14px; }
+.lg-doc .btn { height: var(--m-touch-min); padding: 0 12px; font-size: var(--m-fs-body-sm); font-weight: var(--m-fw-medium); }
+
+.lg-hint { display: flex; align-items: flex-start; margin-top: 16px; padding: 12px 14px; border-radius: var(--m-radius-card-sm);
+  background: var(--bg-surface-2); border: 1px dashed var(--border-default); font-size: var(--m-fs-caption); line-height: 1.6; color: var(--text-tertiary); }
+.lg-hint .icon { width: 15px; height: 15px; margin-right: 7px; flex: none; margin-top: 1px; color: var(--text-tertiary); }
+
+.lg-foot { margin: 26px var(--m-gutter) 0; padding-top: 16px; border-top: 1px solid var(--border-subtle); text-align: center; }
+.lg-foot p { font-size: 11.5px; line-height: 1.7; color: var(--text-tertiary); }
+.lg-foot .v { font-variant-numeric: tabular-nums; }
+.lg-foot-links { display: flex; align-items: center; justify-content: center; margin-top: 2px; }
+.lg-foot-links .dot-sep { color: var(--text-tertiary); }
+</style>
+</head>
+<body class="screen" data-screen="public-login" data-bottom="none">
+  <div class="app">
+    <header class="appbar appbar--left appbar--solid appbar--bordered">
+      <div class="appbar-side"><button type="button" class="iconbtn" data-icon="back" aria-label="返回官网" data-goto="public-landing"></button></div>
+      <h1 class="appbar-title">登录</h1>
+      <div class="appbar-actions">
+        <button type="button" class="iconbtn" data-icon="book" aria-label="查看使用文档" data-goto="public-doc"></button>
+      </div>
+    </header>
+
+    <main class="scroll">
+      <!-- 品牌 -->
+      <div class="lg-brand">
+        <span class="lg-logo" aria-hidden="true"><span data-icon="logo"></span></span>
+        <div class="lg-name">Deadpan<small>判题</small></div>
+        <div class="lg-domain">DEADPAN UNIVERSITY · 校内网</div>
+      </div>
+
+      <!-- 欢迎 -->
+      <div class="lg-welcome">
+        <h1>欢迎回来</h1>
+        <p>使用工号或学号登录；教师与学生共用同一个入口。</p>
+      </div>
+
+      <div class="lg-form">
+        <!-- 错误态 banner：role=alert 让读屏立即播报 -->
+        <div class="banner banner--danger" role="alert" id="login-error">
+          <span data-icon="alert" aria-hidden="true"></span>
+          <div><b>账号或密码不正确</b>，还可尝试 4 次。<br>忘记密码请联系任课教师或信息中心重置。</div>
+        </div>
+
+        <div class="field mt16">
+          <label class="label" for="login-account">账号</label>
+          <div class="input-wrap">
+            <span class="input-icon" aria-hidden="true" data-icon="user"></span>
+            <input class="input input-error" id="login-account" name="account" type="text" value="T2026001"
+              autocomplete="username" aria-invalid="true" aria-describedby="login-error" placeholder="工号 / 学号">
+          </div>
+          <span class="help">教师用工号（如 T2026001），学生用学号。</span>
+        </div>
+
+        <div class="field">
+          <label class="label" for="login-password">密码</label>
+          <div class="input-wrap lg-has-eye">
+            <span class="input-icon" aria-hidden="true" data-icon="lock"></span>
+            <input class="input input-error" id="login-password" name="password" type="password" value="123456"
+              autocomplete="current-password" aria-invalid="true" aria-describedby="login-error" placeholder="请输入密码">
+            <span class="input-suffix">
+              <button type="button" class="lg-eye" id="toggle-pwd" aria-label="显示密码" aria-pressed="false">
+                <span data-icon="eye"></span>
+              </button>
+            </span>
+          </div>
+        </div>
+
+        <!-- 记住我 -->
+        <div class="lg-remember">
+          <button type="button" class="switch on" data-switch role="switch" aria-checked="true" aria-label="记住我" aria-labelledby="remember-label"></button>
+          <div class="lg-remember-main">
+            <b id="remember-label">记住我</b>
+            <span>仅限个人设备；公共机房请关闭</span>
+          </div>
+        </div>
+
+        <div class="lg-submit">
+          <button type="button" class="btn btn--primary btn--block btn--lg" data-goto="teacher-home">登录</button>
+        </div>
+
+        <div class="lg-doc">
+          <button type="button" class="btn btn--ghost" data-goto="public-doc"><span data-icon="book" aria-hidden="true"></span>使用文档</button>
+        </div>
+
+        <div class="lg-hint">
+          <span data-icon="info" aria-hidden="true"></span>
+          <div>账号由学校统一分配，首次登录后请尽快修改初始密码。连续 5 次输错将锁定 10 分钟。</div>
+        </div>
+      </div>
+
+      <!-- 底部版权 -->
+      <footer class="lg-foot">
+        <p>© 2026 Deadpan 大学 · 信息中心</p>
+        <p class="lg-foot-links">Deadpan 判题 <span class="v">v2.1.0</span><span class="dot-sep"></span>仅限校内网访问</p>
+        <p>登录遇到问题？联系任课教师或系统管理员（信息中心 8021）</p>
+      </footer>
+    </main>
+  </div>
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

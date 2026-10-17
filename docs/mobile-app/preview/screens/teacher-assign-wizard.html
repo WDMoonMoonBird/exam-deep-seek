@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>布置作业 · 4 步向导 · 移动端设计稿</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+  .t-steps { padding-top: 4px; }
+  .t-steps .steplabel { font-size: 11.5px; }
+  .t-steps .stepdot { width: 24px; height: 24px; font-size: 12px; }
+  .t-steps .stepdot .icon { width: 13px; height: 13px; }
+  .t-steps .step:not(.active):not(.done) .stepdot { color: var(--text-secondary); }
+  .t-switchcard { display: flex; align-items: center; margin-top: 12px; }
+  .t-switchcard .t { font-size: 14px; font-weight: 500; }
+  .t-switchcard .s { margin-top: 2px; font-size: 12px; color: var(--text-tertiary); }
+  .t-switchcard .switch { margin-left: 12px; }
+  .t-searchrow { padding: 0 var(--m-gutter); }
+  .t-chips { padding-top: 10px; }
+  .t-summary { display: flex; align-items: center; margin: 4px 0 10px; padding: 10px 12px; border-radius: 12px; background: var(--bg-selected); color: var(--text-brand); font-size: 13px; font-weight: 500; }
+  .t-summary .icon { width: 16px; height: 16px; margin-right: 7px; }
+  .t-summary b { font-variant-numeric: tabular-nums; }
+  .t-summary .t-sumspan { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--text-secondary); }
+  .t-pick { width: 100%; text-align: left; display: flex; align-items: center; padding: 13px 14px; border: 1px solid var(--border-default); border-radius: 14px; background: var(--bg-surface); }
+  .t-pick + .t-pick { margin-top: 10px; }
+  .t-pick:active { transform: scale(.995); }
+  .t-pick.on { border-color: var(--brand-600); background: var(--bg-selected); }
+  .t-pick-idx { flex: none; width: 26px; height: 26px; margin-right: 12px; border-radius: 8px; background: var(--brand-600); color: var(--text-on-brand); font-size: 12px; font-weight: 650; display: flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
+  .t-pick-plus { flex: none; width: 26px; height: 26px; margin-right: 12px; border-radius: 8px; border: 1px dashed var(--border-strong); color: var(--text-tertiary); display: flex; align-items: center; justify-content: center; }
+  .t-pick-plus .icon { width: 15px; height: 15px; }
+  .t-pick-main { flex: 1; min-width: 0; }
+  .t-pick-title { font-size: 14.5px; font-weight: 500; line-height: 1.4; }
+  .t-pick-sub { display: flex; align-items: center; flex-wrap: wrap; margin-top: 4px; font-size: 12px; color: var(--text-tertiary); }
+  .t-pick-sub .tag { margin-right: 8px; }
+  .t-pick-sub > * + * { margin-left: 0; }
+  .t-pick .check { margin-left: 12px; }
+  .t-pick[data-check].on .check { background: var(--brand-600); border-color: var(--brand-600); color: var(--text-on-brand); }
+  .t-tip { margin-top: 14px; }
+  .t-section-note { margin: 0 0 8px; font-size: 12px; color: var(--text-tertiary); }
+
+  /* 触控目标补足（视觉尺寸保持屏幕契约值，命中区域扩到 ≥44px） */
+  .chip, .seg button, .btn--sm, .btn--xs, .tool, .diffmore, .sheet-close, .t-expand, button.avatar, .switch { position: relative; }
+  .chip::after, .seg button::after, .btn--sm::after, .btn--xs::after, .tool::after, .diffmore::after, .sheet-close::after, .t-expand::after, button.avatar::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%);
+  }
+  .switch::before { content: ""; position: absolute; left: -6px; right: -6px; top: -7px; bottom: -7px; }
+  .searchbar { height: 44px; }
+</style>
+</head>
+<body class="screen" data-screen="teacher-assign-wizard" data-bottom="actionbar">
+  <div class="app">
+    <header class="appbar appbar--solid appbar--bordered">
+      <div class="appbar-side"><button type="button" class="iconbtn" data-icon="close" aria-label="关闭布置作业，返回作业列表" data-goto="teacher-assignments"></button></div>
+      <h1 class="appbar-title">布置作业<small>第 2 步 / 共 4 步</small></h1>
+      <div class="appbar-actions"><button type="button" class="iconbtn iconbtn--text">存草稿</button></div>
+    </header>
+
+    <main class="scroll">
+      <div class="steps t-steps" aria-label="布置作业步骤，当前第 2 步：选题">
+        <div class="step done">
+          <div class="stepdot"><span data-icon="check"></span></div>
+          <div class="steplabel">基本信息</div>
+        </div>
+        <div class="stepline done"></div>
+        <div class="step active" aria-current="step">
+          <div class="stepdot">2</div>
+          <div class="steplabel">选题</div>
+        </div>
+        <div class="stepline"></div>
+        <div class="step">
+          <div class="stepdot">3</div>
+          <div class="steplabel">班级</div>
+        </div>
+        <div class="stepline"></div>
+        <div class="step">
+          <div class="stepdot">4</div>
+          <div class="steplabel">确认</div>
+        </div>
+      </div>
+
+      <div class="page">
+        <p class="t-section-note">从题库选择题目，或稍后在电脑端新建</p>
+        <label class="searchbar">
+          <span data-icon="search"></span>
+          <input id="q-search" type="search" placeholder="搜索题目 / 知识点" aria-label="搜索题目或知识点">
+        </label>
+      </div>
+
+      <div class="chips t-chips">
+        <button type="button" class="chip active">编程题 <span class="count">86</span></button>
+        <button type="button" class="chip">实训题 <span class="count">12</span></button>
+        <button type="button" class="chip">最近用过 <span class="count">18</span></button>
+      </div>
+
+      <div class="page">
+        <div class="t-summary">
+          <span data-icon="check-circle"></span>
+          <span>已选 <b>3</b> 题 · 共 <b>65</b> 分</span>
+          <span class="t-sumspan">按选择顺序出题</span>
+        </div>
+
+        <div class="card t-switchcard">
+          <div class="grow">
+            <div class="t">打乱题目顺序</div>
+            <div class="s">学生看到的题目顺序随机，防抄袭</div>
+          </div>
+          <button type="button" class="switch" data-switch role="switch" aria-checked="false" aria-label="打乱题目顺序"></button>
+        </div>
+
+        <button type="button" class="t-pick on" data-check aria-pressed="true">
+          <span class="t-pick-idx">1</span>
+          <span class="t-pick-main">
+            <span class="t-pick-title" style="display:block">实现用户列表分页查询</span>
+            <span class="t-pick-sub" style="display:flex"><span class="tag tag--info">编程题</span>10 分 · 使用 28 次</span>
+          </span>
+          <span class="check on" aria-hidden="true"><span data-icon="check"></span></span>
+        </button>
+
+        <button type="button" class="t-pick on" data-check aria-pressed="true">
+          <span class="t-pick-idx">2</span>
+          <span class="t-pick-main">
+            <span class="t-pick-title" style="display:block">用户 CRUD 接口实现</span>
+            <span class="t-pick-sub" style="display:flex"><span class="tag tag--info">编程题</span>15 分 · 使用 24 次</span>
+          </span>
+          <span class="check on" aria-hidden="true"><span data-icon="check"></span></span>
+        </button>
+
+        <button type="button" class="t-pick on" data-check aria-pressed="true">
+          <span class="t-pick-idx">3</span>
+          <span class="t-pick-main">
+            <span class="t-pick-title" style="display:block">前端实训：用户管理系统工程包</span>
+            <span class="t-pick-sub" style="display:flex"><span class="tag tag--accent">实训题</span>40 分 · 使用 12 次</span>
+          </span>
+          <span class="check on" aria-hidden="true"><span data-icon="check"></span></span>
+        </button>
+
+        <button type="button" class="t-pick" data-check aria-pressed="false">
+          <span class="t-pick-plus" data-icon="plus"></span>
+          <span class="t-pick-main">
+            <span class="t-pick-title" style="display:block">图的 Dijkstra 最短路径实现</span>
+            <span class="t-pick-sub" style="display:flex"><span class="tag tag--info">编程题</span>20 分 · 使用 18 次</span>
+          </span>
+          <span class="check" aria-hidden="true"><span data-icon="check"></span></span>
+        </button>
+
+        <button type="button" class="t-pick" data-check aria-pressed="false">
+          <span class="t-pick-plus" data-icon="plus"></span>
+          <span class="t-pick-main">
+            <span class="t-pick-title" style="display:block">Java 集合与异常处理</span>
+            <span class="t-pick-sub" style="display:flex"><span class="tag tag--neutral">客观题</span>5 分 · 使用 45 次</span>
+          </span>
+          <span class="check" aria-hidden="true"><span data-icon="check"></span></span>
+        </button>
+
+        <div class="t-tip">
+          <p class="readonly-tip"><span data-icon="info"></span>新建题目、调整分值请在电脑端完成；移动端布置作业只做选择。</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="actionbar">
+    <button type="button" class="btn btn--secondary">上一步</button>
+    <button type="button" class="btn btn--primary">下一步：选择班级</button>
+  </div>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>教师工作台 · 移动端设计稿</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+  .t-hero { padding-top: 8px; padding-bottom: 14px; }
+  .t-hero .sub { margin-top: 5px; }
+  .t-avatar-btn { border: 0; }
+  .t-stat { display: block; width: 100%; text-align: left; font: inherit; color: inherit; padding: 14px 12px; }
+  .t-stat .v { font-size: 26px; }
+  .t-stat .k { display: flex; align-items: center; justify-content: space-between; }
+  .t-stat .k .icon { width: 13px; height: 13px; color: var(--text-disabled); }
+  .t-quick { display: grid; grid-template-columns: repeat(4, 1fr); grid-gap: 6px; gap: 6px; background: var(--card-bg); border: 1px solid var(--card-bd); border-radius: var(--m-radius-card); padding: 12px 8px; }
+  .t-quick-item { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 74px; border-radius: 12px; color: var(--text-secondary); font-size: 12px; font-weight: 500; }
+  .t-quick-item:active { background: var(--bg-hover); }
+  .t-qicon { width: 40px; height: 40px; border-radius: 12px; background: var(--bg-selected); color: var(--text-brand); display: flex; align-items: center; justify-content: center; }
+  .t-qicon .icon { width: 20px; height: 20px; }
+  .t-qlabel { margin-top: 7px; }
+  .t-pnum { flex: none; margin-left: 10px; font-size: 12px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+  .t-foot-note { font-size: 12px; color: var(--text-tertiary); }
+  .t-foot-note .icon { width: 13px; height: 13px; margin-right: 4px; vertical-align: -2px; }
+  .t-scan-frame { width: 148px; height: 148px; margin: 8px auto 0; border-radius: 16px; border: 2px dashed var(--border-strong); background: var(--bg-sunken); display: flex; align-items: center; justify-content: center; color: var(--text-disabled); }
+  .t-scan-frame .icon { width: 44px; height: 44px; stroke-width: 1.4; }
+
+  /* 触控目标补足（视觉尺寸保持屏幕契约值，命中区域扩到 ≥44px） */
+  .chip, .seg button, .btn--sm, .btn--xs, .tool, .diffmore, .sheet-close, .t-expand, button.avatar, .switch { position: relative; }
+  .chip::after, .seg button::after, .btn--sm::after, .btn--xs::after, .tool::after, .diffmore::after, .sheet-close::after, .t-expand::after, button.avatar::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%);
+  }
+  .switch::before { content: ""; position: absolute; left: -6px; right: -6px; top: -7px; bottom: -7px; }
+  .searchbar { height: 44px; }
+</style>
+</head>
+<body class="screen" data-screen="teacher-home" data-bottom="tabbar">
+  <div data-tabbar="teacher" data-active="home"></div>
+
+  <div class="app">
+    <main class="scroll">
+      <section class="hero t-hero">
+        <div class="hero-row">
+          <div class="grow">
+            <h1>下午好，周老师</h1>
+            <p class="sub">计算机学院 · 10 月 17 日 周六</p>
+          </div>
+          <div class="row g8">
+            <button type="button" class="iconbtn" data-icon="bell" aria-label="通知，2 条未读"></button>
+            <button type="button" class="avatar avatar--brand t-avatar-btn" data-goto="teacher-profile" aria-label="周子轩，打开我的页面">周</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="page stack">
+        <div class="stats">
+          <button type="button" class="stat stat--warn t-stat" data-goto="teacher-review-queue" aria-label="待审核 12 份，去审核">
+            <span class="v">12<small>份</small></span>
+            <span class="k">待审核<span data-icon="chevron-right"></span></span>
+          </button>
+          <button type="button" class="stat stat--info t-stat" data-goto="teacher-assignments" aria-label="进行中 3 门，去作业列表">
+            <span class="v">3<small>门</small></span>
+            <span class="k">进行中<span data-icon="chevron-right"></span></span>
+          </button>
+          <button type="button" class="stat t-stat" data-goto="teacher-assignments" aria-label="AI 评分中 2 门，去作业列表">
+            <span class="v">2<small>门</small></span>
+            <span class="k">AI 评分中<span data-icon="chevron-right"></span></span>
+          </button>
+        </div>
+
+        <div class="banner banner--warning">
+          <span data-icon="alert"></span>
+          <div><b>12 份提交等待审核</b>：其中 3 份已等待超过 24 小时，建议优先处理。<a class="banner-link" href="#" data-goto="teacher-review-queue">去审核</a></div>
+        </div>
+
+        <div class="t-quick" role="group" aria-label="快捷入口">
+          <button type="button" class="t-quick-item" data-goto="teacher-assign-wizard">
+            <span class="t-qicon"><span data-icon="plus"></span></span>
+            <span class="t-qlabel">布置作业</span>
+          </button>
+          <button type="button" class="t-quick-item" data-goto="teacher-questions">
+            <span class="t-qicon"><span data-icon="book"></span></span>
+            <span class="t-qlabel">题库</span>
+          </button>
+          <button type="button" class="t-quick-item" data-goto="teacher-class">
+            <span class="t-qicon"><span data-icon="users"></span></span>
+            <span class="t-qlabel">班级</span>
+          </button>
+          <button type="button" class="t-quick-item" data-open-sheet="scan-sheet">
+            <span class="t-qicon"><span data-icon="qr"></span></span>
+            <span class="t-qlabel">扫码审核</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h2>最近作业</h2>
+        <a class="link" href="#" data-goto="teacher-assignments">全部作业<span data-icon="chevron-right"></span></a>
+      </div>
+
+      <div class="page stack">
+        <div class="card">
+          <div class="card-head">
+            <div class="grow">
+              <div class="card-title">用户管理系统（前端）实训</div>
+              <div class="card-sub">计算机 2301 / 2302 班 · 3 题 · 实训题</div>
+            </div>
+            <span class="tag tag--warning"><i class="dot"></i>待审核 12</span>
+          </div>
+          <div class="row mt12">
+            <div class="bar bar--warning grow"><i style="width:84%"></i></div>
+            <span class="t-pnum">38 / 45</span>
+          </div>
+          <div class="card-foot">
+            <span class="t-foot-note"><span data-icon="clock"></span>截止 2026-10-08 23:59</span>
+            <button type="button" class="btn btn--sm btn--soft" data-goto="teacher-review-queue">去审核</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div class="grow">
+              <div class="card-title">数据结构实验三：图的最短路径</div>
+              <div class="card-sub">计算机 2302 班 · 6 题 · 剩余 3 天 7 小时</div>
+            </div>
+            <span class="tag tag--info"><i class="dot"></i>AI 评分中 7</span>
+          </div>
+          <div class="row mt12">
+            <div class="bar grow"><i style="width:28%"></i></div>
+            <span class="t-pnum">12 / 43</span>
+          </div>
+          <div class="card-foot">
+            <span class="t-foot-note"><span data-icon="clock"></span>截止 2026-10-20 23:59</span>
+            <button type="button" class="btn btn--sm btn--secondary" data-goto="teacher-assignment-detail">查看进度</button>
+          </div>
+        </div>
+
+        <p class="t-foot-note" style="text-align:center">今天已审核 5 份 · 平均每份 1.8 分钟</p>
+      </div>
+    </main>
+  </div>
+
+  <div class="mask" data-for="scan-sheet"></div>
+  <section class="sheet" id="scan-sheet" role="dialog" aria-modal="true" aria-label="扫码审核">
+    <div class="grabber"></div>
+    <div class="sheet-head">
+      <div>
+        <div class="sheet-title">扫码审核</div>
+        <div class="sheet-sub">对准学生提交页的二维码，快速进入该份审核</div>
+      </div>
+      <button type="button" class="sheet-close" data-close-sheet aria-label="关闭"><span data-icon="close"></span></button>
+    </div>
+    <div class="sheet-body">
+      <div class="t-scan-frame"><span data-icon="qr"></span></div>
+      <p class="help" style="text-align:center">相机权限仅在扫码时使用，不保存画面。</p>
+    </div>
+    <div class="sheet-foot"><button type="button" class="btn btn--primary btn--block" data-close-sheet>我知道了</button></div>
+  </section>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>组件样板 · 移动端设计稿</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+  .demo-block { padding: 0 var(--m-gutter); }
+  .demo-block + .demo-block { margin-top: 26px; }
+  .demo-label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-tertiary); margin: 0 0 10px; font-weight: 600; }
+  .swatch-row { display: grid; grid-template-columns: repeat(4, 1fr); grid-gap: 8px; gap: 8px; }
+  .swatch { border-radius: 10px; height: 46px; border: 1px solid var(--border-subtle); display: flex; align-items: flex-end; padding: 5px 7px; font-size: 9px; color: #fff; }
+  .swatch.light { color: var(--text-secondary); }
+  .type-row { display: flex; align-items: baseline; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border-subtle); }
+  .type-row:last-child { border-bottom: 0; }
+</style>
+</head>
+<body class="screen" data-screen="_kitchen-sink" data-bottom="none">
+  <div class="app">
+    <header class="appbar appbar--left appbar--solid">
+      <div class="appbar-side"><button class="iconbtn" data-icon="back" aria-label="返回" data-goto="teacher-home"></button></div>
+      <h1 class="appbar-title">组件样板</h1>
+      <div class="appbar-actions"><span class="tag tag--info">v1.0</span></div>
+    </header>
+    <main class="scroll">
+      <div class="hero"><h1>Screen Kit</h1><p class="sub">390 × 844 · 浅/深色 · iOS/Android · 真令牌渲染</p></div>
+
+      <div class="demo-block">
+        <div class="demo-label">Buttons</div>
+        <div class="gv8">
+          <button class="btn btn--primary btn--block">主按钮 · 50px</button>
+          <div class="btn-row"><button class="btn btn--secondary">次要</button><button class="btn btn--primary">主要</button></div>
+          <div class="btn-row"><button class="btn btn--soft">轻量</button><button class="btn btn--ghost">文字按钮</button><button class="btn btn--danger-soft">危险</button></div>
+          <div class="g8 row"><button class="btn btn--sm btn--secondary">小按钮</button><button class="btn btn--sm btn--primary">继续作答</button><button class="btn btn--xs btn--danger-soft">删除</button></div>
+        </div>
+      </div>
+
+      <div class="demo-block">
+        <div class="demo-label">Tags &amp; Chips</div>
+        <div class="g8 row" style="flex-wrap:wrap">
+          <span class="tag tag--success"><i class="dot"></i>已发布</span>
+          <span class="tag tag--warning"><i class="dot"></i>待审核 12</span>
+          <span class="tag tag--danger"><i class="dot"></i>已截止</span>
+          <span class="tag tag--info"><i class="dot"></i>AI 评分中</span>
+          <span class="tag tag--neutral">草稿</span>
+          <span class="tag tag--accent">实训题</span>
+        </div>
+        <div class="chips mt12" style="padding-left:0;padding-right:0">
+          <button class="chip active">全部</button><button class="chip">待审核 <span class="count">12</span></button><button class="chip">已评分</button><button class="chip">已结束</button>
+        </div>
+      </div>
+
+      <div class="demo-block">
+        <div class="demo-label">Stats &amp; Progress</div>
+        <div class="stats">
+          <div class="stat"><div class="v">12</div><div class="k">待审核</div></div>
+          <div class="stat stat--info"><div class="v">3</div><div class="k">进行中</div></div>
+          <div class="stat stat--warn"><div class="v">2</div><div class="k">AI 评分中</div></div>
+        </div>
+        <div class="card mt12">
+          <div class="between"><span class="card-title">用户管理系统（前端）实训</span><span class="tag tag--warning">待审核 12</span></div>
+          <div class="card-sub">计算机 2301 / 2302 班 · 3 题</div>
+          <div class="row mt12"><div class="bar grow"><i style="width:84%"></i></div><span class="tnum" style="font-size:12px;color:var(--text-tertiary);margin-left:10px">38/45</span></div>
+        </div>
+      </div>
+
+      <div class="demo-block">
+        <div class="demo-label">Form</div>
+        <div class="field"><label class="label" for="demo-1">作业名称</label><input class="input" id="demo-1" value="数据结构实验三：图的最短路径"></div>
+        <div class="field"><label class="label" for="demo-2">截止时间</label><input class="input" id="demo-2" type="date" value="2026-10-20"></div>
+        <div class="field"><label class="label">备注</label><textarea class="textarea" placeholder="给学生的说明（选填）"></textarea><div class="counter">0 / 200</div></div>
+        <div class="row mt16"><span class="grow" style="font-size:14px">允许迟交</span><button class="switch on" data-switch role="switch" aria-checked="true" aria-label="允许迟交"></button></div>
+      </div>
+
+      <div class="demo-block">
+        <div class="demo-label">Cells &amp; States</div>
+        <div class="list">
+          <button class="rowitem rowitem--tap" style="width:100%;text-align:left"><span class="rowicon" data-icon="users"></span><span class="row-main"><span class="row-title">班级管理</span><span class="row-sub">3 个班 · 128 名学生</span></span><span class="chevron" data-icon="chevron-right"></span></button>
+          <button class="rowitem rowitem--tap" style="width:100%;text-align:left"><span class="rowicon rowicon--success" data-icon="scores"></span><span class="row-main"><span class="row-title">成绩已发布</span><span class="row-sub">学生现在可以查看成绩</span></span><span class="tag tag--success">已完成</span></button>
+        </div>
+        <div class="empty"><div class="empty-icon" data-icon="inbox"></div><h3>暂无待审核提交</h3><p>学生提交后会自动进入这里，AI 评分完成会实时推送。</p><button class="btn btn--primary btn--sm">去布置作业</button></div>
+      </div>
+
+      <div class="demo-block">
+        <div class="demo-label">Skeleton / Error</div>
+        <div class="sk-card"><div class="sk" style="width:52%;height:16px"></div><div class="sk sk-line"></div><div class="sk sk-line sk-line--sm"></div></div>
+        <div class="banner banner--warning mt12"><span data-icon="alert"></span><div><b>今晚 23:59 截止</b>：「数据结构实验三」还有 2 道题未答，提交后不可修改。</div></div>
+        <div class="banner banner--danger mt8"><span data-icon="wifi-off"></span><div><b>网络已断开</b>：已缓存内容可查看，恢复网络后自动重试。</div></div>
+      </div>
+
+      <div class="demo-block">
+        <div class="demo-label">Sheet 唤起</div>
+        <button class="btn btn--secondary btn--block" data-open-sheet="demo-sheet">打开底部面板</button>
+      </div>
+      <div style="height:40px"></div>
+    </main>
+  </div>
+
+  <div class="mask" data-for="demo-sheet"></div>
+  <section class="sheet" id="demo-sheet" role="dialog" aria-modal="true" aria-label="示例面板">
+    <div class="grabber"></div>
+    <div class="sheet-head"><div><div class="sheet-title">答题卡</div><div class="sheet-sub">已答 4 / 6 · 剩余 2 题</div></div><button class="sheet-close" data-close-sheet aria-label="关闭"><span data-icon="close"></span></button></div>
+    <div class="sheet-body">
+      <div class="qgrid">
+        <button class="qnum done">1</button><button class="qnum done">2</button><button class="qnum done">3</button><button class="qnum done">4</button><button class="qnum current">5</button><button class="qnum">6</button>
+      </div>
+      <div class="qlegend mt16"><span><i class="legend-done"></i>已答</span><span><i class="legend-current"></i>当前</span><span><i class="legend-undone"></i>未答</span><span><i class="legend-marked"></i>标记</span></div>
+    </div>
+    <div class="sheet-foot"><button class="btn btn--primary btn--block" data-close-sheet>继续作答</button></div>
+  </section>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>页面标题 · 移动端设计稿</title>
+<!-- 单一事实来源：桌面令牌 + 移动端令牌层 + 预览组件库 -->
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+</head>
+<body class="screen" data-screen="screen-id" data-bottom="tabbar">
+  <!-- 底部 Tab 占位：由 screen.js 按 data-tabbar 渲染；无 Tab 的页面删除本行 -->
+  <div data-tabbar="teacher" data-active="home"></div>
+
+  <div class="app">
+    <!-- 顶部导航：标准页用 appbar--left + 返回；Tab 首页用大标题（可不要 appbar） -->
+    <header class="appbar appbar--left">
+      <div class="appbar-side"></div>
+      <h1 class="appbar-title">页面标题</h1>
+      <div class="appbar-actions">
+        <button type="button" class="iconbtn" data-icon="more" aria-label="更多"></button>
+      </div>
+    </header>
+
+    <main class="scroll">
+      <section class="hero">
+        <h1>大标题</h1>
+        <p class="sub">一句辅助说明</p>
+      </section>
+
+      <div class="page stack">
+        <div class="card">
+          <div class="card-title">卡片标题</div>
+          <p class="card-sub">卡片说明文本</p>
+        </div>
+        <button type="button" class="btn btn--primary btn--block" data-goto="teacher-home">主按钮</button>
+      </div>
+    </main>
+  </div>
+
+  <!-- 可选：底部固定动作条（同时把 body 的 data-bottom 改为 actionbar） -->
+  <!-- <div class="actionbar"><button class="btn btn--secondary">次要</button><button class="btn btn--primary">主要</button></div> -->
+
+  <!-- 可选：底部 Sheet 示例 -->
+  <!--
+  <div class="mask" data-for="demo-sheet"></div>
+  <section class="sheet" id="demo-sheet" role="dialog" aria-modal="true" aria-label="示例面板">
+    <div class="grabber"></div>
+    <div class="sheet-head"><div class="sheet-title">示例面板</div><button class="sheet-close" data-close-sheet aria-label="关闭"><span data-icon="close"></span></button></div>
+    <div class="sheet-body">…</div>
+    <div class="sheet-foot"><button class="btn btn--primary btn--block" data-close-sheet>完成</button></div>
+  </section>
+  -->
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

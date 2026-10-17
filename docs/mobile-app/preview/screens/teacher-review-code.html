@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>代码只读 + 选区 · 移动端设计稿</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+  .t-filechips { display: flex; align-items: center; padding: 12px var(--m-gutter) 0; }
+  .t-filechips .chip { height: 34px; }
+  .t-filechips .t-lock { margin-left: auto; display: inline-flex; align-items: center; font-size: 12px; color: var(--text-tertiary); }
+  .t-filechips .t-lock .icon { width: 14px; height: 14px; margin-right: 4px; }
+  .t-codewrap { position: relative; margin-top: 12px; }
+  .t-codewrap .codebody { max-height: none; }
+  .t-codewrap .selmenu { position: absolute; top: 226px; left: 10px; z-index: 5; }
+  .t-code { display: inline-block; }
+  .t-hint { display: flex; align-items: center; padding: 10px var(--m-gutter) 0; font-size: 12px; color: var(--text-tertiary); }
+  .t-hint .icon { width: 14px; height: 14px; margin-right: 5px; }
+  .t-hint .grow { display: block; }
+  .t-readonly { font-size: 12px; color: var(--code-fg); }
+  .t-tip { margin: 14px 0 0; }
+  .t-tabs { border-bottom: 0; }
+  .t-tabs button { margin-right: 26px; }
+  .t-tabs button:last-child { margin-left: auto; margin-right: 0; color: var(--text-link); }
+  .t-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 0 0; }
+  .t-toolgroup { display: flex; align-items: center; }
+  .t-toolgroup .btn { height: 36px; padding: 0 12px; font-size: 12.5px; border-radius: 10px; }
+  .t-toolgroup .btn + .btn { margin-left: 8px; }
+
+  /* 触控目标补足（视觉尺寸保持屏幕契约值，命中区域扩到 ≥44px） */
+  .chip, .seg button, .btn--sm, .btn--xs, .tool, .diffmore, .sheet-close, .t-expand, button.avatar, .switch { position: relative; }
+  .chip::after, .seg button::after, .btn--sm::after, .btn--xs::after, .tool::after, .diffmore::after, .sheet-close::after, .t-expand::after, button.avatar::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%);
+  }
+  .switch::before { content: ""; position: absolute; left: -6px; right: -6px; top: -7px; bottom: -7px; }
+  .searchbar { height: 44px; }
+</style>
+</head>
+<body class="screen" data-screen="teacher-review-code" data-bottom="actionbar">
+  <div class="app">
+    <header class="appbar appbar--solid appbar--bordered">
+      <div class="appbar-side"><button type="button" class="iconbtn" data-icon="back" aria-label="返回审核详情" data-goto="teacher-review-detail"></button></div>
+      <h1 class="appbar-title">陈嘉懿的提交<small>用户管理系统（前端）实训</small></h1>
+      <div class="appbar-actions"><button type="button" class="iconbtn iconbtn--text" data-goto="teacher-review-queue">完成</button></div>
+    </header>
+
+    <main class="scroll">
+      <div class="tabs t-tabs" data-tabgroup>
+        <button type="button" data-tab="q1">第 1 题</button>
+        <button type="button" class="active" data-tab="q2">第 2 题</button>
+        <button type="button" data-goto="teacher-review-diff">差异</button>
+      </div>
+
+      <div class="t-filechips">
+        <button type="button" class="chip active">UserTable.vue</button>
+        <button type="button" class="chip">App.vue</button>
+        <span class="t-lock"><span data-icon="lock"></span>只读 · 312 行</span>
+      </div>
+
+      <p class="t-hint"><span data-icon="info"></span>长按选中代码行，可引用到评语。<span class="grow"></span><span class="tag tag--warning">第 8 行已选中</span></p>
+
+      <div class="page">
+        <div class="t-codewrap">
+          <div class="codebox">
+            <div class="codebar">
+              <div class="file"><span data-icon="file"></span><span>UserTable.vue</span><span class="badge-file">第 2 题</span></div>
+              <span>Vue 3 · setup</span>
+            </div>
+            <div class="codebody" role="group" aria-label="UserTable.vue 只读代码，第 8 行已选中">
+              <div class="codeline"><span class="ln" aria-hidden="true">1</span><span class="t-code"><span class="tk-tag">&lt;script setup&gt;</span></span></div>
+              <div class="codeline"><span class="ln" aria-hidden="true">2</span><span class="t-code"><span class="tk-key">import</span> { ref, onMounted } <span class="tk-key">from</span> <span class="tk-str">'vue'</span></span></div>
+              <div class="codeline"><span class="ln" aria-hidden="true">3</span><span class="t-code"><span class="tk-key">import</span> { getUsers } <span class="tk-key">from</span> <span class="tk-str">'@/api/user'</span></span></div>
+              <div class="codeline"><span class="ln" aria-hidden="true">4</span><span class="t-code"></span></div>
+              <div class="codeline"><span class="ln" aria-hidden="true">5</span><span class="t-code"><span class="tk-key">const</span> page = <span class="tk-fn">ref</span>(<span class="tk-num">1</span>)</span></div>
+              <div class="codeline"><span class="ln" aria-hidden="true">6</span><span class="t-code"><span class="tk-key">const</span> total = <span class="tk-fn">ref</span>(<span class="tk-num">0</span>)</span></div>
+              <div class="codeline"><span class="ln" aria-hidden="true">7</span><span class="t-code"><span class="tk-key">const</span> pageUsers = <span class="tk-fn">ref</span>([])</span></div>
+              <div class="codeline hl"><span class="ln" aria-hidden="true">8</span><span class="t-code"><span class="tk-key">const</span> loading = <span class="tk-fn">ref</span>(<span class="tk-key">false</span>)</span></div>
+              <div class="codeline"><span class="ln" aria-hidden="true">9</span><span class="t-code"><span class="tk-key">async function</span> <span class="tk-fn">load</span>(nextPage = page.value) {</span></div>
+              <div class="codeline"><span class="ln" aria-hidden="true">10</span><span class="t-code">  <span class="tk-key">const</span> res = <span class="tk-key">await</span> <span class="tk-fn">getUsers</span>({</span></div>
+              <div class="codeline"><span class="ln" aria-hidden="true">11</span><span class="t-code">    page: nextPage, size: <span class="tk-num">10</span>,</span></div>
+              <div class="codeline"><span class="ln" aria-hidden="true">12</span><span class="t-code">  })</span></div>
+              <div class="codeline"><span class="ln" aria-hidden="true">13</span><span class="t-code">  pageUsers.value = res.items</span></div>
+              <div class="codeline"><span class="ln" aria-hidden="true">14</span><span class="t-code">  total.value = res.total</span></div>
+              <div class="codeline"><span class="ln" aria-hidden="true">15</span><span class="t-code">  page.value = nextPage</span></div>
+              <div class="codeline"><span class="ln" aria-hidden="true">16</span><span class="t-code">}</span></div>
+              <div class="codeline"><span class="ln" aria-hidden="true">17</span><span class="t-code"><span class="tk-fn">onMounted</span>(() =&gt; <span class="tk-fn">load</span>())</span></div>
+              <div class="codeline"><span class="ln" aria-hidden="true">18</span><span class="t-code"><span class="tk-tag">&lt;/script&gt;</span></span></div>
+            </div>
+            <div class="codetoolbar">
+              <div class="row g8">
+                <button type="button" class="tool" aria-label="减小字号">Aa−</button>
+                <button type="button" class="tool" aria-label="增大字号">Aa+</button>
+                <button type="button" class="tool" aria-label="切换自动换行">换行</button>
+                <button type="button" class="tool" aria-label="复制选中的第 8 行"><span data-icon="copy"></span>复制</button>
+              </div>
+              <span class="t-readonly">只读</span>
+            </div>
+          </div>
+
+          <div class="selmenu" role="toolbar" aria-label="选中行的操作">
+            <button type="button"><span data-icon="message"></span>引用到评语</button>
+            <button type="button"><span data-icon="copy"></span>复制</button>
+            <button type="button"><span data-icon="search"></span>搜索</button>
+          </div>
+        </div>
+
+
+
+        <div class="t-tip">
+          <div class="banner banner--info">
+            <span data-icon="zap"></span>
+            <div><b>AI 建议</b>：第 8 行定义的 <span class="mono">loading</span> 未在模板中使用，建议复核是否遗漏加载态。已自动定位到该行。</div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="actionbar">
+    <button type="button" class="btn btn--secondary" data-goto="teacher-review-detail">改分</button>
+    <button type="button" class="btn btn--primary" data-goto="teacher-review-queue">审核通过</button>
+  </div>
+
+  <div class="mask" data-for="file-sheet"></div>
+  <section class="sheet" id="file-sheet" role="dialog" aria-modal="true" aria-label="工程包文件">
+    <div class="grabber"></div>
+    <div class="sheet-head">
+      <div><div class="sheet-title">工程包文件</div><div class="sheet-sub">368 个文件 · 6.3 MB</div></div>
+      <button type="button" class="sheet-close" data-close-sheet aria-label="关闭"><span data-icon="close"></span></button>
+    </div>
+    <div class="sheet-body">
+      <div class="list">
+        <button type="button" class="rowitem rowitem--tap" data-close-sheet><span class="rowicon" data-icon="code"></span><span class="row-main"><span class="row-title">UserTable.vue</span><span class="row-sub">src/components · 12.4 KB</span></span><span class="tag tag--info">当前</span></button>
+        <button type="button" class="rowitem rowitem--tap" data-close-sheet><span class="rowicon" data-icon="file"></span><span class="row-main"><span class="row-title">App.vue</span><span class="row-sub">src · 3.1 KB</span></span></button>
+        <button type="button" class="rowitem rowitem--tap" data-close-sheet><span class="rowicon" data-icon="folder"></span><span class="row-main"><span class="row-title">user.js</span><span class="row-sub">src/api · 1.2 KB</span></span></button>
+      </div>
+      <p class="readonly-tip mt12"><span data-icon="info"></span>移动端仅展示提交中的代码文件，完整工程请导出后在电脑端查看。</p>
+    </div>
+    <div class="sheet-foot"><button class="btn btn--primary btn--block" data-close-sheet>关闭</button></div>
+  </section>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

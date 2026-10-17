@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>作业列表 · 移动端设计稿</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+  .t-searchrow { padding: 4px var(--m-gutter) 0; }
+  .t-summary { display: flex; align-items: center; padding: 12px var(--m-gutter) 0; font-size: 12px; color: var(--text-tertiary); }
+  .t-summary b { color: var(--text-secondary); font-weight: 600; }
+  .t-summary .dot-sep::before { margin: 0 6px; }
+  .t-meta { display: flex; flex-wrap: wrap; align-items: center; margin-top: 9px; font-size: 12px; color: var(--text-tertiary); }
+  .t-meta > * + * { margin-left: 14px; }
+  .t-meta .icon { width: 14px; height: 14px; margin-right: 4px; vertical-align: -2px; color: var(--text-tertiary); }
+  .t-meta .t-urgent { color: var(--status-warning-fg); }
+  .t-pnum { flex: none; margin-left: 10px; font-size: 12px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+  .t-foot-note { font-size: 12px; color: var(--text-tertiary); }
+  .t-swipe { display: flex; align-items: stretch; }
+  .t-swipe > .card { flex: 1; min-width: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: 0; }
+  .t-swipe .card-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .t-swipe-actions { flex: none; width: 66px; display: flex; flex-direction: column; border: 1px solid var(--card-bd); border-left: 0; border-radius: 0 var(--m-radius-card) var(--m-radius-card) 0; overflow: hidden; }
+  .t-swipe-btn { flex: 1; min-height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 500; background: var(--card-bg); }
+  .t-swipe-btn .icon { width: 18px; height: 18px; margin-bottom: 4px; }
+  .t-swipe-btn--edit { color: var(--text-brand); background: var(--bg-surface-2); border-left: 1px solid var(--border-subtle); }
+  .t-swipe-btn--del { color: var(--status-danger-fg); background: var(--status-danger-bg); border-left: 1px solid var(--border-subtle); }
+  .t-swipe-hint { display: flex; align-items: center; justify-content: center; margin-top: 8px; font-size: 11.5px; color: var(--text-tertiary); }
+  .t-swipe-hint .icon { width: 14px; height: 14px; margin-right: 5px; }
+
+  /* 触控目标补足（视觉尺寸保持屏幕契约值，命中区域扩到 ≥44px） */
+  .chip, .seg button, .btn--sm, .btn--xs, .tool, .diffmore, .sheet-close, .t-expand, button.avatar, .switch { position: relative; }
+  .chip::after, .seg button::after, .btn--sm::after, .btn--xs::after, .tool::after, .diffmore::after, .sheet-close::after, .t-expand::after, button.avatar::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%);
+  }
+  .switch::before { content: ""; position: absolute; left: -6px; right: -6px; top: -7px; bottom: -7px; }
+  .searchbar { height: 44px; }
+</style>
+</head>
+<body class="screen" data-screen="teacher-assignments" data-bottom="tabbar">
+  <div data-tabbar="teacher" data-active="assignments"></div>
+
+  <div class="app">
+    <header class="appbar appbar--left appbar--solid">
+      <div class="appbar-side"></div>
+      <h1 class="appbar-title">作业管理</h1>
+      <div class="appbar-actions">
+        <button type="button" class="iconbtn" data-icon="plus" aria-label="布置作业" data-goto="teacher-assign-wizard"></button>
+      </div>
+    </header>
+
+    <main class="scroll">
+      <div class="t-searchrow">
+        <label class="searchbar">
+          <span data-icon="search"></span>
+          <input id="t-search" type="search" placeholder="搜索作业名称或班级" aria-label="搜索作业名称或班级">
+        </label>
+      </div>
+
+      <div class="chips mt12">
+        <button type="button" class="chip active">全部 <span class="count">4</span></button>
+        <button type="button" class="chip">进行中 <span class="count">2</span></button>
+        <button type="button" class="chip">待审核 <span class="count">12</span></button>
+        <button type="button" class="chip">已结束 <span class="count">1</span></button>
+      </div>
+
+      <div class="t-summary">
+        <span><b>4</b> 份作业</span><span class="dot-sep">按截止时间排序</span><span class="dot-sep">最近更新 2026-10-09 09:12</span>
+      </div>
+
+      <div class="page stack mt12">
+        <!-- 待审核：最高优先级 -->
+        <article class="card">
+          <div class="card-head">
+            <div class="grow">
+              <div class="card-title">用户管理系统（前端）实训</div>
+              <div class="card-sub">计算机 2301 / 2302 班 · 实训题 · 3 题</div>
+            </div>
+            <span class="tag tag--warning"><i class="dot"></i>待审核 12</span>
+          </div>
+          <div class="t-meta">
+            <span><span data-icon="clock"></span>截止 2026-10-08 23:59</span>
+            <span><span data-icon="file"></span>工程包提交</span>
+          </div>
+          <div class="row mt12">
+            <div class="bar bar--warning grow"><i style="width:84%"></i></div>
+            <span class="t-pnum">38 / 45</span>
+          </div>
+          <div class="card-foot">
+            <span class="t-foot-note">已提交 38 · 未交 7</span>
+            <button type="button" class="btn btn--sm btn--soft" data-goto="teacher-assignment-detail">查看详情</button>
+          </div>
+        </article>
+
+        <!-- 进行中：左滑露出锁定/复制链接（静态展示；server 无编辑/删除移动端接口） -->
+        <div class="t-swipe">
+          <article class="card">
+            <div class="card-head">
+              <div class="grow">
+                <div class="card-title">数据结构实验三：图的最短路径</div>
+                <div class="card-sub">计算机 2302 班 · 编程题 · 6 题</div>
+              </div>
+            </div>
+            <div class="t-meta">
+              <span><span class="tag tag--info"><i class="dot"></i>AI 评分中 7</span></span>
+              <span><span data-icon="clock"></span>截止 2026-10-20 23:59</span>
+              <span class="t-urgent"><span data-icon="alert"></span>剩余 3 天 7 小时</span>
+            </div>
+            <div class="row mt12">
+              <div class="bar grow"><i style="width:28%"></i></div>
+              <span class="t-pnum">12 / 43</span>
+            </div>
+            <div class="card-foot">
+              <span class="t-foot-note">已提交 12 · 未交 31</span>
+              <button type="button" class="btn btn--sm btn--secondary" data-goto="teacher-assignment-detail">查看进度</button>
+            </div>
+          </article>
+          <div class="t-swipe-actions">
+            <button type="button" class="t-swipe-btn t-swipe-btn--edit" aria-label="锁定 数据结构实验三：图的最短路径">
+              <span data-icon="lock"></span>锁定
+            </button>
+            <button type="button" class="t-swipe-btn t-swipe-btn--edit" aria-label="复制 数据结构实验三：图的最短路径 的链接">
+              <span data-icon="link"></span>复制链接
+            </button>
+          </div>
+        </div>
+
+        <p class="t-swipe-hint"><span data-icon="arrow-left"></span>左滑卡片可锁定或复制链接（静态演示）</p>
+
+        <article class="card">
+          <div class="card-head">
+            <div class="grow">
+              <div class="card-title">Java 程序设计期末考试</div>
+              <div class="card-sub">计算机 2301 班 · 6 题 · 考试</div>
+            </div>
+            <span class="tag tag--success"><i class="dot"></i>已发布</span>
+          </div>
+          <div class="t-meta">
+            <span><span data-icon="clock"></span>截止 2026-09-28 23:59</span>
+            <span><span data-icon="scores"></span>均分 82.4</span>
+          </div>
+          <div class="row mt12">
+            <div class="bar bar--success grow"><i style="width:100%"></i></div>
+            <span class="t-pnum">45 / 45</span>
+          </div>
+          <div class="card-foot">
+            <span class="t-foot-note">已全部提交 · 成绩已发布</span>
+            <button type="button" class="btn btn--sm btn--secondary" data-goto="teacher-assignment-detail">查看成绩</button>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head">
+            <div class="grow">
+              <div class="card-title">数据库原理期中测验</div>
+              <div class="card-sub">软件 2201 班 · 客观题 20 道 · 限时 60 分钟</div>
+            </div>
+            <span class="tag tag--neutral">草稿</span>
+          </div>
+          <div class="t-meta">
+            <span><span data-icon="clock"></span>截止 2026-10-24 23:59</span>
+            <span><span data-icon="lock"></span>尚未发布</span>
+          </div>
+          <div class="row mt12">
+            <div class="bar grow"><i style="width:0%"></i></div>
+            <span class="t-pnum">0 / 40</span>
+          </div>
+          <div class="card-foot">
+            <span class="t-foot-note">草稿不占用提交名额</span>
+            <button type="button" class="btn btn--sm btn--primary" data-goto="teacher-assign-wizard">继续编辑</button>
+          </div>
+        </article>
+      </div>
+    </main>
+  </div>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

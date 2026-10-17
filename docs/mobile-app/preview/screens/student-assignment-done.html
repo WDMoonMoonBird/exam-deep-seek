@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>已提交详情 · 移动端设计稿</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+  /* 已提交详情局部样式（ad- 前缀），只使用令牌变量 */
+  .ad-hero { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 14px var(--m-gutter) 18px; }
+  .ad-success { width: 76px; height: 76px; border-radius: 50%; background: var(--status-success-bg); color: var(--status-success-fg); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 8px var(--bg-canvas); }
+  .ad-success .icon { width: 38px; height: 38px; stroke-width: 2; }
+  .ad-hero h1 { margin-top: 16px; font-size: var(--m-fs-title-1); line-height: var(--m-lh-title-1); font-weight: var(--m-fw-bold); letter-spacing: var(--m-tracking-tight); }
+  .ad-hero p { margin-top: 6px; max-width: 280px; font-size: var(--m-fs-body-sm); line-height: 1.6; color: var(--text-secondary); }
+  .ad-hero .tag { margin-top: 10px; }
+  .ad-sum { margin-top: 0; }
+  .ad-sum .card-title { font-size: 16px; }
+  .ad-kv { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; font-size: 13.5px; }
+  .ad-kv + .ad-kv { border-top: 1px solid var(--border-subtle); }
+  .ad-kv .k { color: var(--text-secondary); }
+  .ad-kv .v { color: var(--text-primary); font-weight: var(--m-fw-medium); font-variant-numeric: tabular-nums; }
+  .ad-timeline { margin-top: 12px; padding: 4px 0; }
+  .ad-tl { display: grid; grid-template-columns: 26px 1fr; padding: 0 16px; }
+  .ad-rail { position: relative; display: flex; justify-content: center; padding-top: 15px; }
+  .ad-rail::after { content: ""; position: absolute; top: 37px; bottom: -15px; width: 2px; background: var(--border-subtle); }
+  .ad-tl:last-child .ad-rail::after { display: none; }
+  .ad-dot { position: relative; z-index: 1; width: 22px; height: 22px; border-radius: 50%; background: var(--bg-sunken); border: 2px solid var(--border-strong); display: flex; align-items: center; justify-content: center; color: var(--text-tertiary); }
+  .ad-dot .icon { width: 12px; height: 12px; stroke-width: 2.6; }
+  .ad-dot--done { background: var(--status-success-bg); border-color: var(--status-success-fg); color: var(--status-success-fg); }
+  .ad-dot--active { background: var(--bg-selected); border-color: var(--brand-600); color: var(--text-brand); }
+  .ad-dot--active .spinner { width: 11px; height: 11px; margin: 0; border-width: 2px; }
+  .ad-tl-body { padding: 12px 0 16px 12px; border-bottom: 1px solid var(--border-subtle); }
+  .ad-tl:last-child .ad-tl-body { border-bottom: 0; padding-bottom: 8px; }
+  .ad-tl-top { display: flex; align-items: center; justify-content: space-between; }
+  .ad-tl-title { font-size: 15px; font-weight: var(--m-fw-semibold); }
+  .ad-tl--pending .ad-tl-title { color: var(--text-tertiary); font-weight: var(--m-fw-medium); }
+  .ad-tl-sub { margin-top: 3px; font-size: 12px; line-height: 1.55; color: var(--text-tertiary); }
+  .ad-note { margin-top: 12px; }
+  .ad-code { font-family: var(--font-mono); font-size: 12px; color: var(--text-tertiary); }
+</style>
+</head>
+<body class="screen" data-screen="student-assignment-done" data-bottom="actionbar">
+
+  <div class="app">
+    <header class="appbar appbar--bordered">
+      <div class="appbar-side">
+        <button type="button" class="iconbtn" data-icon="back" aria-label="返回作业列表" data-goto="student-assignments"></button>
+      </div>
+      <h1 class="appbar-title">已提交</h1>
+      <div class="appbar-actions">
+        <button type="button" class="iconbtn" aria-label="分享提交回执"><span data-icon="share"></span></button>
+      </div>
+    </header>
+
+    <main class="scroll">
+      <div class="ad-hero">
+        <span class="ad-success" aria-hidden="true"><span data-icon="check-circle"></span></span>
+        <h1>提交成功</h1>
+        <p>工程包已上传并进入评分队列，AI 评分完成后会推送给教师复核。</p>
+        <span class="tag tag--warning"><i class="dot"></i>待评分</span>
+      </div>
+
+      <div class="page">
+        <article class="card ad-sum">
+          <div class="between">
+            <h2 class="card-title">用户管理系统（前端）实训</h2>
+            <span class="tag tag--accent">实训题</span>
+          </div>
+          <p class="card-sub">计算机 2301 班 · 周子轩 · 工程包提交</p>
+          <div class="mt12">
+            <div class="ad-kv"><span class="k">提交时间</span><span class="v">2026-10-08 21:14</span></div>
+            <div class="ad-kv"><span class="k">作答用时</span><span class="v">46 分钟</span></div>
+            <div class="ad-kv"><span class="k">工程包</span><span class="v">6.3 MB · 368 个文件</span></div>
+            <div class="ad-kv"><span class="k">提交编号</span><span class="v ad-code">SUB-20261008-2114</span></div>
+          </div>
+        </article>
+      </div>
+
+      <div class="sec">
+        <h2>评分进度</h2>
+        <span class="sec-note">预计 1 个工作日内出分</span>
+      </div>
+
+      <div class="page">
+        <div class="list ad-timeline">
+          <div class="ad-tl">
+            <div class="ad-rail"><span class="ad-dot ad-dot--done" aria-hidden="true"><span data-icon="check"></span></span></div>
+            <div class="ad-tl-body">
+              <div class="ad-tl-top">
+                <span class="ad-tl-title">已提交</span>
+                <span class="tag tag--success">完成</span>
+              </div>
+              <p class="ad-tl-sub">2026-10-08 21:14 · 368 个文件校验通过</p>
+            </div>
+          </div>
+          <div class="ad-tl">
+            <div class="ad-rail"><span class="ad-dot ad-dot--active" aria-hidden="true"><span class="spinner"></span></span></div>
+            <div class="ad-tl-body">
+              <div class="ad-tl-top">
+                <span class="ad-tl-title">AI 评分中</span>
+                <span class="tag tag--info"><i class="dot"></i>进行中</span>
+              </div>
+              <p class="ad-tl-sub">已用时 2 分钟 · 逐题分析代码与运行结果，预计还需 1–3 分钟</p>
+            </div>
+          </div>
+          <div class="ad-tl ad-tl--pending">
+            <div class="ad-rail"><span class="ad-dot" aria-hidden="true"></span></div>
+            <div class="ad-tl-body">
+              <div class="ad-tl-top">
+                <span class="ad-tl-title">教师审核</span>
+                <span class="tag tag--neutral">待开始</span>
+              </div>
+              <p class="ad-tl-sub">AI 评分完成后进入周子轩老师的复核队列</p>
+            </div>
+          </div>
+          <div class="ad-tl ad-tl--pending">
+            <div class="ad-rail"><span class="ad-dot" aria-hidden="true"></span></div>
+            <div class="ad-tl-body">
+              <div class="ad-tl-top">
+                <span class="ad-tl-title">发布成绩</span>
+                <span class="tag tag--neutral">待开始</span>
+              </div>
+              <p class="ad-tl-sub">发布后推送通知，可在「成绩」中查看反馈</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="page">
+        <div class="banner banner--info ad-note" role="note">
+          <span data-icon="bell" aria-hidden="true"></span>
+          <div><b>无需停留等待</b>：可以先返回作业列表，出分后会通过站内通知提醒你。</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="actionbar">
+    <button type="button" class="btn btn--secondary" data-goto="student-scores">我的成绩</button>
+    <button type="button" class="btn btn--primary" data-goto="student-assignments">返回作业列表</button>
+  </div>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

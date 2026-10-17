@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>班级详情 · 移动端设计稿</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+  .t-classhero { display: flex; align-items: center; padding: 16px var(--m-card-pad); }
+  .t-classicon { flex: none; width: 52px; height: 52px; border-radius: 15px; background: var(--bg-selected); color: var(--text-brand); display: flex; align-items: center; justify-content: center; margin-right: 13px; }
+  .t-classicon .icon { width: 26px; height: 26px; }
+  .t-classname { font-size: 19px; font-weight: 700; letter-spacing: var(--m-tracking-tight); }
+  .t-classsub { margin-top: 3px; font-size: 12px; color: var(--text-tertiary); }
+  .t-classstats { display: flex; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
+  .t-classstat { flex: 1; }
+  .t-classstat + .t-classstat { border-left: 1px solid var(--border-subtle); padding-left: 14px; }
+  .t-classstat b { display: block; font-size: 20px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .t-classstat b small { font-size: 11px; font-weight: 500; color: var(--text-tertiary); margin-left: 1px; }
+  .t-classstat span { display: block; margin-top: 4px; font-size: 11.5px; color: var(--text-tertiary); }
+  .t-progress-item { padding: 13px var(--m-card-pad); }
+  .t-progress-item + .t-progress-item { box-shadow: inset 0 1px 0 var(--border-subtle); }
+  .t-pi-head { display: flex; align-items: center; }
+  .t-pi-title { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .t-pi-head .tag { margin-left: 8px; }
+  .t-pi-meta { display: flex; align-items: center; margin-top: 8px; font-size: 12px; color: var(--text-tertiary); }
+  .t-pi-meta .bar { flex: 1; margin-right: 10px; }
+  .t-pi-pct { flex: none; font-variant-numeric: tabular-nums; }
+  .t-searchrow { padding: 0 var(--m-gutter); }
+  .t-studentlist { margin-top: 12px; }
+  .t-score-v { font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; margin-right: 8px; }
+  .t-score-v small { font-size: 11px; font-weight: 400; color: var(--text-tertiary); margin-left: 1px; }
+  .t-score-v.is-pass { color: var(--status-warning-fg); }
+  .t-warn { color: var(--status-warning-fg); }
+  .t-studentlist .row-main .row-title { display: block; }
+  .t-studentlist .row-main .row-sub { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .t-studentlist .rowitem { text-align: left; width: 100%; }
+  .t-morelink { width: 100%; height: 48px; display: flex; align-items: center; justify-content: center; font-size: 13.5px; color: var(--text-link); border-top: 1px solid var(--border-subtle); background: var(--card-bg); }
+
+  /* 触控目标补足（视觉尺寸保持屏幕契约值，命中区域扩到 ≥44px） */
+  .chip, .seg button, .btn--sm, .btn--xs, .tool, .diffmore, .sheet-close, .t-expand, button.avatar, .switch { position: relative; }
+  .chip::after, .seg button::after, .btn--sm::after, .btn--xs::after, .tool::after, .diffmore::after, .sheet-close::after, .t-expand::after, button.avatar::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%);
+  }
+  .switch::before { content: ""; position: absolute; left: -6px; right: -6px; top: -7px; bottom: -7px; }
+  .searchbar { height: 44px; }
+</style>
+</head>
+<body class="screen" data-screen="teacher-class" data-bottom="none">
+  <div class="app">
+    <header class="appbar appbar--solid appbar--bordered">
+      <div class="appbar-side"><button type="button" class="iconbtn" data-icon="back" aria-label="返回工作台" data-goto="teacher-home"></button></div>
+      <h1 class="appbar-title">计算机 2301 班</h1>
+      <div class="appbar-actions"><button type="button" class="iconbtn" data-icon="more" aria-label="更多班级操作"></button></div>
+    </header>
+
+    <main class="scroll">
+      <div class="page mt8">
+        <div class="card">
+          <div class="t-classhero">
+            <span class="t-classicon" data-icon="users"></span>
+            <div class="grow">
+              <div class="t-classname">计算机 2301 班</div>
+              <div class="t-classsub">Deadpan 大学 · 计算机学院 · 班主任 周子轩</div>
+            </div>
+            <span class="tag tag--info">2026 级</span>
+          </div>
+          <div class="t-classstats">
+            <div class="t-classstat"><b>45<small>人</small></b><span>班级人数</span></div>
+            <div class="t-classstat"><b>38<small>人</small></b><span>已提交</span></div>
+            <div class="t-classstat"><b class="t-warn">12<small>份</small></b><span>待批改</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h2>作业进度</h2>
+        <span class="sec-note">3 份</span>
+      </div>
+      <div class="page">
+        <div class="list">
+          <div class="t-progress-item">
+            <div class="t-pi-head">
+              <span class="t-pi-title">用户管理系统（前端）实训</span>
+              <span class="tag tag--warning">待审核 12</span>
+            </div>
+            <div class="t-pi-meta">
+              <div class="bar bar--warning"><i style="width:84%"></i></div>
+              <span class="t-pi-pct">38 / 45</span>
+            </div>
+          </div>
+          <div class="t-progress-item">
+            <div class="t-pi-head">
+              <span class="t-pi-title">Java 程序设计期末考试</span>
+              <span class="tag tag--success">已发布</span>
+            </div>
+            <div class="t-pi-meta">
+              <div class="bar bar--success"><i style="width:100%"></i></div>
+              <span class="t-pi-pct">45 / 45 · 均分 82.4</span>
+            </div>
+          </div>
+          <div class="t-progress-item">
+            <div class="t-pi-head">
+              <span class="t-pi-title">数据库原理期中测验</span>
+              <span class="tag tag--neutral">草稿</span>
+            </div>
+            <div class="t-pi-meta">
+              <div class="bar"><i style="width:0%"></i></div>
+              <span class="t-pi-pct">0 / 40</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h2>学生</h2>
+        <span class="sec-note">用户管理系统实训 · 第 2 题</span>
+      </div>
+      <div class="t-searchrow">
+        <label class="searchbar">
+          <span data-icon="search"></span>
+          <input id="stu-search" type="search" placeholder="搜索姓名或学号" aria-label="搜索学生姓名或学号">
+        </label>
+      </div>
+
+      <div class="page t-studentlist">
+        <div class="list">
+          <button type="button" class="rowitem rowitem--tap" data-goto="teacher-review-queue">
+            <span class="avatar avatar--sm">陈</span>
+            <span class="row-main" style="margin-left:10px"><span class="row-title">陈嘉懿</span><span class="row-sub">2025010101 · 10-17 16:22</span></span>
+            <span class="row-side"><span class="t-score-v">92<small>分</small></span><span class="tag tag--success">已评分</span></span>
+          </button>
+          <button type="button" class="rowitem rowitem--tap" data-goto="teacher-review-queue">
+            <span class="avatar avatar--sm">周</span>
+            <span class="row-main" style="margin-left:10px"><span class="row-title">周予安</span><span class="row-sub">2025010104 · 10-17 15:50</span></span>
+            <span class="row-side"><span class="t-score-v is-pass">88<small>分</small></span><span class="tag tag--warning">待评分</span></span>
+          </button>
+          <button type="button" class="rowitem rowitem--tap" data-goto="teacher-review-queue">
+            <span class="avatar avatar--sm">赵</span>
+            <span class="row-main" style="margin-left:10px"><span class="row-title">赵可欣</span><span class="row-sub">2025010112 · 10-17 15:32</span></span>
+            <span class="row-side"><span class="t-score-v is-pass">76<small>分</small></span><span class="tag tag--warning">待评分</span></span>
+          </button>
+          <button type="button" class="rowitem rowitem--tap" data-goto="teacher-review-queue">
+            <span class="avatar avatar--sm">王</span>
+            <span class="row-main" style="margin-left:10px"><span class="row-title">王雨桐</span><span class="row-sub">2025010115 · 10-17 13:32</span></span>
+            <span class="row-side"><span class="t-score-v">94<small>分</small></span><span class="tag tag--success">已评分</span></span>
+          </button>
+          <div class="rowitem">
+            <span class="avatar avatar--sm avatar--gray">李</span>
+            <span class="row-main" style="margin-left:10px"><span class="row-title muted">李思远</span><span class="row-sub">2025010107 · 尚未提交</span></span>
+            <span class="row-side"><span class="tag tag--neutral">未提交</span></span>
+          </div>
+          <button type="button" class="t-morelink">查看全部 45 名学生</button>
+        </div>
+
+        <p class="readonly-tip mt12"><span data-icon="info"></span>共 45 名学生 · 数据每日 02:00 同步 · 完整成绩表请在电脑端导出。</p>
+      </div>
+    </main>
+  </div>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

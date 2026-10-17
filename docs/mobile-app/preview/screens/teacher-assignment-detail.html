@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>作业详情 · 移动端设计稿</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+  body[data-screen="teacher-assignment-detail"] [data-tabpanel] { display: none; }
+  body[data-screen="teacher-assignment-detail"] [data-tabpanel].is-active { display: block; }
+  .t-head { padding: 6px var(--m-gutter) 0; }
+  .t-head h1 { font-size: var(--m-fs-title-1); line-height: var(--m-lh-title-1); font-weight: 700; letter-spacing: var(--m-tracking-tight); }
+  .t-head .t-tags { display: flex; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+  .t-head .t-tags > * + * { margin-left: 8px; }
+  .t-head .t-class { font-size: 13px; color: var(--text-secondary); }
+  .t-ringrow { display: flex; align-items: center; }
+  .t-ringside { margin-left: 18px; min-width: 0; }
+  .t-ringside .kv { padding: 5px 0; }
+  .t-ringside .kv .v small { font-size: 12px; font-weight: 400; color: var(--text-tertiary); margin-left: 2px; }
+  .t-warn { color: var(--status-warning-fg) !important; }
+  .t-deadline { display: flex; align-items: center; margin-top: 13px; padding-top: 12px; border-top: 1px solid var(--border-subtle); font-size: 12.5px; color: var(--text-secondary); }
+  .t-deadline .icon { width: 14px; height: 14px; margin-right: 5px; color: var(--text-tertiary); }
+  .t-deadline .tag { margin-left: 8px; }
+  .t-segwrap { padding: 18px var(--m-gutter) 0; }
+  .t-studentlist { margin-top: 14px; }
+  .t-score-v { font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; margin-right: 8px; color: var(--text-primary); }
+  .t-score-v.is-fail { color: var(--status-danger-fg); }
+  .t-score-v.is-pass { color: var(--status-warning-fg); }
+  .t-score-v small { font-size: 11px; font-weight: 400; color: var(--text-tertiary); margin-left: 1px; }
+  .t-q-row { display: flex; align-items: flex-start; padding: 13px var(--m-card-pad); }
+  .t-q-row + .t-q-row { box-shadow: inset 0 1px 0 var(--border-subtle); }
+  .list .row-main .row-title { display: block; }
+  .list .row-main .row-sub { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .list .rowitem { text-align: left; width: 100%; }
+  .t-q-index { width: 26px; height: 26px; border-radius: 8px; background: var(--bg-selected); color: var(--text-brand); font-size: 12.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none; margin-right: 11px; font-variant-numeric: tabular-nums; }
+  .t-q-main { flex: 1; min-width: 0; }
+  .t-q-title { font-size: 14px; font-weight: 500; line-height: 1.45; }
+  .t-q-sub { margin-top: 3px; font-size: 12px; color: var(--text-tertiary); display: flex; align-items: center; }
+  .t-q-sub > * + * { margin-left: 10px; }
+  .t-q-score { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-left: 8px; flex: none; }
+  .t-morelink { width: 100%; height: 48px; display: flex; align-items: center; justify-content: center; font-size: 13.5px; color: var(--text-link); border-top: 1px solid var(--border-subtle); background: var(--card-bg); }
+  .t-empty-note { padding: 16px var(--m-card-pad); font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+  .t-sheet-avatars { display: flex; align-items: center; margin: 4px 0 12px; }
+  .t-sheet-avatars .avatar { margin-right: -10px; box-shadow: 0 0 0 2px var(--m-sheet-bg); }
+
+  /* 触控目标补足（视觉尺寸保持屏幕契约值，命中区域扩到 ≥44px） */
+  .chip, .seg button, .btn--sm, .btn--xs, .tool, .diffmore, .sheet-close, .t-expand, button.avatar, .switch { position: relative; }
+  .chip::after, .seg button::after, .btn--sm::after, .btn--xs::after, .tool::after, .diffmore::after, .sheet-close::after, .t-expand::after, button.avatar::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%);
+  }
+  .switch::before { content: ""; position: absolute; left: -6px; right: -6px; top: -7px; bottom: -7px; }
+  .searchbar { height: 44px; }
+</style>
+</head>
+<body class="screen" data-screen="teacher-assignment-detail" data-bottom="actionbar">
+  <div class="app">
+    <header class="appbar appbar--solid appbar--bordered">
+      <div class="appbar-side"><button type="button" class="iconbtn" data-icon="back" aria-label="返回作业列表" data-goto="teacher-assignments"></button></div>
+      <h1 class="appbar-title">作业详情</h1>
+      <div class="appbar-actions"><button type="button" class="iconbtn" data-icon="more" aria-label="更多操作" data-open-sheet="more-actions"></button></div>
+    </header>
+
+    <main class="scroll">
+      <div class="t-head">
+        <h1>用户管理系统（前端）实训</h1>
+        <div class="t-tags">
+          <span class="tag tag--warning"><i class="dot"></i>待审核 12</span>
+          <span class="tag tag--accent">实训题</span>
+          <span class="t-class">计算机 2301 / 2302 班</span>
+        </div>
+      </div>
+
+      <div class="page mt16">
+        <div class="card">
+          <div class="t-ringrow">
+            <div class="ring ring--warning" style="--p:84" role="img" aria-label="提交进度 84%">
+              <div class="ring-in"><b>84%</b><span>提交率</span></div>
+            </div>
+            <div class="grow t-ringside">
+              <div class="kv"><span class="k">已交</span><span class="v">38 <small>/ 45 人</small></span></div>
+              <div class="kv"><span class="k">未交</span><span class="v t-warn">7 <small>人</small></span></div>
+              <div class="kv"><span class="k">待审核</span><span class="v t-warn">12 <small>份</small></span></div>
+            </div>
+          </div>
+          <div class="t-deadline">
+            <span data-icon="clock"></span>截止 2026-10-08 23:59
+            <span class="tag tag--danger">已截止 9 天</span>
+          </div>
+        </div>
+
+        <div class="btn-row mt12">
+          <button type="button" class="btn btn--secondary" data-open-sheet="remind-sheet"><span data-icon="bell"></span>催交 7 人</button>
+          <button type="button" class="btn btn--secondary"><span data-icon="download"></span>导出成绩</button>
+        </div>
+      </div>
+
+      <div class="t-segwrap">
+        <div class="seg" data-tabgroup>
+          <button type="button" class="active" data-tab="submit">提交 38</button>
+          <button type="button" data-tab="questions">题目 3</button>
+          <button type="button" data-tab="overview">概况</button>
+        </div>
+      </div>
+
+      <div class="page mt16">
+        <section data-tabpanel="submit" class="is-active">
+          <div class="list">
+            <button type="button" class="rowitem rowitem--tap" data-goto="teacher-review-queue">
+              <span class="avatar avatar--sm">陈</span>
+              <span class="row-main" style="margin-left:10px">
+                <span class="row-title">陈嘉懿</span>
+                <span class="row-sub">2025010101 · 10-17 16:22</span>
+              </span>
+              <span class="row-side"><span class="t-score-v">92<small>分</small></span><span class="tag tag--success">已评分</span></span>
+            </button>
+            <button type="button" class="rowitem rowitem--tap" data-goto="teacher-review-queue">
+              <span class="avatar avatar--sm">周</span>
+              <span class="row-main" style="margin-left:10px">
+                <span class="row-title">周予安</span>
+                <span class="row-sub">2025010104 · 10-17 15:50</span>
+              </span>
+              <span class="row-side"><span class="t-score-v is-pass">88<small>分</small></span><span class="tag tag--warning">待评分</span></span>
+            </button>
+            <button type="button" class="rowitem rowitem--tap" data-goto="teacher-review-queue">
+              <span class="avatar avatar--sm">赵</span>
+              <span class="row-main" style="margin-left:10px">
+                <span class="row-title">赵可欣</span>
+                <span class="row-sub">2025010112 · 10-17 15:32</span>
+              </span>
+              <span class="row-side"><span class="t-score-v is-pass">76<small>分</small></span><span class="tag tag--warning">待评分</span></span>
+            </button>
+            <button type="button" class="rowitem rowitem--tap" data-goto="teacher-review-queue">
+              <span class="avatar avatar--sm">王</span>
+              <span class="row-main" style="margin-left:10px">
+                <span class="row-title">王雨桐</span>
+                <span class="row-sub">2025010115 · 10-17 13:32</span>
+              </span>
+              <span class="row-side"><span class="t-score-v">94<small>分</small></span><span class="tag tag--success">已评分</span></span>
+            </button>
+            <div class="rowitem">
+              <span class="avatar avatar--sm avatar--gray">李</span>
+              <span class="row-main" style="margin-left:10px">
+                <span class="row-title muted">李思远</span>
+                <span class="row-sub">2025010107 · 尚未提交</span>
+              </span>
+              <span class="row-side"><span class="tag tag--neutral">未提交</span></span>
+            </div>
+            <button type="button" class="t-morelink" data-open-sheet="more-students">查看全部 45 人（7 人未交）</button>
+          </div>
+          <div class="banner banner--info mt12">
+            <span data-icon="info"></span>
+            <div>AI 已完成 38 份初评，平均 82.4 分。AI 分数仅作建议，发布前需教师逐份确认。</div>
+          </div>
+        </section>
+
+        <section data-tabpanel="questions">
+          <div class="list">
+            <div class="t-q-row">
+              <span class="t-q-index">1</span>
+              <span class="t-q-main">
+                <span class="t-q-title">用户列表分页查询</span>
+                <span class="t-q-sub"><span class="tag tag--info">编程题</span><span>使用 28 次</span></span>
+              </span>
+              <span class="t-q-score">10 分</span>
+            </div>
+            <div class="t-q-row">
+              <span class="t-q-index">2</span>
+              <span class="t-q-main">
+                <span class="t-q-title">用户 CRUD 接口实现</span>
+                <span class="t-q-sub"><span class="tag tag--info">编程题</span><span>使用 24 次</span></span>
+              </span>
+              <span class="t-q-score">15 分</span>
+            </div>
+            <div class="t-q-row">
+              <span class="t-q-index">3</span>
+              <span class="t-q-main">
+                <span class="t-q-title">前端实训：用户管理系统工程包</span>
+                <span class="t-q-sub"><span class="tag tag--accent">实训题</span><span>使用 12 次</span></span>
+              </span>
+              <span class="t-q-score">40 分</span>
+            </div>
+          </div>
+          <p class="readonly-tip mt12"><span data-icon="info"></span>共 3 题 / 65 分 · 移动端仅查看，编辑题目请在电脑端完成。</p>
+        </section>
+
+        <section data-tabpanel="overview">
+          <div class="card">
+            <div class="kv"><span class="k">作业类型</span><span class="v">实训题（工程包）</span></div>
+            <div class="kv"><span class="k">满分</span><span class="v">65 分</span></div>
+            <div class="kv"><span class="k">提交方式</span><span class="v">工程包上传 / 电脑接力</span></div>
+            <div class="kv"><span class="k">允许迟交</span><span class="v">否</span></div>
+            <div class="kv"><span class="k">发布时间</span><span class="v">2026-09-30 09:00</span></div>
+            <div class="kv"><span class="k">覆盖班级</span><span class="v">计算机 2301 / 2302 班</span></div>
+            <div class="kv"><span class="k">AI 评分</span><span class="v">已完成 38 / 45</span></div>
+          </div>
+          <p class="readonly-tip mt12"><span data-icon="lock"></span>已过截止时间，学生无法再提交；催交仅发送提醒，不延长截止。</p>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div class="actionbar">
+    <button type="button" class="btn btn--primary btn--block" data-goto="teacher-review-queue"><span data-icon="review"></span>查看评分与审核</button>
+  </div>
+
+  <div class="mask" data-for="remind-sheet"></div>
+  <section class="sheet" id="remind-sheet" role="dialog" aria-modal="true" aria-label="催交提醒">
+    <div class="grabber"></div>
+    <div class="sheet-head">
+      <div>
+        <div class="sheet-title">催交提醒</div>
+        <div class="sheet-sub">7 名同学尚未提交 · 2026-10-08 23:59 已截止</div>
+      </div>
+      <button type="button" class="sheet-close" data-close-sheet aria-label="关闭"><span data-icon="close"></span></button>
+    </div>
+    <div class="sheet-body">
+      <div class="t-sheet-avatars">
+        <span class="avatar avatar--sm">李</span><span class="avatar avatar--sm">郑</span><span class="avatar avatar--sm">孙</span><span class="avatar avatar--sm">钱</span><span class="avatar avatar--sm">吴</span><span class="avatar avatar--sm avatar--gray">+2</span>
+      </div>
+      <p class="card-sub">将通过站内通知 + 短信提醒学生尽快提交，每小时最多发送一次。</p>
+      <div class="banner banner--warning mt12"><span data-icon="alert"></span><div>作业已过截止时间，学生仍可补交，但会标记「迟交」。</div></div>
+    </div>
+    <div class="sheet-foot">
+      <button type="button" class="btn btn--secondary btn--block" data-close-sheet>取消</button>
+      <button type="button" class="btn btn--primary btn--block" data-close-sheet>发送提醒</button>
+    </div>
+  </section>
+
+  <div class="mask" data-for="more-actions"></div>
+  <div class="actionsheet" id="more-actions" role="dialog" aria-modal="true" aria-label="更多操作">
+    <button type="button" class="action-row" data-close-sheet>编辑作业</button>
+    <button type="button" class="action-row" data-close-sheet>复制为新作业</button>
+    <button type="button" class="action-row action-row--danger" data-close-sheet>删除作业</button>
+    <button type="button" class="action-row action-row--cancel" data-close-sheet>取消</button>
+  </div>
+  <div class="mask" data-for="more-students"></div>
+  <section class="sheet" id="more-students" role="dialog" aria-modal="true" aria-label="学生名单">
+    <div class="grabber"></div>
+    <div class="sheet-head"><div class="sheet-title">全部学生 · 45 人</div><button class="sheet-close" data-close-sheet aria-label="关闭"><span data-icon="close"></span></button></div>
+    <div class="sheet-body"><p class="card-sub">移动端一次展示前 10 人，完整名单与筛选请在电脑端查看。未交 7 人：李思远、郑一诺、孙浩然、钱雨薇、吴子墨、冯佳怡、蒋博文。</p></div>
+    <div class="sheet-foot"><button class="btn btn--primary btn--block" data-close-sheet>关闭</button></div>
+  </section>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>
