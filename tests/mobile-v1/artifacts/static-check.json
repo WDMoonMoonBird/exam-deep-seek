@@ -171,10 +171,7 @@
       "P2": 0
     },
     "changedPaths": {
-      "tracked": [
-        "client/src/mobile/views/teacher/ReviewCode.vue",
-        "client/src/mobile/views/teacher/ReviewDetail.vue"
-      ],
+      "tracked": [],
       "untracked": [
         "docs/mobile-app/preview-standalone.zip",
         "docs/mobile-app/preview-standalone/SCREENS.md",
