@@ -47,7 +47,12 @@ const resolvedBottom = computed(() => {
 <template>
   <div class="m-screen" :data-bottom="resolvedBottom">
     <div class="app">
-      <slot />
+      <!-- 页面进入动效：包在 MobileLayout 的 slot 上，不包路由组件（避免 ⑨a 路由过渡死锁） -->
+      <Transition name="m-page" appear>
+        <div class="m-page">
+          <slot />
+        </div>
+      </Transition>
     </div>
     <MobileTabBar v-if="role" :role="role" :active="active" :badges="badges" />
   </div>

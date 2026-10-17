@@ -189,9 +189,10 @@ onMounted(load);
 .si-qscore { font-size: 18px; font-weight: var(--m-fw-bold); font-variant-numeric: tabular-nums; flex: none; margin-left: 10px; color: var(--score-good); }
 .si-qscore--empty { color: var(--text-tertiary); font-weight: var(--m-fw-medium); }
 .si-fb { padding: 0 16px 12px 56px; }
-.si-fb-text { font-size: 13px; line-height: 1.6; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; }
-.si-fb-text--clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.si-fb-text { max-height: 60em; overflow: hidden; font-size: 13px; line-height: 1.6; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; transition: max-height .22s var(--m-ease-out); }
+.si-fb-text--clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-height: 3.2em; }
 .si-fb-toggle { display: inline-flex; align-items: center; min-height: var(--m-touch-min); font-size: 12px; color: var(--text-link); }
+@media (prefers-reduced-motion: reduce) { .si-fb-text { transition: none; } }
 .si-foot { margin-top: 18px; }
 .si-foot .btn .icon { margin-right: 4px; }
 .si-foot-note { margin-top: 8px; text-align: center; font-size: 11.5px; line-height: 1.6; color: var(--text-tertiary); }

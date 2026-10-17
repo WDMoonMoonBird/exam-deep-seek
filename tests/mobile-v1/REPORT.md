@@ -286,3 +286,9 @@ node client/scripts/verify-frontend.mjs --no-build
 - 按产品要求，教师审核详情页删除「代码与参考」整块（含查看代码、代码差异、返回队列三个入口）；电脑端没有独立的代码/参考查看功能，手机端不再提供该入口。
 - 审核详情仍保留 AI 评语、实训题 AI 分项、教师评语、审核通过/发布流程；代码只读页/差异页路由代码保留但已无 UI 入口。
 - 复验：build exit 0；verify-frontend 71/0；eslint 0；真机浏览器审核详情无该卡片、无控制台错误。
+
+### 10.8 v1.5 Vue 原生动效补齐（2026-10-18）
+- 页面切换：MobileLayout 的 slot 外包 Vue Transition（appear），页面进入时 180ms opacity 过渡；不包 router-view，不影响 verify-frontend ⑨a 路由过渡门禁。
+- 折叠/展开：学生作答「题目材料」、教师代码页「文件目录」使用 Vue Transition（m-collapse）；学生成绩详情评语展开使用 max-height CSS 过渡。
+- 题目切换：学生作答页在客观题/编程题分支之间使用 Vue Transition（m-fade-slide，mode=out-in，按题 key）。
+- 所有动效仅用 opacity/transform/max-height，支持 prefers-reduced-motion 降级；QA smoke 33 页 / 0 console / 0 P0/P1/P2，build / lint / verify-frontend / static-check 通过。

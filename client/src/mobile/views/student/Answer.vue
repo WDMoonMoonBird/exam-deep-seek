@@ -667,29 +667,35 @@ onBeforeRouteLeave(async () => {
               <button type="button" class="ans-material-toggle" :aria-expanded="showMaterial ? 'true' : 'false'" @click="showMaterial = !showMaterial">
                 题目材料<MIcon :name="showMaterial ? 'chevron-up' : 'chevron-down'" />
               </button>
-              <div v-if="showMaterial" class="ans-material-body q-html" v-html="safeMaterialHtml"></div>
+              <Transition name="m-collapse">
+                <div v-if="showMaterial" class="ans-material-body q-html" v-html="safeMaterialHtml"></div>
+              </Transition>
             </div>
 
             <h2 class="ans-stem">{{ currentUnit.title }}</h2>
 
             <div v-if="safeContentHtml" class="ans-content q-html" v-html="safeContentHtml"></div>
 
-            <AnswerObjective
-              v-if="currentUnit.type === 'objective'"
-              :items="itemsOf(currentUnit)"
-              :answers="currentObjAnswers"
-              :readonly="currentReadonly"
-              @update="onObjectiveUpdate"
-            />
-            <AnswerCode
-              v-else
-              :unit="currentUnit"
-              :saved-answer="currentSavedAnswer"
-              :status="currentStatus"
-              :readonly="currentReadonly"
-              :link="handoffLink"
-              @copy="copyHandoff"
-            />
+            <Transition name="m-fade-slide" mode="out-in">
+              <AnswerObjective
+                v-if="currentUnit.type === 'objective'"
+                :key="'objective-' + currentUnit.key"
+                :items="itemsOf(currentUnit)"
+                :answers="currentObjAnswers"
+                :readonly="currentReadonly"
+                @update="onObjectiveUpdate"
+              />
+              <AnswerCode
+                v-else
+                :key="'code-' + currentUnit.key"
+                :unit="currentUnit"
+                :saved-answer="currentSavedAnswer"
+                :status="currentStatus"
+                :readonly="currentReadonly"
+                :link="handoffLink"
+                @copy="copyHandoff"
+              />
+            </Transition>
 
             <div v-if="currentPublishedScore != null || currentFeedback" class="ans-feedback">
               <div class="between">

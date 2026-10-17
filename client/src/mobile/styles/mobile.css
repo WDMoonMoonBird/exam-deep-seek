@@ -115,6 +115,33 @@
 
 /* ---------------------------------------------------------------- 3. App 骨架 */
 .m-screen .app{ display: flex; flex-direction: column; flex: 1; min-height: 0; height: 100%; }
+
+/* ---------------------------------------------------------------- 3b. Vue 原生动效（页面/折叠/分支）
+   只用 opacity + transform；不动 fixed 元素定位；不包路由组件（verify-frontend ⑨a）。 */
+.m-screen .m-page{ display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.m-screen .m-page-enter-active{ transition: opacity .18s var(--m-ease-out); }
+.m-screen .m-page-enter-from{ opacity: 0; }
+.m-screen .m-collapse-enter-active,
+.m-screen .m-collapse-leave-active{ transition: opacity .18s var(--m-ease-out), transform .18s var(--m-ease-out); }
+.m-screen .m-collapse-enter-from,
+.m-screen .m-collapse-leave-to{ opacity: 0; transform: translateY(-4px); }
+.m-screen .m-fade-slide-enter-active,
+.m-screen .m-fade-slide-leave-active{ transition: opacity .18s var(--m-ease-out), transform .18s var(--m-ease-out); }
+.m-screen .m-fade-slide-enter-from{ opacity: 0; transform: translateY(4px); }
+.m-screen .m-fade-slide-leave-to{ opacity: 0; transform: translateY(-4px); }
+.m-screen .m-fade-enter-active,
+.m-screen .m-fade-leave-active{ transition: opacity .16s var(--m-ease-out); }
+.m-screen .m-fade-enter-from,
+.m-screen .m-fade-leave-to{ opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .m-screen .m-page-enter-active,
+  .m-screen .m-collapse-enter-active,
+  .m-screen .m-collapse-leave-active,
+  .m-screen .m-fade-slide-enter-active,
+  .m-screen .m-fade-slide-leave-active,
+  .m-screen .m-fade-enter-active,
+  .m-screen .m-fade-leave-active{ transition: none; }
+}
 .m-screen .scroll{
   flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
   -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;

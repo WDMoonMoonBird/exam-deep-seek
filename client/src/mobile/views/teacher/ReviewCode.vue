@@ -370,22 +370,24 @@ onMounted(loadDetail);
                 <small>{{ treeFileCount }} 个文件</small>
                 <MIcon name="chevron-right" class="tree-head-chev" :class="{ open: treeOpen }" />
               </button>
-              <div v-if="treeOpen" class="file-tree-body" role="group" aria-label="工程文件树">
-                <button
-                  v-for="row in treeRows"
-                  :key="row.path"
-                  type="button"
-                  class="tree-row"
-                  :class="{ 'is-dir': row.isDir, active: !row.isDir && activeFile === row.path }"
-                  :style="{ paddingLeft: (10 + row.depth * 14) + 'px' }"
-                  :aria-expanded="row.isDir ? !!expandedDirs[row.path] : undefined"
-                  @click="row.isDir ? toggleDir(row.path) : onFileSelect(row.path)"
-                >
-                  <MIcon :name="row.isDir ? 'folder' : 'file'" class="tree-ico" />
-                  <span class="tree-name">{{ row.name }}</span>
-                  <MIcon v-if="row.isDir" name="chevron-right" class="tree-chev" :class="{ open: !!expandedDirs[row.path] }" />
-                </button>
-              </div>
+              <Transition name="m-collapse">
+                <div v-if="treeOpen" class="file-tree-body" role="group" aria-label="工程文件树">
+                  <button
+                    v-for="row in treeRows"
+                    :key="row.path"
+                    type="button"
+                    class="tree-row"
+                    :class="{ 'is-dir': row.isDir, active: !row.isDir && activeFile === row.path }"
+                    :style="{ paddingLeft: (10 + row.depth * 14) + 'px' }"
+                    :aria-expanded="row.isDir ? !!expandedDirs[row.path] : undefined"
+                    @click="row.isDir ? toggleDir(row.path) : onFileSelect(row.path)"
+                  >
+                    <MIcon :name="row.isDir ? 'folder' : 'file'" class="tree-ico" />
+                    <span class="tree-name">{{ row.name }}</span>
+                    <MIcon v-if="row.isDir" name="chevron-right" class="tree-chev" :class="{ open: !!expandedDirs[row.path] }" />
+                  </button>
+                </div>
+              </Transition>
             </div>
 
             <div v-if="tooLarge" class="banner banner--warning mt12">
