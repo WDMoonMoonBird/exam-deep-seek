@@ -108,4 +108,65 @@ describe('W13 ★不写分语义（decideScoreWrite）', () => {
     expect(p.gradingStale).toBe(false);
     expect(JSON.parse(p.aiFeedback).breakdown[0].kind).toBe('checker');
   });
+
+  it('W13-8 ★回写把 submitted 推进到 ai_graded（教师端才看得见）；已审核/已发布/草稿不降级也不推进', () => {
+    expect(buildWriteback({ result: measure(9, 55), score: 55, currentStatus: 'submitted' }).status).toBe('ai_graded');
+    expect(buildWriteback({ result: measure(9, 55), score: 55 }).status).toBe('ai_graded');
+    expect(buildWriteback({ result: measure(9, 55), score: 55, currentStatus: 'reviewed' }).status).toBe('reviewed');
+    expect(buildWriteback({ result: measure(9, 55), score: 55, currentStatus: 'published' }).status).toBe('published');
+    // ★A2 F-1：草稿不是「待批改」⇒ 不得被尺子回写推进为 ai_graded（D t13 方案①：KEEP_STATUSES 保状态）
+    expect(buildWriteback({ result: measure(9, 55), score: 55, currentStatus: 'draft' }).status).toBe('draft');
+  });
+
+  it('W13-9 ★回写链路（fake prisma）：逐份读当前状态再更新 ⇒ submitted→ai_graded；reviewed/published/draft 不降级', async () => {
+    const root = tmpRoot();
+    writeMeasure(root, 'a-submitted.json', measure(1201, 81));
+    writeMeasure(root, 'b-reviewed.json', measure(1202, 64));
+    writeMeasure(root, 'c-published.json', measure(1203, 90));
+    writeMeasure(root, 'd-draft.json', measure(1204, 72));
+    const statusById = { 1201: 'submitted', 1202: 'reviewed', 1203: 'published', 1204: 'draft' };
+    const updates = [];
+    const lookups = [];
+    const prisma = {
+      submission: {
+        findUnique: async ({ where }) => { lookups.push(where.id); return { status: statusById[where.id] || null, aiFeedback: null }; },
+        update: async ({ where, data }) => { updates.push({ id: where.id, data }); return { id: where.id }; },
+      },
+    };
+    const out = await consumeMeasureResults({
+      prisma, runRoot: root, assignmentId: 7,
+      submissionIdBySlug: { 1201: 1201, 1202: 1202, 1203: 1203, 1204: 1204 },
+    });
+    expect(out.written).toBe(4);
+    expect(lookups.sort()).toEqual([1201, 1202, 1203, 1204]); // 每份都先读既有状态（读-改-写）
+    const byId = Object.fromEntries(updates.map((u) => [u.id, u.data]));
+    expect(byId[1201].status).toBe('ai_graded');
+    expect(byId[1202].status).toBe('reviewed');
+    expect(byId[1203].status).toBe('published');
+    // ★A2 F-1 链路回归：读到的 draft 必须原样保留（不得被回写推进为 ai_graded）
+    expect(byId[1204].status).toBe('draft');
+    expect(byId[1204].status).not.toBe('ai_graded');
+    for (const id of [1201, 1202, 1203, 1204]) {
+      expect(byId[id].aiScore).toBeGreaterThan(0);
+      expect(byId[id].checkerId).toMatch(/^sha256:/);
+      expect(byId[id].canonicalSha256).toMatch(/^sha256:/);
+    }
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('W13-10 ★A2 F-1 回归锁（状态矩阵）：draft 保持 draft 不推进；reviewed/published 不降级；仅待批改类推进到 ai_graded', () => {
+    // D t13 方案①（KEEP_STATUSES 含 draft）：载荷仍带分数，但状态不推进（分数口径不由本断言改变）
+    const draft = buildWriteback({ result: measure(9, 55), score: 55, currentStatus: 'draft' });
+    expect(draft.status).toBe('draft');
+    expect(draft.status).not.toBe('ai_graded');
+    expect(draft.aiScore).toBe(55);
+    // 保留类：原文原样保留（既有 reviewed/published 断言继续有效）
+    for (const s of ['reviewed', 'published', 'draft']) {
+      expect(buildWriteback({ result: measure(9, 55), score: 55, currentStatus: s }).status).toBe(s);
+    }
+    // 可推进类：submitted / 缺省 / 空串 ⇒ ai_graded（教师端可见的既有语义不变）
+    for (const s of ['submitted', null, undefined, '']) {
+      expect(buildWriteback({ result: measure(9, 55), score: 55, currentStatus: s }).status).toBe('ai_graded');
+    }
+  });
 });

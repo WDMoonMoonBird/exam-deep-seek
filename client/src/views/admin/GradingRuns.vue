@@ -14,6 +14,7 @@
       <a-space wrap>
         <a-input-number v-model:value="filters.assignmentId" placeholder="作业ID" style="width: 120px" :min="1" />
         <a-select v-model:value="filters.type" placeholder="类型" style="width: 150px" allowClear :options="typeOptions" />
+        <a-select v-model:value="filters.runKind" placeholder="运行类型" style="width: 160px" allowClear :options="runKindOptions" />
         <a-select v-model:value="filters.sessions_purged" placeholder="会话销毁" style="width: 170px" allowClear :options="purgeOptions" />
         <a-select v-model:value="filters.status" placeholder="状态" style="width: 140px" allowClear :options="statusOptions" />
         <a-button type="primary" size="small" @click="reload">查询</a-button>
@@ -22,7 +23,7 @@
     </a-card>
     <a-card size="small">
       <a-table :columns="cols" :dataSource="items" rowKey="id" size="small" :loading="loading"
-        :pagination="pagination" :scroll="{ x: 1520 }" @change="onTableChange">
+        :pagination="pagination" :scroll="{ x: 1780 }" @change="onTableChange">
         <template #headerCell="{ column }">
           <a-tooltip v-if="column.tooltip" :title="column.tooltip">
             <span>{{ column.title }}</span>
@@ -41,17 +42,38 @@
             </a-tooltip>
           </template>
           <template v-if="column.key === 'archive'">
-            <a class="link" @click="openDetail(record)">{{ record.archive || '—' }}</a>
-            <div class="muted">{{ record.id }}</div>
+            <a class="link" @click="openDetail(record)">{{ record.archive || record.id }}</a>
+            <div class="muted">{{ record.id }}<span v-if="record.archive_present === false"> · 无归档</span></div>
           </template>
           <template v-else-if="column.key === 'type'">
             <a-tooltip :title="'原键：type=' + (record.type || '—')">
               <StatusTag :tone="record.type === 'build' ? 'neutral' : 'success'" :text="typeLabel(record.type)" dot />
             </a-tooltip>
           </template>
+          <template v-else-if="column.key === 'run_kind_col'">
+            <a-tooltip :title="'原键：run_kind=' + (record.run_kind || '—') + '（build=本次造尺 / reuse=复用量尺 / worker=普通批改 / ruler=存量尺子）'">
+              <StatusTag :tone="runKindTone(record.run_kind)" :text="runKindLabel(record.run_kind)" dot />
+            </a-tooltip>
+          </template>
           <template v-else-if="column.key === 'assignment'">
             {{ record.assignment_id ?? '—' }}
             <div class="muted">{{ record.assignment_title || '' }}</div>
+          </template>
+          <template v-else-if="column.key === 'teacher'">
+            {{ record.teacher_name || '—' }}
+            <div v-if="record.teacher_id" class="muted">ID {{ record.teacher_id }}</div>
+          </template>
+          <template v-else-if="column.key === 'classes'">
+            <template v-if="record.classes && record.classes.length">
+              {{ record.classes.map((c) => c.name).join('、') }}
+            </template>
+            <span v-else class="muted">—</span>
+            <div v-if="record.class_count" class="muted">共 {{ record.class_count }} 个班</div>
+          </template>
+          <template v-else-if="column.key === 'checker'">
+            <a-tooltip :title="'原键：checker_id=' + (record.checker_id_raw || record.checker_id || '—')">
+              <span class="mono">{{ record.checker_label || record.checker_id || '—' }}</span>
+            </a-tooltip>
           </template>
           <template v-else-if="column.key === 'status_col'">
             <a-tooltip :title="'原键：status=' + (record.status || '—')">{{ statusLabel(record.status) }}</a-tooltip>
@@ -75,21 +97,33 @@
       <a-spin :spinning="detailLoading">
         <a-alert v-if="detailError" type="error" show-icon :message="detailError" />
         <template v-else-if="detail">
+          <a-alert v-if="detail.run && detail.run.notice" type="info" show-icon class="mb" :message="detail.run.notice" />
           <a-descriptions size="small" bordered :column="2" title="运行概览">
             <a-descriptions-item label="归档">
               {{ detail.run.archive || '—' }}
+              <span v-if="detail.run.archive_present === false" class="muted"> · 无归档</span>
               <span class="muted"> · 原键 archive</span>
             </a-descriptions-item>
             <a-descriptions-item label="类型">
               <a-tooltip :title="'原键：type=' + (detail.run.type || '—')">{{ typeLabel(detail.run.type) }}</a-tooltip>
+            </a-descriptions-item>
+            <a-descriptions-item label="运行类型">
+              <a-tooltip :title="'原键：run_kind=' + (detail.run.run_kind || '—')">{{ runKindLabel(detail.run.run_kind) }}</a-tooltip>
+            </a-descriptions-item>
+            <a-descriptions-item label="老师 / 班级">
+              {{ detail.run.teacher_name || (meta && meta.teacher && meta.teacher.name) || '—' }}
+              <span class="muted"> · </span>
+              <template v-if="detail.run.classes && detail.run.classes.length">{{ detail.run.classes.map((c) => c.name).join('、') }}</template>
+              <template v-else-if="meta && meta.classes && meta.classes.length">{{ meta.classes.map((c) => c.name).join('、') }}</template>
+              <span v-else class="muted">无关联班级</span>
             </a-descriptions-item>
             <a-descriptions-item label="作业">
               {{ detail.run.assignment_id ?? '—' }} {{ detail.run.assignment_title || '' }}
               <span class="muted"> · 原键 assignment_id</span>
             </a-descriptions-item>
             <a-descriptions-item label="尺子ID">
-              <span class="mono">{{ detail.run.checker_id || '—' }}</span>
-              <span class="muted"> · 原键 checker_id</span>
+              <span class="mono">{{ checkerLabel(detail.run) }}</span>
+              <span class="muted"> · 原键 checker_id / checker_label</span>
             </a-descriptions-item>
             <a-descriptions-item label="计数" :span="2">
               <a-space wrap>
@@ -160,6 +194,7 @@
               </template>
             </a-table>
             <a-empty v-if="!submissions.length" :image="false" description="无逐份条目（该运行未产出结果文件；总数以顶部计数为准）" />
+            <p v-if="detail.submissions_source === 'db_by_checker'" class="muted note">口径：该运行没有归档证据（旧运行/归档已清理）⇒ 逐份结果来自数据库（仅学生名 / 分数 / 尺子归属，<b>不含答题全文</b>，也不改分）。</p>
           </a-card>
           <a-card size="small" title="📊 用量（tokens / 缓存命中 / 费用）" class="mt">
             <a-alert v-if="usageAlert" :type="usageAlertType" show-icon :message="usageAlert" class="mb" />
@@ -248,11 +283,11 @@
           <a-card size="small" title="🧾 元信息（运行时的快照）" class="mt">
             <template v-if="meta">
               <a-descriptions size="small" bordered :column="2">
-                <a-descriptions-item label="老师">{{ meta.teacher ? meta.teacher.name : '—' }}</a-descriptions-item>
-                <a-descriptions-item label="作业">{{ meta.assignment.title || '—' }}（ID {{ meta.assignment.id ?? '—' }}）</a-descriptions-item>
+                <a-descriptions-item label="老师">{{ (meta.teacher && meta.teacher.name) || detail.run.teacher_name || '—' }}</a-descriptions-item>
+                <a-descriptions-item label="作业">{{ meta.assignment.title || detail.run.assignment_title || '—' }}（ID {{ meta.assignment.id ?? '—' }}）</a-descriptions-item>
                 <a-descriptions-item label="班级（全部）" :span="2">
-                  <template v-if="meta.classes && meta.classes.length">
-                    <StatusTag v-for="c in meta.classes" :key="c.id" tone="neutral" :text="c.name" class="mr" />
+                  <template v-if="(meta.classes && meta.classes.length) || (detail.run.classes && detail.run.classes.length)">
+                    <StatusTag v-for="c in (meta.classes && meta.classes.length ? meta.classes : detail.run.classes)" :key="c.id" tone="neutral" :text="c.name" class="mr" />
                   </template>
                   <span v-else class="muted">无关联班级（assignment_classes 为空）</span>
                 </a-descriptions-item>
@@ -308,15 +343,19 @@
             <p class="muted note">说明：上方各面板已把常见英文键中文化；此处保留**原始键名与原文**，便于与运行日志、数据库字段逐项对照排查（不做任何改写）。</p>
           </a-card>
           <a-card size="small" title="日志" class="mt">
-            <a-space class="mb">
-              <a-button size="small" @click="loadLog('stdout')">stdout 尾部</a-button>
-              <a-button size="small" @click="loadLog('stderr')">stderr 尾部</a-button>
-              <a-button size="small" @click="loadLog('run')">run.log</a-button>
-              <a-button size="small" :loading="logDownloading" @click="downloadLog('stdout')">下载全量日志（stdout）</a-button>
-            </a-space>
-            <a-alert v-if="logMissing" type="info" show-icon class="mb" :message="`该通道日志缺失（present=false，reason=${logMissing}）—— 不是接口错误`" />
-            <pre v-if="logText" class="log">{{ logText }}</pre>
-            <p v-if="!logText && !logMissing" class="muted">点击上方按钮查看该运行的三通道日志（stdout / stderr / run）。</p>
+            <a-alert v-if="detail.run.archive_present === false" type="info" show-icon class="mb"
+              :message="'该记录没有归档目录（旧运行 / 归档已清理 / 存量尺子记录）⇒ 无 stdout/stderr/run.log 可读；这不是接口错误。'" />
+            <template v-else>
+              <a-space class="mb">
+                <a-button size="small" @click="loadLog('stdout')">stdout 尾部</a-button>
+                <a-button size="small" @click="loadLog('stderr')">stderr 尾部</a-button>
+                <a-button size="small" @click="loadLog('run')">run.log</a-button>
+                <a-button size="small" :loading="logDownloading" @click="downloadLog('stdout')">下载全量日志（stdout）</a-button>
+              </a-space>
+              <a-alert v-if="logMissing" type="info" show-icon class="mb" :message="`该通道日志缺失（present=false，reason=${logMissing}）—— 不是接口错误`" />
+              <pre v-if="logText" class="log">{{ logText }}</pre>
+              <p v-if="!logText && !logMissing" class="muted">点击上方按钮查看该运行的三通道日志（stdout / stderr / run）。</p>
+            </template>
           </a-card>
         </template>
       </a-spin>
@@ -339,7 +378,7 @@ const items = ref([]);
 const total = ref(0);
 const page = ref(1);
 const pageSize = ref(20);
-const filters = reactive({ assignmentId: null, type: undefined, status: undefined, sessions_purged: undefined });
+const filters = reactive({ assignmentId: null, type: undefined, runKind: undefined, status: undefined, sessions_purged: undefined });
 const detailOpen = ref(false);
 const detailLoading = ref(false);
 const detail = ref(null);
@@ -349,14 +388,27 @@ const logMissing = ref('');
 const logDownloading = ref(false);   // ★R2-B38：全量日志下载中（走既有 axios 实例 + Blob，不产生裸根 URL）
 
 /** ★R2-B37b 中文化映射（中文为主；英文原键放 tooltip，便于与日志/DB 对照） */
-const TYPE_LABELS = { worker: '批改运行', build: '造尺运行' };
+const TYPE_LABELS = { worker: '批改运行', build: '造尺运行', ruler: '存量尺子记录' };
+/** ★D2：运行类型（自动造尺链路的 build/reuse 是作业级记录的关键口径） */
+const RUN_KIND_LABELS = { build: '造尺（build）', reuse: '复用（reuse）', worker: '普通批改', ruler: '存量尺子（ruler）' };
 const SOURCE_LABELS = { worker: '批改 worker', build: '造尺脚本' };
 const HOME_POLICY_LABELS = { 'sessions+credentials': '会话文件 + 凭据（保留 home 骨架）' };
-const STATUS_LABELS = { done: '完成', failed: '失败', pending: '排队中', running: '运行中', needs_rerun: '需重跑' };
+const STATUS_LABELS = { done: '完成', failed: '失败', pending: '排队中', running: '运行中', needs_rerun: '需重跑', ready: '就绪（ready）' };
 const TIER_LABELS = { peak: '高峰', idle: '空闲', mixed: '跨时段', na: '不适用（无模型调用）' };
 /** ★R2-B38：时段档中文化 —— 零 LLM 时后端给 na ⇒ 与命中率 na 口径统一显示「不适用（无模型调用）」 */
 function tierLabel(t) { return TIER_LABELS[t] || (t || '—'); }
 function typeLabel(t) { return TYPE_LABELS[t] || (t || '—'); }
+/** ★D2：运行类型中文化 + 兜底（checker_id 仍是 __AUTO_BUILD__ 哨兵时显示「自动造尺（未对齐）」） */
+function runKindLabel(k) { return RUN_KIND_LABELS[k] || (k || '—'); }
+function runKindTone(k) {
+  if (k === 'build' || k === 'reuse') return 'success';
+  if (k === 'ruler') return 'neutral';
+  return 'neutral';
+}
+function checkerLabel(run) {
+  if (!run) return '—';
+  return run.checker_label || run.checker_id || '—';
+}
 function sourceLabel(s) { return SOURCE_LABELS[s] || (s || '—'); }
 function homePolicyLabel(v) { return HOME_POLICY_LABELS[v] || (v || '—'); }
 function statusLabel(s) { return STATUS_LABELS[s] || (s || '—'); }
@@ -416,15 +468,25 @@ function exitLabel(v) {
   return n === 0 ? '0（正常）' : String(n);
 }
 
-const typeOptions = [{ value: 'worker', label: '批改运行' }, { value: 'build', label: '造尺运行' }];
+const typeOptions = [{ value: 'worker', label: '批改运行' }, { value: 'build', label: '造尺运行' }, { value: 'ruler', label: '存量尺子记录' }];
+const runKindOptions = [
+  { value: 'build', label: '造尺（build）' },
+  { value: 'reuse', label: '复用（reuse）' },
+  { value: 'worker', label: '普通批改' },
+  { value: 'ruler', label: '存量尺子（ruler）' },
+];
 const purgeOptions = [{ value: 'yes', label: '已销毁' }, { value: 'no', label: '未销毁（需关注）' }];
-const statusOptions = [{ value: 'done', label: 'done' }, { value: 'failed', label: 'failed' }, { value: 'pending', label: 'pending' }, { value: 'running', label: 'running' }];
+const statusOptions = [{ value: 'done', label: 'done' }, { value: 'failed', label: 'failed' }, { value: 'pending', label: 'pending' }, { value: 'running', label: 'running' }, { value: 'needs_rerun', label: 'needs_rerun' }, { value: 'ready', label: 'ready' }];
 
 // ★R2-B37b：表头中文化（英文原键放列 tooltip，便于与日志/DB 字段对照）
 const cols = [
-  { title: '归档 / 运行', key: 'archive', width: 190, tooltip: '原键：archive / id' },
-  { title: '类型', key: 'type', width: 100, tooltip: '原键：type（worker=批改运行 / build=造尺运行）' },
+  { title: '归档 / 运行', key: 'archive', width: 200, tooltip: '原键：archive / id' },
+  { title: '类型', key: 'type', width: 110, tooltip: '原键：type（worker=批改运行 / build=造尺运行 / ruler=存量尺子记录）' },
+  { title: '运行类型', key: 'run_kind_col', width: 130, tooltip: '原键：run_kind（build=本次造尺 / reuse=复用量尺 / worker=普通批改 / ruler=存量尺子）' },
   { title: '作业', key: 'assignment', width: 150, tooltip: '原键：assignment_id / assignment_title' },
+  { title: '老师', key: 'teacher', width: 120, tooltip: '原键：teacher_name / teacher_id（列表按作业归属补齐）' },
+  { title: '班级', key: 'classes', width: 170, tooltip: '原键：classes[].name / class_count（作业关联班级）' },
+  { title: '尺子', key: 'checker', width: 150, tooltip: '原键：checker_id；__AUTO_BUILD__ ⇒ 自动造尺（未对齐）' },
   { title: '状态', key: 'status_col', width: 100, tooltip: '原键：status' },
   { title: '已量尺', key: 'measured', width: 80, tooltip: '原键：measured（成功量尺份数）' },
   { title: '不可量', key: 'unmeasurable', width: 80, tooltip: '原键：unmeasurable（C8 预检/量尺判不可量）' },
@@ -574,6 +636,7 @@ async function load() {
     const params = { page: page.value, pageSize: pageSize.value };
     if (filters.assignmentId) params.assignmentId = filters.assignmentId;
     if (filters.type) params.type = filters.type;
+    if (filters.runKind) params.run_kind = filters.runKind;
     if (filters.status) params.status = filters.status;
     if (filters.sessions_purged) params.sessions_purged = filters.sessions_purged;
     const res = await request.get('/admin/grading-runs', { params });
@@ -588,7 +651,7 @@ async function load() {
 }
 function reload() { page.value = 1; load(); }
 function reset() {
-  filters.assignmentId = null; filters.type = undefined; filters.status = undefined; filters.sessions_purged = undefined;
+  filters.assignmentId = null; filters.type = undefined; filters.runKind = undefined; filters.status = undefined; filters.sessions_purged = undefined;
   reload();
 }
 function onTableChange(pg) { page.value = pg.current || 1; pageSize.value = pg.pageSize || 20; load(); }

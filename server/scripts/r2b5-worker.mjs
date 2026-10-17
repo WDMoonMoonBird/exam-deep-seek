@@ -21,6 +21,7 @@ import { EXIT, parseWorkerConfig, runWorkerLoop } from '../src/infrastructure/ds
 import { describeLlmConfig, llmEnv, readPlatformLlmConfig } from '../src/infrastructure/dsh/config/dshPlatformLlmConfig.js';
 import { checkTimeoutVsStale, formatReclaimSummary, reclaimStaleRunning, resolveClockToleranceMs, resolveStaleMs } from '../src/infrastructure/dsh/worker/dshStaleJobReclaimer.js';
 import { MATERIALS_ROOT_ENV, formatMaterialsRoot } from '../src/infrastructure/dsh/materials/dshMaterialsResolver.js';
+import { scanDueAssignments } from '../src/infrastructure/dsh/worker/dueAssignmentScanner.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '..');
@@ -138,6 +139,13 @@ const deviceArgs = opts.deviceArgs.length ? opts.deviceArgs : [path.join(SERVER,
 console.log('WORKER_START db=/' + dbName + ' idle_backoff_ms=' + config.idleBackoffMs + ' max_backoff_ms=' + config.maxBackoffMs
   + ' failure_backoff_ms=' + config.failureBackoffMs + ' max_consecutive_failures=' + config.maxConsecutiveFailures
   + ' db_limit=' + (config.dbLimit === undefined ? 'auto' : config.dbLimit) + ' stale_running_ms=' + staleMs + ' clock_tolerance_ms=' + clockToleranceMs + ' ' + formatMaterialsRoot(materialsRoot) + ' device=' + device);
+console.log('AUTO_GRADE=' + (config.autoGrade ? 'on' : 'off') + ' lookback_days=' + config.autoGradeLookbackDays
+  + ' scan_ms=' + config.autoGradeScanMs + ' limit=' + config.autoGradeLimit
+  + ' schedule=' + (opts.once ? 'once' : 'daemon'));
+if (config.autoGrade && opts.reuseChecker) {
+  // ★自动造尺 job 必须保留「无尺则造」：--reuse-checker 只约束普通 job（否则新作业永远造不出尺）
+  console.log('AUTO_GRADE_BUILD_OVERRIDE=on reason=auto_build_job --reuse-checker 只约束普通 job；自动造尺 job 仍走 build-and-measure');
+}
 
 // ★R2-B17：领取第一个 job **之前**回收僵尸 running 行（否则 DB 级闸会被永久占住且静默停摆）
 let reclaim;
@@ -159,6 +167,10 @@ const res = await runWorkerLoop({
   stopSignal,
   log: console,
   maxIterations: opts.once ? 1 : opts.maxIterations,
+  // ★截止后自动为「该教师/该班级/该作业」建会话；造尺/复用由上面的 runOnce 完成
+  scanDueImpl: config.autoGrade
+    ? ({ prisma: p, log }) => scanDueAssignments({ prisma: p, log, lookbackDays: config.autoGradeLookbackDays, limit: config.autoGradeLimit })
+    : null,
 });
 
 console.log('WORKER_EXIT=' + res.exitCode + ' iterations=' + res.iterations + ' consumed=' + res.consumed + ' failures=' + res.failures + (signalled ? ' signal=' + signalled : ''));

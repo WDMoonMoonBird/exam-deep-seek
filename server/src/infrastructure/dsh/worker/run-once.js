@@ -22,7 +22,9 @@ import { formatMaterialsMissing, formatMaterialsResolved, resolveMaterialsForAss
 import { getDshGradingConcurrency } from '../../ai/deepseek/config.js';
 import logger from '../../../utils/logger.js';
 import { JOB_STATUS, DEFAULT_MAX_ATTEMPTS, claimJobAtomic, createGate, finishJob } from './claim.js';
-import { REUSE_CHECKER_MODE, absolutizeDeviceArgs, placeCheckerFiles, withReuseCheckerArgs, withWorkdirArg } from './device-args.js';
+import { REUSE_CHECKER_MODE, absolutizeDeviceArgs, placeCheckerFiles, withBuildCheckerArgs, withReuseCheckerArgs, withWorkdirArg } from './device-args.js';
+import { AUTO_BUILD_CHECKER, isAutoBuildChecker } from './autoBuild.js';
+import { REEXPORT_ENV, alignJobCheckerId, ensureMaterialsForAssignment, logSessionScope } from './autoBuildSession.js';
 import { errorTail, persistDeviceLogs } from './device-logs.js';
 
 /**
@@ -108,6 +110,10 @@ export async function runOnce(args = {}) {
   return res;
 }
 
+// 自动造尺的物料导出 / 会话作用域 / checker 对齐已拆到 ./autoBuildSession.js
+// （A1 t1 建议的拆分点；run-once 主链路 finalizeRunRoot→persistJobRun 顺序不变，w51/w55 源码文本守卫仍成立）
+export { ensureMaterialsForAssignment, materialsDirReady } from './autoBuildSession.js';
+
 /**
  * 消费一个 job（默认取最早的 pending）。
  * @returns {{consumed:boolean, reason?:string, jobId?:number, status?:string, written?:number, skipped?:number, runRoot?:string, exitCode?:number, timedOut?:boolean}}
@@ -128,14 +134,36 @@ async function runOnceInner({
     const job = await claimJobAtomic({ prisma, jobId, dbLimit: dbLimit === undefined ? limit : dbLimit });
     if (!job) return { consumed: false, reason: 'no_pending_job' };
 
+    // ★自动造尺 job：截止调度器用哨兵 checker_id 建 job；worker 负责「没尺就造、有尺就复用」。
+    const autoBuild = isAutoBuildChecker(job.checkerId);
+    if (autoBuild) console.log('AUTO_BUILD_SESSION assignment=' + job.assignmentId + ' job=' + job.id + ' checker=' + AUTO_BUILD_CHECKER);
+    await logSessionScope({ prisma, job, log: logger });
+
     const runRoot = path.join(runRootBase, 'r2b4-job-' + job.id + '-' + Date.now());
     fs.mkdirSync(runRoot, { recursive: true });
     const home = path.join(runRoot, 'home');
     fs.mkdirSync(home, { recursive: true });
 
+    // ★F4（自动造尺）：先用平台数据导出该作业物料（与 ops 的 r2b20 同源），再做尺子解析/拉起装置。
+    //   顺序很关键：物料拿不到就不该抢占尺子（claimed_here 会让别的作业等待一个永远没有产物的 builder）。
+    //   失败 ⇒ fail-closed：job needs_rerun，不写分、不进入装置流程。
+    if (autoBuild) {
+      const prep = await ensureMaterialsForAssignment({
+        prisma, materialsRoot, assignmentId: job.assignmentId, jobId: job.id, log: logger,
+        force: String(process.env[REEXPORT_ENV] || '') === '1',
+      });
+      if (!prep.ok) {
+        console.log('MATERIALS_EXPORT_FAILED assignment=' + job.assignmentId + ' reason=' + prep.reason + ' job=' + job.id);
+        logger.warn({ jobId: job.id, assignmentId: job.assignmentId, reason: prep.reason }, '自动造尺：物料导出失败 ⇒ fail-closed（不写分、不跑装置）');
+        await finishJob({ prisma, jobId: job.id, status: JOB_STATUS.needsRerun, error: 'materials_export_failed:' + prep.reason });
+        return { consumed: true, jobId: job.id, runRoot, status: JOB_STATUS.needsRerun, reason: 'materials_export_failed:' + prep.reason, materials: { ok: false, reason: prep.reason } };
+      }
+    }
+
     // R2-B10②：复用已入库尺子（measure-only-reuse，零模型调用、尺子不变）
     let reuse = null;
-    let runArgs = deviceArgs;
+    // 自动造尺 job 的装置参数必须显式切到 build-and-measure（run.sh 默认 per-submission ⇒ 永远不会造尺）
+    let runArgs = autoBuild ? withBuildCheckerArgs(deviceArgs) : deviceArgs;
     // 容错：老测试的 fake prisma 没有 gradingChecker（抛错 ⇒ 视为「无 ready 尺子」，不改写既有语义）
     let readyChecker = null;
     try {
@@ -150,8 +178,13 @@ async function runOnceInner({
 
     // ★R2-B35：内容指纹尺子解析（ready ⇒ 零 LLM 复用；building ⇒ 等待；无 ⇒ 抢占后由本次装置流程造尺一次 + 首次绑定）
     //   假 prisma / 迁移未落地 / 无发布快照 ⇒ 一律回落旧路径（不改变既有行为）
+    //   ★F3/F6：--reuse-checker 只约束「普通 job 只许复用」；自动造尺 job 必须保留「无尺则造」能力，
+    //     否则峰谷窗口形态（worker 带 --reuse-checker）下自动 job 永远不会造尺（只会 needs_rerun）。
+    const reuseOnly = reuseChecker && !autoBuild;
     let rulerPlan = null;
     let jobCheckerId = job.checkerId;
+    // ★R2：对齐失败原因（成功打分也会写进 last_error，避免 job.checker_id 只剩哨兵且无迹可查）
+    let alignFailedReason = null;
     try {
       const contentRes = await resolveAssignmentContent({ prisma, assignmentId: job.assignmentId });
       if (contentRes.ok) {
@@ -162,8 +195,8 @@ async function runOnceInner({
         //   并发安全不受影响：抢占仍是 store 内原子完成（claimBuildingRuler），抢输者回到等待分支。
         const rr = await resolveRulerForAssignment({
           prisma, assignmentId: job.assignmentId, questionId: contentRes.questionId,
-          mode: reuseChecker ? 'reuse' : 'build',
-          claimOnly: !reuseChecker,
+          mode: reuseOnly ? 'reuse' : 'build',
+          claimOnly: !reuseOnly,
           pollIntervalMs: resolvePollMs(), waitTimeoutMs: resolveWaitMs(),
           log: console, jobTag: 'job=' + job.id,
         });
@@ -190,7 +223,12 @@ async function runOnceInner({
       console.log('RULER_RESOLVE=error reason=' + String(err && err.message).slice(0, 160) + ' job=' + job.id);
     }
 
-    if (reuseChecker || (rulerPlan && rulerPlan.mode === 'reuse')) {
+    // 真实 checker 的 job 也可能因内容变化进入 build；统一保证 build 模式参数
+    if (rulerPlan && rulerPlan.mode === 'build') {
+      runArgs = withBuildCheckerArgs(runArgs);
+    }
+
+    if (reuseOnly || (rulerPlan && rulerPlan.mode === 'reuse')) {
       if (rulerPlan && rulerPlan.mode === 'reuse') {
         // ★内容命中：尺子原始字节**逐字节**落位（不重序列化 ⇒ 装置 frozen_intact 预检不会被误判篡改）
         const ruler = rulerPlan.ruler || null;
@@ -241,6 +279,7 @@ async function runOnceInner({
     // ★R2-B21：按 **job 的 assignmentId** 解析该作业自己的物料目录与份数（多作业场景必需）
     //   设定 DSH_GRADER_MATERIALS_ROOT ⇒ 覆盖启动时写死的 --source-dir/--submissions；目录缺失/为空 ⇒ fail-closed（不回落实验/、不写分）
     if (materialsRoot) {
+      // 自动 job 的物料已在上方（F4）导出；这里只做解析 + 缺失 fail-closed（既有 R2-B21 语义）
       const m = resolveMaterialsForAssignment({ materialsRoot, assignmentId: job.assignmentId });
       if (!m.ok) {
         console.log(formatMaterialsMissing({ assignmentId: job.assignmentId, dir: m.dir }));
@@ -257,12 +296,17 @@ async function runOnceInner({
     // ★R2-B12①：装置必须在**本次 run-root** 下工作（否则产物/frozen 尺子错位 ⇒ 闸 exit 5、消费失败）
     runArgs = withWorkdirArg(runArgs, runRoot);
     const finalArgs = absolutizeDeviceArgs(runArgs, repoRootAbs);
+    // 造尺会话比纯量尺慢（实测 8.7 min + 物料导出）；build 单独放宽超时，measure 保持原值
+    const isBuildRun = autoBuild || !!(rulerPlan && rulerPlan.mode === 'build');
+    const buildTimeoutMs = Math.max(Number(timeoutMs) || 0, Number(process.env.DSH_BUILD_TIMEOUT_MS) || 1200000);
+    const effectiveTimeoutMs = isBuildRun ? buildTimeoutMs : timeoutMs;
+
     const res = await (deps.runDshGrader || runDshGrader)({
       command: deviceCommand || 'node',
       args: finalArgs,
       runRoot,
       cwd: repoRootAbs, // ★R2-B11：此前是 cwd=runRoot ⇒ 相对装置路径（scripts/dsh-grader/run.sh）解析失败 ⇒ bash exit 127
-      timeoutMs,
+      timeoutMs: effectiveTimeoutMs,
       // R2-B9②：平台模型/端点经 extraEnv 注入（未配置时 extraEnv 为空 ⇒ 行为不变）；stubEnv 最后合并（测试可覆盖）
       extraEnv: { DSH_HOME: home, ...extraEnv, ...stubEnv },
       spawnImpl: deps.spawnImpl,
@@ -292,7 +336,7 @@ async function runOnceInner({
       }
     }
 
-    const base = { consumed: true, jobId: job.id, runRoot, exitCode: res.exitCode, timedOut: !!res.timedOut, reuse, deviceLogs };
+    const base = { consumed: true, jobId: job.id, runRoot, exitCode: res.exitCode, timedOut: !!res.timedOut, reuse, deviceLogs, alignFailed: alignFailedReason };
 
     if (res.timedOut) {
       if (rulerPlan && rulerPlan.mode === 'build') {
@@ -349,6 +393,9 @@ async function runOnceInner({
       });
       const builtRuler = await findRulerByContentKey(prisma, rulerPlan.contentKey);
       jobCheckerId = stored.checkerId;
+      // ★自动 job 的 checker_id 从哨兵对齐到真实尺子（否则审计/归档仍显示 __AUTO_BUILD__）
+      const alignedBuild = await alignJobCheckerId({ prisma, jobId: job.id, to: stored.checkerId });
+      if (!alignedBuild.ok) alignFailedReason = alignedBuild.reason;
       const b = await bindResolvedRuler({
         prisma, assignmentId: job.assignmentId, questionId: rulerPlan.questionId,
         ruler: builtRuler, contentKey: rulerPlan.contentKey,
@@ -359,6 +406,14 @@ async function runOnceInner({
         return { ...base, status: JOB_STATUS.needsRerun, reason: 'ruler_bind_conflict' };
       }
     }
+    // 兼容：内容不可解析（无冻结快照）但仍是自动 job ⇒ 装置可能已产出 checker，至少把 job 对齐到真实 checker
+    if (!rulerPlan && isAutoBuildChecker(job.checkerId) && stored.checkerId) {
+      const alignedLegacy = await alignJobCheckerId({ prisma, jobId: job.id, to: stored.checkerId });
+      // 锚点/绑定一律用真实 checker；job 行对齐失败只影响审计字段（已记 last_error）
+      jobCheckerId = stored.checkerId;
+      if (!alignedLegacy.ok) alignFailedReason = alignedLegacy.reason;
+    }
+
     // ★R2-B14①：入库时持久化作业锚点（供后续复用回填；upsert 幂等）
     const anchorSaved = await persistAnchor({ prisma, assignmentId: job.assignmentId, checkerId: jobCheckerId, runRoot });
     console.log('ANCHOR_PERSISTED=' + (anchorSaved.persisted ? 'yes' : 'no') + (anchorSaved.persisted ? ' frozen_sha256=' + (anchorSaved.frozenSha256 || 'na') + ' n_submissions=' + anchorSaved.nSubmissions + ' ANCHOR_RAW_PERSISTED=' + (anchorSaved.rawBytes > 0 ? 'yes bytes=' + anchorSaved.rawBytes + ' sha256=' + anchorSaved.rawSha256 : 'no') : ' reason=' + anchorSaved.reason));
@@ -383,10 +438,15 @@ async function runOnceInner({
 
     const consumed = await consumeMeasureResults({ prisma, runRoot, assignmentId: job.assignmentId });
     const status = consumed.written > 0 ? JOB_STATUS.done : JOB_STATUS.needsRerun;
+    // ★R2：打分成功但对齐失败 ⇒ last_error 留明确线索（D2 管理员页/排障可据此显示「job.checker_id 仍是哨兵」）
+    const alignWarning = alignFailedReason
+      ? 'ruler_job_checker_align_failed:' + alignFailedReason + '（打分已完成；真实 checker=' + (stored.checkerId || '(none)') + '，job.checker_id 仍为 ' + AUTO_BUILD_CHECKER + '）'
+      : null;
     await finishJob({
       prisma, jobId: job.id, status,
       written: consumed.written, skipped: consumed.skipped.length,
-      error: consumed.written > 0 ? null : 'all_needs_rerun:' + consumed.skipped.map((r) => r.reason).join(','),
+      // ★repair-2：needs_rerun 出口也要留对齐线索（否则 job.checker_id 仍是哨兵却只剩 all_needs_rerun）
+      error: consumed.written > 0 ? alignWarning : ('all_needs_rerun:' + consumed.skipped.map((r) => r.reason).join(',') + (alignFailedReason ? '; align=' + alignFailedReason : '')),
     });
     logger.info({ jobId: job.id, status, written: consumed.written, skipped: consumed.skipped.length }, 'R2-B4：job 消费完成');
     return { ...base, status, written: consumed.written, skipped: consumed.skipped.length, checkerId: stored.checkerId };

@@ -16,10 +16,12 @@ export const listGradingRuns = async (req, res) => {
     const status = q.status ? String(q.status) : null;
     const archiveType = q.type ? String(q.type) : null;
     const purgeFlag = q.sessions_purged ? String(q.sessions_purged) : null;
+    // ★D2：按运行类型筛选（build=本次造尺 / reuse=内容复用 / worker=普通批改 / ruler=存量尺子记录）
+    const runKind = q.run_kind ? String(q.run_kind) : null;
 
     // 读模型出口已 toJsonSafe（BIGINT ⇒ Number）
     const data = await dshRunsOf(req).listRuns({
-      page, pageSize, assignmentId, status, archiveType, purgeFlag,
+      page, pageSize, assignmentId, status, archiveType, purgeFlag, runKind,
       orderBy: q.order_by, orderDir: q.order,
     });
     res.json({ code: 0, message: 'ok', data });

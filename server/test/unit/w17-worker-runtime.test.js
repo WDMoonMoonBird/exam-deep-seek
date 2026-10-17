@@ -3,6 +3,7 @@
  * 不触库、不起服务。
  */
 import { EXIT, nextBackoff, parseWorkerConfig, runWorkerLoop, sleepInterruptible } from '../../src/infrastructure/dsh/worker/dshGradingWorkerRuntime.js';
+import { BUILD_CHECKER_MODE, REUSE_CHECKER_MODE, withBuildCheckerArgs, withReuseCheckerArgs } from '../../src/infrastructure/dsh/worker/device-args.js';
 import { buildClaimSql } from '../../src/infrastructure/dsh/worker/index.js';
 
 describe('W17 配置与退避', () => {
@@ -75,11 +76,86 @@ describe('W17 常驻循环', () => {
     expect(Date.now() - t0).toBeLessThan(3000); // 有退避但不是热循环（3×10ms + 开销）
   });
 
+  it('W17-8 ★截止扫描：按间隔调用 scanDueImpl；扫描抛错不终止循环', async () => {
+    let scans = 0;
+    const res = await runWorkerLoop({
+      prisma: {},
+      runOnceImpl: async () => ({ consumed: false, reason: 'no_pending_job' }),
+      scanDueImpl: async () => { scans += 1; return { enqueued: 0 }; },
+      config: { ...cfg, autoGrade: true, autoGradeScanMs: 1 },
+      maxIterations: 3,
+    });
+    expect(scans).toBe(3);
+    expect(res.exitCode).toBe(EXIT.ok);
+    let scans2 = 0;
+    const res2 = await runWorkerLoop({
+      prisma: {},
+      runOnceImpl: async () => ({ consumed: false, reason: 'no_pending_job' }),
+      scanDueImpl: async () => { scans2 += 1; throw new Error('scan boom'); },
+      config: { ...cfg, autoGrade: true, autoGradeScanMs: 1 },
+      maxIterations: 2,
+    });
+    expect(scans2).toBe(2);
+    expect(res2.exitCode).toBe(EXIT.ok);
+    expect(res2.failures).toBe(0); // 扫描异常不占用 runOnce 的连续失败额度
+  });
+
+  it('W17-9 ★截止扫描按间隔节流：首轮必扫、间隔内不重复扫；autoGrade=false 完全不扫；参数透传', async () => {
+    const prisma = { tag: 'fake-prisma' };
+    const scans = [];
+    const res = await runWorkerLoop({
+      prisma,
+      runOnceImpl: async () => ({ consumed: false, reason: 'no_pending_job' }),
+      scanDueImpl: async (args) => { scans.push(args); return { enqueued: 0 }; },
+      config: { ...cfg, autoGrade: true, autoGradeScanMs: 5000, autoGradeLookbackDays: 3, autoGradeLimit: 5 },
+      maxIterations: 4,
+    });
+    expect(scans).toHaveLength(1); // 4 次迭代远小于 5s ⇒ 只有首轮扫一次
+    expect(scans[0]).toMatchObject({ prisma, lookbackDays: 3, limit: 5 });
+    expect(res.exitCode).toBe(EXIT.ok);
+
+    let off = 0;
+    await runWorkerLoop({
+      prisma,
+      runOnceImpl: async () => ({ consumed: false, reason: 'no_pending_job' }),
+      scanDueImpl: async () => { off += 1; return { enqueued: 0 }; },
+      config: { ...cfg, autoGrade: false, autoGradeScanMs: 1 },
+      maxIterations: 3,
+    });
+    expect(off).toBe(0);
+  });
+
   it('W17-6 sleepInterruptible：stopping 时立即返回，否则按时返回', async () => {
     const t0 = Date.now();
     expect(await sleepInterruptible(5000, () => true)).toBe('stopping');
     expect(Date.now() - t0).toBeLessThan(500);
     expect(await sleepInterruptible(30, () => false)).toBe('timeout');
+  });
+});
+
+describe('W17 自动造尺装置参数（F3：build-and-measure）', () => {
+  it('W17-10 withBuildCheckerArgs：剥掉旧 --checker/--checker-mode（空格与等号两种写法）再追加 build-and-measure', () => {
+    const base = ['scripts/dsh-grader/run.sh', '--assignment', '15', '--checker', '/old/checker.json', '--checker-mode', 'per-submission', '--limit', '3'];
+    expect(withBuildCheckerArgs(base)).toEqual([
+      'scripts/dsh-grader/run.sh', '--assignment', '15', '--limit', '3', '--checker-mode', BUILD_CHECKER_MODE,
+    ]);
+    expect(withBuildCheckerArgs(['run.sh', '--checker=/x/checker.json', '--checker-mode=measure-only-reuse'])).toEqual([
+      'run.sh', '--checker-mode', BUILD_CHECKER_MODE,
+    ]);
+    expect(withBuildCheckerArgs()).toEqual(['--checker-mode', BUILD_CHECKER_MODE]);
+    const out = withBuildCheckerArgs(base);
+    expect(out.filter((a) => a === '--checker-mode')).toHaveLength(1);
+    expect(out).not.toContain('--checker'); // 旧尺子路径不得残留（否则装置按旧尺量尺）
+  });
+
+  it('W17-11 ★自动造尺覆盖复用具（--reuse-checker 形态）：自动 job 仍切 build-and-measure（F3/F6）', () => {
+    const reuse = withReuseCheckerArgs(['scripts/dsh-grader/run.sh', '--assignment', '15'], '/ruler/checker.json');
+    expect(reuse).toContain('--checker');
+    expect(reuse).toContain(REUSE_CHECKER_MODE);
+    const build = withBuildCheckerArgs(reuse);
+    expect(build).toEqual(['scripts/dsh-grader/run.sh', '--assignment', '15', '--checker-mode', BUILD_CHECKER_MODE]);
+    expect(build).not.toContain('--checker');
+    expect(build).not.toContain(REUSE_CHECKER_MODE);
   });
 });
 

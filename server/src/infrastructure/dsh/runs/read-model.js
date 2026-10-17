@@ -12,24 +12,46 @@
  *   日志沿用进程 logger。
  */
 import fs from 'node:fs';
+import path from 'node:path';
 import defaultPrisma from '../../../utils/prisma.js';
 import defaultLogger from '../../../utils/logger.js';
+import { isAutoBuildChecker } from '../worker/autoBuild.js';
 import { listArchiveDirs, maskSecrets, parseTeardown, readArchiveFile, readJsonSafe, runsRootDir, safeArchiveDir } from './archive-fs.js';
 import { parseJsonCol, loadRunMeta } from './run-meta.js';
 
-function shapeRow(row, { teardown = null, type = 'worker', archive = null, assignmentTitle = null, usage = null } = {}) {
+/**
+ * ★D2（t7）：自动造尺/存量记录的统一行形状。
+ * - run_kind：build（本次造尺）/ reuse（内容命中复用）/ worker（普通批改 job / 历史任务）/ ruler（存量尺子记录）
+ * - archive_present：归档目录是否真的存在（旧运行归档会被 keep_days 清理 ⇒ 页面要能提示"无归档"）
+ * - checker_label：A1-R2 兜底 —— job.checker_id 仍是 '__AUTO_BUILD__'（对齐失败）时显示「自动造尺（未对齐）」
+ * - teacher_name/teacher_id/classes/class_count：列表/详情统一由 attachAssignmentDisplayMeta 补齐（先置 null 占位）
+ */
+function shapeRow(row, {
+  teardown = null, type = 'worker', archive = null, assignmentTitle = null, usage = null,
+  runKind = null, archivePresent = null, id = null, source = null,
+} = {}) {
   const ev = teardown || {};
   const u = usageListFields(usage);
   const started = row && row.started_at ? new Date(row.started_at).getTime() : null;
   const finished = row && row.finished_at ? new Date(row.finished_at).getTime() : null;
+  const rawChecker = row && row.checker_id ? String(row.checker_id) : null;
+  const sentinel = isAutoBuildChecker(rawChecker);
   return {
-    id: type === 'worker' ? 'job-' + row.job_id : 'archive-' + archive,
+    id: id || (type === 'worker' ? 'job-' + row.job_id : 'archive-' + archive),
     type,
-    archive: archive || (row ? String(row.job_id) : null),
+    archive: archive || null,
+    archive_present: archivePresent === null ? !!archive : !!archivePresent,
     job_id: row ? row.job_id : null,
     assignment_id: row ? row.assignment_id : null,
     assignment_title: assignmentTitle,
-    checker_id: row && row.checker_id ? maskSecrets(String(row.checker_id)).slice(0, 24) : null,
+    teacher_id: null,
+    teacher_name: null,
+    classes: [],
+    class_count: null,
+    checker_id: sentinel ? null : (rawChecker ? maskSecrets(rawChecker).slice(0, 24) : null),
+    checker_id_raw: rawChecker ? maskSecrets(rawChecker).slice(0, 80) : null,
+    checker_label: sentinel ? '自动造尺（未对齐）' : null,
+    run_kind: runKind || (type === 'build' ? 'build' : (type === 'ruler' ? 'ruler' : 'worker')),
     status: row ? row.status || null : null,
     measured: row ? Number(row.measured) : (ev.session_files_before === undefined ? null : null),
     unmeasurable: row ? Number(row.unmeasurable) : null,
@@ -43,7 +65,7 @@ function shapeRow(row, { teardown = null, type = 'worker', archive = null, assig
     sessions_purged: ev.sessions_purged === undefined ? null : ev.sessions_purged,
     keep_scene: ev.keep_scene === undefined ? null : ev.keep_scene,
     home_policy: ev.home_policy || null,
-    source: ev.source || (type === 'build' ? 'build' : 'worker'),
+    source: source || ev.source || (type === 'build' ? 'build' : (type === 'ruler' ? 'ruler' : 'worker')),
     created_at: row ? row.created_at : null,
     // ★R2-B37：用量列（来自 grading_run_usage；无记录 ⇒ null，不显示假 0）
     cost_total: u.cost_total,
@@ -51,8 +73,6 @@ function shapeRow(row, { teardown = null, type = 'worker', archive = null, assig
     cache_hit_rate: u.cache_hit_rate,
     no_model_session: u.no_model_session,
     model_calls: u.model_calls,
-    // ★R2-B37：元信息摘要（老师 / 班级数）——班级全量在详情 meta，列表只给计数避免放大
-    teacher_name: (teardown && teardown.__teacher_name) || null,
   };
 }
 
@@ -297,6 +317,147 @@ async function selectJobRuns({ whereSql = '', params = [], orderBy = 'created_at
 
 const SORTABLE = { created_at: 'created_at', finished_at: 'finished_at', job_id: 'job_id' };
 
+// ===================== ★D2（t7）：自动造尺 / 存量记录（只读聚合，不新增表/迁移） =====================
+const LEGACY_JOB_LIMIT = 1000;   // 旧任务索引上限（grading_jobs 最近的 N 行；避免全表扫描放大）
+const RULER_RECORD_LIMIT = 200;  // 存量尺子记录上限（按绑定时间倒序）
+
+/**
+ * 判据：job → build / reuse / worker（只读；ruler 表缺失 ⇒ 退化为 worker，不报错）
+ * - build：本 job 造出的尺子（grading_rulers.source_run_id = job.id），或 checker_id 仍是 '__AUTO_BUILD__' 哨兵；
+ * - reuse：job 带 content_key 且同内容尺子已存在但由别的运行造出（零 LLM 复用）；
+ * - worker：无内容键的历史/普通批改 job。
+ */
+function classifyJobKind({ jobId = null, checkerId = null, contentKey = null, rulerByContent = null } = {}) {
+  if (isAutoBuildChecker(checkerId)) return 'build';
+  if (!contentKey || !rulerByContent) return 'worker';
+  const ruler = rulerByContent.get(String(contentKey));
+  if (!ruler) return 'worker';
+  const src = ruler.source_run_id === null || ruler.source_run_id === undefined ? null : Number(ruler.source_run_id);
+  return src !== null && Number.isFinite(src) && src === Number(jobId) ? 'build' : 'reuse';
+}
+
+/** 最近的 grading_jobs 索引（id → 行）+ 内容键集合；表缺失/查询失败 ⇒ 空索引（旧任务行不可见，但不 500） */
+async function loadRecentJobsIndex({ prisma: prismaClient = defaultPrisma, log = defaultLogger } = {}) {
+  try {
+    const rows = await prismaClient.$queryRawUnsafe(
+      'SELECT id, assignment_id, checker_id, status, written_count, skipped_count, content_key, created_at, updated_at '
+      + 'FROM grading_jobs ORDER BY created_at DESC LIMIT ' + LEGACY_JOB_LIMIT,
+    );
+    const byId = new Map();
+    const contentKeys = new Set();
+    for (const raw of rows || []) {
+      const r = normalizeRawRow(raw);
+      byId.set(Number(r.id), r);
+      if (r.content_key) contentKeys.add(String(r.content_key));
+    }
+    return { byId, contentKeys };
+  } catch (err) {
+    log.warn({ err: String((err && err.message) || err).slice(0, 120) }, 'D2：grading_jobs 读取失败（旧任务行不可见，不 500）');
+    return { byId: new Map(), contentKeys: new Set() };
+  }
+}
+
+/** content_key → 尺子行（source_run_id/checker_id），用于 build/reuse 分类；表缺失 ⇒ 空 Map */
+async function loadRulerContentIndex({ contentKeys = [], prisma: prismaClient = defaultPrisma, log = defaultLogger } = {}) {
+  const out = new Map();
+  const keys = [...contentKeys].filter((k) => /^[A-Za-z0-9]{16,80}$/.test(String(k)));
+  if (!keys.length) return out;
+  try {
+    const rows = await prismaClient.$queryRawUnsafe(
+      'SELECT content_key, source_run_id, status, checker_id FROM grading_rulers WHERE content_key IN (' + keys.map(() => '?').join(',') + ')',
+      ...keys,
+    );
+    for (const raw of rows || []) { const r = normalizeRawRow(raw); out.set(String(r.content_key), r); }
+  } catch (err) {
+    log.warn({ err: String((err && err.message) || err).slice(0, 120) }, 'D2：grading_rulers 读取失败（build/reuse 分类退化为 worker）');
+  }
+  return out;
+}
+
+/**
+ * 存量「尺子记录」：ready 尺子 × 作业绑定，且该作业确有以该 checker 写分的提交（written>0）。
+ * 用途：实验2 的 80 份若没有 grading_job_runs 行（归档也已清理），管理员页仍能看到"这把尺子写过分"的记录。
+ * 只读：只 SELECT；分数一律来自 submissions.ai_score（不写库、不改分）；不含答题全文。
+ */
+async function loadLegacyRulerRecords({ prisma: prismaClient = defaultPrisma, log = defaultLogger, limit = RULER_RECORD_LIMIT } = {}) {
+  try {
+    const rows = await prismaClient.$queryRawUnsafe(
+      'SELECT r.id AS ruler_id, r.content_key, r.status, r.checker_id, r.created_at, b.assignment_id, b.question_id, b.bound_at, '
+      + '(SELECT COUNT(*) FROM submissions s WHERE s.assignment_id = b.assignment_id AND s.checker_id = r.checker_id AND s.ai_score IS NOT NULL) AS written '
+      + 'FROM grading_rulers r JOIN assignment_question_rulers b ON b.ruler_id = r.id '
+      + 'WHERE r.status = ? AND r.checker_id IS NOT NULL '
+      + 'ORDER BY b.bound_at DESC LIMIT ' + Number(limit),
+      'ready',
+    );
+    return (rows || []).map(normalizeRawRow).filter((r) => r.checker_id && Number(r.written) > 0);
+  } catch (err) {
+    log.warn({ err: String((err && err.message) || err).slice(0, 120) }, 'D2：存量尺子记录读取失败（不 500）');
+    return [];
+  }
+}
+
+/** 列表行补齐：作业标题 / 老师 / 班级（批量 3~4 条查询；失败降级 null，不 500） */
+async function attachAssignmentDisplayMeta({ items = [], prisma: prismaClient = defaultPrisma, log = defaultLogger } = {}) {
+  const ids = [...new Set(items.map((x) => Number(x && x.assignment_id)).filter((n) => Number.isFinite(n) && n > 0))];
+  if (!ids.length) return;
+  try {
+    const assignments = await prismaClient.assignment.findMany({ where: { id: { in: ids } }, select: { id: true, title: true, teacherId: true } });
+    const teacherIds = [...new Set((assignments || []).map((a) => Number(a.teacherId)).filter((n) => Number.isFinite(n)))];
+    const teachers = teacherIds.length
+      ? await prismaClient.user.findMany({ where: { id: { in: teacherIds } }, select: { id: true, username: true, realName: true } })
+      : [];
+    const links = await prismaClient.assignmentClass.findMany({ where: { assignmentId: { in: ids } }, select: { assignmentId: true, classId: true } });
+    const classIds = [...new Set((links || []).map((l) => Number(l.classId)).filter((n) => Number.isFinite(n)))];
+    const classes = classIds.length ? await prismaClient.class.findMany({ where: { id: { in: classIds } }, select: { id: true, name: true } }) : [];
+    const aById = new Map((assignments || []).map((a) => [Number(a.id), a]));
+    const tById = new Map((teachers || []).map((t) => [Number(t.id), t]));
+    const cById = new Map((classes || []).map((c) => [Number(c.id), c]));
+    const classesByAssignment = new Map();
+    for (const l of links || []) {
+      const aid = Number(l.assignmentId);
+      if (!classesByAssignment.has(aid)) classesByAssignment.set(aid, []);
+      const c = cById.get(Number(l.classId));
+      if (c) classesByAssignment.get(aid).push({ id: c.id, name: c.name || ('class-' + c.id) });
+    }
+    for (const item of items) {
+      const a = aById.get(Number(item.assignment_id));
+      if (!a) continue;
+      const t = tById.get(Number(a.teacherId));
+      item.assignment_title = item.assignment_title || a.title || null;
+      item.teacher_id = a.teacherId === null || a.teacherId === undefined ? null : Number(a.teacherId);
+      item.teacher_name = t ? (t.realName || t.username || ('user-' + t.id)) : null;
+      item.classes = classesByAssignment.get(Number(item.assignment_id)) || [];
+      item.class_count = item.classes.length;
+    }
+  } catch (err) {
+    log.warn({ err: String((err && err.message) || err).slice(0, 120) }, 'D2：列表元信息（老师/班级）读取失败（降级 null，不 500）');
+  }
+}
+
+/**
+ * 详情逐份结果兜底：归档里的 evidence-summary.json 不存在（旧运行/归档被清理）时，从 DB 取「该作业 + 该 checker 已写分」的提交。
+ * ★只取 id/分数/学生名；**绝不取 answer 字段**（不泄露答题全文），也不改任何分数。
+ */
+async function loadSubmissionsByChecker({ prisma: prismaClient = defaultPrisma, assignmentId, checkerId, limit = 200 } = {}) {
+  if (!assignmentId || !checkerId || isAutoBuildChecker(checkerId)) return null;
+  try {
+    const rows = await prismaClient.submission.findMany({
+      where: { assignmentId: Number(assignmentId), checkerId: String(checkerId), aiScore: { not: null } },
+      select: { id: true, aiScore: true, student: { select: { realName: true, username: true } } },
+      orderBy: { id: 'asc' },
+      take: limit,
+    });
+    return (rows || []).map((s) => ({
+      slug: (s.student && (s.student.realName || s.student.username)) || ('submission-' + s.id),
+      score: s.aiScore === null || s.aiScore === undefined ? null : Number(s.aiScore),
+      hits: null,
+      reason: '存量记录（无逐份产物；分数来自数据库，不含答题全文）',
+      student: (s.student && (s.student.realName || s.student.username)) || null,
+    }));
+  } catch { return null; }
+}
+
+
 /**
  * 读模型工厂：组合根唯一装配点（compose.js ⇒ app.locals.dshRuns）。
  * 返回面暴露接口层需要的三个方法 + 目录守卫（避免 interface 直接依赖 infrastructure 的实现细节）。
@@ -309,7 +470,7 @@ export function createDshRunsReadModel({ prisma: prismaClient = defaultPrisma, l
    */
   async function listRuns({
     page = 1, pageSize = 20, assignmentId = null, status = null,
-    archiveType = null, purgeFlag = null, orderBy = 'created_at', orderDir = 'desc',
+    archiveType = null, purgeFlag = null, runKind = null, orderBy = 'created_at', orderDir = 'desc',
   } = {}) {
     const order = SORTABLE[String(orderBy || 'created_at')] || 'created_at';
     const dir = String(orderDir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
@@ -330,39 +491,95 @@ export function createDshRunsReadModel({ prisma: prismaClient = defaultPrisma, l
     }
     const archives = listArchiveDirs();
     const byJob = new Map(rows.map((r) => [String(r.job_id), r]));
+    // ★D2：grading_jobs 索引（旧任务无 grading_job_runs 行/无归档也必须可见）+ 尺子索引（build/reuse 判定）
+    const jobsIndex = await loadRecentJobsIndex({ prisma: prismaClient, log: loggerClient });
+    const rulerByContent = await loadRulerContentIndex({ contentKeys: jobsIndex.contentKeys, prisma: prismaClient, log: loggerClient });
+    const jobById = jobsIndex.byId;
+    const archiveWorkerIds = new Set(archives.filter((a) => a.type === 'worker').map((a) => String(a.jobId)));
+    const seenJobIds = new Set([...rows.map((r) => String(r.job_id)), ...archiveWorkerIds]);
     // ★R2-B37：批量取用量（worker 按 job_id；造尺按 run_ref）—— 1~2 条 SQL，表缺失/失败如实降级
-    const jobIds = rows.map((r) => Number(r.job_id)).filter((n) => Number.isFinite(n));
+    const jobIds = [...new Set([...rows.map((r) => Number(r.job_id)), ...jobById.keys()])].filter((n) => Number.isFinite(n));
     const runRefs = archives.filter((a) => a.type === 'build').map((a) => usageKeyFor({ type: 'build', assignmentId: a.assignmentId, archive: a.archive })).filter(Boolean);
     const { index: usageIndex, info: usageInfo } = await loadUsageIndex({ jobIds, runRefs, prisma: prismaClient, log: loggerClient });
     const items = [];
     for (const a of archives) {
       if (a.type === 'worker') {
-        const row = byJob.get(String(a.jobId)) || { job_id: a.jobId };
-        items.push(shapeRow(row, { teardown: parseTeardown(a.archive), type: 'worker', archive: a.archive, usage: usageIndex.get('job:' + a.jobId) || null }));
+        const row = byJob.get(String(a.jobId)) || jobById.get(Number(a.jobId)) || { job_id: a.jobId };
+        items.push(shapeRow(row, {
+          teardown: parseTeardown(a.archive), type: 'worker', archive: a.archive, archivePresent: true,
+          runKind: classifyJobKind({ jobId: a.jobId, checkerId: row.checker_id, contentKey: row.content_key, rulerByContent }),
+          usage: usageIndex.get('job:' + a.jobId) || null,
+        }));
         byJob.delete(String(a.jobId));
       } else {
         items.push(shapeRow({ job_id: null, assignment_id: a.assignmentId }, {
-          teardown: parseTeardown(a.archive), type: 'build', archive: a.archive,
+          teardown: parseTeardown(a.archive), type: 'build', archive: a.archive, archivePresent: true,
           usage: usageIndex.get(usageKeyFor({ type: 'build', assignmentId: a.assignmentId, archive: a.archive })) || null,
         }));
       }
     }
-    for (const row of byJob.values()) items.push(shapeRow(row, { teardown: null, type: 'worker', archive: String(row.job_id), usage: usageIndex.get('job:' + row.job_id) || null }));
+    for (const row of byJob.values()) {
+      const archive = String(row.job_id);
+      items.push(shapeRow(row, {
+        teardown: null, type: 'worker', archive, archivePresent: fs.existsSync(path.join(runsRootDir(), archive)),
+        runKind: classifyJobKind({ jobId: row.job_id, checkerId: row.checker_id, contentKey: (jobById.get(Number(row.job_id)) || {}).content_key, rulerByContent }),
+        usage: usageIndex.get('job:' + row.job_id) || null,
+      }));
+    }
+    // ★D2：旧任务（有 grading_jobs 行，但没有 run 行 / 没有归档）—— 实验2 的 80 份就是这一类的兜底可见性
+    let legacyJobs = 0;
+    for (const job of jobById.values()) {
+      if (seenJobIds.has(String(job.id))) continue;
+      if (status && String(job.status || '') !== String(status)) continue;
+      items.push(shapeRow({
+        job_id: job.id, assignment_id: job.assignment_id, checker_id: job.checker_id, status: job.status,
+        written: job.written_count, skipped: job.skipped_count, measured: null, unmeasurable: null, failed: null, device_exit: null,
+        started_at: job.created_at, finished_at: job.updated_at, created_at: job.created_at,
+      }, {
+        teardown: null, type: 'worker', archive: null, archivePresent: false,
+        runKind: classifyJobKind({ jobId: job.id, checkerId: job.checker_id, contentKey: job.content_key, rulerByContent }),
+        usage: usageIndex.get('job:' + job.id) || null,
+      }));
+      legacyJobs += 1;
+    }
+    // ★D2：存量尺子记录（ready 尺子 × 作业绑定，且该 checker 确实写过分）—— 没有 job 行时仍可见
+    const jobContentPairs = new Set([...jobById.values()].filter((j) => j.content_key).map((j) => String(j.assignment_id) + ':' + String(j.content_key)));
+    let rulerRecords = 0;
+    for (const r of await loadLegacyRulerRecords({ prisma: prismaClient, log: loggerClient })) {
+      if (jobContentPairs.has(String(r.assignment_id) + ':' + String(r.content_key))) continue; // 已有对应 job 行 ⇒ 不重复
+      if (status && String(r.status || '') !== String(status)) continue;
+      items.push(shapeRow({
+        job_id: null, assignment_id: r.assignment_id, checker_id: r.checker_id, status: r.status,
+        written: r.written, measured: null, unmeasurable: null, skipped: null, failed: null, device_exit: null,
+        started_at: null, finished_at: null, created_at: r.created_at,
+      }, {
+        teardown: null, type: 'ruler', id: 'ruler-' + r.assignment_id + '-' + r.ruler_id, archive: null, archivePresent: false,
+        runKind: 'ruler', source: 'ruler', usage: null,
+      }));
+      rulerRecords += 1;
+    }
     let list = items;
     if (assignmentId && Number.isFinite(assignmentId)) list = list.filter((x) => Number(x.assignment_id) === assignmentId);
     if (archiveType) list = list.filter((x) => x.type === archiveType);
+    if (runKind) list = list.filter((x) => x.run_kind === runKind);
     if (purgeFlag === 'no') list = list.filter((x) => x.sessions_purged === false);
     if (purgeFlag === 'yes') list = list.filter((x) => x.sessions_purged === true);
     const total = list.length;
     const start = (page - 1) * pageSize;
+    const pageItems = list.slice(start, start + pageSize);
+    await attachAssignmentDisplayMeta({ items: pageItems, prisma: prismaClient, log: loggerClient });
     return toJsonSafe({
-      items: list.slice(start, start + pageSize),
+      items: pageItems,
       total,
       page,
       pageSize,
       source: {
         table: 'grading_job_runs',
+        jobs_table: 'grading_jobs',
+        rulers_table: 'grading_rulers',
         archives_root: runsRootDir(),
+        legacy_jobs: legacyJobs,
+        ruler_records: rulerRecords,
         usage_table: usageInfo.table_missing ? null : 'grading_run_usage',
         usage_note: usageInfo.table_missing ? 'usage_table_missing（迁移未落地 ⇒ 用量列如实为 null）' : (usageInfo.error || null),
       },
@@ -376,19 +593,62 @@ export function createDshRunsReadModel({ prisma: prismaClient = defaultPrisma, l
    */
   async function getRunDetail({ id, logLineLimit = 200 } = {}) {
     const rid = String(id || '');
-    let type = null; let archive = null; let jobId = null;
+    let type = null; let archive = null; let jobId = null; let rulerId = null; let rulerAssignmentId = null;
     if (/^job-\d+$/.test(rid)) { type = 'worker'; jobId = Number(rid.slice(4)); archive = String(jobId); }
     else if (/^archive-build-\d+-\d{8}T\d{6}Z$/.test(rid)) { type = 'build'; archive = rid.slice('archive-'.length); }
+    else if (/^ruler-\d+-\d+$/.test(rid)) {
+      // ★D2：存量尺子记录（read-model 合成；无归档，纯只读）
+      const m = /^ruler-(\d+)-(\d+)$/.exec(rid);
+      type = 'ruler'; rulerAssignmentId = Number(m[1]); rulerId = Number(m[2]);
+    }
     else if (/^\d+$/.test(rid)) { type = 'worker'; jobId = Number(rid); archive = String(jobId); }
     else return { status: 'bad_id' };
-    if (!safeArchiveDir(archive)) return { status: 'bad_archive' };
+    if (type !== 'ruler' && !safeArchiveDir(archive)) return { status: 'bad_archive' };
     let row = null; let rowFromDb = false;   // ★R2-B34（O-1）：区分「库里有行」与「仅为渲染用的占位」
     if (type === 'worker') {
       try {
         const sel = await selectJobRuns({ whereSql: ' WHERE job_id = ?', params: [jobId], orderBy: 'job_id', dir: 'DESC', single: true, prisma: prismaClient, log: loggerClient });
         const rs = (sel.rows || []).map(normalizeRawRow);
-        if (rs && rs[0]) { row = rs[0]; rowFromDb = true; } else { row = { job_id: jobId }; }   // ★R2-B34（O-1）
-      } catch (err) { row = { job_id: jobId }; }
+        if (rs && rs[0]) { row = rs[0]; rowFromDb = true; }
+      } catch (err) { row = null; }
+      if (!row) {
+        // ★D2：没有 grading_job_runs 行的旧任务（实验2 80 份）—— 详情直接从 grading_jobs 读（只读，不改分）
+        try {
+          const rs = await prismaClient.$queryRawUnsafe(
+            'SELECT id AS job_id, assignment_id, checker_id, status, written_count, skipped_count, content_key, created_at, updated_at, last_error '
+            + 'FROM grading_jobs WHERE id = ? LIMIT 1', jobId,
+          );
+          if (rs && rs[0]) {
+            row = normalizeRawRow(rs[0]);
+            row.started_at = row.created_at; row.finished_at = row.updated_at;
+            row.written = row.written_count; row.skipped = row.skipped_count;
+            rowFromDb = true;
+          }
+        } catch { /* grading_jobs 表缺失 ⇒ 保持占位行 */ }
+      }
+      if (!row) row = { job_id: jobId };
+    } else if (type === 'ruler') {
+      try {
+        const rs = await prismaClient.$queryRawUnsafe(
+          'SELECT id AS ruler_id, content_key, status, checker_id, source_run_id, created_at FROM grading_rulers WHERE id = ? LIMIT 1', rulerId,
+        );
+        if (!rs || !rs[0]) return { status: 'not_found' };
+        const r = normalizeRawRow(rs[0]);
+        const bind = await prismaClient.$queryRawUnsafe(
+          'SELECT assignment_id, question_id FROM assignment_question_rulers WHERE ruler_id = ? AND assignment_id = ? LIMIT 1', rulerId, rulerAssignmentId,
+        ).catch(() => []);
+        const writtenCount = r.checker_id
+          ? await prismaClient.submission.count({ where: { assignmentId: rulerAssignmentId, checkerId: String(r.checker_id), aiScore: { not: null } } }).catch(() => 0)
+          : 0;
+        row = {
+          job_id: null, assignment_id: rulerAssignmentId, checker_id: r.checker_id, status: r.status,
+          content_key: r.content_key, written: Number(writtenCount) || 0, created_at: r.created_at,
+          binding: (bind && bind[0]) || null,
+        };
+        rowFromDb = true;
+      } catch (err) {
+        return { status: 'not_found' };
+      }
     } else {
       row = { job_id: null, assignment_id: Number(archive.split('-')[1]) };
     }
@@ -410,6 +670,18 @@ export function createDshRunsReadModel({ prisma: prismaClient = defaultPrisma, l
         title = a ? a.title : null;
       }
     } catch { /* 标题可选 */ }
+    // ★D2：build/reuse 判定（只读；ruler 表缺失 ⇒ 退化为 worker，不影响页面）
+    let runKind = type === 'build' ? 'build' : (type === 'ruler' ? 'ruler' : 'worker');
+    if (type === 'worker' && row) {
+      let rulerByContent = null;
+      if (row.content_key) {
+        try {
+          const rr = await prismaClient.$queryRawUnsafe('SELECT content_key, source_run_id FROM grading_rulers WHERE content_key = ? LIMIT 1', String(row.content_key));
+          if (rr && rr[0]) rulerByContent = new Map([[String(rr[0].content_key), normalizeRawRow(rr[0])]]);
+        } catch { /* 分类可选 */ }
+      }
+      runKind = classifyJobKind({ jobId: row.job_id, checkerId: row.checker_id, contentKey: row.content_key, rulerByContent });
+    }
     // ★R2-B37：用量 / 元信息 / 工具调用三块（只读；不可得一律 null + reason，不显示假 0）
     const usageKey = usageKeyFor({ type, jobId: row && row.job_id, assignmentId: row && row.assignment_id, archive });
     const { index: usageIndex, info: usageInfo } = await loadUsageIndex({
@@ -423,12 +695,49 @@ export function createDshRunsReadModel({ prisma: prismaClient = defaultPrisma, l
     const usageBlock = shapeUsageBlock({ row: usageRow, teardownUsage, archive });   // ★R2-B49：带上归档 ⇒ 可读 out/summaries.json 的评语 meta
     const toolsBlock = shapeToolsBlock({ row: usageRow });
     const meta = await loadRunMeta({ assignmentId: row && row.assignment_id, archive, prisma: prismaClient });
+    // ★D2：逐份结果兜底 —— 归档 evidence-summary.json 缺失（旧运行/归档被清理）时从 DB 取「该作业+该 checker 已写分」的提交。
+    //   只取 id/分数/学生名，**不取 answer**（不泄露答题全文），也不改任何分数。
+    let submissions = summary && Array.isArray(summary.submissions) ? summary.submissions : [];
+    let submissionCounts = summary ? {
+      n: summary.n, measurable: summary.measurable, unmeasurable: summary.unmeasurable,
+      skipped_artifacts: summary.skipped_artifacts === undefined ? null : Number(summary.skipped_artifacts) || 0,
+      skipped_kinds: summary.skipped_kinds || null,
+    } : null;
+    let submissionsSource = summary ? 'archive_evidence_summary' : null;
+    if (!submissions.length) {
+      const dbSubs = await loadSubmissionsByChecker({ prisma: prismaClient, assignmentId: row && row.assignment_id, checkerId: row && row.checker_id });
+      if (dbSubs && dbSubs.length) {
+        submissions = dbSubs;
+        submissionsSource = 'db_by_checker';
+        submissionCounts = {
+          n: dbSubs.length,
+          measurable: row && row.written !== undefined && row.written !== null ? Number(row.written) : dbSubs.length,
+          unmeasurable: null, skipped_artifacts: null, skipped_kinds: null,
+        };
+      }
+    }
+    // ★D2：运行行（含 build/reuse 分类、归档是否存在、哨兵兜底文案）+ 老师/班级归属
+    const run = shapeRow(row, {
+      teardown, type, archive, assignmentTitle: title,
+      usage: usageRow || (teardownUsage ? { cost_total: teardownUsage.cost_total, cost_currency: teardownUsage.cost_currency, cache_hit_rate: teardownUsage.cache_hit_rate, no_model_session: teardownUsage.no_model_session ? 1 : 0, model_calls: teardownUsage.model_calls } : null),
+      runKind, archivePresent: type === 'ruler' ? false : dirExists, source: type === 'ruler' ? 'ruler' : null,
+    });
+    run.content_key = row && row.content_key ? String(row.content_key) : null;
+    run.last_error = row && row.last_error ? String(row.last_error).slice(0, 300) : null;
+    run.notice = type !== 'ruler' && !dirExists ? 'archive_missing（归档已清理或旧运行；逐份结果优先来自数据库，不含答题全文）' : null;
+    if (meta) {
+      run.teacher_id = meta.teacher ? meta.teacher.id : null;
+      run.teacher_name = meta.teacher ? meta.teacher.name : null;
+      run.classes = (meta.classes || []).map((c) => ({ id: c.id, name: c.name }));
+      run.class_count = run.classes.length;
+      run.assignment_title = run.assignment_title || (meta.assignment && meta.assignment.title) || null;
+    }
     const usageReason = usageBlock.available ? null
       : (usageInfo.table_missing ? 'usage_table_missing' : (usageRow ? 'unsupported' : 'no_usage_record'));
     const toolsReason = toolsBlock.available ? null
       : (usageInfo.table_missing ? 'usage_table_missing' : toolsBlock.reason);
     return { status: 'ok', data: toJsonSafe({
-      run: shapeRow(row, { teardown, type, archive, assignmentTitle: title, usage: usageRow || (teardownUsage ? { cost_total: teardownUsage.cost_total, cost_currency: teardownUsage.cost_currency, cache_hit_rate: teardownUsage.cache_hit_rate, no_model_session: teardownUsage.no_model_session ? 1 : 0, model_calls: teardownUsage.model_calls } : null) }),
+      run,
       teardown_json: teardown,
       // 三块面板（字段齐备；不可得 ⇒ null + *_info.reason）
       usage: usageBlock.available ? usageBlock : null,
@@ -447,13 +756,10 @@ export function createDshRunsReadModel({ prisma: prismaClient = defaultPrisma, l
       meta,
       tools: toolsBlock.available ? toolsBlock.items : null,
       tools_info: { available: toolsBlock.available, reason: toolsReason, source: toolsBlock.source || null, count: toolsBlock.available ? toolsBlock.items.length : null },
-      submissions: summary && Array.isArray(summary.submissions) ? summary.submissions : [],
-      submission_counts: summary ? {
-        n: summary.n, measurable: summary.measurable, unmeasurable: summary.unmeasurable,
-        // ★R2-B38（t6）：干扰产物总数 + 按类型计数（旧 summary 无该字段 ⇒ 如实 null，不伪造 0）
-        skipped_artifacts: summary.skipped_artifacts === undefined ? null : Number(summary.skipped_artifacts) || 0,
-        skipped_kinds: summary.skipped_kinds || null,
-      } : null,
+      submissions,
+      submission_counts: submissionCounts,
+      submissions_source: submissionsSource,   // archive_evidence_summary | db_by_checker | null
+
       logs: {
         stdout: { present: stdout.ok, tail: stdout.ok ? stdout.text : null, truncated: !!stdout.truncated, missing_reason: stdout.ok ? null : stdout.reason },
         stderr: { present: stderr.ok, tail: stderr.ok ? stderr.text : null, truncated: !!stderr.truncated, missing_reason: stderr.ok ? null : stderr.reason },

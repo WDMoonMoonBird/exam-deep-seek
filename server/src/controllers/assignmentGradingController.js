@@ -8,6 +8,7 @@ import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
 import { resolveRulerForAssignment } from '../infrastructure/dsh/ruler/dshRulerAssignment.js';
 import { setJobContentKey } from '../infrastructure/dsh/ruler/dshRulerStore.js';
+import { AUTO_BUILD_CHECKER } from '../infrastructure/dsh/worker/autoBuild.js';
 
 /** 活动态（占用「活动键」的状态）：每 (assignment, checker) 至多一行 */
 export const ACTIVE_JOB_STATUSES = ['pending', 'running'];
@@ -50,56 +51,91 @@ export const triggerAssignmentGrading = async (req, res) => {
     } catch (err) {
       logger.warn({ assignmentId, err: err && err.message }, 'R2-B35：内容指纹解析异常 ⇒ 回落按作业查找 ready checker');
     }
+    // 无 ready 尺子 / 造尺失败 ⇒ 建「自动造尺」job，由 worker 走 build 流程（F6）；
+    //   正在造尺 / 绑定冲突仍拒绝（避免重复造尺、避免静默换尺）。
+    let shouldBuild = false;
     if (rulerBlock) {
       const code = RULER_BLOCK_CODES[rulerBlock.reason] || RULER_BLOCK_CODES[rulerBlock.status] || 'RULER_NOT_READY';
-      const message = code === 'RULER_BUILDING'
-        ? '该内容的尺子正在生成中（并发去重），请稍后重试'
-        : (code === 'RULER_BIND_CONFLICT'
-          ? '该作业已绑定另一把尺子（内容与绑定不一致）⇒ 已 fail-closed，需人工处置（不得静默换尺）'
-          : '该内容还没有可用的尺子（尚未造尺/造尺失败），无法作业级评分');
-      logger.warn({ assignmentId, code, reason: rulerBlock.reason, contentKey: rulerBlock.contentKey }, 'R2-B35：内容尺子不可用 ⇒ 拒绝触发');
-      return res.status(409).json({
-        code: 1011,
-        message,
-        data: { requiresChecker: true, code, reason: rulerBlock.reason, contentKey: rulerBlock.contentKey, rulerStatus: rulerBlock.status || null },
-      });
+      const reasonText = String(rulerBlock.reason || '');
+      // 可重试的「没有可用尺子」：缺行 / 无来源 / 上次造尺失败（store 的失败原因带 ruler_failed: 前缀）
+      const buildable = ['missing', 'no_ruler_source', 'failed', 'ruler_failed'].includes(reasonText)
+        || reasonText.startsWith('ruler_failed:');
+      if (buildable) {
+        shouldBuild = true;
+        contentKey = rulerBlock.contentKey || contentKey;
+      } else {
+        const message = code === 'RULER_BUILDING'
+          ? '该内容的尺子正在生成中（并发去重），请稍后重试'
+          : (code === 'RULER_BIND_CONFLICT'
+            ? '该作业已绑定另一把尺子（内容与绑定不一致）⇒ 已 fail-closed，需人工处置（不得静默换尺）'
+            : '该内容尺子不可用（reason=' + (reasonText || 'unknown') + '），需人工处置');
+        logger.warn({ assignmentId, code, reason: reasonText, contentKey: rulerBlock.contentKey }, 'R2-B35：内容尺子不可用 ⇒ 拒绝触发');
+        return res.status(409).json({
+          code: 1011,
+          message,
+          data: { requiresChecker: true, code, reason: reasonText, contentKey: rulerBlock.contentKey, rulerStatus: rulerBlock.status || null },
+        });
+      }
     }
 
     // 解析出的 checker：内容尺子优先；否则回落「按 assignment 找 ready checker」（历史作业/迁移未落地）
     let checkerId = ruler && ruler.checkerId ? ruler.checkerId : null;
-    if (!checkerId) {
+    if (!checkerId && !shouldBuild) {
       const checker = await prisma.gradingChecker.findFirst({
         where: { assignmentId, status: 'ready' },
         orderBy: { id: 'desc' },
         select: { checkerId: true },
       });
       if (!checker) {
-        return res.status(409).json({
-          code: 1011,
-          message: '该作业还没有可用的 checker（装置尚未产出/未入库），无法作业级评分',
-          data: { requiresChecker: true, code: 'CHECKER_NOT_READY' },
-        });
+        if (!contentKey) {
+          return res.status(409).json({
+            code: 1011,
+            message: '该作业缺少发布冻结快照/标准工程包，无法自动造尺；请重新发布作业后再触发',
+            data: { requiresChecker: true, code: 'RULER_NOT_READY', reason: 'snapshot_missing' },
+          });
+        }
+        shouldBuild = true;
+      } else {
+        checkerId = checker.checkerId;
       }
-      checkerId = checker.checkerId;
     }
-    const checker = { checkerId };
+    if (shouldBuild) checkerId = AUTO_BUILD_CHECKER;
+    const build = shouldBuild;
 
-    // ★R2-B12②：活动键方案 —— 活动态（pending/running）每 (assignment, checker) 至多一行；
-    // 终态（done/failed/needs_rerun）可多行共存 ⇒ 幂等查询按**活动态**判定（不再按 status='pending'）。
-    const activeWhere = { assignmentId, checkerId: checker.checkerId, status: { in: ACTIVE_JOB_STATUSES } };
-    const key = { assignmentId, checkerId: checker.checkerId, status: JOB_STATUS_INITIAL };
-    const existing = await prisma.gradingJob.findFirst({ where: activeWhere, orderBy: { id: 'desc' }, select: { id: true, createdAt: true, status: true } });
+    // ★R2-B12②：活动态（pending/running）**按作业**至多一个（自动造尺与手动评分共享同一把坑）；
+    // 终态（done/failed/needs_rerun）可多行共存 ⇒ 幂等查询按活动态判定。
+    const activeWhere = { assignmentId, status: { in: ACTIVE_JOB_STATUSES } };
+    const key = { assignmentId, checkerId, status: JOB_STATUS_INITIAL };
+    const existing = await prisma.gradingJob.findFirst({ where: activeWhere, orderBy: { id: 'desc' }, select: { id: true, createdAt: true, status: true, checkerId: true } });
     if (existing) {
-      logger.info({ assignmentId, checkerId: checker.checkerId, jobId: existing.id }, 'W7：重复触发命中既有 pending job（幂等）');
-      return res.json({ code: 0, message: '已存在进行中的作业级批改任务', data: { jobId: existing.id, checkerId: checker.checkerId, reused: true } });
+      logger.info({ assignmentId, checkerId, jobId: existing.id }, 'W7：重复触发命中既有 pending job（幂等）');
+      return res.json({
+        code: 0,
+        message: '已存在进行中的作业级批改任务',
+        data: {
+          jobId: existing.id,
+          checkerId: existing.checkerId === AUTO_BUILD_CHECKER ? null : existing.checkerId,
+          reused: true,
+          build: existing.checkerId === AUTO_BUILD_CHECKER,
+        },
+      });
     }
     let job;
     try {
       job = await prisma.gradingJob.create({ data: key, select: { id: true } });
     } catch (err) {
       if (err?.code === 'P2002') { // 竞态：唯一键兜底
-        const again = await prisma.gradingJob.findFirst({ where: activeWhere, orderBy: { id: 'desc' }, select: { id: true } });
-        return res.json({ code: 0, message: '已存在进行中的作业级批改任务', data: { jobId: again?.id ?? null, checkerId: checker.checkerId, reused: true } });
+        const again = await prisma.gradingJob.findFirst({ where: activeWhere, orderBy: { id: 'desc' }, select: { id: true, checkerId: true } });
+        return res.json({
+          code: 0,
+          message: '已存在进行中的作业级批改任务',
+          data: {
+            jobId: again?.id ?? null,
+            checkerId: again && again.checkerId === AUTO_BUILD_CHECKER ? null : ((again && again.checkerId) || null),
+            reused: true,
+            build: !!(again && again.checkerId === AUTO_BUILD_CHECKER),
+          },
+        });
       }
       throw err;
     }
@@ -108,8 +144,12 @@ export const triggerAssignmentGrading = async (req, res) => {
       const stamped = await setJobContentKey({ prisma, jobId: job.id, contentKey });
       if (!stamped.ok) logger.warn({ assignmentId, jobId: job.id, contentKey }, 'R2-B35：grading_jobs.content_key 回填失败（迁移未落地？）');
     }
-    logger.info({ assignmentId, checkerId: checker.checkerId, jobId: job.id, contentKey }, 'W7：作业级批改任务已创建');
-    res.json({ code: 0, message: '已创建作业级批改任务', data: { jobId: job.id, checkerId: checker.checkerId, reused: false, contentKey } });
+    logger.info({ assignmentId, checkerId, jobId: job.id, contentKey, build }, 'W7：作业级批改任务已创建');
+    res.json({
+      code: 0,
+      message: build ? '已创建作业级批改任务（将自动造尺）' : '已创建作业级批改任务',
+      data: { jobId: job.id, checkerId: build ? null : checkerId, reused: false, contentKey, build },
+    });
   } catch (err) {
     logger.error({ err }, '作业级批改触发失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });

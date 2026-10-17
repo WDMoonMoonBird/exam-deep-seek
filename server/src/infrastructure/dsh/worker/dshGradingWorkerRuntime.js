@@ -21,6 +21,11 @@ export function parseWorkerConfig(env = process.env) {
     staleRunningMs: env.DSH_WORKER_STALE_RUNNING_MS ? num(env.DSH_WORKER_STALE_RUNNING_MS, 15 * 60 * 1000) : undefined,
     // ★R2-B19：时钟异常容差（updated_at 超出「现在+容差」才视为异常行；缺省 60s）
     clockToleranceMs: env.DSH_WORKER_CLOCK_TOLERANCE_MS ? num(env.DSH_WORKER_CLOCK_TOLERANCE_MS, 60 * 1000) : undefined,
+    // ★截止自动造尺：每轮最多扫一次「已截止但还没有 job」的作业（默认 60s；DSH_AUTO_GRADE=0 关闭）
+    autoGrade: String(env.DSH_AUTO_GRADE ?? '1') !== '0',
+    autoGradeScanMs: num(env.DSH_AUTO_GRADE_SCAN_MS, 60000),
+    autoGradeLookbackDays: num(env.DSH_AUTO_GRADE_LOOKBACK_DAYS, 7),
+    autoGradeLimit: num(env.DSH_AUTO_GRADE_LIMIT, 20),
   };
 }
 
@@ -51,16 +56,40 @@ export async function runWorkerLoop({
   stopSignal = { stopped: false },
   log = console,
   maxIterations = Infinity,
+  scanDueImpl = null,
 } = {}) {
   let backoff = config.idleBackoffMs;
   let failures = 0;
   let iterations = 0;
   let consumed = 0;
+  let lastScanAt = 0;
   const isStopping = () => !!stopSignal.stopped;
+  const scanEveryMs = Number(config.autoGradeScanMs) > 0 ? Number(config.autoGradeScanMs) : 60000;
 
   while (iterations < maxIterations) {
     iterations += 1;
     if (isStopping()) return { exitCode: EXIT.stopRequested, iterations, consumed, failures };
+
+    // ★截止自动造尺：先扫描并建 job，同一轮 runOnce 就能领取（首次迭代必扫；失败不终止循环）
+    if (scanDueImpl && config.autoGrade !== false) {
+      const now = Date.now();
+      if (now - lastScanAt >= scanEveryMs) {
+        lastScanAt = now;
+        try {
+          const scan = await scanDueImpl({
+            prisma, log,
+            lookbackDays: config.autoGradeLookbackDays,
+            limit: config.autoGradeLimit,
+          });
+          if (scan && scan.enqueued > 0 && log && typeof log.info === 'function') {
+            log.info('[auto-grade] 已为 ' + scan.enqueued + ' 个截止作业创建会话');
+          }
+        } catch (err) {
+          if (log && typeof log.warn === 'function') log.warn('[auto-grade] 扫描失败：' + (err && err.message));
+        }
+      }
+    }
+
     let out = null;
     try {
       out = await runOnceImpl({ prisma, dbLimit: config.dbLimit });

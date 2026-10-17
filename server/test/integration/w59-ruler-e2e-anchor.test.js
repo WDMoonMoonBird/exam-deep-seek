@@ -13,6 +13,7 @@ import prisma from '../../src/utils/prisma.js';
 import { sha256Hex, standardDirDigest, UPLOADS_ROOT_ENV, rubricContentSha256 } from '../../src/infrastructure/dsh/ruler/dshRulerContentKey.js';
 import { completeClaimedRuler, resolveAssignmentContent, resolveRulerForAssignment } from '../../src/infrastructure/dsh/ruler/dshRulerAssignment.js';
 import { findRulerByContentKey } from '../../src/infrastructure/dsh/ruler/dshRulerStore.js';
+import { AUTO_BUILD_CHECKER } from '../../src/infrastructure/dsh/worker/autoBuild.js';
 import { exportMaterials } from '../../scripts/r2b20-export-materials.mjs';
 import { authReq, getTestData, loginAsTeacher } from './helpers.js';
 
@@ -333,7 +334,7 @@ describe('W59 尺子内容化端到端（老锚点/worker/r2b7/HTTP/导出）', 
     expect(dirs.some((d) => fs.existsSync(path.join('/tmp', d, 'out', 'stub-env.json')))).toBe(false); // 装置从未启动
   }, 180000);
 
-  it('W59-6 ★HTTP 触发闸：内容命中 ⇒ 跨班/跨教师也能触发（不再 409），无尺/失败尺 ⇒ 409 可判定', async () => {
+  it('W59-6 ★HTTP 触发闸（D1-F6）：无尺/失败尺 ⇒ 200 建自动造尺 job（哨兵）；内容命中 ⇒ 跨班/跨作业 200 同尺；building ⇒ 409 可判定', async () => {
     const r = authReq(await loginAsTeacher());
     const teacherId = getTestData().teacherId;
     const { q, dir } = await mkQuestion('-http');
@@ -344,11 +345,27 @@ describe('W59 尺子内容化端到端（老锚点/worker/r2b7/HTTP/导出）', 
     const c3 = await resolveAssignmentContent({ prisma, assignmentId: a3, uploadsRoot });
     cleanup.contentKeys.add(c1.contentKey); cleanup.contentKeys.add(c3.contentKey);
     await deleteRulers([c1.contentKey, c3.contentKey]);
-    // 无尺 ⇒ 409 + RULER_NOT_READY
+
+    // ── ① 无尺 ⇒ 200 + build job（D1-F6 新契约；旧断言 409/RULER_NOT_READY 已过期）
+    //    不是放宽：断言响应是「自动造尺」语义（build/checkerId=null/jobId），且 DB 行用哨兵 checker + 内容键落库。
     const missing = await r.post('/api/teacher/assignments/' + a1 + '/grade');
-    expect(missing.status).toBe(409);
-    expect(missing.body.data.code).toBe('RULER_NOT_READY');
-    // 造好尺子 ⇒ 两个同内容作业都能触发（第二个此前必然 409：本作业没有 ready checker）
+    expect(missing.status).toBe(200);
+    expect(missing.body.code).toBe(0);
+    expect(missing.body.data.build).toBe(true);
+    expect(missing.body.data.checkerId).toBe(null);                    // 还没有真尺 ⇒ 不回假 checkerId
+    expect(missing.body.data.jobId).toBeGreaterThan(0);
+    expect(missing.body.data.contentKey).toBe(c1.contentKey);
+    const autoRow = await prisma.$queryRawUnsafe('SELECT checker_id, content_key, status FROM grading_jobs WHERE id = ?', missing.body.data.jobId);
+    expect(autoRow[0].checker_id).toBe(AUTO_BUILD_CHECKER);            // 哨兵（worker 据此走 build 流程）
+    expect(autoRow[0].status).toBe('pending');
+    expect(autoRow[0].content_key).toBe(c1.contentKey);                // 非空且与内容指纹一致
+    expect(String(autoRow[0].content_key || '').length).toBeGreaterThan(0);
+    // ★活动 job 按作业判重：哨兵 pending 会占住该作业的「活动坑」⇒ 必须置终态，后续「造好尺 ⇒ 200 真尺」才测得到
+    await prisma.gradingJob.update({ where: { id: missing.body.data.jobId }, data: { status: 'done' } });
+    const stillActive = await prisma.$queryRawUnsafe("SELECT COUNT(*) AS n FROM grading_jobs WHERE assignment_id = ? AND status IN ('pending','running')", a1);
+    expect(Number(stillActive[0].n)).toBe(0);
+
+    // ── ② 造好尺子 ⇒ 两个同内容作业都能触发（第二个此前必然 409：本作业没有 ready checker）
     const built = await resolveRulerForAssignment({ prisma, assignmentId: a1, questionId: c1.questionId, mode: 'build', log: mkLog() });
     expect(built.status).toBe('claimed_here');
     const doc = JSON.parse(FIXTURE_RAW.toString('utf8'));
@@ -358,6 +375,7 @@ describe('W59 尺子内容化端到端（老锚点/worker/r2b7/HTTP/导出）', 
     await completeClaimedRuler({ prisma, contentKey: c1.contentKey, checkerId: doc.checker_id, checkerRaw: raw });
     const first = await r.post('/api/teacher/assignments/' + a1 + '/grade');
     expect(first.status).toBe(200);
+    expect(first.body.data.build).toBe(false);
     expect(first.body.data.checkerId).toBe(doc.checker_id);
     expect(first.body.data.contentKey).toBe(c1.contentKey);
     cleanup.jobIds.push(first.body.data.jobId);
@@ -369,15 +387,28 @@ describe('W59 尺子内容化端到端（老锚点/worker/r2b7/HTTP/导出）', 
     const jobRow = await prisma.$queryRawUnsafe('SELECT checker_id, content_key FROM grading_jobs WHERE id = ?', second.body.data.jobId);
     expect(jobRow[0].checker_id).toBe(doc.checker_id);
     expect(jobRow[0].content_key).toBe(c1.contentKey);                // ★content_key 落 grading_jobs
-    // 造尺失败的尺子 ⇒ 409 RULER_FAILED（fail-closed）
+
+    // ── ③ building 态 ⇒ 409 RULER_BUILDING（闸仍可判定：只有「有人正在造尺」才拒绝）
     const r3 = await resolveRulerForAssignment({ prisma, assignmentId: a3, questionId: c3.questionId, mode: 'build', log: mkLog() });
-    expect(r3.status).toBe('claimed_here');
+    expect(r3.status).toBe('claimed_here');                            // 抢占 building（本测试扮演造尺方）
+    const building = await r.post('/api/teacher/assignments/' + a3 + '/grade');
+    expect(building.status).toBe(409);
+    expect(building.body.data.code).toBe('RULER_BUILDING');
+    expect(building.body.data.reason).toBe('wait_timeout');
+
+    // ── ④ failed 尺子按 F6 同样 buildable ⇒ 200 build job（旧断言 409 RULER_FAILED 已过期）
     const { failClaimedRuler } = await import('../../src/infrastructure/dsh/ruler/dshRulerAssignment.js');
     await failClaimedRuler({ prisma, contentKey: c3.contentKey, reason: 'HTTP 夹具失败' });
     const failed = await r.post('/api/teacher/assignments/' + a3 + '/grade');
-    expect(failed.status).toBe(409);
-    expect(failed.body.data.code).toBe('RULER_FAILED');
-    expect(failed.body.data.reason).toContain('ruler_failed');
+    expect(failed.status).toBe(200);
+    expect(failed.body.data.build).toBe(true);
+    expect(failed.body.data.checkerId).toBe(null);
+    expect(failed.body.data.jobId).toBeGreaterThan(0);
+    expect(failed.body.data.contentKey).toBe(c3.contentKey);
+    const failRow = await prisma.$queryRawUnsafe('SELECT checker_id, content_key, status FROM grading_jobs WHERE id = ?', failed.body.data.jobId);
+    expect(failRow[0].checker_id).toBe(AUTO_BUILD_CHECKER);
+    expect(failRow[0].status).toBe('pending');
+    expect(failRow[0].content_key).toBe(c3.contentKey);
   }, 180000);
 
   it('W59-7 ★导出物料与内容指纹同源：快照存在时 rubric/题目描述字节与 content_key 的两个哈希逐位一致', async () => {

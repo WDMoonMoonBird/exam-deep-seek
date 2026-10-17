@@ -47,8 +47,8 @@ export function decideScoreWrite({ score, stale, unsupported, exitCode } = {}) {
   return { write: true, status: 'graded', reason: 'ok', score: n };
 }
 
-/** 回写载荷（审计字段齐备） */
-export function buildWriteback({ result, score, previousFeedback = null }) {
+/** 回写载荷（审计字段齐备）。★status：尺子量完后把提交推进到 ai_graded（已发布/已审核的不降级）。 */
+export function buildWriteback({ result, score, previousFeedback = null, currentStatus = null }) {
   const items = Array.isArray(result?.items) ? result.items : [];
   // ★R2-B41：逐项依据（title/status/reason）来自 grading-result 投影；缺失 ⇒ 退化为原 items 的 comment/reason（不崩、不改分）
   const detail = (result && (result.grading_detail || result.detail)) || null;
@@ -71,8 +71,15 @@ export function buildWriteback({ result, score, previousFeedback = null }) {
     try { const d = JSON.parse(String(raw)); return d && typeof d === 'object' ? d : null; } catch { return null; }
   })();
   const summaryOut = (result && result.summary) || (prevDoc && prevDoc.summary) || null;
+  // ★最后一公里：原实现只写 aiScore/aiFeedback，不改 status ⇒ 教师端 summary 仍按 submitted 计「待评分」，
+  //   实际分数已落库但界面看不见。已审核/已发布的重评不得降级。
+  // ★repair-2（A2/C1）：草稿（draft）不是「已提交」状态 ⇒ 不得被 AI 回写推成 ai_graded（否则教师端把未提交算成待审核）。
+  //   只保留 reviewed/published/draft；其余（submitted/null/ai_graded）才推进到 ai_graded。
+  const KEEP_STATUSES = ['reviewed', 'published', 'draft'];
+  const nextStatus = KEEP_STATUSES.includes(currentStatus) ? currentStatus : 'ai_graded';
   return {
     aiScore: scoreInt,
+    status: nextStatus,
     aiFeedback: JSON.stringify({
       source: 'dsh-checker',
       raw_score: rawNum,
@@ -199,11 +206,13 @@ export async function consumeMeasureResults({ prisma, runRoot, assignmentId = nu
     try {
       // ★R2-B48：读-改-写——取既有 ai_feedback 传入，保证「本次没有新总评」时**既有 summary 不被抹掉**
       let previousFeedback = null;
+      let currentStatus = null;
       try {
-        const prev = await prisma.submission.findUnique({ where: { id: subId }, select: { aiFeedback: true } });
+        const prev = await prisma.submission.findUnique({ where: { id: subId }, select: { aiFeedback: true, status: true } });
         previousFeedback = (prev && prev.aiFeedback) || null;
-      } catch { previousFeedback = null; }
-      await prisma.submission.update({ where: { id: subId }, data: buildWriteback({ result, score: decision.score, previousFeedback }) });
+        currentStatus = (prev && prev.status) || null;
+      } catch { previousFeedback = null; currentStatus = null; }
+      await prisma.submission.update({ where: { id: subId }, data: buildWriteback({ result, score: decision.score, previousFeedback, currentStatus }) });
       row.write = true;
       written += 1;
     } catch (err) {
@@ -227,7 +236,12 @@ export async function regradeWithStoredChecker({ prisma, submissionId, resultPat
   if (!decision.write) {
     return { ok: false, status: decision.status, reason: decision.reason };
   }
-  await prisma.submission.update({ where: { id: +submissionId }, data: buildWriteback({ result, score: decision.score }) });
+  let currentStatus = null;
+  try {
+    const prev = await prisma.submission.findUnique({ where: { id: +submissionId }, select: { status: true } });
+    currentStatus = (prev && prev.status) || null;
+  } catch { currentStatus = null; }
+  await prisma.submission.update({ where: { id: +submissionId }, data: buildWriteback({ result, score: decision.score, currentStatus }) });
   return { ok: true, checkerId: result?.checker_id ?? null, canonicalSha256: result?.canonical_sha256 ?? null, score: decision.score };
 }
 

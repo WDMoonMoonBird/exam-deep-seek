@@ -16,6 +16,7 @@ const SERVER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
  *  run.sh 在 measure-only-reuse 下**不清 out/**，并按 --checker 复制到 out/checker/checker.json；
  *  lib_assignment.sh 的作业级流程读 out/assignment/checker.frozen.json。 */
 export const REUSE_CHECKER_MODE = 'measure-only-reuse';
+export const BUILD_CHECKER_MODE = 'build-and-measure';
 export const CHECKER_FROZEN_REL = 'out/assignment/checker.frozen.json';
 export const CHECKER_JSON_REL = 'out/checker/checker.json';
 
@@ -40,6 +41,22 @@ export function withReuseCheckerArgs(args = [], checkerPath) {
     out.push(args[i]);
   }
   return [...out, '--checker', checkerPath, '--checker-mode', REUSE_CHECKER_MODE];
+}
+
+/** 自动造尺模式的装置参数：剥掉已有的 --checker/--checker-mode，再追加 build-and-measure。
+ *  背景：run.sh 默认 CHECKER_MODE=per-submission；worker 原参数没有 --checker-mode ⇒ 「无尺则本次造尺」
+ *  在真装置上实际走的是 per-submission 流程（永远不会造出作业级尺子）。自动评分 job 必须显式切到 build-and-measure。 */
+export function withBuildCheckerArgs(args = []) {
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--checker') { i++; continue; }
+    if (a === '--checker-mode') { i++; continue; }
+    if (typeof a === 'string' && a.startsWith('--checker=')) continue;
+    if (typeof a === 'string' && a.startsWith('--checker-mode=')) continue;
+    out.push(a);
+  }
+  return [...out, '--checker-mode', BUILD_CHECKER_MODE];
 }
 
 /** R2-B11：装置参数里的**相对路径**绝对化（相对仓库根解析；仅当目标确实存在时才替换，避免误改普通值）。
