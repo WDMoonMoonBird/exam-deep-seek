@@ -158,3 +158,40 @@ cd android
 4. 真正实现失败可重跑的自动循环，产出每日报告
 
 > 说明：本轮未执行服务器部署（没有服务器登录凭据）；Release APK 已构建并签名，但不能宣称正式环境可用。
+
+
+## 11. 云端部署与 Release APK 复测（2026-10-18 01:05）
+
+### 11.1 已部署
+
+- 本地重新构建 client/dist（base /exam/，VITE_API_BASE_URL=/exam/api）
+- 上传到云主机 /var/www/html/exam.mobile-new-*，清理 AppleDouble 后原子换位
+- 旧前端备份：/root/backups/exam-html-mobile-*.tar.gz；旧目录：/var/www/html/exam.mobile-old-*
+- nginx 增加 /exam/m SPA fallback：
+  - 配置备份：/root/backups/exam-nginx-mobile-*.conf
+  - nginx -t 通过，reload 成功
+- 外部实测：
+  - https://deadpan.asia/exam/ → 200
+  - https://deadpan.asia/exam/m → 200
+  - https://deadpan.asia/exam/m/login → 200
+  - https://deadpan.asia/exam/api/health → 200
+- 截图：docs/android/shots/release-proxy-phone.png
+
+### 11.2 Release APK 复测
+
+- Release APK（asia.deadpan.exam，已签名）重新安装到 BlueStacks
+- BlueStacks 通过本机 SSH CONNECT 代理加载 https://deadpan.asia/exam/m，页面完整渲染，已截图
+- 1080x1920 手机分辨率下布局正常；未再出现之前的 RenderThread 崩溃（原生分辨率启动后切换）
+
+### 11.3 仍存在的网络边界
+
+- 本机（Mac）与 BlueStacks 直接访问 deadpan.asia:443 仍会被 reset；nginx access log 中看不到该来源请求，说明阻断在服务器之前（运营商/安全组/防火墙/WAF）。
+- 使用 ssh -L 8443:127.0.0.1:443 root@203.0.113.10 + 本机 CONNECT 代理后，Release APK 可以正常加载生产页面。
+- 这是本机到生产的网络链路问题，不是 APK 配置问题；手机在另一网络下需要实测。
+- 生产数据库账号与本地不同（teacher_a 在生产返回用户名或密码错误），因此此轮只验证到生产页面加载，未验证生产账号登录后的业务链路。
+
+### 11.4 结论
+
+- 云端已完成移动端 /m 部署：外部可访问，200
+- Release APK 已能加载线上生产页面（经本机网络隧道；直接链路仍被阻断）
+- 剩余 P1：解决本机/当前网络到生产 443 的 reset（安全组/ISP/WAF 白名单），以及用生产账号跑登录后全链路
