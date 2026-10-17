@@ -3,6 +3,7 @@
 > 目的：回答「这套移动 UI 里哪些数据必须后端开接口、哪些接口难、现阶段不改后端时 UI 砍哪些」。
 > 复核基线：分支 `feat/mobile-app`（commit `1777f94`）+ 当前后端源码（`server/src/routes/*`、controllers、`server/prisma/schema.prisma`）。
 > 上游文档：[05-page-specs.md](./05-page-specs.md) §6（G1–G14 初版缺口）、[07-implementation-plan.md](./07-implementation-plan.md)。
+> **决策（2026-10-17）**：按本文 §4/§5 执行零后端 v1；§3 的真缺口降级/搁置但**不取消**，见 [09-v1-scope-and-deferred-backlog.md](./09-v1-scope-and-deferred-backlog.md)。
 
 ---
 
