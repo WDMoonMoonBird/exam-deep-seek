@@ -260,3 +260,16 @@ cd android
   - 新 SHA-256：00aa8e4f291f5baefeaaaaa9592d628d3e682ae071ccc12a47fc13b07e057f91
   - BlueStacks 直接安装（无代理）后启动页面为登录页，截图 docs/android/shots/apk-login-start.png
   - 欢迎页按钮截图 docs/android/shots/welcome-download-button.png
+
+
+## 14. 安装解析错误处理（2026-10-18 06:40）
+
+- 用户手机下载旧 URL 的 APK 后提示「解析软件包时出现问题」；服务端日志显示同一 URL 曾有多次**部分下载/中断**与 **304 缓存命中**，判断为浏览器缓存了不完整或旧文件，而非 APK 本身损坏
+- 本机/服务端校验：APK zip 完整、v1+v2 签名通过、下载完整哈希一致
+- 新增独立版本文件避免缓存：
+  - https://203.0.113.10/exam/download/deadpan-1.1.apk
+  - 响应头：Content-Type=application/vnd.android.package-archive、Content-Disposition=attachment、Cache-Control=no-store
+- 欢迎页「安卓版下载」已改指向 1.1
+- 1.1 SHA-256：00aa8e4f291f5baefeaaaaa9592d628d3e682ae071ccc12a47fc13b07e057f91
+- 大小：18,160,613 bytes
+- 如仍提示解析错误，请确认手机 Android 版本 ≥ 5.1，并在浏览器下载完成后核对文件大小；若仍失败，下一步生成 targetSdk 33 兼容包

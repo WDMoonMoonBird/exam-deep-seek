@@ -44,7 +44,7 @@ const consoleHref = computed(() => {
 });
 const docHref = computed(() => withBase(isMobileEntry.value ? '/m/doc' : '/doc'));
 /** Android APK：使用公网 IP + IP 证书，避开当前网络对 deadpan.asia 的 SNI 阻断 */
-const androidApkHref = 'https://203.0.113.10/exam/download/deadpan-1.0.apk';
+const androidApkHref = 'https://203.0.113.10/exam/download/deadpan-1.1.apk';
 /** 开源仓库地址：外链（不走 BASE 前缀），页脚最底部展示 */
 const REPO_URL = 'https://gitee.com/WD_MoonMoonBird/exam-deep-seek';
 
