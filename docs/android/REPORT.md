@@ -195,3 +195,13 @@ cd android
 - 云端已完成移动端 /m 部署：外部可访问，200
 - Release APK 已能加载线上生产页面（经本机网络隧道；直接链路仍被阻断）
 - 剩余 P1：解决本机/当前网络到生产 443 的 reset（安全组/ISP/WAF 白名单），以及用生产账号跑登录后全链路
+
+
+### 11.5 APK 云端下载
+
+- 已将 Release APK 上传到生产静态目录：
+  https://deadpan.asia/exam/download/deadpan-1.0.apk
+- 服务器本地实测：HTTP 200，18,160,533 bytes
+- SHA-256：203536289f0bae7be07ff303ee73baf6264135eafb349aa19872f1e26d289310
+- BlueStacks 当前安装的是同一 Release APK；在本机网络下通过 SSH CONNECT 代理加载生产页面成功
+- 手机直接下载安装后，若也遇到 connection reset，说明该手机所在网络同样被上游阻断，换移动网络/白名单后再试
