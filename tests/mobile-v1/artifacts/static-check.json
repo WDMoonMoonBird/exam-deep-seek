@@ -172,19 +172,7 @@
     },
     "changedPaths": {
       "tracked": [
-        "client/src/mobile/layout/MobileLayout.vue",
-        "client/src/mobile/styles/mobile.css",
-        "client/src/mobile/views/student/Answer.vue",
-        "client/src/mobile/views/student/ScoreDetail.vue",
-        "client/src/mobile/views/teacher/ReviewCode.vue",
-        "tests/mobile-v1/artifacts/_m_student_assignments-360.png",
-        "tests/mobile-v1/artifacts/_m_student_home-360.png",
-        "tests/mobile-v1/artifacts/answer-sheet.png",
-        "tests/mobile-v1/artifacts/smoke.json",
-        "tests/mobile-v1/artifacts/static-check.json",
-        "tests/mobile-v1/artifacts/student-home.png",
-        "tests/mobile-v1/artifacts/teacher-review-detail.png",
-        "tests/mobile-v1/artifacts/teacher-review.png"
+        "client/src/mobile/views/teacher/ReviewDetail.vue"
       ],
       "untracked": [
         "docs/mobile-app/preview-standalone.zip",

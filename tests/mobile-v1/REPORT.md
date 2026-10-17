@@ -292,3 +292,9 @@ node client/scripts/verify-frontend.mjs --no-build
 - 折叠/展开：学生作答「题目材料」、教师代码页「文件目录」使用 Vue Transition（m-collapse）；学生成绩详情评语展开使用 max-height CSS 过渡。
 - 题目切换：学生作答页在客观题/编程题分支之间使用 Vue Transition（m-fade-slide，mode=out-in，按题 key）。
 - 所有动效仅用 opacity/transform/max-height，支持 prefers-reduced-motion 降级；QA smoke 33 页 / 0 console / 0 P0/P1/P2，build / lint / verify-frontend / static-check 通过。
+
+### 10.9 v1.6 实训题审核恢复工程代码入口（2026-10-18）
+- 应反馈「实训题审核看不到代码」：上一轮删除「代码与参考」后，实训题审核详情确实失去代码入口。本轮按题型拆分：
+  - 实训题（project）在 AI 分项下方恢复「学生工程代码」卡片，提供「查看代码」「代码差异」；使用原有文件树/差异页，可查看学生提交与标准工程包。
+  - 通用编程题仍不显示该入口块（保持上一轮删除决定），避免与电脑端流程不一致。
+- 实测提交 10471：卡片/按钮出现，进入代码页显示 20 个文件树，无控制台错误；QA smoke 33 页 / 0 console / 0 P0/P1/P2，static-check 17/0，build 通过。

@@ -249,6 +249,16 @@ async function publishSubmission() {
   }, 500);
 }
 
+function goCode() {
+  const query = queryAssignmentId.value ? { assignmentId: queryAssignmentId.value } : {};
+  router.push({ path: '/m/teacher/review/' + submissionId.value + '/code', query });
+}
+
+function goDiff() {
+  const query = queryAssignmentId.value ? { assignmentId: queryAssignmentId.value } : {};
+  router.push({ path: '/m/teacher/review/' + submissionId.value + '/diff', query });
+}
+
 onMounted(loadDetail);
 </script>
 
@@ -351,6 +361,18 @@ onMounted(loadDetail);
                 </div>
                 <p v-if="item.comment" class="breakdown-comment">{{ item.comment }}</p>
               </div>
+            </div>
+          </div>
+
+          <div v-if="isProject" class="card mt12">
+            <div class="between">
+              <div class="card-title">学生工程代码</div>
+              <MStatusTag type="accent">文件树</MStatusTag>
+            </div>
+            <p class="help mt8">查看学生提交文件与标准工程包；手机端只读，可引用代码行到教师评语。</p>
+            <div class="row g8 mt12">
+              <button type="button" class="btn btn--sm btn--secondary" @click="goCode"><MIcon name="code" />查看代码</button>
+              <button type="button" class="btn btn--sm btn--secondary" @click="goDiff"><MIcon name="file" />代码差异</button>
             </div>
           </div>
 
