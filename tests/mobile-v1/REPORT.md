@@ -276,3 +276,8 @@ node client/scripts/verify-frontend.mjs --no-build
 - 教师端四个主 Tab 页去掉顶部重复标题：工作台、作业、评分审核（审核）、我的；保留各页右上角操作（通知/头像、布置作业、批量审核），详情页标题保留。
 - 「我的」页删除右上角「使用文档」书签按钮，保留页内「关于与帮助」入口。
 - 四个主 Tab 页补 sr-only h1，视觉不显示但保留无障碍页面标题；QA smoke 33 页 / 0 console / 0 P0/P1/P2，build / lint / verify-frontend / static-check 均通过。
+
+### 10.6 v1.3 审核代码页文件树（2026-10-18）
+- 教师端「代码只读」页的实训题文件选择从平铺 chips 改为可展开/收起的文件树；数据直接使用既有 GET /teacher/submissions/:id/project 返回的 studentFiles.tree / standardFiles.tree（缺失时按 contents 路径兜底），无后端改动。
+- 默认展开当前文件所在目录链；文件夹可点按展开/收起；切换「学生提交/标准答案」会重建树并保持当前文件。
+- 真机浏览器实测：提交 10471（20 个文件）树正常渲染、选中文件与代码同步、无控制台错误；QA smoke/static/build 均通过。

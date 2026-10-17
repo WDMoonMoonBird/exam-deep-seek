@@ -53,16 +53,101 @@ function keysOf(contents) {
   return Object.keys(contents).filter((key) => typeof contents[key] === 'string').sort();
 }
 
-const fileNames = computed(() => {
-  if (!isProject.value) return [];
-  const studentKeys = keysOf(project.value && project.value.studentFiles && project.value.studentFiles.contents);
-  const standardKeys = keysOf(project.value && project.value.standardFiles && project.value.standardFiles.contents);
-  const merged = [];
-  studentKeys.concat(standardKeys).forEach((key) => {
-    if (merged.indexOf(key) < 0) merged.push(key);
+const treeOpen = ref(true);
+const expandedDirs = ref({});
+
+/** 当前查看对象（学生/标准）的文件树 + 内容；接口已返回 tree，缺失时按 contents 路径兜底生成 */
+function filesOfCurrentView() {
+  if (!isProject.value || !project.value) return null;
+  return view.value === 'student' ? project.value.studentFiles : project.value.standardFiles;
+}
+
+function treeFromContents(contents) {
+  const root = [];
+  Object.keys(contents || {}).sort().forEach((filePath) => {
+    const parts = String(filePath).split('/').filter(Boolean);
+    if (!parts.length) return;
+    let list = root;
+    let current = '';
+    parts.forEach((part, index) => {
+      current = current ? current + '/' + part : part;
+      const isFile = index === parts.length - 1;
+      const type = isFile ? 'file' : 'directory';
+      let node = list.find((item) => item.name === part && item.type === type);
+      if (!node) {
+        node = { name: part, type, path: current };
+        if (!isFile) node.children = [];
+        list.push(node);
+      }
+      if (!isFile) list = node.children;
+    });
   });
-  return merged;
+  return sortTree(root);
+}
+
+function sortTree(nodes) {
+  nodes.sort((a, b) => {
+    if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+    return String(a.name).localeCompare(String(b.name));
+  });
+  nodes.forEach((node) => { if (node.children) sortTree(node.children); });
+  return nodes;
+}
+
+const currentTree = computed(() => {
+  const files = filesOfCurrentView();
+  if (!files) return [];
+  const tree = Array.isArray(files.tree) ? files.tree : [];
+  return tree.length ? tree : treeFromContents(files.contents);
 });
+const treeFileCount = computed(() => countFiles(currentTree.value));
+const treeRows = computed(() => {
+  const rows = [];
+  flattenVisibleTree(currentTree.value, 0, rows);
+  return rows;
+});
+
+function countFiles(nodes) {
+  return (nodes || []).reduce((count, node) => {
+    if (!node || node.type === 'directory') return count + countFiles(node && node.children);
+    return count + 1;
+  }, 0);
+}
+
+function expandAncestors(filePath, out) {
+  const parts = String(filePath || '').split('/').filter(Boolean);
+  let current = '';
+  parts.slice(0, -1).forEach((part) => {
+    current = current ? current + '/' + part : part;
+    out[current] = true;
+  });
+}
+
+function flattenVisibleTree(nodes, depth, out) {
+  (nodes || []).forEach((node) => {
+    if (!node) return;
+    const isDir = node.type === 'directory';
+    out.push({ name: node.name, path: node.path || node.name, depth, isDir });
+    if (isDir && expandedDirs.value[node.path || node.name]) {
+      flattenVisibleTree(node.children, depth + 1, out);
+    }
+  });
+}
+
+function prepareTree() {
+  const next = {};
+  expandAncestors(activeFile.value, next);
+  if (!Object.keys(next).length) {
+    const firstDir = (currentTree.value || []).find((node) => node.type === 'directory');
+    if (firstDir) next[firstDir.path || firstDir.name] = true;
+  }
+  expandedDirs.value = next;
+  treeOpen.value = true;
+}
+
+function toggleDir(path) {
+  expandedDirs.value[path] = !expandedDirs.value[path];
+}
 
 const referenceText = computed(() => {
   if (!submission.value) return '';
@@ -135,6 +220,7 @@ function pickFirstFile() {
 function switchView(value) {
   view.value = value;
   pickFirstFile();
+  prepareTree();
 }
 
 function onFileSelect(name) {
@@ -173,6 +259,7 @@ async function loadProject() {
   }
   project.value = r.data || null;
   pickFirstFile();
+  prepareTree();
 }
 
 function onCodeClick(event) {
@@ -276,16 +363,29 @@ onMounted(loadDetail);
           </div>
 
           <template v-if="!isProject || project">
-            <div v-if="isProject && fileNames.length" class="file-chips" role="group" aria-label="选择文件">
-              <button
-                v-for="name in fileNames"
-                :key="name"
-                type="button"
-                class="file-chip"
-                :class="{ active: activeFile === name }"
-                :aria-pressed="activeFile === name"
-                @click="onFileSelect(name)"
-              >{{ name }}</button>
+            <div v-if="isProject && treeFileCount" class="file-tree-panel">
+              <button type="button" class="file-tree-head" :aria-expanded="treeOpen" aria-label="文件目录" @click="treeOpen = !treeOpen">
+                <MIcon name="folder" />
+                <span>文件目录</span>
+                <small>{{ treeFileCount }} 个文件</small>
+                <MIcon name="chevron-right" class="tree-head-chev" :class="{ open: treeOpen }" />
+              </button>
+              <div v-if="treeOpen" class="file-tree-body" role="group" aria-label="工程文件树">
+                <button
+                  v-for="row in treeRows"
+                  :key="row.path"
+                  type="button"
+                  class="tree-row"
+                  :class="{ 'is-dir': row.isDir, active: !row.isDir && activeFile === row.path }"
+                  :style="{ paddingLeft: (10 + row.depth * 14) + 'px' }"
+                  :aria-expanded="row.isDir ? !!expandedDirs[row.path] : undefined"
+                  @click="row.isDir ? toggleDir(row.path) : onFileSelect(row.path)"
+                >
+                  <MIcon :name="row.isDir ? 'folder' : 'file'" class="tree-ico" />
+                  <span class="tree-name">{{ row.name }}</span>
+                  <MIcon v-if="row.isDir" name="chevron-right" class="tree-chev" :class="{ open: !!expandedDirs[row.path] }" />
+                </button>
+              </div>
             </div>
 
             <div v-if="tooLarge" class="banner banner--warning mt12">
@@ -293,7 +393,7 @@ onMounted(loadDetail);
             </div>
 
             <MEmpty
-              v-if="(isProject && !fileNames.length) || (isProject && currentFileMissing() && !projectLoading)"
+              v-if="(isProject && !treeFileCount) || (isProject && currentFileMissing() && !projectLoading)"
               icon="folder"
               :title="view === 'standard' ? '没有标准答案文件' : '没有可展示的文件'"
               description="该实训题可能未上传标准工程包，或提交不含文本文件"
@@ -371,33 +471,21 @@ onMounted(loadDetail);
 
 <style scoped>
 .seg-wrap { padding-top: 4px; }
-.file-chips {
-  display: flex;
-  overflow-x: auto;
-  margin-top: 12px;
-  padding-bottom: 4px;
-  scrollbar-width: none;
-}
-.file-chips::-webkit-scrollbar { display: none; }
-.file-chip {
-  flex: none;
-  position: relative;
-  min-height: 36px;
-  margin-right: 8px;
-  padding: 0 12px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--m-radius-chip);
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  font-weight: 500;
-  max-width: 60vw;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.file-chip::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%); }
-.file-chip.active { background: var(--brand-600); border-color: var(--brand-600); color: var(--text-on-brand); }
+.file-tree-panel { margin-top: 12px; border: 1px solid var(--border-default); border-radius: var(--m-radius-card-sm); background: var(--bg-surface); overflow: hidden; }
+.file-tree-head { width: 100%; min-height: 44px; display: flex; align-items: center; padding: 0 12px; color: var(--text-secondary); font-size: 13px; font-weight: 500; text-align: left; }
+.file-tree-head .icon { width: 17px; height: 17px; margin-right: 6px; color: var(--text-tertiary); }
+.file-tree-head small { margin-left: auto; color: var(--text-tertiary); font-size: 12px; font-weight: 400; }
+.tree-head-chev { width: 16px !important; height: 16px !important; margin-left: 4px; color: var(--text-tertiary) !important; transition: transform var(--m-duration-fast); }
+.tree-head-chev.open { transform: rotate(90deg); }
+.file-tree-body { max-height: 250px; overflow: auto; border-top: 1px solid var(--border-subtle); padding: 4px 0; }
+.tree-row { display: flex; align-items: center; width: 100%; min-height: 40px; padding-right: 10px; text-align: left; color: var(--text-primary); font-size: 13px; }
+.tree-row.is-dir { color: var(--text-secondary); }
+.tree-row.active { background: var(--bg-active); color: var(--text-brand); }
+.tree-ico { width: 16px !important; height: 16px !important; flex: none; margin-right: 6px; color: var(--text-tertiary) !important; }
+.tree-row.is-dir .tree-ico { color: var(--status-warning-fg) !important; }
+.tree-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-chev { width: 14px !important; height: 14px !important; flex: none; margin-left: 4px; color: var(--text-tertiary) !important; transition: transform var(--m-duration-fast); }
+.tree-chev.open { transform: rotate(90deg); }
 .code-toolbar {
   display: flex;
   align-items: center;

@@ -172,10 +172,7 @@
     },
     "changedPaths": {
       "tracked": [
-        "client/src/mobile/views/teacher/Assignments.vue",
-        "client/src/mobile/views/teacher/Home.vue",
-        "client/src/mobile/views/teacher/Profile.vue",
-        "client/src/mobile/views/teacher/ReviewQueue.vue"
+        "client/src/mobile/views/teacher/ReviewCode.vue"
       ],
       "untracked": [
         "docs/mobile-app/preview-standalone.zip",
