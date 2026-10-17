@@ -14,7 +14,21 @@
 - 手机分辨率 1080x1920 下移动端布局正常
 - Release APK 已生成并使用正式 keystore 签名，apksigner 校验通过
 - 图标由仓库根目录 学习中.svg 生成，应用名 Deadpan 判题，包名 asia.deadpan.exam
-- **阻塞项：正式环境 https://deadpan.asia/exam/m 从当前网络访问时 TLS 连接被 reset，无法验证正式包联网；服务器部署/网络白名单需要处理。**
+- **阻塞项（已定位到两层）：**
+  1. **正式服务器还没有移动端路由**：外部实测 https://deadpan.asia/exam/ 和 /exam/doc 返回 200，但 **https://deadpan.asia/exam/m 与 /exam/m/login 返回 404**（Ghost 404 页面）。说明生产部署的仍是旧前端/或 nginx 未把 /exam/m 纳入 SPA fallback。
+  2. **本机到正式域名的 TLS 链路不稳定**：curl 直连返回 000 / TLS reset；BlueStacks WebView 报 SSL handshake failed / net_error -101。这是本机网络/防火墙/白名单问题，不是 APK 权限问题。
+  - 因此 Release APK 的 URL、INTERNET 权限、签名都是正确的；无法联网是“生产未部署 /m + 本机网络不可达”共同导致。
+
+## 1.1 生产路由诊断证据（2026-10-18 00:55）
+
+| 地址 | HTTP | 页面 |
+|---|---|---|
+| https://deadpan.asia/exam/ | 200 | Deadpan 判题 |
+| https://deadpan.asia/exam/doc | 200 | Deadpan 判题 |
+| https://deadpan.asia/exam/m | 404 | Ghost 404 页面不存在 |
+| https://deadpan.asia/exam/m/login | 404 | Ghost 404 页面不存在 |
+
+结论：正式服务器当前部署的前端不包含 /m 移动端路由（或 nginx 未配置 /exam/m fallback）；不是 Capacitor 壳不会联网。
 
 ## 2. 环境
 
