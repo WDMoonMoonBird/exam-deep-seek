@@ -108,7 +108,6 @@
       "id": "B2-obs",
       "detail": "工作区存在与本任务无关的未跟踪文件（非 client 源码，不判定）",
       "files": [
-        "\"client/src/assets/\\345\\255\\246\\344\\271\\240\\344\\270\\255.svg\"",
         "\"\\345\\256\\241\\346\\237\\245\\346\\200\\273\\346\\212\\245\\345\\221\\212-\\345\\244\\215\\345\\256\\241.md\""
       ]
     },
@@ -173,16 +172,12 @@
     },
     "changedPaths": {
       "tracked": [
-        "client/src/mobile/routes.js",
-        "client/src/mobile/views/public/Login.vue",
-        "client/src/views/Doc.vue",
-        "client/src/views/Landing.vue",
-        "tests/mobile-v1/artifacts/static-check.json",
-        "tests/mobile-v1/smoke.mjs",
-        "tests/mobile-v1/static-check.mjs"
+        "client/src/mobile/views/teacher/Assignments.vue",
+        "client/src/mobile/views/teacher/Home.vue",
+        "client/src/mobile/views/teacher/Profile.vue",
+        "client/src/mobile/views/teacher/ReviewQueue.vue"
       ],
       "untracked": [
-        "\"client/src/assets/\\345\\255\\246\\344\\271\\240\\344\\270\\255.svg\"",
         "docs/mobile-app/preview-standalone.zip",
         "docs/mobile-app/preview-standalone/SCREENS.md",
         "docs/mobile-app/preview-standalone/assets/02-design-tokens.css",
@@ -221,7 +216,8 @@
         "docs/mobile-app/preview-standalone/screens/teacher-assign-wizard.html",
         "docs/mobile-app/preview-standalone/screens/teacher-assignment-detail.html",
         "docs/mobile-app/preview-standalone/screens/teacher-assignments.html",
-        "docs/mobile-app/preview-standalone/screens/teacher-batch-confirm.html"
+        "docs/mobile-app/preview-standalone/screens/teacher-batch-confirm.html",
+        "docs/mobile-app/preview-standalone/screens/teacher-batch-select.html"
       ]
     }
   }

@@ -123,7 +123,7 @@ onMounted(() => {
 
 <template>
   <MobileLayout role="teacher" active="home" bottom="tabbar" :badges="badges">
-    <MobileAppBar title="工作台" align="left">
+    <MobileAppBar align="left">
       <template #right>
         <button type="button" class="iconbtn" aria-label="通知与待审核" @click="router.push('/m/teacher/review')">
           <MIcon name="bell" />
@@ -135,6 +135,7 @@ onMounted(() => {
     </MobileAppBar>
 
     <main class="scroll">
+      <h1 class="sr-only">工作台</h1>
       <section class="hero home-hero">
         <div class="hero-row">
           <div class="grow">

@@ -9,7 +9,6 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import MobileLayout from '../../layout/MobileLayout.vue';
-import MobileAppBar from '../../layout/MobileAppBar.vue';
 import { MIcon, MSheet, MStatusTag } from '../../components/index.js';
 import request from '../../../api/request.js';
 import { useSafeRequest } from '../../../composables/useSafeRequest.js';
@@ -119,15 +118,8 @@ onMounted(() => {
 
 <template>
   <MobileLayout role="teacher" active="me" bottom="tabbar" :badges="badges">
-    <MobileAppBar title="我的" align="left">
-      <template #right>
-        <button type="button" class="iconbtn" aria-label="使用文档" @click="router.push('/m/doc')">
-          <MIcon name="book" />
-        </button>
-      </template>
-    </MobileAppBar>
-
     <main class="scroll">
+      <h1 class="sr-only">我的</h1>
       <div class="page mt8">
         <div class="card identity-card">
           <span class="avatar avatar--xl avatar--brand" aria-hidden="true">{{ teacherName.slice(0, 1) }}</span>

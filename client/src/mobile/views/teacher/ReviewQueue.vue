@@ -168,7 +168,7 @@ onMounted(() => {
 
 <template>
   <MobileLayout role="teacher" active="review" bottom="tabbar" :badges="badges">
-    <MobileAppBar title="评分审核" align="left">
+    <MobileAppBar align="left">
       <template #right>
         <button type="button" class="iconbtn" aria-label="批量审核" @click="goBatch">
           <MIcon name="grid" />
@@ -177,6 +177,7 @@ onMounted(() => {
     </MobileAppBar>
 
     <main class="scroll">
+      <h1 class="sr-only">评分审核</h1>
       <div class="page mt8">
         <div v-if="hasFilter" class="filterbar">
           <MIcon name="filter" />

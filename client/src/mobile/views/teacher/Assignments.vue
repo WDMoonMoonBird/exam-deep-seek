@@ -187,7 +187,7 @@ onMounted(() => {
 
 <template>
   <MobileLayout role="teacher" active="assignments" bottom="tabbar" :badges="badges">
-    <MobileAppBar title="作业" align="left">
+    <MobileAppBar align="left">
       <template #right>
         <button type="button" class="iconbtn" aria-label="布置作业" @click="router.push('/m/teacher/assign/new')">
           <MIcon name="plus" />
@@ -196,6 +196,7 @@ onMounted(() => {
     </MobileAppBar>
 
     <main class="scroll">
+      <h1 class="sr-only">作业</h1>
       <div class="page mt8">
         <label class="searchbar">
           <MIcon name="search" />

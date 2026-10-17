@@ -271,3 +271,8 @@ node client/scripts/verify-frontend.mjs --no-build
 - 桌面 Landing/Doc 在 /m 上下文把登录/文档/返回登录链接改走移动端（桌面行为不变）。
 - QA 脚本已同步：/m、/m/doc 不要求 .m-screen，桌面手册正文不参与移动端延期文案扫描；smoke 结论更新为 33 页/0 console/0 P0/P1/P2。
 - 复验：build exit 0；verify-frontend 71/0；eslint 0；static-check 17/0；smoke 33/0/0/0。
+
+### 10.5 v1.2 顶部标题精简（2026-10-17 深夜）
+- 教师端四个主 Tab 页去掉顶部重复标题：工作台、作业、评分审核（审核）、我的；保留各页右上角操作（通知/头像、布置作业、批量审核），详情页标题保留。
+- 「我的」页删除右上角「使用文档」书签按钮，保留页内「关于与帮助」入口。
+- 四个主 Tab 页补 sr-only h1，视觉不显示但保留无障碍页面标题；QA smoke 33 页 / 0 console / 0 P0/P1/P2，build / lint / verify-frontend / static-check 均通过。
