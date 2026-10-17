@@ -2,6 +2,7 @@
 
 > 分支 feat/mobile-app · 设计稿先行阶段的实现计划。上游：[05-page-specs.md](./05-page-specs.md)（37 屏 handoff）、[06-platform-strategy.md](./06-platform-strategy.md)（Web/PWA/Android 平台决策）、[02-design-tokens.md](./02-design-tokens.md)、[04-interaction-a11y.md](./04-interaction-a11y.md)
 > 本文回答：路由怎么加、Vant 怎么按需、改哪些文件、37 屏对应哪些 Vue 页面、分几步做、怎么测、怎么合并、怎么上线回滚。
+> **范围提示**：若采用「零后端改造 v1」，请先按 [08-backend-gap-and-ui-trim.md](./08-backend-gap-and-ui-trim.md) §4 裁剪 UI（管理端后置、成绩聚合/构成/AI 分项等砍掉），再执行本文 M0–M2。
 > **本阶段不改生产代码**：以下路径是落地阶段的变更清单，M0 起才创建。
 
 ---

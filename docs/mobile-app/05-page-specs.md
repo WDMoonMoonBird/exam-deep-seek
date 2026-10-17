@@ -558,6 +558,8 @@
 
 ## 6. API 复用 / 新增缺口汇总（handoff 必须同步给后端）
 
+> **2026-10-17 二次复核**：现有后端源码已覆盖部分旧缺口（学生列表字段、教师待办/作业统计等）。以 [08-backend-gap-and-ui-trim.md](./08-backend-gap-and-ui-trim.md) 为准：G1/G2/G6/G12 为真缺口；G7 可用「逐条 review + publishScores(ids)」替代；其余按 08 §4 裁剪。
+
 **复用现有接口即可支撑的屏（30 屏）**：1–3、6–14、17–24、27（大部分）、28、29、30、31（部分）、33、34。核心复用接口：auth/login；student/assignments、assignments/:id、draft、submit、scores、profile、project 提交；teacher/pending-summary、assignments、assignments/:id、assignments/:id/lock、review-summary、review-class/:classId、submissions、submissions/:id、submissions/:id/review、submissions/:id/score、submissions/publish、batch-review、batch-publish、project-submission/:id、questions、classes、students（按需）；admin schools/classes/teachers/students/monitor；auth/password。
 
 **需要新增或确认的能力（按屏）**

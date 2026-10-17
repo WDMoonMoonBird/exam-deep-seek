@@ -1,7 +1,7 @@
 # Exam-DeepSeek 移动端设计 · 评审入口（README）
 
 > 分支 `feat/mobile-app` ｜ 方法 skill `afrexai-ui-design-system` Phase 1–10 ｜ 阶段：**设计稿先行**
-> 本分支交付「37 屏高保真移动端设计稿 + 9 篇正文文档 + SCREENS 施工契约」；**生产代码零改动**（`client/` 未动，仅新增 `docs/mobile-app/`）。
+> 本分支交付「37 屏高保真移动端设计稿 + 10 篇正文文档 + SCREENS 施工契约」；**生产代码零改动**（`client/` 未动，仅新增 `docs/mobile-app/`）。
 > 独立评审 **84 / 100**（良好 · P0 = 0；4 条 P1 已在交付前修复），详情见 [qa-report.md](qa-report.md)。
 > 唯一施工契约：[preview/SCREENS.md](preview/SCREENS.md) ｜ 移动令牌层：[02-design-tokens.css](02-design-tokens.css) ｜ 桌面端参照：[docs/ui-redesign/](../ui-redesign/)
 
@@ -16,7 +16,7 @@
 | [preview/shots/](preview/shots/) | 逐屏截图（2× DPR，Playwright 生成） | ✅ |
 | [preview/assets/](preview/assets/) | Mobile Screen Kit：`screen.css`（组件库）+ `screen.js`（状态栏/Tab/Sheet/Toast/二维码）+ `screens.js`（屏幕注册表） | ✅ |
 | [preview/tools/shot.mjs](preview/tools/shot.mjs) | 逐屏截图工具（浅色 iOS 默认；支持 `--theme=dark` / `--platform=android`） | ✅ |
-| 9 篇设计文档 | 见 §4 文档索引 | ✅ |
+| 10 篇设计文档 | 见 §4 文档索引 | ✅ |
 | 生产代码 | 本阶段**不产出**；实施拆分见 [07-implementation-plan.md](07-implementation-plan.md) | ⏳ 待实施 |
 
 > 所有设计稿均为**设计稿 / 待实施**状态；不代表生产代码已改。37 屏若个别文件在评审时尚未落盘，以 [preview/SCREENS.md](preview/SCREENS.md) 的契约与 id 为准。
@@ -68,6 +68,7 @@
 | [05-page-specs.md](05-page-specs.md) | 37 屏逐屏 handoff 规范（布局/字段/状态/验收） | 9 |
 | [06-platform-strategy.md](06-platform-strategy.md) | Web 移动端 / PWA / Android（Capacitor）/ iOS（只规划）策略 | 8 |
 | [07-implementation-plan.md](07-implementation-plan.md) | `/m` 路由架构、文件清单、屏幕→Vue 映射、人日、测试矩阵、风险 | 10 |
+| [08-backend-gap-and-ui-trim.md](08-backend-gap-and-ui-trim.md) | **后端接口对账 + 零后端改造 UI 裁剪建议**（现有接口可支撑范围、难接口、砍/降级清单） | 交付/后端 |
 | [qa-report.md](qa-report.md) | 独立设计评审（八维 rubric 打分 + 逐屏问题清单） | 8 |
 | [preview/SCREENS.md](preview/SCREENS.md) | 37 屏契约 + 共享演示数据 + 禁止事项 | 9 |
 
