@@ -8,7 +8,7 @@
                      提升为 h1（真实标题，非通用词）；.doc-title 已声明字号/字重/flex，另在 CSS 里补 margin:0 抵消 h1 默认外边距。 -->
                 <h1 class="doc-title"><span class="doc-title-main">Deadpan 判题</span><span class="doc-title-sep"> ·
                     </span><span class="doc-title-sub">教师使用文档</span></h1>
-                <a-button type="link" href="/exam/login" class="doc-login-btn">前往登录</a-button>
+                <a-button type="link" :href="docLoginHref" class="doc-login-btn">前往登录</a-button>
             </div>
         </header>
 
@@ -255,6 +255,8 @@
 
 <script setup>
 import { ref, computed, h, watch, nextTick, onMounted, onUnmounted } from 'vue';
+import { useRoute } from 'vue-router';
+import { withAppBase } from '../domain/appPath.js';
 import { BarsOutlined } from '@ant-design/icons-vue';
 import { Tag } from 'ant-design-vue';
 import ZoomHost from '../components/manual/ZoomHost.vue';
@@ -269,6 +271,9 @@ import AssignHomeworkSection from '../components/manual/sections/AssignHomeworkS
 import ReviewSection from '../components/manual/sections/ReviewSection.vue';
 import ProjectSection from '../components/manual/sections/ProjectSection.vue';
 
+const route = useRoute();
+/** /m/doc 复用桌面手册时，登录按钮仍回移动登录；桌面端不变 */
+const docLoginHref = computed(() => withAppBase(route.path.startsWith('/m') ? '/m/login' : '/login'));
 const showMobileToc = ref(false);
 const mobileTocOpen = ref(false);
 

@@ -90,9 +90,17 @@ function toggleCollapse(sqId) {
   else collapsedSqs.add(sqId);
 }
 
+// 只滚右侧作答面板（.sp-content）；不要用 scrollIntoView，
+// 否则浏览器会把外层 Layout 的 .content 一起滚动，导致整页上移、底部留白且无法继续下滚。
 function scrollTo(sectionId) {
   const el = document.getElementById(sectionId);
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const scroller = contentRef.value;
+  if (!el || !scroller) return;
+  const top =
+    el.getBoundingClientRect().top -
+    scroller.getBoundingClientRect().top +
+    scroller.scrollTop;
+  scroller.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
 }
 
 function activateAnchor(anchor) {

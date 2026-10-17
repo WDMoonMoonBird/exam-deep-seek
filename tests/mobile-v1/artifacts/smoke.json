@@ -1,0 +1,1037 @@
+{
+  "base": "http://localhost:5173/exam",
+  "pages": [
+    {
+      "url": "/m",
+      "role": "public",
+      "mounted": false,
+      "h1Count": 1,
+      "h1": [
+        "面向高校编程课的AI 评分平台"
+      ],
+      "textLen": 1377,
+      "textSample": "Deadpan 判题 教师登录 校内网部署 · 教师端 面向高校编程课的 AI 评分平台 从建题、布置、学生提交，到 AI 评分、教师审核、成绩发布 —— 一学期的作业流程收进一个控制台。 客观题自动判分；主观题与实训工程包由 AI 按你的评分标准给出分数与评语，教师只做终审。 教师登录 查看使用文档 客观题自动批改 实训工程包 AI 评审 校内网私有化部署 教师控制台 · 演示 周 周子轩 题库管理 新增题目 待审核 2 进行中作业 4 已发布成绩 128 标题 类型 搭建 Spring MVC 数据绑定与响应综",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": false,
+      "path": "/exam/m",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/login",
+      "role": "public",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "Deadpan 判题"
+      ],
+      "textLen": 42,
+      "textSample": "Deadpan 判题 请登录以继续 用户名（工号/学号） 密码 显示 记住账号 登录",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/login",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/doc",
+      "role": "public",
+      "mounted": false,
+      "h1Count": 1,
+      "h1": [
+        "Deadpan 判题 · 教师使用文档"
+      ],
+      "textLen": 8912,
+      "textSample": "Deadpan 判题 教师使用文档 前往登录 1. 系统简介 Deadpan 判题是一套面向高校编程类课程的AI 智能评分平台，支持教师创建题目、布置作业、AI 自动评分、教师审核发布、学生在线答题的完整教学闭环。 1 建题 2 布置 3 提交 4 AI 评分 5 审核发布 6 出分 教师创建编程题目，设置参考答案和评分标准。每道题包含大题和若干小题，支持多种编程语言。 下一步 系统支持三种角色：超级管理员（管理学校/教师/班级）、教师（题库/作业/审核）、学生（答题/查看成绩）。本文档面向教师用户。 2. 快速入",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": false,
+      "path": "/exam/m/doc",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/404",
+      "role": "public",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "页面不存在"
+      ],
+      "textLen": 170,
+      "textSample": "页面不存在 404 页面不存在或已被移动 这个地址找不到对应的页面，可能已被移动或删除。你的登录状态仍然有效。 游 未登录 当前为游客访问 未登录 当前地址 /m/404 回到首页 返回上一页 页面编号 404 · 如果从外部链接进入，请确认链接是否完整。 Deadpan 判题 v2.1.0 · 页面不存在 找不到需要的内容？查看使用文档",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/404",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/403",
+      "role": "public",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "无访问权限"
+      ],
+      "textLen": 173,
+      "textSample": "无访问权限 403 无访问权限 当前账号角色无法访问该页面，请回到自己的首页或更换账号。 游 未登录 当前为游客访问 未登录 当前角色 未登录 所需权限 学生或教师身份 回到首页 前往登录 如果确认账号权限有误，请联系任课教师或信息中心调整。 Deadpan 判题 v2.1.0 · 权限校验失败（403） 你的登录状态仍然保留，不会被自动退出。",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/403",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/500",
+      "role": "public",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "服务异常"
+      ],
+      "textLen": 230,
+      "textSample": "服务异常 500 服务暂时不可用 服务器开了个小差，请稍后重试；必要时可联系管理员排查。 游 未登录 当前为游客访问 未登录 当前地址 /m/500 发生时间 2026-10-18 00:00:20 错误信息 服务异常（HTTP 500）· 当前版本不展示请求编号 重新加载 返回首页 若持续出现请联系管理员（信息中心）。 Deadpan 判题 v2.1.0 · 服务异常（500） 本页不展示伪造的请求编号；排查时请把「当前地址 + 发生时间」提供给管理员。",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/500",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/platform/install",
+      "role": "public",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "安装到主屏"
+      ],
+      "textLen": 590,
+      "textSample": "安装到主屏 DEADPAN 判题 把 Deadpan 装到桌面 像 App 一样打开：从桌面图标直达，少一层浏览器地址栏。 当前识别为 桌面或其他浏览器：按下方对应指引添加到主屏幕。 打开更快 桌面图标直达，跳过手动输入网址 全屏体验 从主屏幕启动时隐藏部分浏览器工具栏 同一账号 与浏览器共用登录态，无需重新登录 添加到主屏幕 Android · Chrome 菜单 → 安装应用 / 添加到主屏幕 用 Chrome 打开本页 在地址栏输入校内网地址，或从消息里的链接打开。 点右上角「⋮」菜单，选择「安装应用」或「添",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/platform/install",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/platform/splash",
+      "role": "public",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "Deadpan 判题"
+      ],
+      "textLen": 112,
+      "textSample": "Deadpan 判题 教学评测，随时可用 v2.1.0 · 构建 20261017 正在检查更新… 62% Web 端冷启动由浏览器完成 · 本页为设计视觉样例 进入移动端 Deadpan 大学 · 信息中心 · 仅限校内网",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [
+        {
+          "tag": "SPAN",
+          "cls": "sp-glow",
+          "left": -65,
+          "right": 455
+        }
+      ],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/platform/splash",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/platform/states",
+      "role": "public",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "状态体系"
+      ],
+      "textLen": 308,
+      "textSample": "状态体系 四态 一套状态，覆盖所有列表页 空态、加载、错误、断网 —— 每个列表与详情页都必须具备，且文案要告诉用户下一步做什么。 空态 加载中 错误 断网 空态先解释为什么为空，再给一个能继续的动作。 我的作业 共 0 项 还没有待办作业 老师发布新作业后会出现在这里；今晚 23:59 前截止的作业会优先提醒。 重新加载 使用说明 空态不是错误：用图标 + 一句「为什么为空」+ 一个主操作把用户带到下一步，不要只写「暂无数据」。 说明 ≤ 2 行 主按钮唯一 不误导为加载失败 四态检查项：每个列表页 / 每块列表",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 14,
+      "isMobileChunk": true,
+      "path": "/exam/m/platform/states",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/student/home",
+      "role": "student",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "夜深了，李明"
+      ],
+      "textLen": 236,
+      "textSample": "夜深了，李明 计算机 2301 班 · 今天有 1 份作业截止 李 今天 06:59 截止 6 小时 59 分 数据结构实验三：图的最短路径 已作答 4 项 · 共 6 题 · 满分 100 提交后不可修改 继续作答 我的作业 1 份待完成 我的成绩 1 门已出分 使用文档 作答与提交帮助 最近成绩 全部成绩 Java 程序设计期末考试 已出分 · 满分 100 92 /100 数据更新于 2026-10-18 00:00 · 点右上角刷新 首页 作业 1 成绩 我的",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 1,
+      "tabbarItems": 4,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/student/home",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/student/assignments",
+      "role": "student",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "我的作业"
+      ],
+      "textLen": 242,
+      "textSample": "我的作业 共 1 份 · 1 份待完成 · 0 份待评分 全部 1 进行中 1 待评分 0 已评分 0 今天 06:59 截止 · 还剩 6 小时 59 分：数据结构实验三：图的最短路径 尚未提交，提交后不可修改。 去完成 数据结构实验三：图的最短路径 共 6 题 · 满分 100 · 限 1 次 进行中 今天 06:59 截止 · 剩 6 小时 已作答 4 项 · 草稿自动保存 继续作答 查看作业详情 已显示全部 1 份作业 · 按状态与截止时间排序 首页 作业 1 成绩 我的",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 1,
+      "tabbarItems": 4,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/student/assignments",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/student/assignments/1",
+      "role": "student",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "作业详情"
+      ],
+      "textLen": 351,
+      "textSample": "作业详情 数据结构实验三：图的最短路径 进行中 限 1 次 今天 06:59 截止 剩余 6 小时 59 分 · 请及时提交 已答 0 项 0/2 小题 作业信息 开放时间 2026-10-16 23:59 截止时间 2026-10-18 06:59 满分 36 分 题目 2 题 · 2 小题 提交次数 限 1 次提交 已提交次数 0 次 作业说明 完成最短路径算法，包含客观题与编程题。 作答须知： 可提前交卷；交卷后不可修改。客观题在手机上完成，编程题请复制链接到电脑继续作答。 题目共 2 小题 答题卡 1 第 ",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/student/assignments/1",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/student/assignments/1/answer",
+      "role": "student",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "数据结构实验三：图的最短路径 第 1 / 2 题 · 客观题"
+      ],
+      "textLen": 291,
+      "textSample": "数据结构实验三：图的最短路径 第 1 / 2 题 · 客观题 0/2 6:59:27 1/2 客观题 第 1 题 6 分 标记本题 第 1 题（单选） HTTP 状态码 404 表示什么？ 共 4 小问 1. 客观题 多个空按顺序用英文逗号分隔（例：答案1,答案2）。 2. 客观题 多个空按顺序用英文逗号分隔（例：答案1,答案2）。 3. 客观题 多个空按顺序用英文逗号分隔（例：答案1,答案2）。 4. 客观题 多个空按顺序用英文逗号分隔（例：答案1,答案2）。 答案会自动保存为草稿 剩余 6 小时 59 分 · ",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/student/assignments/1/answer",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/student/assignments/1/done",
+      "role": "student",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "尚未提交"
+      ],
+      "textLen": 95,
+      "textSample": "已提交 尚未提交 该作业还没有提交记录；如仍可作答，可返回作业详情继续作答。 未提交 还没有提交记录 如果作业仍在开放时间内，可以返回作业详情继续作答并交卷。 去作答 我的成绩 返回作业列表",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/student/assignments/1/done",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/student/scores",
+      "role": "student",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "成绩"
+      ],
+      "textLen": 110,
+      "textSample": "成绩 已出分 1 门 · 待出分 0 份 1 已出分成绩 0 待出分作业 已出分 1 份 Java 程序设计期末考试 已发布成绩 · 满分 100 92 已出分 点击任一成绩可查看逐题得分与评语。 首页 作业 成绩 我的",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 1,
+      "tabbarItems": 4,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/student/scores",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/student/scores/1",
+      "role": "student",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "成绩详情"
+      ],
+      "textLen": 117,
+      "textSample": "成绩详情 Java 程序设计期末考试 成绩已发布 · 满分 100 92 / 100 已发布 总分 92 / 100 逐题得分 0 项 本次成绩暂无逐题明细。 返回成绩列表 成绩由教师评分并发布后显示；如对成绩有疑问，请联系任课教师。",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/student/scores/1",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/student/profile",
+      "role": "student",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "李明学生"
+      ],
+      "textLen": 194,
+      "textSample": "李 李明 学生 学号 2026001004 计算机 2301 班 0 已提交作业 1 已出分成绩 偏好设置 深色主题 当前浅色 · 深色环境更省电 字号大小 影响正文与列表文字 标准 更多 使用文档 作答、提交与查看成绩的说明 关于 Exam-DeepSeek AI 评分 · 教学评测平台 移动端 v1 退出登录 退出后需重新登录；未提交的作答草稿保存在服务器。 首页 作业 成绩 我的",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 1,
+      "tabbarItems": 4,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/student/profile",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/teacher/home",
+      "role": "teacher",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "工作台"
+      ],
+      "textLen": 178,
+      "textSample": "周 工作台 上午好，周子轩 Deadpan 大学 · 10月18日星期日 12份 待审核 2份 AI 待评 0份 评分异常 12 份提交等待审核：AI 已完成初评，确认分数与评语后即可通过。 去审核 布置作业 题库 班级 审核 最近作业 全部作业 数据结构实验三：图的最短路径 未关联班级 · 0 题 进行中 38 / 45 工作台 作业 审核 12 我的",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 1,
+      "tabbarItems": 4,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/teacher/home",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/teacher/assignments",
+      "role": "teacher",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "作业"
+      ],
+      "textLen": 107,
+      "textSample": "作业 全部 进行中 未开始 已结束 已锁定 数据结构实验三：图的最短路径 未关联班级 · 0 题 进行中 截止 2026-10-20 23:59 38 / 45 不允许重交 查看详情 工作台 作业 审核 12 我的",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 1,
+      "tabbarItems": 4,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/teacher/assignments",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/teacher/assignments/1",
+      "role": "teacher",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "作业详情"
+      ],
+      "textLen": 163,
+      "textSample": "作业详情 数据结构实验三：图的最短路径 进行中 未关联班级 84 提交率 已交 38 / 45 人 未交 7 人 待审核 0 份 截止 2026-10-20 23:59 提交 题目 概况 陈 陈嘉懿 2025010101 92 AI 分 AI 评分中 学生状态与 AI 分数来自真实提交；发布前学生不可见成绩。 查看评分与审核",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/teacher/assignments/1",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/teacher/review",
+      "role": "teacher",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "评分审核"
+      ],
+      "textLen": 94,
+      "textSample": "评分审核 待审核 1 份 已处理 0% 已提交 0 份 · 待审核 0 份 ? 未知学生 92 AI 分 未知作业 提交于 2026-10-17 22:59 工作台 作业 审核 12 我的",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 1,
+      "tabbarItems": 4,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/teacher/review",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/teacher/review/101",
+      "role": "teacher",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "审核详情"
+      ],
+      "textLen": 237,
+      "textSample": "审核详情 队列 ? 未知学生 AI 评分中 未知作业 提交于 2026-10-17 22:59 AI 建议分 AI 评分中 92 / 100 AI 初评 · 满分 100 教师评分* 0 – 100 分，默认采用 AI 建议分；通过审核时以该分数为准。 保存改分 只保存分数，仍需「审核通过」才会进入已审核状态 AI 评语 该提交没有可展示的 AI 整段评语。 教师评语（学生可见） 未填写时学生端将看到 AI 评语；通过后随成绩展示。 0 / 1000 保存改分 审核通过",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/teacher/review/101",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/teacher/review/101/code",
+      "role": "teacher",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "代码只读"
+      ],
+      "textLen": 51,
+      "textSample": "代码只读 编程题 学生作答 参考答案 学生没有提交内容 切换查看对象，或返回审核详情继续评分 返回审核",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/teacher/review/101/code",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/teacher/review/101/diff",
+      "role": "teacher",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "代码对比"
+      ],
+      "textLen": 73,
+      "textSample": "代码对比 该题没有工程包 代码差异仅支持实训题（工程包提交）；该提交为通用题，请查看代码与参考答案。 查看代码与参考答案 返回审核 引用差异到评语",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/teacher/review/101/diff",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/teacher/batch",
+      "role": "teacher",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "批量审核"
+      ],
+      "textLen": 210,
+      "textSample": "批量审核 完成 已选 0 项 本页 1 份待审核 · 共 1 份 全选本页 清空 未指定作业：请从具体作业进入批量审核，以便确认是否含实训题。 去选择作业 AI 已评分 · 待审核 0 / 1 ? 未知学生 · 未知作业 提交于 2026-10-17 22:59 92 AI 分 待审核 批量审核会逐条提交（并发 3 条），全部成功后再统一发布成绩；不保证批量操作原子，失败项可在下一步重试。 清空选择 审核通过 (0)",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/teacher/batch",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/teacher/batch/confirm",
+      "role": "teacher",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "批量审核"
+      ],
+      "textLen": 61,
+      "textSample": "批量审核 关闭 未指定作业，不能批量审核 请从具体作业进入批量审核，以便确认作业是否含实训题。 返回审核队列 返回审核队列",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/teacher/batch/confirm",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/teacher/assign/new",
+      "role": "teacher",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "布置作业"
+      ],
+      "textLen": 110,
+      "textSample": "布置作业 1 基本信息 2 选题 3 班级 4 确认 作业名称* 作业说明 选填，学生端可见 开始时间* 截止时间* 时间按本机时区填写，截止时间必须晚于开始时间。创建后可回到作业列表锁定或复制作业链接。 上一步 下一步",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/teacher/assign/new",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/teacher/questions",
+      "role": "teacher",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "题库"
+      ],
+      "textLen": 62,
+      "textSample": "题库 全部 编程题 实训题 两数之和 编程题 10 分 更新于 未知 只读预览 移动端仅预览题目，编辑与新建请在电脑端完成。",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/teacher/questions",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/teacher/classes/1",
+      "role": "teacher",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "班级详情"
+      ],
+      "textLen": 137,
+      "textSample": "班级详情 未关联学校 班级 2 学生 1 作业 0 待审核 作业进度 1 份 AI 评分中 2 / 学生 2 人 陈 陈嘉懿 2025010101 92 AI 分 AI 评分中 周 周予安 2025010104 未提交 手机端只读；新增/编辑学生、完整成绩表请在电脑端完成。",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/teacher/classes/1",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/teacher/profile",
+      "role": "teacher",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "我的"
+      ],
+      "textLen": 154,
+      "textSample": "我的 周 周子轩教师 工号 T2026001 Deadpan 大学 设置 深色主题 切换立即生效，仅影响本机移动端 字号大小 影响正文与列表文字 标准 切换到桌面版 大屏编辑、批量导出更高效 关于与帮助 使用文档 · 反馈问题 退出登录 Deadpan 判题 · 移动端 v1 工作台 作业 审核 12 我的",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 1,
+      "tabbarItems": 4,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/teacher/profile",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/teacher/code/unsupported",
+      "role": "teacher",
+      "mounted": true,
+      "h1Count": 1,
+      "h1": [
+        "编辑标准答案"
+      ],
+      "textLen": 343,
+      "textSample": "编辑标准答案 手机不提供代码编辑 编辑标准答案需要连续输入与调试。为保证准确性与效率，手机端只做只读预览，请在电脑端完成编辑。 为什么不支持 软键盘会遮挡行号与缩进 代码需要精确缩进，手机输入法的自动纠错容易破坏语法。 没有补全与语法检查 无法提示 API、括号匹配与编译错误，改错成本远高于电脑。 误触可能破坏测试用例 评分标准与标准工程包关联评分链路，一次误删可能影响整题判分。 接力到电脑 需登录 复制链接，在电脑上编辑 将打开题库列表，再选择题目编辑。 /exam/teacher/questions 复制链接 ",
+      "overflow": false,
+      "docScrollW": 390,
+      "vw": 390,
+      "offenders": [],
+      "tabbar": 0,
+      "tabbarItems": 0,
+      "skeletons": 0,
+      "isMobileChunk": true,
+      "path": "/exam/m/teacher/code/unsupported",
+      "title": "Deadpan 判题"
+    },
+    {
+      "url": "/m/student/home",
+      "viewport": "360x800",
+      "overflow": false,
+      "vw": 360,
+      "sw": 360
+    },
+    {
+      "url": "/m/student/assignments",
+      "viewport": "360x800",
+      "overflow": false,
+      "vw": 360,
+      "sw": 360
+    }
+  ],
+  "guards": [
+    {
+      "name": "未登录受保护页→/m/login?redirect",
+      "auth": null,
+      "url": "/m/student/home",
+      "finalUrl": "http://localhost:5173/exam/m/login?redirect=/m/student/home",
+      "pass": true,
+      "errors": []
+    },
+    {
+      "name": "未登录教师页→/m/login?redirect",
+      "auth": null,
+      "url": "/m/teacher/home",
+      "finalUrl": "http://localhost:5173/exam/m/login?redirect=/m/teacher/home",
+      "pass": true,
+      "errors": []
+    },
+    {
+      "name": "学生访问教师页→/m/403",
+      "auth": "student",
+      "url": "/m/teacher/home",
+      "finalUrl": "http://localhost:5173/exam/m/403",
+      "pass": true,
+      "errors": []
+    },
+    {
+      "name": "教师访问学生页→/m/403",
+      "auth": "teacher",
+      "url": "/m/student/home",
+      "finalUrl": "http://localhost:5173/exam/m/403",
+      "pass": true,
+      "errors": []
+    },
+    {
+      "name": "超管访问 /m→/m/403?reason=admin",
+      "auth": "super_admin",
+      "url": "/m/student/home",
+      "finalUrl": "http://localhost:5173/exam/m/403?reason=admin",
+      "pass": true,
+      "errors": []
+    },
+    {
+      "name": "/m/admin→移动 404",
+      "auth": null,
+      "url": "/m/admin",
+      "finalUrl": "http://localhost:5173/exam/m/admin",
+      "pass": true,
+      "errors": []
+    },
+    {
+      "name": "/m/admin/monitor→移动 404（未登录）",
+      "auth": null,
+      "url": "/m/admin/monitor",
+      "finalUrl": "http://localhost:5173/exam/m/admin/monitor",
+      "pass": true,
+      "errors": []
+    },
+    {
+      "name": "超管访问 /m/admin→/m/403?reason=admin",
+      "auth": "super_admin",
+      "url": "/m/admin",
+      "finalUrl": "http://localhost:5173/exam/m/403?reason=admin",
+      "pass": true,
+      "errors": []
+    },
+    {
+      "name": "未知 /m 路径→移动 404（公开）",
+      "auth": null,
+      "url": "/m/unknown-page",
+      "finalUrl": "http://localhost:5173/exam/m/unknown-page",
+      "pass": true,
+      "errors": []
+    },
+    {
+      "name": "401 过期→/m/login?expired=1",
+      "finalUrl": "http://localhost:5173/exam/m/login?expired=1&redirect=/m/student/assignments",
+      "pass": true
+    },
+    {
+      "name": "桌面入口不回归 /",
+      "finalUrl": "/exam/",
+      "pass": true,
+      "hasM": false,
+      "textLen": 1444,
+      "errors": []
+    },
+    {
+      "name": "桌面入口不回归 /login",
+      "finalUrl": "/exam/login",
+      "pass": true,
+      "hasM": false,
+      "textLen": 37,
+      "errors": []
+    },
+    {
+      "name": "超管 /m 403 文案",
+      "finalUrl": "http://localhost:5173/exam/m/403?reason=admin",
+      "text": "无访问权限 403 移动端暂不提供管理端 管理端页面暂未在移动端提供，请使用电脑端浏览器访问管理后台。 王 王建国 超级管理员 超级管理员 当前角色 超级管理员 所需权限 管理端权限（需在电脑端使用） 登录账号 admin 电脑端入口 请在电脑浏览器打开管理后台 前往电脑端管理后台 退出登录 如果确认账号权限有误，请联系任课教师或信息中心调整。 Deadpan 判题 v2.1.0 · 权限校验失败（403） 你的登录状态仍然保留，不会被自动退出。",
+      "pass": true
+    }
+  ],
+  "states": [
+    {
+      "name": "学生作业列表-延迟",
+      "mode": "delay",
+      "loading": 13,
+      "textAfter": 250,
+      "pass": true
+    },
+    {
+      "name": "学生作业列表-失败",
+      "mode": "error",
+      "mounted": true,
+      "emptyEls": 2,
+      "text": "我的作业 共 0 份 · 0 份待完成 · 0 份待评分 全部 0 进行中 0 待评分 0 已评分 0 作业加载失败 服务出错了，请稍后重试 重新加载 首页 作业 成绩 我的",
+      "pass": true
+    },
+    {
+      "name": "学生作业列表-空",
+      "mode": "empty",
+      "mounted": true,
+      "emptyEls": 2,
+      "text": "我的作业 共 0 份 · 0 份待完成 · 0 份待评分 全部 0 进行中 0 待评分 0 已评分 0 还没有收到作业 老师布置作业后，这里会显示作业要求与截止时间。 刷新 首页 作业 成绩 我的",
+      "pass": true
+    },
+    {
+      "name": "教师审核队列-延迟",
+      "mode": "delay",
+      "loading": 10,
+      "textAfter": 99,
+      "pass": true
+    },
+    {
+      "name": "教师审核队列-失败",
+      "mode": "error",
+      "mounted": true,
+      "emptyEls": 0,
+      "text": "评分审核 待审核 0 份 已处理 0% 已提交 0 份 · 待审核 0 份 服务出错了，请稍后重试重试 工作台 作业 审核 12 我的 服务出错了，请稍后重试",
+      "pass": true
+    },
+    {
+      "name": "教师题库-空",
+      "mode": "empty",
+      "mounted": true,
+      "emptyEls": 2,
+      "text": "题库 全部 编程题 实训题 题库还没有题目 在电脑端新建题目后，这里会显示题目列表 查看使用文档 移动端仅预览题目，编辑与新建请在电脑端完成。",
+      "pass": true
+    }
+  ],
+  "components": {
+    "sheet": {
+      "opened": true,
+      "sheet": {
+        "open": true,
+        "inScreen": true,
+        "closeW": 44,
+        "closeH": 44,
+        "role": "dialog",
+        "modal": "true"
+      },
+      "escClosed": true,
+      "maskClicked": true,
+      "maskClosed": true,
+      "pass": true
+    },
+    "layout": {
+      "tabbar": 0,
+      "sheetInScreen": false,
+      "sheetRoots": 0
+    },
+    "tabbar": [
+      {
+        "role": "public",
+        "url": "/m/doc",
+        "tabbar": 0,
+        "items": 0
+      },
+      {
+        "role": "student",
+        "url": "/m/student/home",
+        "tabbar": 1,
+        "items": 4
+      },
+      {
+        "role": "teacher",
+        "url": "/m/teacher/home",
+        "tabbar": 1,
+        "items": 4
+      }
+    ],
+    "font": {
+      "teacher": {
+        "rowFound": true,
+        "options": [
+          "标准\n正文 15px · 辅助 13px",
+          "大\n正文 16.5px · 辅助 14px",
+          "特大\n正文 18px · 辅助 15px"
+        ],
+        "localStorage": {
+          "m-font-size": "large"
+        },
+        "mfs": "16.5px",
+        "pass": true
+      },
+      "studentHasFontSetting": true
+    }
+  },
+  "apiAudit": {
+    "total": 33,
+    "public": 0,
+    "student": 13,
+    "teacher": 20,
+    "sample": [
+      {
+        "method": "GET",
+        "path": "/api/student/assignments?page=1&pageSize=100"
+      },
+      {
+        "method": "GET",
+        "path": "/api/student/scores"
+      },
+      {
+        "method": "GET",
+        "path": "/api/student/profile"
+      },
+      {
+        "method": "GET",
+        "path": "/api/student/assignments?page=1&pageSize=100"
+      },
+      {
+        "method": "GET",
+        "path": "/api/student/assignments/1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/student/assignments/1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/student/assignments/1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/student/scores"
+      },
+      {
+        "method": "GET",
+        "path": "/api/student/assignments?page=1&pageSize=100"
+      },
+      {
+        "method": "GET",
+        "path": "/api/student/scores"
+      },
+      {
+        "method": "GET",
+        "path": "/api/student/profile"
+      },
+      {
+        "method": "GET",
+        "path": "/api/student/assignments?page=1&pageSize=100"
+      },
+      {
+        "method": "GET",
+        "path": "/api/student/scores"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teacher/pending-summary?schoolId=1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teacher/assignments?page=1&pageSize=2&schoolId=1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teacher/assignments?page=1&pageSize=20&schoolId=1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teacher/pending-summary?schoolId=1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teacher/assignments/1?schoolId=1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teacher/assignments?page=1&pageSize=100&schoolId=1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teacher/review-class/1?assignmentId=1&schoolId=1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teacher/submissions?status=ai_graded&page=1&pageSize=20&schoolId=1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teacher/review-summary?schoolId=1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teacher/pending-summary?schoolId=1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teacher/submissions/101?schoolId=1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teacher/submissions/101?schoolId=1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teacher/submissions/101?schoolId=1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teacher/submissions?status=ai_graded&page=1&pageSize=50&schoolId=1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teacher/questions?page=1&pageSize=50&schoolId=1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teacher/classes?schoolId=1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teacher/review-summary?classId=1&schoolId=1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teacher/students?classId=1&schoolId=1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teacher/review-class/1?assignmentId=1&schoolId=1"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teacher/pending-summary?schoolId=1"
+      }
+    ]
+  },
+  "console": [],
+  "findings": [],
+  "summary": {
+    "pages": 33,
+    "consoleErrors": 0,
+    "guardFailures": 0,
+    "stateFailures": 0,
+    "findings": {
+      "P0": 0,
+      "P1": 0,
+      "P2": 0
+    }
+  }
+}

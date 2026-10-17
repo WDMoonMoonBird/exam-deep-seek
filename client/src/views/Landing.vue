@@ -16,10 +16,14 @@
  * 公开访问：本页不读接口，无网络请求；进入系统后才走各自的守卫。
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { useUserStore } from '../stores/user.js';
 import ThemeToggle from '../components/ThemeToggle.vue';
 
 const userStore = useUserStore();
+const route = useRoute();
+/** 从 /m 进入时，登录/文档/控制台链接保持移动端语义；桌面端行为不变 */
+const isMobileEntry = computed(() => route.path === '/m' || route.path.startsWith('/m/'));
 const loggedIn = computed(() => userStore.isLoggedIn);
 /** 已登录时的落地页：与 router/index.js 守卫里的角色前缀一致 */
 const consolePath = computed(() => {
@@ -30,9 +34,17 @@ const consolePath = computed(() => {
 /** 站点基路径：应用部署在子路径（生产为 /exam/）时，根绝对链接会 404 ⇒ 统一走 base 前缀 */
 const BASE = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
 const withBase = (p) => BASE + (p.startsWith('/') ? p : '/' + p);
-const loginHref = computed(() => withBase('/login'));
-const consoleHref = computed(() => withBase(consolePath.value));
-const docHref = computed(() => withBase('/doc'));
+const loginHref = computed(() => withBase(isMobileEntry.value ? '/m/login' : '/login'));
+const consoleHref = computed(() => {
+  if (!isMobileEntry.value) return withBase(consolePath.value);
+  const role = userStore.role || 'teacher';
+  if (role === 'teacher') return withBase('/m/teacher/home');
+  if (role === 'student') return withBase('/m/student/home');
+  return withBase('/m/403?reason=admin');
+});
+const docHref = computed(() => withBase(isMobileEntry.value ? '/m/doc' : '/doc'));
+/** Android APK：使用公网 IP + IP 证书，避开当前网络对 deadpan.asia 的 SNI 阻断 */
+const androidApkHref = 'https://203.0.113.10/exam/download/deadpan-1.1.apk';
 /** 开源仓库地址：外链（不走 BASE 前缀），页脚最底部展示 */
 const REPO_URL = 'https://gitee.com/WD_MoonMoonBird/exam-deep-seek';
 
@@ -202,6 +214,7 @@ const rubricPublished = ref(false);
               <a class="btn btn-ghost btn-lg" :href="docHref" target="_blank" rel="noopener">
                 <svg class="icon" aria-hidden="true"><use href="#lg-book" /></svg>查看使用文档
               </a>
+              <a class="btn btn-ghost btn-lg" :href="androidApkHref" download>安卓版下载</a>
             </div>
             <ul class="trust">
               <li><svg class="icon" aria-hidden="true"><use href="#lg-check" /></svg>客观题自动批改</li>

@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>作业详情 · 移动端设计稿</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+  /* 作业详情局部样式（sd- 前缀），只使用令牌变量 */
+  .sd-head { padding: 6px var(--m-gutter) 14px; }
+  .sd-title { font-size: 21px; line-height: 1.35; font-weight: var(--m-fw-bold); letter-spacing: var(--m-tracking-tight); }
+  .sd-headmeta { display: flex; align-items: center; flex-wrap: wrap; margin-top: 6px; font-size: var(--m-fs-body-sm); color: var(--text-secondary); }
+  .sd-tags { display: flex; align-items: center; margin-top: 10px; }
+  .sd-tags .tag + .tag { margin-left: 8px; }
+  .sd-card + .sd-card { margin-top: 12px; }
+  .sd-deadline { position: relative; overflow: hidden; padding-left: 18px; }
+  .sd-deadline::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--status-warning-fg); }
+  .sd-deadline-row { display: flex; align-items: center; }
+  .sd-deadline-icon { width: 38px; height: 38px; border-radius: 11px; background: var(--status-warning-bg); color: var(--status-warning-fg); display: flex; align-items: center; justify-content: center; flex: none; }
+  .sd-deadline-icon .icon { width: 20px; height: 20px; }
+  .sd-deadline-main { flex: 1; min-width: 0; margin-left: 12px; }
+  .sd-deadline-main .t { font-size: 15px; font-weight: var(--m-fw-semibold); }
+  .sd-deadline-main .s { margin-top: 2px; font-size: 12.5px; color: var(--status-warning-fg); font-weight: var(--m-fw-medium); }
+  .sd-progress { display: flex; align-items: center; margin-top: 12px; }
+  .sd-progress .bar { flex: 1; }
+  .sd-progress .num { margin-left: 10px; font-size: 12px; color: var(--text-secondary); font-weight: var(--m-fw-medium); }
+  .sd-facts { display: grid; grid-template-columns: repeat(2, 1fr); grid-gap: 0 12px; gap: 0 12px; }
+  .sd-fact { padding: 10px 0; border-top: 1px solid var(--border-subtle); }
+  .sd-fact:nth-child(1), .sd-fact:nth-child(2) { border-top: 0; padding-top: 2px; }
+  .sd-fact .k { font-size: 12px; color: var(--text-tertiary); }
+  .sd-fact .v { margin-top: 3px; font-size: 15px; font-weight: var(--m-fw-semibold); font-variant-numeric: tabular-nums; }
+  .sd-teacher { display: flex; align-items: center; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+  .sd-teacher .avatar { margin-right: 10px; }
+  .sd-teacher .t { font-size: 14px; font-weight: var(--m-fw-medium); }
+  .sd-teacher .s { font-size: 12px; color: var(--text-tertiary); margin-top: 1px; }
+  .sd-qrow .row-main { display: flex; flex-direction: column; }
+  .sd-qrow .row-sub { display: block; }
+  .sd-qnum { width: 30px; height: 30px; border-radius: 9px; background: var(--bg-sunken); color: var(--text-secondary); display: flex; align-items: center; justify-content: center; flex: none; font-size: 13.5px; font-weight: var(--m-fw-semibold); margin-right: 12px; font-variant-numeric: tabular-nums; }
+  .sd-qrow--todo .sd-qnum { background: var(--status-warning-bg); color: var(--status-warning-fg); }
+  .sd-qstate { display: inline-flex; align-items: center; font-size: 12px; color: var(--text-tertiary); flex: none; margin-left: 8px; }
+  .sd-qstate .icon { width: 14px; height: 14px; margin-right: 3px; }
+  .sd-qstate--done { color: var(--status-success-fg); }
+  .sd-qstate--todo { color: var(--status-warning-fg); }
+  .sd-qtype { display: inline-flex; align-items: center; font-size: 12px; color: var(--text-tertiary); }
+  .sd-qtype .tag { margin-right: 6px; }
+  .sd-listfoot { padding: 12px var(--m-card-pad); font-size: 12px; color: var(--text-tertiary); background: var(--bg-surface-2); border-top: 1px solid var(--border-subtle); }
+  .sd-note { margin-top: 12px; }
+  .sd-cardlink { display: inline-flex; align-items: center; min-height: var(--m-touch-min); padding: 0 2px; margin-right: -2px; }
+</style>
+</head>
+<body class="screen" data-screen="student-assignment-detail" data-bottom="actionbar">
+
+  <div class="app">
+    <header class="appbar appbar--left appbar--bordered">
+      <div class="appbar-side">
+        <button type="button" class="iconbtn" data-icon="back" aria-label="返回作业列表" data-goto="student-assignments"></button>
+      </div>
+      <h1 class="appbar-title">作业详情</h1>
+      <div class="appbar-actions">
+        <button type="button" class="iconbtn" aria-label="更多操作"><span data-icon="more"></span></button>
+      </div>
+    </header>
+
+    <main class="scroll">
+      <div class="sd-head">
+        <h2 class="sd-title">数据结构实验三：图的最短路径</h2>
+        <div class="sd-headmeta">计算机 2301 班 · 实验报告 + 编程题</div>
+        <div class="sd-tags">
+          <span class="tag tag--info"><i class="dot"></i>进行中</span>
+          <span class="tag tag--warning"><i class="dot"></i>今天 23:59 截止</span>
+        </div>
+      </div>
+
+      <div class="page">
+        <!-- 截止与进度 -->
+        <article class="card sd-deadline">
+          <div class="sd-deadline-row">
+            <span class="sd-deadline-icon" aria-hidden="true"><span data-icon="clock"></span></span>
+            <div class="sd-deadline-main">
+              <div class="t">今晚 23:59 截止</div>
+              <div class="s tnum">剩余 7 小时 27 分 · 请及时提交</div>
+            </div>
+            <span class="tag tag--warning">剩余 2 题</span>
+          </div>
+          <div class="sd-progress">
+            <div class="bar" role="progressbar" aria-label="作答进度" aria-valuemin="0" aria-valuemax="6" aria-valuenow="4"><i style="width:66%"></i></div>
+            <span class="num tnum">已答 4/6 题</span>
+          </div>
+        </article>
+
+        <!-- 考试信息 -->
+        <article class="card sd-card mt12">
+          <h3 class="card-title">考试信息</h3>
+          <div class="sd-facts mt12">
+            <div class="sd-fact"><div class="k">限时</div><div class="v">60 分钟</div></div>
+            <div class="sd-fact"><div class="k">满分</div><div class="v">100 分</div></div>
+            <div class="sd-fact"><div class="k">题数</div><div class="v">6 题（客观 4 · 编程 2）</div></div>
+            <div class="sd-fact"><div class="k">已用时间</div><div class="v">18 分钟</div></div>
+          </div>
+          <div class="sd-teacher">
+            <span class="avatar avatar--sm avatar--brand" aria-hidden="true">周</span>
+            <div class="grow">
+              <div class="t">周子轩</div>
+              <div class="s">任课教师 · 计算机学院</div>
+            </div>
+            <span class="tag tag--neutral">发布 10-15</span>
+          </div>
+        </article>
+
+        <div class="banner banner--info sd-note" role="note">
+          <span data-icon="info" aria-hidden="true"></span>
+          <div><b>作答须知</b>：可提前交卷；交卷后不可修改。第 5、6 题为编程题，建议扫码转到电脑上作答，手机端草稿会自动同步。</div>
+        </div>
+
+        <!-- 题目列表 -->
+        <div class="sec">
+          <h2>题目<span class="sec-note">共 6 题</span></h2>
+          <button type="button" class="link sd-cardlink" data-goto="student-answer-sheet">答题卡<span data-icon="chevron-right" aria-hidden="true"></span></button>
+        </div>
+
+        <div class="list">
+          <button type="button" class="rowitem rowitem--tap sd-qrow" data-goto="student-answer-objective" aria-label="第 1 题 图的邻接矩阵存储，客观题 5 分，已答">
+            <span class="sd-qnum" aria-hidden="true">1</span>
+            <span class="row-main">
+              <span class="row-title">图的邻接矩阵存储</span>
+              <span class="row-sub">客观题 · 5 分</span>
+            </span>
+            <span class="sd-qstate sd-qstate--done"><span data-icon="check-circle" aria-hidden="true"></span>已答</span>
+            <span class="chevron" data-icon="chevron-right" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="rowitem rowitem--tap sd-qrow" data-goto="student-answer-objective" aria-label="第 2 题 邻接表与稀疏图，客观题 5 分，已答">
+            <span class="sd-qnum" aria-hidden="true">2</span>
+            <span class="row-main">
+              <span class="row-title">邻接表与稀疏图</span>
+              <span class="row-sub">客观题 · 5 分</span>
+            </span>
+            <span class="sd-qstate sd-qstate--done"><span data-icon="check-circle" aria-hidden="true"></span>已答</span>
+            <span class="chevron" data-icon="chevron-right" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="rowitem rowitem--tap sd-qrow" data-goto="student-answer-objective" aria-label="第 3 题 Dijkstra 算法适用条件，客观题 5 分，已答">
+            <span class="sd-qnum" aria-hidden="true">3</span>
+            <span class="row-main">
+              <span class="row-title">Dijkstra 算法适用条件</span>
+              <span class="row-sub">客观题 · 5 分</span>
+            </span>
+            <span class="sd-qstate sd-qstate--done"><span data-icon="check-circle" aria-hidden="true"></span>已答</span>
+            <span class="chevron" data-icon="chevron-right" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="rowitem rowitem--tap sd-qrow" data-goto="student-answer-objective" aria-label="第 4 题 最短路径松弛过程，客观题 5 分，已答">
+            <span class="sd-qnum" aria-hidden="true">4</span>
+            <span class="row-main">
+              <span class="row-title">最短路径松弛过程</span>
+              <span class="row-sub">客观题 · 5 分</span>
+            </span>
+            <span class="sd-qstate sd-qstate--done"><span data-icon="check-circle" aria-hidden="true"></span>已答</span>
+            <span class="chevron" data-icon="chevron-right" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="rowitem rowitem--tap sd-qrow sd-qrow--todo" data-goto="student-answer-code" aria-label="第 5 题 实现 Dijkstra 求单源最短路，编程题 40 分，未答">
+            <span class="sd-qnum" aria-hidden="true">5</span>
+            <span class="row-main">
+              <span class="row-title">实现 Dijkstra 求单源最短路</span>
+              <span class="row-sub">编程题 · 40 分</span>
+            </span>
+            <span class="sd-qstate sd-qstate--todo"><span data-icon="alert" aria-hidden="true"></span>未答</span>
+            <span class="chevron" data-icon="chevron-right" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="rowitem rowitem--tap sd-qrow sd-qrow--todo" data-goto="student-answer-code" aria-label="第 6 题 输出路径并分析复杂度，编程题 40 分，未答">
+            <span class="sd-qnum" aria-hidden="true">6</span>
+            <span class="row-main">
+              <span class="row-title">输出路径并分析复杂度</span>
+              <span class="row-sub">编程题 · 40 分</span>
+            </span>
+            <span class="sd-qstate sd-qstate--todo"><span data-icon="alert" aria-hidden="true"></span>未答</span>
+            <span class="chevron" data-icon="chevron-right" aria-hidden="true"></span>
+          </button>
+          <div class="sd-listfoot">客观题在手机上即可完成；编程题支持扫码接力到电脑，进度实时同步。</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="actionbar">
+    <button type="button" class="btn btn--secondary" data-goto="student-answer-sheet">答题卡</button>
+    <button type="button" class="btn btn--primary" data-goto="student-answer-objective">继续作答</button>
+  </div>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

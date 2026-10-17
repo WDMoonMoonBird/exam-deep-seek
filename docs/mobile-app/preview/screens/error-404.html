@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>404 · 页面不存在 · Deadpan 判题</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+/* ============ 异常页共用视觉语言（error-404 / 403 / 500）：只用令牌 ============ */
+.err-scroll { display: flex; flex-direction: column; }
+.err-scroll > * { flex-shrink: 0; }
+.err-hero { position: relative; overflow: hidden; padding: 20px var(--m-gutter) 6px; text-align: center; }
+.err-halo { position: absolute; left: 50%; top: -48px; width: 236px; height: 236px; margin-left: -118px; border-radius: 50%; pointer-events: none; }
+.err-icon { position: relative; display: flex; align-items: center; justify-content: center; width: 54px; height: 54px; border-radius: 50%; margin: 0 auto; }
+.err-icon .icon { width: 25px; height: 25px; }
+.err-code { position: relative; margin-top: 8px; font-size: calc(var(--fs-display-1) * 2); line-height: 1; font-weight: 700; letter-spacing: -0.045em; font-variant-numeric: tabular-nums; }
+.err-title { position: relative; margin-top: 10px; font-size: var(--m-fs-title-1); line-height: var(--m-lh-title-1); font-weight: 700; letter-spacing: var(--m-tracking-tight); color: var(--text-strong); }
+.err-sub { position: relative; margin: 7px auto 0; max-width: 300px; font-size: var(--m-fs-body-sm); line-height: 1.65; color: var(--text-secondary); }
+
+.err-body { padding: 18px var(--m-gutter) 0; }
+.err-card { padding: 0 var(--m-card-pad); }
+.err-id { display: flex; align-items: center; padding: 14px 0 12px; border-bottom: 1px solid var(--border-subtle); }
+.err-id-main { flex: 1; min-width: 0; margin-left: 10px; }
+.err-id-name { font-size: var(--m-fs-body); font-weight: var(--m-fs-semibold); color: var(--text-primary); }
+.err-id-role { margin-top: 1px; font-size: var(--m-fs-caption); color: var(--text-tertiary); }
+.err-id .tag { flex: none; }
+.err-ctx { padding: 2px 0 6px; }
+.err-row { display: flex; align-items: center; padding: 10px 0; }
+.err-row + .err-row { border-top: 1px solid var(--border-subtle); }
+.err-row-main { flex: 1; min-width: 0; }
+.err-k { display: block; font-size: var(--m-fs-caption); color: var(--text-tertiary); }
+.err-v { display: block; margin-top: 2px; font-size: var(--m-fs-body-sm); font-weight: var(--m-fw-medium); color: var(--text-primary); word-break: break-all; }
+.err-v.mono { font-size: 12.5px; font-weight: 400; color: var(--text-secondary); }
+.err-copy { flex: none; margin-left: 8px; margin-right: -10px; color: var(--text-tertiary); }
+.err-actions { margin-top: 18px; }
+.err-actions .btn-row .btn { height: var(--m-btn-h); }
+.err-switch { display: flex; justify-content: center; margin-top: 6px; }
+.err-switch .btn { height: var(--m-touch-min); font-size: var(--m-fs-body-sm); }
+.err-note { margin-top: 14px; padding: 0 8px; text-align: center; font-size: var(--m-fs-caption); line-height: 1.6; color: var(--text-tertiary); }
+.err-retry { display: flex; align-items: center; justify-content: center; margin-top: 14px; font-size: var(--m-fs-caption); color: var(--text-tertiary); }
+.err-retry .spinner { width: 13px; height: 13px; border-width: 1.5px; margin-right: 6px; color: var(--text-tertiary); }
+.err-foot { margin-top: auto; padding: 22px var(--m-gutter) 4px; border-top: 1px solid var(--border-subtle); text-align: center; font-size: 11.5px; line-height: 1.7; color: var(--text-tertiary); }
+.err-foot a { display: inline-flex; align-items: center; min-height: var(--m-touch-min); padding: 0 6px; color: var(--text-link); font-weight: var(--m-fw-medium); }
+
+/* 语义色：用状态令牌着色（深色主题自动翻转），状态不只靠颜色 —— 图标 + 文案 + 编号 */
+.err-hero--info .err-halo { background: radial-gradient(circle, var(--status-info-bg), transparent 68%); }
+.err-hero--info .err-icon { background: var(--status-info-bg); color: var(--status-info-fg); }
+.err-hero--info .err-code { color: var(--text-brand); }
+.err-hero--warning .err-halo { background: radial-gradient(circle, var(--status-warning-bg), transparent 68%); }
+.err-hero--warning .err-icon { background: var(--status-warning-bg); color: var(--status-warning-fg); }
+.err-hero--warning .err-code { color: var(--status-warning-fg); }
+.err-hero--danger .err-halo { background: radial-gradient(circle, var(--status-danger-bg), transparent 68%); }
+.err-hero--danger .err-icon { background: var(--status-danger-bg); color: var(--status-danger-fg); }
+.err-hero--danger .err-code { color: var(--status-danger-fg); }
+
+</style>
+</head>
+<body class="screen" data-screen="error-404" data-bottom="none">
+  <div class="app">
+    <header class="appbar appbar--left appbar--solid appbar--bordered">
+      <div class="appbar-side"><button type="button" class="iconbtn" data-icon="back" aria-label="返回上一页" data-goto="teacher-home"></button></div>
+      <h1 class="appbar-title">页面不存在</h1>
+      <div class="appbar-actions"><button type="button" class="iconbtn" data-icon="info" aria-label="查看使用文档" data-goto="public-doc"></button></div>
+    </header>
+
+    <main class="scroll err-scroll">
+      <section class="err-hero err-hero--info">
+        <span class="err-halo" aria-hidden="true"></span>
+        <span class="err-icon" aria-hidden="true" data-icon="search"></span>
+        <div class="err-code">404</div>
+        <h1 class="err-title">页面不存在或已被移动</h1>
+        <p class="err-sub">这个地址找不到对应的页面，可能已被移动或删除。你的登录状态仍然有效。</p>
+      </section>
+
+      <div class="err-body">
+        <div class="card err-card">
+          <div class="err-id">
+            <span class="avatar avatar--sm" aria-hidden="true">周</span>
+            <div class="err-id-main">
+              <div class="err-id-name">周子轩</div>
+              <div class="err-id-role">教师 · Deadpan 大学 · T2026001</div>
+            </div>
+            <span class="tag tag--success"><i class="dot"></i>登录正常</span>
+          </div>
+          <div class="err-ctx">
+          <div class="err-row">
+            <div class="err-row-main">
+              <span class="err-k">当前地址</span>
+              <span class="err-v mono">/teacher/assignments/1024/edit</span>
+            </div>
+            <button type="button" class="iconbtn err-copy" data-icon="copy" aria-label="复制当前地址"></button>
+          </div>
+          </div>
+        </div>
+
+        <div class="err-actions">
+          <div class="btn-row">
+          <button type="button" class="btn btn--primary" data-goto="public-landing">回到首页</button>
+          <button type="button" class="btn btn--secondary" data-goto="teacher-home">返回上一页</button>
+        </div>
+        </div>
+        
+        <p class="err-note">页面编号 404 · 如果从外部链接进入，请确认链接是否完整。</p>
+      </div>
+
+      <footer class="err-foot">
+        Deadpan 判题 v2.1.0 · 页面不存在<br>找不到需要的内容？<a href="public-doc.html" data-goto="public-doc">查看使用文档</a>
+      </footer>
+    </main>
+  </div>
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

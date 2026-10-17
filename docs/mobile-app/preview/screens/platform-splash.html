@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f16">
+<title>启动屏 · Deadpan 判题</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+/* ============ Android 启动屏（platform-splash）============
+ * 深色品牌面：不随浅/深主题翻转（启动屏在两种主题下都是同一张深色品牌画面）。
+ * 隐藏系统状态栏由页面自绘（真实冷启动时由壳隐藏）；Android 手势条由 ?platform=android 体现。
+ */
+body.sp-screen { padding-top: 0; background: var(--gray-950); }
+body.sp-screen .statusbar { display: none; }
+.sp-app { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center;
+  padding: 84px var(--m-gutter) calc(30px + var(--m-safe-bottom)); overflow: hidden; background: var(--gray-950); }
+.sp-glow { position: absolute; left: 50%; top: -190px; width: 520px; height: 520px; margin-left: -260px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle at center, var(--brand-800) 0%, transparent 62%); opacity: .75; }
+.sp-main { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; margin: auto 0; }
+.sp-logo { width: 88px; height: 88px; border-radius: 27px; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(158deg, var(--brand-500) 0%, var(--brand-700) 100%);
+  box-shadow: 0 24px 64px -16px var(--brand-800); }
+.sp-logo .icon { width: 46px; height: 46px; stroke-width: 1.9; color: var(--gray-0); }
+.sp-name { margin-top: 24px; font-size: calc(var(--fs-display-1) - 2px); line-height: 1.2; font-weight: 700; letter-spacing: var(--m-tracking-tight); color: var(--gray-0); }
+.sp-name em { font-style: normal; color: var(--brand-300); }
+.sp-slogan { margin-top: 8px; font-size: var(--m-fs-body); letter-spacing: 0.14em; color: var(--gray-300); }
+.sp-ver { margin-top: 18px; display: inline-flex; align-items: center; height: 26px; padding: 0 12px; border-radius: var(--m-radius-chip);
+  background: var(--gray-800); color: var(--gray-300); font-size: 11.5px; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+.sp-ver i { width: 5px; height: 5px; border-radius: 50%; background: var(--green-200); margin-right: 6px; }
+
+.sp-bottom { position: relative; width: 100%; max-width: 300px; }
+.sp-loading { display: flex; align-items: baseline; justify-content: space-between; }
+.sp-loading span:first-child { font-size: var(--m-fs-body-sm); color: var(--gray-300); }
+.sp-pct { font-size: var(--m-fs-caption); color: var(--gray-400); font-variant-numeric: tabular-nums; }
+.sp-progress { height: 4px; margin-top: 9px; border-radius: 999px; background: var(--gray-800); overflow: hidden; }
+.sp-progress i { display: block; height: 100%; width: 62%; border-radius: 999px; background: linear-gradient(90deg, var(--brand-500), var(--brand-300)); animation: spGrow 1.6s var(--m-ease-out) both; }
+@keyframes spGrow { from { width: 8%; } to { width: 62%; } }
+.sp-hint { margin-top: 12px; text-align: center; font-size: 11.5px; line-height: 1.6; color: var(--gray-400); }
+.sp-org { margin-top: 5px; text-align: center; font-size: 11px; color: var(--gray-450); letter-spacing: 0.02em; }
+
+/* Android 手势条：仅 Android（?platform=android��出现；iOS 不显示 */
+.sp-homebar { display: none; position: absolute; left: 50%; bottom: 9px; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: var(--gray-500); opacity: .9; }
+html[data-platform="android"] .sp-homebar { display: block; }
+
+@media (prefers-reduced-motion: reduce) { .sp-progress i { animation: none; width: 62%; } }
+@media (max-height: 700px) {
+  .sp-app { padding-top: 76px; }
+  .sp-logo { width: 76px; height: 76px; border-radius: 23px; }
+  .sp-logo .icon { width: 40px; height: 40px; }
+  .sp-name { margin-top: 18px; }
+}
+</style>
+</head>
+<body class="screen sp-screen" data-screen="platform-splash" data-bottom="none">
+  <div class="app">
+    <div class="sp-app">
+      <span class="sp-glow" aria-hidden="true"></span>
+
+      <div class="sp-main">
+        <span class="sp-logo" aria-hidden="true"><span data-icon="logo"></span></span>
+        <h1 class="sp-name">Deadpan <em>判题</em></h1>
+        <p class="sp-slogan">教学评测，随时可用</p>
+        <span class="sp-ver"><i aria-hidden="true"></i>v2.1.0 · 构建 20261017</span>
+      </div>
+
+      <div class="sp-bottom">
+        <div class="sp-loading" role="status" aria-live="polite">
+          <span>正在检查更新…</span>
+          <span class="sp-pct">62%</span>
+        </div>
+        <div class="sp-progress" role="progressbar" aria-label="检查更新进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="62"><i></i></div>
+        <p class="sp-hint">首次启动约需 3 秒 · 即将进入工作台</p>
+        <p class="sp-org">Deadpan 大学 · 信息中心 · 仅限校内网</p>
+      </div>
+
+      <span class="sp-homebar" aria-hidden="true"></span>
+    </div>
+  </div>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

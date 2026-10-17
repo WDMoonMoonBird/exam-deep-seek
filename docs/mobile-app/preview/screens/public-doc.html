@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>使用文档 · Deadpan 判题</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+/* ============ 使用文档（public-doc）页内样式：只用令牌 ============ */
+.doc-search { padding: 8px var(--m-gutter) 0; }
+.doc-search .searchbar { height: var(--m-touch-min); }
+
+.doc-toc { margin: 12px var(--m-gutter) 0; padding: 0; overflow: hidden; }
+.doc-toc-head { display: flex; align-items: center; justify-content: space-between; padding: 13px var(--m-card-pad) 10px; }
+.doc-toc-head h2 { font-size: var(--m-fs-body-sm); font-weight: var(--m-fw-semibold); color: var(--text-secondary); letter-spacing: 0.01em; }
+.doc-toc-head span { font-size: var(--m-fs-caption); color: var(--text-tertiary); }
+.doc-toc-item { display: flex; align-items: center; width: 100%; text-align: left; min-height: 48px; padding: 8px var(--m-card-pad); position: relative; }
+.doc-toc-item + .doc-toc-item { box-shadow: inset 0 1px 0 var(--border-subtle); }
+.doc-toc-item:active { background: var(--bg-hover); }
+.doc-toc-item .idx { flex: none; width: 24px; font-size: 11px; font-weight: 600; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.doc-toc-item .grow { display: flex; flex-direction: column; min-width: 0; }
+.doc-toc-item .name { font-size: var(--m-fs-body-sm); font-weight: var(--m-fw-medium); color: var(--text-primary); }
+.doc-toc-item .sub { margin-top: 1px; font-size: 11.5px; color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-toc-item .icon { width: 17px; height: 17px; color: var(--text-disabled); flex: none; }
+.doc-toc-item.active { background: var(--bg-selected); }
+.doc-toc-item.active .idx, .doc-toc-item.active .name { color: var(--text-brand); }
+.doc-toc-item.active .name { font-weight: var(--m-fw-semibold); }
+.doc-toc-item.active::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--brand-600); }
+.doc-toc-item .cur { margin-left: 8px; font-size: 10.5px; font-weight: 600; color: var(--text-brand); background: var(--bg-selected); border-radius: 5px; padding: 2px 5px; flex: none; }
+
+/* 文章 */
+.doc-article { padding: 22px var(--m-gutter) 0; }
+.doc-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: var(--text-brand); text-transform: uppercase; }
+.doc-h1 { margin-top: 7px; font-size: var(--m-fs-title-1); line-height: 1.35; font-weight: 700; letter-spacing: var(--m-tracking-tight); color: var(--text-strong); }
+.doc-meta { display: flex; align-items: center; flex-wrap: wrap; margin-top: 8px; font-size: var(--m-fs-caption); color: var(--text-tertiary); }
+.doc-meta i { width: 3px; height: 3px; border-radius: 50%; background: var(--text-disabled); margin: 0 7px; }
+.doc-body { margin-top: 18px; font-size: var(--m-fs-body); line-height: 1.75; color: var(--text-primary); }
+.doc-body p { color: var(--text-secondary); }
+.doc-body p + p { margin-top: 10px; }
+.doc-body b, .doc-body strong { color: var(--text-primary); font-weight: var(--m-fw-semibold); }
+.doc-body h2 { display: flex; align-items: center; margin-top: 26px; font-size: var(--m-fs-title-2); line-height: 1.4; font-weight: 700; letter-spacing: var(--m-tracking-tight); color: var(--text-strong); }
+.doc-body h2 .no { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin-right: 8px; border-radius: 8px; background: var(--bg-selected); color: var(--text-brand); font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.doc-body h2:first-child { margin-top: 0; }
+.doc-tip { margin-top: 14px; }
+
+.doc-steps { margin-top: 12px; }
+.doc-step { position: relative; display: flex; align-items: flex-start; padding: 0 0 14px 38px; }
+.doc-step:last-child { padding-bottom: 0; }
+.doc-step::after { content: ""; position: absolute; left: 11px; top: 26px; bottom: 2px; width: 1.5px; background: var(--border-default); }
+.doc-step:last-child::after { display: none; }
+.doc-step-no { position: absolute; left: 0; top: 1px; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--bg-selected); color: var(--text-brand); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.doc-step-main { flex: 1; min-width: 0; font-size: var(--m-fs-body); line-height: 1.65; color: var(--text-secondary); }
+.doc-step-main b { color: var(--text-primary); font-weight: var(--m-fw-semibold); }
+.doc-step-main .sub { display: block; margin-top: 2px; font-size: var(--m-fs-caption); color: var(--text-tertiary); }
+
+.doc-code { margin-top: 14px; }
+.doc-code .codebody { max-height: none; }
+.doc-code .codeline { padding-right: 14px; }
+.doc-code .tk-com { margin-left: 6px; }
+
+.doc-list { margin-top: 10px; }
+.doc-list li { position: relative; padding-left: 16px; font-size: var(--m-fs-body); line-height: 1.7; color: var(--text-secondary); }
+.doc-list li + li { margin-top: 6px; }
+.doc-list li::before { content: ""; position: absolute; left: 2px; top: 0.66em; width: 5px; height: 5px; border-radius: 50%; background: var(--border-strong); }
+
+/* 上一节 / 下一节 */
+.doc-nav { margin: 26px var(--m-gutter) 0; }
+.doc-nav-title { margin-bottom: 8px; font-size: var(--m-fs-caption); font-weight: 600; color: var(--text-tertiary); letter-spacing: 0.06em; }
+.doc-nav .rowitem { min-height: 62px; }
+.doc-nav .row-main { display: flex; flex-direction: column; min-width: 0; }
+.doc-nav .row-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-nav .row-sub { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-nav .dir { display: block; font-size: 11px; font-weight: 600; color: var(--text-tertiary); letter-spacing: 0.04em; }
+.doc-nav .row-title { margin-top: 1px; font-size: var(--m-fs-body-sm); }
+.doc-nav .row-sub { margin-top: 1px; font-size: 11.5px; }
+.doc-nav .icon { width: 18px; height: 18px; color: var(--text-tertiary); flex: none; margin-left: 10px; }
+
+.doc-foot { margin-top: 24px; padding: 18px var(--m-gutter) 4px; border-top: 1px solid var(--border-subtle); text-align: center; }
+.doc-foot p { font-size: 11.5px; line-height: 1.7; color: var(--text-tertiary); }
+.doc-foot .v { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 374px) {
+  .doc-h1 { font-size: var(--m-fs-title-2); }
+}
+</style>
+</head>
+<body class="screen" data-screen="public-doc" data-bottom="none">
+  <div class="app">
+    <header class="appbar appbar--left appbar--solid appbar--bordered">
+      <div class="appbar-side"><button type="button" class="iconbtn" data-icon="back" aria-label="返回官网" data-goto="public-landing"></button></div>
+      <h1 class="appbar-title">使用文档</h1>
+      <div class="appbar-actions">
+        <button type="button" class="iconbtn" data-icon="user" aria-label="前往登录" data-goto="public-login"></button>
+      </div>
+    </header>
+
+    <main class="scroll">
+      <!-- 搜索 -->
+      <div class="doc-search">
+        <div class="searchbar">
+          <span data-icon="search" aria-hidden="true"></span>
+          <input id="doc-q" type="search" placeholder="搜索文档：布置作业、审核、导出…" aria-label="搜索文档">
+        </div>
+      </div>
+
+      <!-- 目录卡 -->
+      <nav class="card doc-toc" aria-label="文档目录">
+        <div class="doc-toc-head"><h2>本篇目录</h2><span>教师使用文档 · 共 4 节</span></div>
+        <div data-tabgroup="doc-toc">
+          <button type="button" class="doc-toc-item active" data-tab="quickstart" aria-current="true">
+            <span class="idx">01</span>
+            <span class="grow"><span class="name">快速开始</span><span class="sub">登录、布置第一份作业、完成一次审核</span></span>
+            <span class="cur">当前</span>
+          </button>
+          <button type="button" class="doc-toc-item" data-tab="classes">
+            <span class="idx">02</span>
+            <span class="grow"><span class="name">班级管理</span><span class="sub">建班、导入名单、教学团队协作</span></span>
+            <span data-icon="chevron-right" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="doc-toc-item" data-tab="assign">
+            <span class="idx">03</span>
+            <span class="grow"><span class="name">作业布置</span><span class="sub">选题、设置截止时间、催交与导出</span></span>
+            <span data-icon="chevron-right" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="doc-toc-item" data-tab="review">
+            <span class="idx">04</span>
+            <span class="grow"><span class="name">评分审核</span><span class="sub">AI 评分说明、改分、批量发布与撤回</span></span>
+            <span data-icon="chevron-right" aria-hidden="true"></span>
+          </button>
+        </div>
+      </nav>
+
+      <!-- 文章 -->
+      <article class="doc-article">
+        <div class="doc-eyebrow">第 1 节 · 快速开始</div>
+        <h1 class="doc-h1">3 分钟完成第一次布置与审核</h1>
+        <div class="doc-meta">
+          <span>更新于 2026-10-17</span><i aria-hidden="true"></i><span>阅读约 8 分钟</span><i aria-hidden="true"></i><span>适用于 v2.1.0</span>
+        </div>
+
+        <div class="doc-body">
+          <p>Deadpan 判题把「建题 → 布置 → 学生提交 → AI 评分 → 教师终审 → 发布成绩」收进一条链路。本页带你用 3 分钟走完第一次布置与审核。</p>
+
+          <h2><span class="no" aria-hidden="true">1</span>登录并进入工作台</h2>
+          <p>打开控制台，使用学校分配的工号登录；教师与学生共用同一个入口，系统会按账号角色自动进入对应端。</p>
+          <ol class="doc-steps">
+            <li class="doc-step">
+              <span class="doc-step-no" aria-hidden="true">1</span>
+              <div class="doc-step-main"><b>输入工号与密码</b>，例如 T2026001；学生使用学号。<span class="sub">忘记密码请联系任课教师或信息中心重置。</span></div>
+            </li>
+            <li class="doc-step">
+              <span class="doc-step-no" aria-hidden="true">2</span>
+              <div class="doc-step-main"><b>登录后默认进入「工作台」</b>，顶部「审核」角标显示待处理份数。<span class="sub">示例学期：待审核 12 份、进行中 3 份。</span></div>
+            </li>
+            <li class="doc-step">
+              <span class="doc-step-no" aria-hidden="true">3</span>
+              <div class="doc-step-main"><b>首次使用建议开启通知提醒</b>，提交与评分完成会实时推送。<span class="sub">入口：「我的」→ 通知提醒。</span></div>
+            </li>
+          </ol>
+          <div class="banner banner--info doc-tip"><span data-icon="info" aria-hidden="true"></span><div><b>小提示</b>：手机端可以完成审核与催交，但编辑题目、上传标准工程包等操作请在电脑端进行。</div></div>
+
+          <h2><span class="no" aria-hidden="true">2</span>布置第一份作业</h2>
+          <p>进入「作业」标签页，点击右上角「布置作业」，按 4 步向导完成设置：基本信息 → 选题 → 班级 → 确认。</p>
+          <ol class="doc-steps">
+            <li class="doc-step">
+              <span class="doc-step-no" aria-hidden="true">1</span>
+              <div class="doc-step-main"><b>填写名称与截止时间</b>，例如「数据结构实验三：图的最短路径」，截止 2026-10-20 23:59。<span class="sub">建议至少提前 3 天发布，给学生留出缓冲。</span></div>
+            </li>
+            <li class="doc-step">
+              <span class="doc-step-no" aria-hidden="true">2</span>
+              <div class="doc-step-main"><b>从题库选择题目并指定班级</b>，系统会按班级名单生成提交清单。<span class="sub">计算机 2301 班 · 45 人 · 6 题。</span></div>
+            </li>
+            <li class="doc-step">
+              <span class="doc-step-no" aria-hidden="true">3</span>
+              <div class="doc-step-main"><b>确认发布</b>，学生端立即出现待办；提交后 AI 自动评分并推送到审核队列。<span class="sub">发布前可保存草稿，草稿不计入学生待办。</span></div>
+            </li>
+          </ol>
+
+          <div class="codebox doc-code">
+            <div class="codebar">
+              <span class="file"><span data-icon="file" aria-hidden="true"></span><span>评分标准.yaml</span><span class="badge-file">实训题</span></span>
+              <span>示例 · 可自定义</span>
+            </div>
+            <div class="codebody">
+              <div class="codeline"><span class="ln">1</span><span class="tk-key">功能完整性</span>: <span class="tk-num">50</span>  <span class="tk-com"># 增删改查 30</span></div>
+              <div class="codeline"><span class="ln">2</span><span class="tk-key">代码规范</span>: <span class="tk-num">25</span>    <span class="tk-com"># 路由 12 / 注释</span></div>
+              <div class="codeline"><span class="ln">3</span><span class="tk-key">健壮性</span>: <span class="tk-num">25</span>      <span class="tk-com"># 异常提示 8</span></div>
+              <div class="codeline"><span class="ln">4</span><span class="tk-key">总分</span>: <span class="tk-num">100</span>       <span class="tk-com"># 合计自动校验</span></div>
+              <div class="codeline"><span class="ln">5</span></div>
+              <div class="codeline"><span class="ln">6</span><span class="tk-com"># 未上传标准包 = 开放性题目</span></div>
+            </div>
+          </div>
+          <div class="banner banner--warning doc-tip"><span data-icon="alert" aria-hidden="true"></span><div><b>注意</b>：实训题的标准工程包只能在电脑端上传；未上传时 AI 不会臆造标准答案，只按评分标准做评价式评分。</div></div>
+
+          <h2><span class="no" aria-hidden="true">3</span>审核并发布成绩</h2>
+          <p>学生提交后，AI 在 1–2 分钟内完成评分并推送到「评分审核」。你只需要逐份确认或改分：</p>
+          <ul class="doc-list">
+            <li>队列页上下滑动切换学生，长按可快速通过；</li>
+            <li>改分与评语会保留在审核记录里，学生只看到终审结果；</li>
+            <li>批量发布后学生立即可见，且不可撤销 —— 发布前请先看低分份数。</li>
+          </ul>
+          <div class="banner banner--danger doc-tip"><span data-icon="lock" aria-hidden="true"></span><div><b>高风险操作</b>：批量发布不可撤销。建议先处理分数低于 60 或标记异常的提交，再发布其余部分。</div></div>
+        </div>
+      </article>
+
+      <!-- 上一节 / 下一节 -->
+      <nav class="doc-nav" aria-label="章节导航">
+        <div class="doc-nav-title">继续阅读</div>
+        <div class="list">
+          <button type="button" class="rowitem rowitem--tap" style="width:100%;text-align:left" data-goto="public-landing">
+            <span class="rowicon rowicon--neutral" aria-hidden="true" data-icon="arrow-left"></span>
+            <span class="row-main">
+              <span class="dir">上一篇 · 文档首页</span>
+              <span class="row-title">Deadpan 判题能做什么</span>
+              <span class="row-sub">三种角色、六步评分流程</span>
+            </span>
+          </button>
+          <button type="button" class="rowitem rowitem--tap" style="width:100%;text-align:left">
+            <span class="row-main">
+              <span class="dir">下一篇 · 第 2 节</span>
+              <span class="row-title">班级管理：把学生加进你的班级</span>
+              <span class="row-sub">建班、导入名单、教学团队协作</span>
+            </span>
+            <span data-icon="arrow-right" aria-label="加载下一节"></span>
+          </button>
+        </div>
+      </nav>
+
+      <footer class="doc-foot">
+        <p>Deadpan 判题 · 教师使用文档 <span class="v">v2.1.0</span></p>
+        <p>文档内容与产品版本同步更新 · 最后更新 2026-10-17</p>
+      </footer>
+    </main>
+  </div>
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>实时监控 · Deadpan 判题</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+/* ============ 实时监控（admin-monitor）页内样式：只用令牌 ============ */
+.am-head { display: flex; align-items: flex-start; padding: 14px var(--m-gutter) 0; }
+.am-title { font-size: var(--m-fs-title-1); line-height: 1.3; font-weight: 700; letter-spacing: var(--m-tracking-tight); color: var(--text-strong); }
+.am-sub { margin-top: 4px; font-size: var(--m-fs-caption); color: var(--text-tertiary); }
+.am-head-actions { display: flex; align-items: center; flex: none; margin-left: 10px; margin-top: 2px; }
+.am-live { height: 24px; margin-right: 4px; }
+.am-live .dot { animation: amPulse 1.8s ease-in-out infinite; }
+@keyframes amPulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .am-live .dot { animation: none; } }
+
+.am-tip { margin-top: 14px; }
+
+/* 在线人数 */
+.am-online { margin-top: 12px; }
+.am-online-label { font-size: var(--m-fs-body-sm); font-weight: var(--m-fw-medium); color: var(--text-secondary); }
+.am-online-num { display: flex; align-items: flex-end; margin-top: 6px; }
+.am-online-num b { font-size: calc(var(--fs-display-1) * 1.4); line-height: 0.95; font-weight: 700; letter-spacing: -0.03em; color: var(--text-strong); font-variant-numeric: tabular-nums; }
+.am-online-num .unit { margin: 0 0 4px 4px; font-size: var(--m-fs-body-sm); color: var(--text-tertiary); }
+.am-delta { display: inline-flex; align-items: center; margin: 0 0 6px auto; font-size: var(--m-fs-caption); color: var(--status-success-fg); font-weight: var(--m-fw-medium); }
+.am-delta .icon { width: 13px; height: 13px; margin-right: 2px; }
+.am-trend { display: flex; align-items: flex-end; height: 54px; margin-top: 14px; }
+.am-trend i { flex: 1; min-width: 0; height: calc(var(--h, 40) * 1%); border-radius: 3px 3px 0 0; background: var(--score-track); }
+.am-trend i + i { margin-left: 4px; }
+.am-trend i.is-peak { background: var(--brand-300); }
+.am-trend i.is-now { background: var(--brand-600); }
+.am-axis { display: flex; justify-content: space-between; margin-top: 5px; font-size: 10.5px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.am-online-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding-top: 11px; border-top: 1px solid var(--border-subtle); font-size: var(--m-fs-caption); color: var(--text-tertiary); }
+.am-online-foot b { color: var(--text-secondary); font-weight: var(--m-fw-medium); }
+
+/* 评分队列 */
+.am-queue { margin-top: 12px; }
+.am-metrics { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--border-subtle); }
+.am-metric { position: relative; padding: 0 6px 0 14px; }
+.am-metric:first-child { padding-left: 0; }
+.am-metric + .am-metric::before { content: ""; position: absolute; left: 0; top: 3px; bottom: 3px; width: 1px; background: var(--border-subtle); }
+.am-metric b { display: block; font-size: 20px; font-weight: 650; line-height: 1.15; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; color: var(--text-strong); }
+.am-metric b small { font-size: 10.5px; font-weight: 500; color: var(--text-tertiary); margin-left: 1px; }
+.am-metric span { display: block; margin-top: 2px; font-size: 11.5px; color: var(--text-tertiary); }
+.am-progress { margin-top: 14px; }
+.am-progress-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; font-size: var(--m-fs-caption); color: var(--text-secondary); }
+.am-progress-head b { color: var(--text-primary); font-weight: var(--m-fw-semibold); font-variant-numeric: tabular-nums; }
+.am-queue-foot { display: flex; align-items: center; margin-top: 10px; font-size: 11.5px; color: var(--text-tertiary); }
+.am-queue-foot .tag { margin-left: auto; }
+
+/* 服务状态 */
+.am-services { margin-top: 12px; padding-top: 4px; padding-bottom: 4px; }
+.am-service { display: flex; align-items: center; padding: 10px 0; }
+.am-service + .am-service { border-top: 1px solid var(--border-subtle); }
+.am-service-ico { width: 30px; height: 30px; border-radius: 9px; background: var(--bg-sunken); color: var(--text-secondary); display: flex; align-items: center; justify-content: center; flex: none; margin-right: 10px; }
+.am-service-ico .icon { width: 16px; height: 16px; }
+.am-service-main { flex: 1; min-width: 0; }
+.am-service-main b { font-size: var(--m-fs-body-sm); font-weight: var(--m-fw-medium); color: var(--text-primary); }
+.am-service-main span { display: block; margin-top: 1px; font-size: 11.5px; color: var(--text-tertiary); }
+
+/* 日志流 */
+.am-log { margin: 0 var(--m-gutter); }
+.am-logbody { max-height: none; padding: 6px 0 8px; }
+.am-logbody .codeline { display: flex; align-items: flex-start; width: 100%; min-width: 0; white-space: normal; padding: 4px 14px 4px 12px; }
+.am-logbody .codeline .ln { position: static; width: 64px; padding-right: 12px; color: var(--gray-400); font-size: 10.5px; line-height: 1.95; }
+.am-lv { flex: none; width: 48px; font-size: 10.5px; font-weight: 600; line-height: 1.9; letter-spacing: 0.02em; }
+.am-lv--info { color: var(--green-200); }
+.am-lv--warn { color: var(--amber-200); }
+.am-lv--error { color: var(--red-200); }
+.am-msg { flex: 1; min-width: 0; color: var(--gray-300); font-size: 11.5px; line-height: 1.75; }
+.am-msg b { color: var(--gray-0); font-weight: 600; }
+.am-log-foot { margin: 8px var(--m-gutter) 0; font-size: 11px; line-height: 1.6; color: var(--text-tertiary); }
+
+.am-foot { margin-top: 4px; padding: 16px var(--m-gutter) 0; text-align: center; font-size: 11px; color: var(--text-tertiary); }
+</style>
+</head>
+<body class="screen" data-screen="admin-monitor" data-bottom="tabbar">
+  <div data-tabbar="admin" data-active="monitor"></div>
+
+  <div class="app">
+    <main class="scroll">
+      <header class="am-head">
+        <div class="grow">
+          <h1 class="am-title">实时监控</h1>
+          <div class="am-sub">服务器运行状态 · 每 30 秒自动刷新</div>
+        </div>
+        <div class="am-head-actions">
+          <span class="tag tag--success am-live"><i class="dot"></i>实时</span>
+          <button type="button" class="iconbtn" aria-label="刷新监控数据"><span data-icon="refresh"></span></button>
+        </div>
+      </header>
+
+      <div class="page am-tip">
+        <div class="readonly-tip">
+          <span data-icon="info" aria-hidden="true"></span>
+          <div>手机上仅查看：配置修改、进程重启与完整日志下载请在电脑端完成。</div>
+        </div>
+      </div>
+
+      <!-- 在线人数 + 趋势 -->
+      <div class="page">
+        <div class="card am-online">
+          <div class="between">
+            <span class="am-online-label">当前在线</span>
+            <span class="tag tag--success"><i class="dot"></i>实时</span>
+          </div>
+          <div class="am-online-num">
+            <b class="tnum">318</b><span class="unit">人</span>
+            <span class="am-delta"><span data-icon="arrow-up" aria-hidden="true"></span>较 1 小时前 +26</span>
+          </div>
+          <div class="am-trend" role="img" aria-label="过去 30 分钟在线人数趋势：15:30 为 292 人，16:30 为 318 人，峰值 402 人出现在 15:20">
+            <i style="--h:40" aria-hidden="true"></i><i style="--h:46" aria-hidden="true"></i><i style="--h:42" aria-hidden="true"></i><i style="--h:50" aria-hidden="true"></i><i style="--h:55" aria-hidden="true"></i><i style="--h:52" aria-hidden="true"></i><i style="--h:58" aria-hidden="true"></i><i style="--h:61" aria-hidden="true"></i><i style="--h:56" aria-hidden="true"></i><i style="--h:64" aria-hidden="true"></i><i style="--h:68" aria-hidden="true"></i><i style="--h:66" aria-hidden="true"></i><i style="--h:72" aria-hidden="true"></i><i class="is-peak" style="--h:100" aria-hidden="true"></i><i style="--h:74" aria-hidden="true"></i><i style="--h:79" aria-hidden="true"></i><i style="--h:84" aria-hidden="true"></i><i class="is-now" style="--h:88" aria-hidden="true"></i>
+          </div>
+          <div class="am-axis"><span>15:30</span><span>16:00</span><span>16:30</span></div>
+          <div class="am-online-foot"><span>峰值 <b>402</b>（15:20）</span><span>学生 <b>286</b> · 教师 <b>32</b></span></div>
+        </div>
+      </div>
+
+      <!-- 评分队列 -->
+      <div class="page">
+        <div class="card am-queue">
+          <div class="between">
+            <span class="card-title">评分队列</span>
+            <span class="tag tag--info"><i class="dot"></i>进行中 23</span>
+          </div>
+          <div class="am-metrics">
+            <div class="am-metric"><b>1,203</b><span>今日任务</span></div>
+            <div class="am-metric"><b>1,180</b><span>已完成</span></div>
+            <div class="am-metric"><b>186<small>ms</small></b><span>平均响应</span></div>
+          </div>
+          <div class="am-progress">
+            <div class="am-progress-head"><span>任务完成率</span><b>98.1%</b></div>
+            <div class="bar"><i style="width:98%"></i></div>
+          </div>
+          <div class="am-queue-foot">
+            <span>预计 4 分钟内清空</span>
+            <span class="tag tag--neutral">8 并发 Worker</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 服务状态 -->
+      <div class="page">
+        <div class="card am-services">
+          <div class="am-service">
+            <span class="am-service-ico" aria-hidden="true" data-icon="link"></span>
+            <div class="am-service-main"><b>API 网关</b><span>api.deadpan.edu.cn · 响应 42ms</span></div>
+            <span class="tag tag--success"><i class="dot"></i>正常</span>
+          </div>
+          <div class="am-service">
+            <span class="am-service-ico" aria-hidden="true" data-icon="activity"></span>
+            <div class="am-service-main"><b>评分 Worker</b><span>8 个进程在线 · CPU 38%</span></div>
+            <span class="tag tag--success"><i class="dot"></i>正常</span>
+          </div>
+          <div class="am-service">
+            <span class="am-service-ico" aria-hidden="true" data-icon="folder"></span>
+            <div class="am-service-main"><b>数据库</b><span>MySQL 8.0 · 连接 37 / 200</span></div>
+            <span class="tag tag--success"><i class="dot"></i>正常</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 日志流 -->
+      <div class="sec"><h2>日志流</h2><span class="sec-note">最近 5 条 · 自动滚动</span></div>
+      <div class="codebox am-log">
+        <div class="codebar">
+          <span class="file"><span data-icon="file" aria-hidden="true"></span><span>grading-worker.log</span></span>
+          <span>LIVE · 30s</span>
+        </div>
+        <div class="codebody am-logbody">
+          <div class="codeline"><span class="ln">16:32:10</span><span class="am-lv am-lv--info">INFO</span><span class="am-msg">评分任务 <b>#1203</b> 完成 · 92 分（2.1s）</span></div>
+          <div class="codeline"><span class="ln">16:31:48</span><span class="am-lv am-lv--warn">WARN</span><span class="am-msg">评分队列积压 <b>23</b> 个任务，已扩容 2 个 Worker</span></div>
+          <div class="codeline"><span class="ln">16:31:05</span><span class="am-lv am-lv--error">ERROR</span><span class="am-msg">POST /api/grading 超时 · 已自动重试并成功</span></div>
+          <div class="codeline"><span class="ln">16:30:52</span><span class="am-lv am-lv--info">INFO</span><span class="am-msg">在线用户 <b>318</b> · 心跳检测正常</span></div>
+          <div class="codeline"><span class="ln">16:30:31</span><span class="am-lv am-lv--info">INFO</span><span class="am-msg">AI 评分任务 <b>#1203</b> 开始 · DeepSeek-V3 · 8 并发</span></div>
+        </div>
+      </div>
+      <p class="am-log-foot">日志为最近 30 分钟摘要；完整日志、下载与进程重启请使用电脑端「服务器监控」。</p>
+
+      <p class="am-foot">最后更新 16:32:10 · 自动刷新已开启</p>
+    </main>
+  </div>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

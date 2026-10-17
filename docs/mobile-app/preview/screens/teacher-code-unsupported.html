@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>手机编辑说明 · 移动端设计稿</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+  .t-hero { padding: 10px var(--m-gutter) 0; }
+  .t-heroicon { width: 52px; height: 52px; border-radius: 16px; background: var(--bg-selected); color: var(--text-brand); display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+  .t-heroicon .icon { width: 26px; height: 26px; }
+  .t-hero h1 { font-size: var(--m-fs-title-1); line-height: var(--m-lh-title-1); font-weight: 700; letter-spacing: var(--m-tracking-tight); }
+  .t-hero p { margin-top: 5px; font-size: 13px; line-height: 1.6; color: var(--text-secondary); }
+  .t-reason { display: flex; align-items: flex-start; padding: 9px 0; }
+  .t-reason + .t-reason { border-top: 1px solid var(--border-subtle); }
+  .t-reason .rowicon { margin-right: 11px; }
+  .t-reason-title { font-size: 14px; font-weight: 500; line-height: 1.4; }
+  .t-reason-sub { margin-top: 2px; font-size: 12px; color: var(--text-tertiary); line-height: 1.55; }
+  .t-wayhead { display: flex; align-items: center; margin-bottom: 12px; }
+  .t-wayno { width: 22px; height: 22px; border-radius: 7px; background: var(--brand-600); color: var(--text-on-brand); font-size: 12px; font-weight: 650; display: flex; align-items: center; justify-content: center; flex: none; margin-right: 8px; }
+  .t-way-title { font-size: 15px; font-weight: 600; }
+  .t-way-sub { margin-left: auto; font-size: 11.5px; color: var(--text-tertiary); }
+  .t-handoff { display: flex; align-items: flex-start; }
+  .t-handoff .qr { width: 112px; height: 112px; }
+  .t-handoff-main { flex: 1; min-width: 0; margin-left: 16px; }
+  .t-handoff-main h4 { font-size: 14.5px; font-weight: 600; }
+  .t-handoff-main p { margin-top: 4px; font-size: 12px; line-height: 1.55; color: var(--text-tertiary); }
+  .t-linkbox { display: flex; align-items: center; margin-top: 10px; padding: 8px 8px 8px 12px; border-radius: 10px; background: var(--bg-sunken); }
+  .t-linktext { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .t-linkbox .btn { flex: none; margin-left: 8px; }
+  .t-upload { padding: 20px 16px; }
+  .t-upload-actions { display: flex; margin-top: 14px; }
+  .t-upload-actions .btn { flex: 1; }
+  .t-upload-actions .btn + .btn { margin-left: 10px; }
+  .t-codehint { display: flex; align-items: center; justify-content: center; margin-top: 12px; font-size: 12px; color: var(--text-tertiary); }
+  .t-codehint .icon { width: 14px; height: 14px; margin-right: 5px; }
+  .t-tip { margin-top: 14px; }
+
+  /* 触控目标补足（视觉尺寸保持屏幕契约值，命中区域扩到 ≥44px） */
+  .chip, .seg button, .btn--sm, .btn--xs, .tool, .diffmore, .sheet-close, .t-expand, button.avatar, .switch { position: relative; }
+  .chip::after, .seg button::after, .btn--sm::after, .btn--xs::after, .tool::after, .diffmore::after, .sheet-close::after, .t-expand::after, button.avatar::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%);
+  }
+  .switch::before { content: ""; position: absolute; left: -6px; right: -6px; top: -7px; bottom: -7px; }
+  .searchbar { height: 44px; }
+</style>
+</head>
+<body class="screen" data-screen="teacher-code-unsupported" data-bottom="actionbar">
+  <div class="app">
+    <header class="appbar appbar--solid appbar--bordered">
+      <div class="appbar-side"><button type="button" class="iconbtn" data-icon="back" aria-label="返回代码只读" data-goto="teacher-review-code"></button></div>
+      <h1 class="appbar-title">编辑标准答案<small>第 2 题 · UserTable.vue</small></h1>
+      <div class="appbar-actions"><button type="button" class="iconbtn" data-icon="info" aria-label="为什么手机不能编辑"></button></div>
+    </header>
+
+    <main class="scroll">
+      <div class="t-hero">
+        <div class="t-heroicon"><span data-icon="code"></span></div>
+        <h1>手机不提供代码编辑</h1>
+        <p>编辑标准答案需要连续输入与调试。为了保证效率与准确性，手机端只做只读预览，并提供两条接力到电脑的方式。</p>
+      </div>
+
+      <div class="page mt16">
+        <div class="card">
+          <div class="card-title mb8">为什么不支持</div>
+          <div class="t-reason">
+            <span class="rowicon rowicon--warning" data-icon="edit"></span>
+            <div><div class="t-reason-title">软键盘会遮挡行号与缩进</div><div class="t-reason-sub">代码需要精确缩进，手机输入法自动纠错容易破坏语法。</div></div>
+          </div>
+          <div class="t-reason">
+            <span class="rowicon rowicon--warning" data-icon="code"></span>
+            <div><div class="t-reason-title">没有补全与语法检查</div><div class="t-reason-sub">无法提示 API、括号匹配与编译错误，改错成本远高于电脑。</div></div>
+          </div>
+          <div class="t-reason">
+            <span class="rowicon rowicon--warning" data-icon="alert"></span>
+            <div><div class="t-reason-title">误触会破坏测试用例</div><div class="t-reason-sub">参考答案关联 24 个测试点，一次误删就可能导致整题判分异常。</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec"><h2>接力到电脑</h2><span class="sec-note">二选一</span></div>
+
+      <div class="page stack">
+        <div class="card">
+          <div class="t-wayhead">
+            <span class="t-wayno">1</span>
+            <span class="t-way-title">扫码打开，直接编辑</span>
+            <span class="t-way-sub">链接 10 分钟内有效</span>
+          </div>
+          <div class="t-handoff">
+            <div class="qr" data-qr role="img" aria-label="电脑端编辑链接二维码"></div>
+            <div class="t-handoff-main">
+              <h4>用电脑浏览器扫码</h4>
+              <p>登录同一账号后自动定位到这道题的标准答案，保存后手机端实时同步。</p>
+              <div class="t-linkbox">
+                <span class="t-linktext">deadpan.edu.cn/e/8f2c-4a91</span>
+                <button type="button" class="btn btn--xs btn--secondary"><span data-icon="copy"></span>复制</button>
+              </div>
+            </div>
+          </div>
+          <div class="t-codehint"><span data-icon="clock"></span>10 分钟内有效 · 可重新生成</div>
+        </div>
+
+        <div class="card">
+          <div class="t-wayhead">
+            <span class="t-wayno">2</span>
+            <span class="t-way-title">导出文件 · 修改后上传</span>
+          </div>
+          <div class="upload t-upload">
+            <div class="upload-icon" data-icon="upload"></div>
+            <h4>上传修改后的文件</h4>
+            <p>支持 .vue / .js / .zip，单个文件不超过 50 MB；上传后会自动覆盖当前标准答案。</p>
+            <div class="t-upload-actions">
+              <button type="button" class="btn btn--secondary btn--sm"><span data-icon="download"></span>导出文件</button>
+              <button type="button" class="btn btn--primary btn--sm"><span data-icon="upload"></span>上传文件</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="banner banner--warning t-tip">
+          <span data-icon="alert"></span>
+          <div><b>手机端不会缓存编辑内容。</b>请以电脑端保存结果为准；上传覆盖前会保留最近 5 个版本，可回滚。</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="actionbar">
+    <button type="button" class="btn btn--primary btn--block"><span data-icon="external"></span>在电脑上打开</button>
+  </div>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

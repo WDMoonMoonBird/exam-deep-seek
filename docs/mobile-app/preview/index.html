@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f6f7f9">
+<title>Deadpan 判题 · 移动端 UI 设计总览（feat/mobile-app）</title>
+<link rel="stylesheet" href="../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../02-design-tokens.css">
+<link rel="stylesheet" href="assets/screen.css">
+<link rel="stylesheet" href="assets/gallery.css">
+</head>
+<body class="g-page" id="top">
+
+<!-- ================================================================ 顶栏 -->
+<header class="g-top">
+  <div class="g-wrap g-top-in">
+    <a class="g-brand" href="#top" aria-label="回到顶部">
+      <span class="g-brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h9a6.5 6.5 0 0 1 0 13H4V5z"/><path d="M8 9h5a2.5 2.5 0 0 1 0 5H8V9z"/></svg></span>
+      <span class="g-brand-text"><b>Deadpan 判题 · Mobile</b><span>移动端 UI 设计系统 v1.0 · 设计总览</span></span>
+    </a>
+    <nav class="g-nav" aria-label="页面导航">
+      <a href="#overview">总览</a>
+      <a href="#design-system">设计系统</a>
+      <a href="#prototype">交互原型</a>
+      <a href="#screens">全部页面</a>
+      <a href="#platform">平台策略</a>
+      <a href="#ia">信息架构</a>
+      <a href="#quality">验收</a>
+      <a href="#docs">文档</a>
+    </nav>
+    <div class="g-top-right">
+      <span class="g-ver">feat/mobile-app</span>
+      <div class="g-seg" id="theme-seg" role="group" aria-label="主题切换">
+        <button type="button" data-theme-value="light" class="on">浅色</button>
+        <button type="button" data-theme-value="dark">深色</button>
+      </div>
+      <div class="g-seg" id="platform-seg" role="group" aria-label="设备框切换">
+        <button type="button" data-platform-value="ios" class="on">iOS</button>
+        <button type="button" data-platform-value="android">Android</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ================================================================ Hero -->
+<section class="g-hero" id="overview">
+  <div class="g-wrap g-hero-in">
+    <div class="g-hero-copy">
+      <span class="g-eyebrow"><span class="dot"></span>37 屏高保真 · afrexai-ui-design-system Phase 1–10</span>
+      <h1>一套为手机<em>重新设计</em>的<br>教学评测界面</h1>
+      <p class="g-hero-lead">学生作答、教师审核、管理巡检 —— 一条完整的移动端动线。基于现有桌面设计令牌重建移动骨架：底部 Tab、拇指热区、安全区、深色模式与 PWA / Android 壳全部纳入规划。现有响应式在手机上错位的页面，在这里按场景重排。</p>
+      <div class="g-hero-meta">
+        <span class="g-metric"><b>37</b><span>屏完整页面</span></span>
+        <span class="g-metric"><b>5</b><span>个角色分组</span></span>
+        <span class="g-metric"><b>2</b><span>套浅/深主题</span></span>
+        <span class="g-metric"><b>3</b><span>端：Web / Android / iOS 规划</span></span>
+      </div>
+      <div class="g-hero-actions">
+        <a class="g-btn g-btn--primary" href="#prototype">打开交互原型<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;margin-left:7px;margin-right:0"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></a>
+        <a class="g-btn g-btn--ghost" href="#screens">浏览 37 屏</a>
+      </div>
+      <p class="g-hero-note">设计稿先行 · 未改动生产代码 · <b>v1 零后端改造已批准</b>（需后端的 UI 延期不取消，见 09） · 基线 <code>390 × 844</code> · 兼容 <code>360–430</code> · WCAG AA</p>
+    </div>
+    <div class="g-hero-art" id="hero-phones" aria-label="设计稿预览"></div>
+  </div>
+</section>
+
+<!-- ================================================================ 原则 -->
+<section class="g-sec g-sec--tight" id="principles">
+  <div class="g-wrap">
+    <div class="g-sec-head">
+      <div class="g-sec-head-main">
+        <div class="g-sec-kicker">Design Principles</div>
+        <h2>不是把桌面缩小，而是按场景重排</h2>
+        <p class="g-sec-lead">手机上每次操作都发生在拇指、弱网和碎片时间里。37 屏都按下面五条取舍。</p>
+      </div>
+    </div>
+    <div class="g-principles">
+      <article class="g-principle"><div class="n">01</div><h3>一屏一事</h3><p>每屏只有一个主任务；主操作固定在底部动作条，不藏在表内或右上角。</p></article>
+      <article class="g-principle"><div class="n">02</div><h3>数据先行</h3><p>列表卡片只保留能决策的 4 个字段：状态、进度、截止、下一步动作。</p></article>
+      <article class="g-principle"><div class="n">03</div><h3>状态显性</h3><p>loading / empty / error / offline 四态完整；AI 评分这类异步结果有进度语义。</p></article>
+      <article class="g-principle"><div class="n">04</div><h3>拇指优先</h3><p>触控目标 ≥44px，主按钮高 50px；高频操作落在下半屏，危险操作需二次确认。</p></article>
+      <article class="g-principle"><div class="n">05</div><h3>克制动效</h3><p>160–320ms、只动 transform / opacity；Sheet 与页面切换模拟原生手感，尊重减少动效偏好。</p></article>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ 平台 -->
+<section class="g-sec" id="platform">
+  <div class="g-wrap">
+    <div class="g-sec-head">
+      <div class="g-sec-head-main">
+        <div class="g-sec-kicker">Platform Strategy</div>
+        <h2>一份 Vue 代码，三层复用</h2>
+        <p class="g-sec-lead">Web 移动端现在交付；Android 以 Capacitor 壳复用同一套 UI；iOS 只做规划 —— 苹果限制、审核成本与当前工具链决定暂不出包。</p>
+      </div>
+      <div class="g-sec-side"><a class="g-btn g-btn--ghost" href="../06-platform-strategy.md">平台策略文档<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-left:6px"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></a></div>
+    </div>
+    <div class="g-platforms">
+      <article class="g-platform">
+        <div class="g-platform-top"><span class="g-platform-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18z"/></svg></span><span class="g-st g-st--ok">现在可用</span></div>
+        <h3>Web 移动端</h3>
+        <p>独立 <b>/m/*</b> 路由 + 底部 Tab 骨架；小屏自动切换，≥768 回退桌面表格。PWA 可添加到主屏。</p>
+        <ul><li>Vant 4 按需，仅 /m chunk 加载</li><li>安全区 + 100dvh + 弱网四态</li><li>不影响桌面用户包体与路由</li></ul>
+        <div class="g-platform-foot"><span>落地阶段</span><b>M0–M3</b></div>
+      </article>
+      <article class="g-platform g-platform--android">
+        <div class="g-platform-top"><span class="g-platform-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12v8a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3V9z"/><path d="M6 9a6 6 0 0 1 12 0"/><path d="M8 3l1.5 2M16 3l-1.5 2"/><path d="M10 14h.01M14 14h.01"/></svg></span><span class="g-st g-st--plan">M4 计划</span></div>
+        <h3>Android · Capacitor 壳</h3>
+        <p>同一份 Vue 代码装进壳：系统返回键、状态栏、启动屏、文件选择。校内扫码装 APK，Web 层可远程更新。</p>
+        <ul><li>JDK 24 + Android SDK 已就绪</li><li>签名 keystore 与升级需交接备份</li><li>不做原生重写，不写 Kotlin</li></ul>
+        <div class="g-platform-foot"><span>分发方式</span><b>扫码 APK / 学校应用中心</b></div>
+      </article>
+      <article class="g-platform g-platform--ios">
+        <div class="g-platform-top"><span class="g-platform-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="3"/><path d="M11 5.5h2"/></svg></span><span class="g-st g-st--wait">只做规划</span></div>
+        <h3>iOS · 暂不出包</h3>
+        <p>当前无 Xcode、开发者账号 $99/年、纯壳应用有 4.2 拒审风险；先用 Safari + 添加到主屏兜底。</p>
+        <ul><li>TestFlight 90 天限制、企业证书门槛高</li><li>PWA 推送需 16.4+ 且已加到主屏</li><li>启动条件：iPhone 教师占比 + 原生价值补齐</li></ul>
+        <div class="g-platform-foot"><span>支持方式</span><b>Safari / PWA</b></div>
+      </article>
+    </div>
+
+    <div class="g-platform-demo" id="platform-compare" style="margin-top:20px"></div>
+
+    <div class="g-ds-grid" style="margin-top:20px;grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+      <div class="g-panel">
+        <div class="g-panel-h"><h3>iOS 的启动条件（写进计划，不现在做）</h3><span>Gate 而非 Roadmap</span></div>
+        <div class="g-cap"><span>前提 · Xcode 与 macOS 构建环境</span><span class="part">需 15GB+ 安装与真机</span></div>
+        <div class="g-cap"><span>成本 · Apple Developer Program</span><span class="part">$99 / 年</span></div>
+        <div class="g-cap"><span>审核 · Guideline 4.2 最小功能</span><span class="part">纯 WebView 壳会被拒</span></div>
+        <div class="g-cap"><span>分发 · TestFlight 90 天 / App Store 备案</span><span class="part">需学校 IT 配合</span></div>
+        <div class="g-cap"><span>替代 · Safari 添加到主屏 + PWA</span><span class="yes">现在即可用</span></div>
+      </div>
+      <div class="g-panel">
+        <div class="g-panel-h"><h3>跨端一致性的三道保险</h3><span>One UI, Three Shells</span></div>
+        <p class="g-muted" style="font-size:13px;line-height:1.7">同一套移动组件与设计令牌，运行在三类容器里：手机浏览器、PWA 独立窗口、Capacitor WebView。差异只允许出现在系统层（状态栏高度、返回手势、文件选择），业务 UI 不写平台分支。</p>
+        <div class="g-cap"><span>安全区</span><span class="yes">--m-safe-top / --m-safe-bottom</span></div>
+        <div class="g-cap"><span>返回</span><span class="part">浏览器返回 / 系统返回键统一走路由</span></div>
+        <div class="g-cap"><span>深色</span><span class="yes">跟随系统 + 手动开关</span></div>
+        <div class="g-cap"><span>更新</span><span class="part">入口版本探测 + APK 升级提示</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ 设计系统 -->
+<section class="g-sec" id="design-system">
+  <div class="g-wrap">
+    <div class="g-sec-head">
+      <div class="g-sec-head-main">
+        <div class="g-sec-kicker">Design System</div>
+        <h2>令牌 + 组件 + 动效，一套语言</h2>
+        <p class="g-sec-lead">移动端不另起一套视觉：复用桌面端的品牌蓝、状态语义与深色主题，只补移动维度（安全区、触控尺寸、Tab 骨架、移动字号档）。</p>
+      </div>
+      <div class="g-sec-side"><a class="g-btn g-btn--ghost" href="../02-design-tokens.css">查看令牌文件<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-left:6px"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></a></div>
+    </div>
+
+    <div class="g-ds-grid">
+      <div class="g-ds-stack">
+        <div class="g-panel">
+          <div class="g-panel-h"><h3>颜色</h3><span>Brand + Semantic + Surface</span></div>
+          <div class="g-swatches">
+            <div class="g-swatch" style="background:var(--brand-600)"><b>brand-600</b>#0066CC</div>
+            <div class="g-swatch" style="background:var(--brand-500)"><b>brand-500</b>#1F7AE0</div>
+            <div class="g-swatch light" style="background:var(--brand-50)"><b>brand-50</b>#EFF6FF</div>
+            <div class="g-swatch light" style="background:var(--bg-canvas);border-color:var(--border-default)"><b>bg-canvas</b>#F6F7F9</div>
+            <div class="g-swatch" style="background:var(--gray-950)"><b>text-strong</b>#0B0F16</div>
+            <div class="g-swatch light" style="background:var(--bg-surface)"><b>surface</b>#FFFFFF</div>
+          </div>
+          <div class="g-swatches" style="margin-top:8px">
+            <div class="g-swatch light" style="background:var(--status-success-bg);color:var(--status-success-fg)"><b>success</b>已发布/已评分</div>
+            <div class="g-swatch light" style="background:var(--status-warning-bg);color:var(--status-warning-fg)"><b>warning</b>待审核/截止</div>
+            <div class="g-swatch light" style="background:var(--status-danger-bg);color:var(--status-danger-fg)"><b>danger</b>错误/未提交</div>
+            <div class="g-swatch light" style="background:var(--status-info-bg);color:var(--status-info-fg)"><b>info</b>进行中/AI</div>
+            <div class="g-swatch light" style="background:var(--status-accent-bg);color:var(--status-accent-fg)"><b>accent</b>实训/项目</div>
+            <div class="g-swatch light" style="background:var(--status-neutral-bg);color:var(--status-neutral-fg)"><b>neutral</b>草稿/未开始</div>
+          </div>
+        </div>
+
+        <div class="g-panel">
+          <div class="g-panel-h"><h3>字体</h3><span>系统中文字体栈 · 正文 ≥15px</span></div>
+          <div class="g-type-row"><span class="t" style="font-size:var(--m-fs-display);font-weight:700;letter-spacing:-0.02em">大标题 28</span><span class="m">--m-fs-display · 28/1.25</span></div>
+          <div class="g-type-row"><span class="t" style="font-size:var(--m-fs-title-1);font-weight:700">页面标题 22</span><span class="m">--m-fs-title-1 · 22/1.3</span></div>
+          <div class="g-type-row"><span class="t" style="font-size:var(--m-fs-title-2);font-weight:600">区块标题 18</span><span class="m">--m-fs-title-2 · 18/1.4</span></div>
+          <div class="g-type-row"><span class="t" style="font-size:var(--m-fs-body)">正文 15 · 中文行高 1.6，保证长文可读</span><span class="m">--m-fs-body · 15/1.6</span></div>
+          <div class="g-type-row"><span class="t" style="font-size:var(--m-fs-body-sm);color:var(--text-secondary)">辅助说明 13 · 时间/班级/元信息</span><span class="m">--m-fs-body-sm · 13</span></div>
+          <div class="g-type-row"><span class="t" style="font-size:var(--m-fs-caption);color:var(--text-tertiary)">注释 12 · Tab 文字与标签</span><span class="m">--m-fs-caption · 12</span></div>
+        </div>
+
+        <div class="g-panel">
+          <div class="g-panel-h"><h3>尺寸与触控</h3><span>拇指热区 · 4px 基数</span></div>
+          <div class="g-token-row"><code>--m-touch-min</code><span class="v">44px · 最小触控目标</span></div>
+          <div class="g-token-row"><code>--m-control-h</code><span class="v">48px · 输入/选择器</span></div>
+          <div class="g-token-row"><code>--m-btn-h</code><span class="v">50px · 主按钮</span></div>
+          <div class="g-token-row"><code>--m-gutter</code><span class="v">16px · 页面左右留白</span></div>
+          <div class="g-token-row"><code>--m-radius-card / sheet</code><span class="v">16 / 24px</span></div>
+          <div class="g-token-row"><code>--m-tabbar-h</code><span class="v">56px + 安全区</span></div>
+          <div class="g-token-row"><code>--m-safe-top / bottom</code><span class="v">44 / 34px（iOS）· 24 / 16（Android）</span></div>
+          <div class="g-space-demo" style="margin-top:16px;align-items:flex-end">
+            <span style="width:4px;height:20px"></span><span style="width:8px;height:26px"></span><span style="width:12px;height:32px"></span><span style="width:16px;height:38px"></span><span style="width:24px;height:46px"></span><span style="width:32px;height:54px"></span>
+          </div>
+          <p class="g-subtle" style="font-size:11.5px;margin-top:8px">4 · 8 · 12 · 16 · 24 · 32 —— 间距只用这个序列</p>
+        </div>
+
+        <div class="g-panel">
+          <div class="g-panel-h"><h3>组件样板</h3><span>来自 Screen Kit，真实渲染</span></div>
+          <div class="g-specimens">
+            <div class="g-spec"><div class="g-spec-label">Buttons</div><div class="gv8"><button class="btn btn--primary btn--block">主按钮 50px</button><div class="btn-row"><button class="btn btn--secondary">次要</button><button class="btn btn--primary">主要</button></div><div class="g8 row"><button class="btn btn--sm btn--secondary">小按钮</button><button class="btn btn--xs btn--danger-soft">删除</button></div></div></div>
+            <div class="g-spec"><div class="g-spec-label">Tags / Chips</div><div class="g8 row" style="flex-wrap:wrap"><span class="tag tag--success"><i class="dot"></i>已发布</span><span class="tag tag--warning"><i class="dot"></i>待审核 12</span><span class="tag tag--danger"><i class="dot"></i>已截止</span><span class="tag tag--info"><i class="dot"></i>AI 评分中</span><span class="tag tag--neutral">草稿</span><span class="tag tag--accent">实训题</span></div><div class="chips" style="padding:8px 0 0"><button class="chip active">全部</button><button class="chip">待审核 <span class="count">12</span></button><button class="chip">已评分</button></div></div>
+            <div class="g-spec"><div class="g-spec-label">Form</div><div class="field"><label class="label" for="ds-name">作业名称</label><input class="input" id="ds-name" value="数据结构实验三：图的最短路径"></div><div class="field"><label class="label" for="ds-time">截止时间</label><input class="input" id="ds-time" type="date" value="2026-10-20"></div><div class="row mt12"><span class="grow" style="font-size:13px;color:var(--text-secondary)">允许迟交</span><button class="switch on" role="switch" aria-checked="true" aria-label="允许迟交"></button></div></div>
+            <div class="g-spec"><div class="g-spec-label">Progress / Score</div><div class="row" style="margin-bottom:12px"><div class="bar grow"><i style="width:84%"></i></div><span class="tnum" style="font-size:12px;color:var(--text-tertiary);margin-left:10px">38/45</span></div><div class="row"><div class="ring" style="--p:64"><div class="ring-in"><b>64%</b><span>已提交</span></div></div><div style="margin-left:16px"><div class="score-hero"><b>92</b><span class="total">/ 100</span><span class="tag tag--success">A</span></div><div class="g-subtle" style="font-size:11.5px;margin-top:2px">AI 评分 · 已通过教师审核</div></div></div></div>
+            <div class="g-spec" style="grid-column:1 / -1"><div class="g-spec-label">Feedback / States</div><div class="gv8"><div class="banner banner--warning"><span data-icon="alert"></span><div><b>今晚 23:59 截止</b>：「数据结构实验三」还有 2 道题未答，提交后不可修改。</div></div><div class="banner banner--danger"><span data-icon="wifi-off"></span><div><b>网络已断开</b>：已缓存内容可查看，恢复网络后自动重试。</div></div><div class="row g8"><span class="sk" style="width:120px;height:14px"></span><span class="sk" style="width:72px;height:14px"></span><span class="tag tag--info">加载骨架</span><span class="tag tag--neutral">空态/错误态见全部页面</span></div></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="g-ds-side">
+        <div class="g-panel">
+          <div class="g-panel-h"><h3>组件全集</h3><span>_kitchen-sink.html</span></div>
+          <div class="g-thumb" style="margin:0 auto 4px"><div class="g-phone" data-chrome="live"><div class="g-island"></div><div class="g-punch"></div><div class="g-screen"><iframe title="组件样板" data-file="_kitchen-sink" scrolling="no"></iframe></div><div class="g-homebar"></div><div class="g-gesture"></div></div></div>
+          <p class="g-subtle" style="font-size:12px;line-height:1.65;text-align:center">组件、状态、动效在同屏可对照；屏幕运行时自动注入状态栏与 Tab。</p>
+        </div>
+        <div class="g-panel" style="margin-top:20px">
+          <div class="g-panel-h"><h3>三层令牌结构</h3><span>Single Source of Truth</span></div>
+          <div class="g-cap"><span>Primitive 原始值</span><span>--gray-* / --brand-* / --space-*</span></div>
+          <div class="g-cap"><span>Semantic 语义</span><span>--bg-* / --text-* / --status-* / --score-*</span></div>
+          <div class="g-cap"><span>Component 组件</span><span>--btn-* / --card-* / --input-*</span></div>
+          <div class="g-cap"><span>Mobile 移动层</span><span>--m-*（本分支新增）</span></div>
+          <p class="g-subtle" style="font-size:12px;line-height:1.65;margin-top:12px">业务样式只允许引用第 2/3 层与 --m-*；不写死 hex、圆角、阴影、时长。<a href="../02-design-tokens.md" style="color:var(--text-link)">令牌说明 →</a></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ 交互原型 -->
+<section class="g-sec" id="prototype">
+  <div class="g-wrap">
+    <div class="g-sec-head">
+      <div class="g-sec-head-main">
+        <div class="g-sec-kicker">Interactive Prototype</div>
+        <h2>在手机框里直接点</h2>
+        <p class="g-sec-lead">左侧 37 屏索引，中间是可交互的手机，右侧是屏幕说明。手机内的卡片、按钮、底部 Tab、Sheet 都能点 —— 这是一条真实可演示的动线，不是静态图。</p>
+      </div>
+      <div class="g-sec-side"><a class="g-btn g-btn--ghost" href="#screens">全部页面总览<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-left:6px"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></a></div>
+    </div>
+    <div class="g-proto">
+      <aside class="g-nav-panel" id="proto-nav" aria-label="屏幕索引"></aside>
+      <div class="g-stage" id="proto-device" aria-label="手机预览"></div>
+      <aside class="g-info" id="proto-info" aria-label="屏幕说明"></aside>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ 全部页面 -->
+<section class="g-sec" id="screens">
+  <div class="g-wrap">
+    <div class="g-sec-head">
+      <div class="g-sec-head-main">
+        <div class="g-sec-kicker">All Screens</div>
+        <h2>37 屏，五个分组</h2>
+        <p class="g-sec-lead">每张卡片都是真实 HTML 渲染（不是截图）。点缩略图在交互原型中打开；浅/深色由顶部开关统一控制。</p>
+      </div>
+      <div class="g-sec-side"><span class="g-ver">37 screens · 390×844 · 2× DPR</span></div>
+    </div>
+    <nav class="g-groups" id="group-links" aria-label="分组跳转"></nav>
+    <div id="gallery-groups"></div>
+  </div>
+</section>
+
+<!-- ================================================================ 信息架构 -->
+<section class="g-sec" id="ia">
+  <div class="g-wrap">
+    <div class="g-sec-head">
+      <div class="g-sec-head-main">
+        <div class="g-sec-kicker">Information Architecture</div>
+        <h2>四类角色，四条导航</h2>
+        <p class="g-sec-lead">桌面端 11 个侧栏菜单在手机上归并为 3–4 个底部 Tab；低频与高风险页面降为二级页或引导到电脑端。完整 37 屏地图见 <a href="../01-information-architecture.md" style="color:var(--text-link)">01-information-architecture.md</a>。</p>
+      </div>
+    </div>
+    <div class="g-roles">
+      <article class="g-role">
+        <div class="g-role-top"><b>公共</b><span>public · 6</span></div>
+        <div class="g-tabbar-demo"><i class="on">登录</i><i>官网</i><i>文档</i><i>异常</i></div>
+        <ul><li><span class="k">入口</span>落地 → 登录 → 角色首页</li><li><span class="k">页面</span>官网 / 登录 / 文档 / 404 / 403 / 500</li><li><span class="k">原则</span>不丢登录态；错误页给人话与下一步</li></ul>
+      </article>
+      <article class="g-role">
+        <div class="g-role-top"><b>学生</b><span>student · 11</span></div>
+        <div class="g-tabbar-demo"><i class="on">首页</i><i>作业</i><i>成绩</i><i>我的</i></div>
+        <ul><li><span class="k">主路径</span>首页待办 → 作业详情 → 作答 → 交卷 → 成绩</li><li><span class="k">二级</span>答题卡 / 交卷确认 / 成绩详情</li><li><span class="k">边界</span>编程题扫码接力到电脑，不假装能写</li></ul>
+      </article>
+      <article class="g-role">
+        <div class="g-role-top"><b>教师</b><span>teacher · 14</span></div>
+        <div class="g-tabbar-demo"><i class="on">工作台</i><i>作业</i><i>审核</i><i>我的</i></div>
+        <ul><li><span class="k">主路径</span>工作台待办 → 作业 → 评分审核队列 → 逐份审核</li><li><span class="k">二级</span>题库 / 班级 / 批量 / 布置作业 / 代码只读</li><li><span class="k">边界</span>手机编辑代码 → 说明页 + 接力到电脑</li></ul>
+      </article>
+      <article class="g-role">
+        <div class="g-role-top"><b>管理员</b><span>admin · 3</span></div>
+        <div class="g-tabbar-demo"><i class="on">概览</i><i>管理</i><i>监控</i></div>
+        <ul><li><span class="k">场景</span>出差/碎片时间巡检系统是否正常</li><li><span class="k">只读</span>KPI / 组织目录 / 实时日志</li><li><span class="k">边界</span>高风险配置明确引导电脑端</li></ul>
+      </article>
+    </div>
+    <div class="g-flow">
+      <h3>学生作答动线 · 3 步内完成一次提交</h3>
+      <div class="g-flow-steps">
+        <div class="g-flow-step"><b>Step 1</b>首页待办「继续作答」</div><span class="g-flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span>
+        <div class="g-flow-step"><b>Step 2</b>作答 + 答题卡检查</div><span class="g-flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span>
+        <div class="g-flow-step"><b>Step 3</b>交卷确认 → 提交回执</div>
+        <span class="g-flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span>
+        <div class="g-flow-step"><b>Later</b>成绩详情 + AI 评语</div>
+      </div>
+      <p class="g-flow-note"><b>为什么不是桌面表单的移动版：</b>桌面「左侧题目列表 + 右侧大编辑器」在 390px 放不下；移动端一屏一题 + 底部答题卡 Sheet，把检查动作收进一个手势里。</p>
+    </div>
+    <div class="g-flow">
+      <h3>教师审核动线 · 一份 20 秒内审完</h3>
+      <div class="g-flow-steps">
+        <div class="g-flow-step"><b>1</b>工作台「待审核 12」</div><span class="g-flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span>
+        <div class="g-flow-step"><b>2</b>队列：AI 分 + 分项 + 评语</div><span class="g-flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span>
+        <div class="g-flow-step"><b>3</b>必要时看代码 / diff</div><span class="g-flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span>
+        <div class="g-flow-step"><b>4</b>通过 → 自动下一份</div>
+      </div>
+      <p class="g-flow-note"><b>为什么不保留批量表格：</b>390px 上 12 列表格必然横向滚动；批量改为「卡片长按多选 + 影响范围摘要 + 二次确认」，规模操作仍然可用。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ 验收 -->
+<section class="g-sec" id="quality">
+  <div class="g-wrap">
+    <div class="g-sec-head">
+      <div class="g-sec-head-main">
+        <div class="g-sec-kicker">Design Review</div>
+        <h2>按 rubric 打分，而不是“看着还行”</h2>
+        <p class="g-sec-lead">独立评审 **84 / 100**（良好，P0=0；自评 88）；八维 rubric 与逐屏问题见 <a href="../qa-report.md" style="color:var(--text-link)">qa-report.md</a>。</p>
+      </div>
+    </div>
+    <div class="g-quality">
+      <div class="g-score-card">
+        <div class="g-score-big"><b id="score-value">84</b><span>/ 100 · 独立评审</span></div>
+        <div class="g-score-stars">★★★★☆</div>
+        <p class="g-score-note">独立评审结论：可交付（P0 = 0）。扣分集中在交互一致性、少数 AA 对比度与触控命中区；4 条 P1 已在本轮修复，10 条 P2 随 M0–M3 落地消化。</p>
+        <div class="g-rubric">
+          <div class="g-rubric-row"><span class="name">视觉层级 <span class="g-subtle">20%</span></span><div class="bar"><i style="width:90%"></i></div><span class="val">18</span></div>
+          <div class="g-rubric-row"><span class="name">一致性 <span class="g-subtle">15%</span></span><div class="bar"><i style="width:87%"></i></div><span class="val">13</span></div>
+          <div class="g-rubric-row"><span class="name">留白 <span class="g-subtle">15%</span></span><div class="bar"><i style="width:87%"></i></div><span class="val">13</span></div>
+          <div class="g-rubric-row"><span class="name">无障碍 <span class="g-subtle">15%</span></span><div class="bar"><i style="width:73%"></i></div><span class="val">11</span></div>
+          <div class="g-rubric-row"><span class="name">响应式 <span class="g-subtle">10%</span></span><div class="bar"><i style="width:80%"></i></div><span class="val">8</span></div>
+          <div class="g-rubric-row"><span class="name">交互设计 <span class="g-subtle">10%</span></span><div class="bar"><i style="width:80%"></i></div><span class="val">8</span></div>
+          <div class="g-rubric-row"><span class="name">字体 <span class="g-subtle">10%</span></span><div class="bar"><i style="width:90%"></i></div><span class="val">9</span></div>
+          <div class="g-rubric-row"><span class="name">配色 <span class="g-subtle">5%</span></span><div class="bar"><i style="width:80%"></i></div><span class="val">4</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="g-check-grid">
+          <div class="g-check"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><div><b>触控 ≥44px</b>：所有可点元素；主按钮 50px，Tab 项含内边距 52px。</div></div>
+          <div class="g-check"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><div><b>状态不只靠颜色</b>：状态标签同时带文案/圆点；选中态叠加勾选或描边。</div></div>
+          <div class="g-check"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><div><b>四态完整</b>：空态/骨架/错误/断网在 states-overview 与各列表页可见。</div></div>
+          <div class="g-check"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><div><b>深色可用</b>：全站切 dark 不出现亮色孤岛；代码面板按设计恒为深色。</div></div>
+          <div class="g-check"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><div><b>安全区</b>：44/34 与 24/16 两档；底部 Tab/动作条避开 Home Indicator。</div></div>
+          <div class="g-check"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><div><b>无外部依赖</b>：0 CDN / 0 网络字体 / 0 远程图片；图标为内联 SVG。</div></div>
+          <div class="g-check"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><div><b>37 屏全覆盖</b>：公共 6 / 学生 11 / 教师 14 / 管理 3 / 平台状态 3，全部可打开。</div></div>
+          <div class="g-check"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><div><b>文档与稿一致</b>：屏幕 id、分组、演示数据在 SCREENS.md 与文档中同源。</div></div>
+        </div>
+        <table class="g-test-matrix" aria-label="测试矩阵">
+          <thead><tr><th>维度</th><th>档位</th><th>验证方式</th></tr></thead>
+          <tbody>
+            <tr><td><b>视口</b></td><td>360 / 390 / 430</td><td>三档截图 + 横向溢出断言</td></tr>
+            <tr><td><b>主题</b></td><td>浅色 / 深色</td><td>令牌切换 + 对比度抽查</td></tr>
+            <tr><td><b>平台</b></td><td>iOS / Android</td><td>安全区/状态栏/设备框差异</td></tr>
+            <tr><td><b>浏览器</b></td><td>Chrome / Safari / 微信 WebView</td><td>真机走通学生作答 + 教师审核</td></tr>
+            <tr><td><b>状态</b></td><td>空 / 加载 / 错误 / 断网</td><td>states-overview + 列表页四态</td></tr>
+            <tr><td><b>无障碍</b></td><td>键盘 / 读屏 / 200% 缩放</td><td>焦点顺序、aria-label、对比度</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ 文档 -->
+<section class="g-sec" id="docs">
+  <div class="g-wrap">
+    <div class="g-sec-head">
+      <div class="g-sec-head-main">
+        <div class="g-sec-kicker">Deliverables</div>
+        <h2>设计文档与交接</h2>
+        <p class="g-sec-lead">设计稿只是入口；落地所需的分阶段计划、路由架构、组件映射与测试矩阵都在 07 文档里。v1 范围与延期清单见 09（搁置项保留在计划中，不取消）。</p>
+      </div>
+    </div>
+    <div class="banner banner--info" style="margin-bottom:22px;align-items:flex-start"><div><b>v1 范围决策（2026-10-17）：</b>采用零后端改造，保留 34 屏；需要后端的 UI 暂时搁置、<b>不取消</b>（D1–D13）。详见 <a href="../09-v1-scope-and-deferred-backlog.md" style="color:inherit;text-decoration:underline">09-v1-scope-and-deferred-backlog.md</a>。</div></div>
+    <div class="g-docs">
+      <a class="g-doc" href="../README.md"><span class="no">README</span><h3>评审入口</h3><p>交付清单、核心决策与下一步。</p><span class="file">README.md</span></a>
+      <a class="g-doc" href="../00-design-brief.md"><span class="no">00</span><h3>设计简报</h3><p>用户、场景、目标、约束与非目标。</p><span class="file">00-design-brief.md</span></a>
+      <a class="g-doc" href="../01-information-architecture.md"><span class="no">01</span><h3>信息架构</h3><p>四类角色导航、37 屏地图、关键动线。</p><span class="file">01-information-architecture.md</span></a>
+      <a class="g-doc" href="../02-design-tokens.md"><span class="no">02</span><h3>设计令牌</h3><p>移动层 --m-*、安全区、Vant 映射。</p><span class="file">02-design-tokens.md + .css</span></a>
+      <a class="g-doc" href="../03-components.md"><span class="no">03</span><h3>组件规范</h3><p>AppBar/Tab/卡片/Sheet/代码面板等。</p><span class="file">03-components.md</span></a>
+      <a class="g-doc" href="../04-interaction-a11y.md"><span class="no">04</span><h3>交互与无障碍</h3><p>手势、动效、四态、WCAG AA 清单。</p><span class="file">04-interaction-a11y.md</span></a>
+      <a class="g-doc" href="../05-page-specs.md"><span class="no">05</span><h3>逐屏规范</h3><p>37 屏 handoff：要素/状态/数据/验收。</p><span class="file">05-page-specs.md</span></a>
+      <a class="g-doc" href="../06-platform-strategy.md"><span class="no">06</span><h3>平台策略</h3><p>Web/PWA/Android/iOS 与苹果限制。</p><span class="file">06-platform-strategy.md</span></a>
+      <a class="g-doc" href="../07-implementation-plan.md"><span class="no">07</span><h3>实施计划</h3><p>/m 路由、Vant、文件清单、人日与风险。</p><span class="file">07-implementation-plan.md</span></a>
+      <a class="g-doc" href="../08-backend-gap-and-ui-trim.md"><span class="no">08</span><h3>接口对账</h3><p>现有接口可支撑范围、难接口与 UI 裁剪建议。</p><span class="file">08-backend-gap-and-ui-trim.md</span></a>
+      <a class="g-doc" href="../09-v1-scope-and-deferred-backlog.md"><span class="no">09</span><h3>v1 范围冻结</h3><p>零后端 v1、34 屏、延期清单（不取消）与功能开关。</p><span class="file">09-v1-scope-and-deferred-backlog.md</span></a>
+      <a class="g-doc" href="SCREENS.md"><span class="no">SPEC</span><h3>屏幕契约</h3><p>37 屏要求、共享演示数据、施工约定。</p><span class="file">preview/SCREENS.md</span></a>
+      <a class="g-doc" href="../qa-report.md"><span class="no">QA</span><h3>独立评审</h3><p>八维 rubric 打分、逐屏问题与修复建议。</p><span class="file">qa-report.md</span></a>
+      <a class="g-doc" href="shots/" ><span class="no">SHOTS</span><h3>截图</h3><p>浅/深色总览、分组图与 37 张单屏截图。</p><span class="file">preview/shots/</span></a>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ 页脚 -->
+<footer class="g-foot">
+  <div class="g-wrap g-foot-in">
+    <div>
+      <div class="g-brand">
+        <span class="g-brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h9a6.5 6.5 0 0 1 0 13H4V5z"/><path d="M8 9h5a2.5 2.5 0 0 1 0 5H8V9z"/></svg></span>
+        <span class="g-brand-text"><b>Deadpan 判题 · 移动端设计稿</b><span>Exam-DeepSeek · branch feat/mobile-app</span></span>
+      </div>
+      <p style="margin-top:14px">设计稿先行：本分支只新增 docs/mobile-app/ 下的设计稿与文档，未改动 client/ 生产代码。<br>评审通过后按 <a href="../07-implementation-plan.md" style="color:var(--text-link)">07-implementation-plan.md</a> 分阶段落地。</p>
+    </div>
+    <div class="g-foot-right">
+      <div>方法：<code>afrexai-ui-design-system</code> Phase 1–10</div>
+      <div>基线：390×844 · 浅/深色 · iOS/Android</div>
+      <div>生成：<span id="g-year">2026</span> · 屏幕运行时 v1.0</div>
+    </div>
+  </div>
+</footer>
+
+<div class="g-toast" id="g-toast" role="status" aria-live="polite"></div>
+
+<script src="assets/screens.js"></script>
+<script src="assets/gallery.js"></script>
+<script>
+  window.addEventListener("load", function () {
+    setTimeout(function () {
+      var host = document.getElementById("gallery-groups");
+      var nav = document.getElementById("proto-nav");
+      if (host && host.children.length && nav && nav.children.length) return;
+      var d = document.createElement("div");
+      d.setAttribute("role", "alert");
+      d.style.cssText = "position:fixed;left:50%;top:84px;transform:translateX(-50%);z-index:999;background:var(--bg-surface);border:1px solid var(--border-default);box-shadow:var(--shadow-lg);border-radius:12px;padding:12px 18px;font-size:13px;color:var(--text-primary)";
+      d.textContent = "设计总览加载不完整：请刷新页面（静态服务器偶发连接重置）。";
+      document.body.appendChild(d);
+    }, 4000);
+  });
+</script>
+</body>
+</html>

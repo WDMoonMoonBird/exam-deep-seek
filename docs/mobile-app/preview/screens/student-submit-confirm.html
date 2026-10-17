@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>交卷确认 · 移动端设计稿</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+  /* Sheet 页共用：作答页底层 + 答题卡样式（局部，仅使用令牌） */
+  .ao-exam { display: flex; align-items: center; padding: 0 var(--m-gutter) 12px; }
+  .ao-timer { display: inline-flex; align-items: center; flex: none; font-size: 14px; font-weight: var(--m-fw-semibold); color: var(--status-warning-fg); font-variant-numeric: tabular-nums; }
+  .ao-timer .icon { width: 17px; height: 17px; margin-right: 5px; flex: none; }
+  .ao-bar { flex: 1; margin: 0 12px; }
+  .ao-count { flex: none; font-size: 12px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+  .ao-sheetbtn { position: relative; color: var(--text-primary); }
+  .ao-badge { position: absolute; top: -1px; right: -2px; min-width: 28px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--red-600); color: #fff; font-size: 10px; line-height: 17px; font-weight: var(--m-fw-semibold); text-align: center; font-variant-numeric: tabular-nums; box-shadow: 0 0 0 2px var(--bg-canvas); }
+  .ao-q { padding: 16px; }
+  .ao-q-head { display: flex; align-items: center; justify-content: space-between; }
+  .ao-q-meta { display: flex; align-items: center; }
+  .ao-q-meta .tag + .tag { margin-left: 6px; }
+  .ao-score { margin-left: 8px; font-size: 12px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+  .ao-mark-look { display: inline-flex; align-items: center; justify-content: center; height: var(--m-touch-min); padding: 0 12px; border-radius: 10px; color: var(--text-secondary); font-size: 13px; background: var(--bg-surface-2); border: 1px solid var(--border-subtle); }
+  .ao-mark-look .icon { width: 16px; height: 16px; margin-right: 4px; }
+  .ao-stem { margin-top: 12px; font-size: 17px; line-height: 1.6; font-weight: var(--m-fw-semibold); letter-spacing: var(--m-tracking-tight); }
+  .ao-key { width: 20px; flex: none; font-size: 15px; font-weight: var(--m-fw-semibold); color: var(--text-tertiary); margin-right: 8px; }
+  .option.selected .ao-key { color: var(--text-brand); }
+  .ao-opt-text { flex: 1; min-width: 0; }
+  .as-progress { display: flex; align-items: center; }
+  .as-progress .bar { flex: 1; }
+  .as-progress .num { margin-left: 10px; font-size: 12px; color: var(--text-secondary); font-weight: var(--m-fw-medium); }
+  .as-grid { margin-top: 14px; }
+  .as-grid .qnum { height: 46px; font-size: 15px; }
+  .as-summary { margin-top: 16px; border-top: 1px solid var(--border-subtle); padding-top: 12px; }
+  .as-sumrow { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; }
+  .as-sumrow .k { display: flex; align-items: center; font-size: 13.5px; color: var(--text-secondary); }
+  .as-sumrow .k .icon { width: 15px; height: 15px; margin-right: 6px; color: var(--text-tertiary); }
+  .as-sumrow .v { font-size: 13px; color: var(--text-tertiary); }
+  .as-note { margin-top: 12px; }
+  .sc-warn { align-items: flex-start; }
+  .sc-warn .icon { margin-top: 1px; }
+  .sc-stats { margin-top: 14px; }
+  .sc-stats .stat { padding: 12px 14px; }
+  .sc-stats .stat .v { font-size: 26px; }
+  .sc-stats .stat .k { margin-top: 2px; }
+  .sc-left { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; padding: 11px 14px; border-radius: 12px; background: var(--bg-surface-2); border: 1px solid var(--border-subtle); font-size: 13px; color: var(--text-secondary); }
+  .sc-left .t { display: inline-flex; align-items: center; }
+  .sc-left .t .icon { width: 16px; height: 16px; margin-right: 6px; color: var(--status-warning-fg); }
+  .sc-left b { color: var(--status-warning-fg); font-variant-numeric: tabular-nums; }
+  .sc-unanswered { margin-top: 12px; }
+  .sc-unanswered .rowitem { min-height: 48px; padding: 10px 12px; }
+  .sc-unanswered .row-main { display: flex; flex-direction: column; }
+  .sc-unanswered .row-title { font-size: 13.5px; }
+  .sc-unanswered .row-sub { font-size: 12px; }
+  .sc-tip { display: flex; align-items: flex-start; margin-top: 14px; font-size: 12px; line-height: 1.55; color: var(--text-tertiary); }
+  .sc-tip .icon { width: 14px; height: 14px; margin-right: 6px; margin-top: 1px; flex: none; }
+  .sc-foot-note { margin-top: 10px; text-align: center; font-size: 12px; color: var(--text-tertiary); }
+</style>
+</head>
+<body class="screen" data-screen="student-submit-confirm" data-bottom="sheet">
+
+  <div class="app" inert aria-hidden="true">
+    <header class="appbar appbar--bordered">
+      <div class="appbar-side">
+        <button type="button" class="iconbtn" data-icon="back" aria-label="返回"></button>
+      </div>
+      <h1 class="appbar-title">数据结构实验三<small>第 3 / 6 题 · 还剩 2 道编程题</small></h1>
+      <div class="appbar-actions">
+        <button type="button" class="iconbtn ao-sheetbtn" aria-label="答题卡"><span data-icon="grid"></span><span class="ao-badge">4/6</span></button>
+      </div>
+    </header>
+    <main class="scroll">
+      <div class="ao-exam">
+        <span class="ao-timer"><span data-icon="clock"></span><span class="tnum">42:18</span></span>
+        <div class="bar ao-bar"><i style="width:50%"></i></div>
+        <span class="ao-count">3/6</span>
+      </div>
+      <div class="page">
+        <article class="card ao-q">
+          <div class="ao-q-head">
+            <div class="ao-q-meta">
+              <span class="tag tag--info">单选题</span>
+              <span class="tag tag--neutral">第 3 题</span>
+              <span class="ao-score">5 分</span>
+            </div>
+            <span class="ao-mark-look"><span data-icon="star"></span>标记本题</span>
+          </div>
+          <h2 class="ao-stem">使用 Dijkstra 算法求单源最短路径时，下列哪种情况会导致算法得到错误结果？</h2>
+          <div class="options mt16">
+            <div class="option"><span class="radio"></span><span class="ao-key">A</span><span class="ao-opt-text">图中存在权值为 0 的边</span></div>
+            <div class="option selected"><span class="radio on"></span><span class="ao-key">B</span><span class="ao-opt-text">图中存在负权边</span></div>
+            <div class="option"><span class="radio"></span><span class="ao-key">C</span><span class="ao-opt-text">图为有向图</span></div>
+            <div class="option"><span class="radio"></span><span class="ao-key">D</span><span class="ao-opt-text">图中存在环</span></div>
+          </div>
+        </article>
+      </div>
+    </main>
+  </div>
+
+  <div class="mask open" data-for="sheet-submit"></div>
+  <section class="sheet open" id="sheet-submit" role="dialog" aria-modal="true" aria-labelledby="sc-title">
+    <div class="grabber"></div>
+    <div class="sheet-head">
+      <div>
+        <div class="sheet-title" id="sc-title">确认交卷</div>
+        <div class="sheet-sub">数据结构实验三 · 第 3 / 6 题</div>
+      </div>
+      <button type="button" class="sheet-close" data-close-sheet aria-label="关闭交卷确认，继续作答"><span data-icon="close"></span></button>
+    </div>
+    <div class="sheet-body">
+      <div class="banner banner--danger sc-warn" role="alert">
+        <span data-icon="alert" aria-hidden="true"></span>
+        <div><b>还有 2 题未作答</b>：第 5、6 题为编程题，未作答按 0 分计。</div>
+      </div>
+
+      <div class="stats stats--2 sc-stats">
+        <div class="stat"><div class="v">4</div><div class="k">已答题数 · 共 6 题</div></div>
+        <div class="stat stat--warn"><div class="v">2</div><div class="k">未答题数 · 编程题</div></div>
+      </div>
+
+      <div class="sc-left">
+        <span class="t"><span data-icon="clock" aria-hidden="true"></span>剩余时间</span>
+        <span><b class="tnum">42:18</b> · 充足</span>
+      </div>
+
+      <div class="list sc-unanswered">
+        <div class="rowitem">
+          <span class="row-main"><span class="row-title">第 5 题 · 实现 Dijkstra 求单源最短路</span><span class="row-sub">编程题 · 40 分</span></span>
+          <span class="tag tag--warning">未作答</span>
+        </div>
+        <div class="rowitem">
+          <span class="row-main"><span class="row-title">第 6 题 · 输出路径并分析复杂度</span><span class="row-sub">编程题 · 40 分</span></span>
+          <span class="tag tag--warning">未作答</span>
+        </div>
+      </div>
+
+      <p class="sc-tip"><span data-icon="lock" aria-hidden="true"></span>提交后不可修改，也未提供撤回入口。成绩将在教师复核后发布，可提前交卷。</p>
+    </div>
+    <div class="sheet-foot">
+      <button type="button" class="btn btn--primary btn--block" data-goto="student-assignment-done">确认交卷</button>
+      <button type="button" class="btn btn--secondary btn--block" data-close-sheet>继续作答</button>
+      <div class="sc-foot-note">已自动保存草稿 · 16:30</div>
+    </div>
+  </section>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

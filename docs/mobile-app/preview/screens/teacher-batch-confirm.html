@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>批量审核 · 确认 · 移动端设计稿</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+  .t-chips { padding: 10px 0 0; }
+  .t-chips .chip { height: 34px; }
+  .t-hit { display: flex; align-items: flex-end; margin-top: 14px; }
+  .t-hit b { font-size: 46px; line-height: .95; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .t-hit .t-unit { margin: 0 0 6px 6px; font-size: 14px; color: var(--text-tertiary); }
+  .t-hit .tag { margin: 0 0 7px auto; }
+  .t-hit-sub { margin-top: 8px; font-size: 12.5px; color: var(--text-secondary); }
+  .t-scope { margin-top: 14px; }
+  .t-scope-row { display: flex; align-items: flex-start; padding: 12px 0; }
+  .t-scope-row + .t-scope-row { border-top: 1px solid var(--border-subtle); }
+  .t-scope-icon { flex: none; width: 36px; height: 36px; border-radius: 11px; display: flex; align-items: center; justify-content: center; margin-right: 11px; background: var(--bg-selected); color: var(--text-brand); }
+  .t-scope-icon .icon { width: 18px; height: 18px; }
+  .t-scope-icon--warn { background: var(--status-warning-bg); color: var(--status-warning-fg); }
+  .t-scope-icon--danger { background: var(--status-danger-bg); color: var(--status-danger-fg); }
+  .t-scope-main { flex: 1; min-width: 0; }
+  .t-scope-title { font-size: 14px; font-weight: 600; line-height: 1.4; }
+  .t-scope-sub { margin-top: 3px; font-size: 12.5px; color: var(--text-secondary); line-height: 1.55; }
+  .t-scope-side { flex: none; margin-left: 10px; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+  .t-scope-side.is-warn { color: var(--status-warning-fg); }
+  .t-names { margin-top: 2px; font-size: 12px; color: var(--text-tertiary); }
+  .t-names b { color: var(--status-danger-fg); font-weight: 600; }
+
+  /* 触控目标补足（视觉尺寸保持屏幕契约值，命中区域扩到 ≥44px） */
+  .chip, .seg button, .btn--sm, .btn--xs, .tool, .diffmore, .sheet-close, .t-expand, button.avatar, .switch { position: relative; }
+  .chip::after, .seg button::after, .btn--sm::after, .btn--xs::after, .tool::after, .diffmore::after, .sheet-close::after, .t-expand::after, button.avatar::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%);
+  }
+  .switch::before { content: ""; position: absolute; left: -6px; right: -6px; top: -7px; bottom: -7px; }
+  .searchbar { height: 44px; }
+</style>
+</head>
+<body class="screen" data-screen="teacher-batch-confirm" data-bottom="actionbar">
+  <div class="app">
+    <header class="appbar appbar--solid appbar--bordered">
+      <div class="appbar-side"><button type="button" class="iconbtn" data-icon="back" aria-label="返回批量选择" data-goto="teacher-batch-select"></button></div>
+      <h1 class="appbar-title">批量审核<small>发布前确认</small></h1>
+      <div class="appbar-actions"><button type="button" class="iconbtn iconbtn--text" data-goto="teacher-review-queue">关闭</button></div>
+    </header>
+
+    <main class="scroll">
+      <div class="chips t-chips">
+        <button type="button" class="chip active">AI 分 90–100</button>
+        <button type="button" class="chip">未审核</button>
+        <button type="button" class="chip">已评分</button>
+        <button type="button" class="chip">全部班级</button>
+      </div>
+
+      <div class="page mt12">
+        <div class="card">
+          <div class="card-title">筛选结果</div>
+          <div class="t-hit">
+            <b>12</b><span class="t-unit">份提交</span>
+            <span class="tag tag--info"><i class="dot"></i>待发布</span>
+          </div>
+          <div class="t-hit-sub">AI 分 90–100 · 未审核 · 全部班级 · 用户管理系统（前端）实训</div>
+        </div>
+
+        <div class="banner banner--danger mt12">
+          <span data-icon="alert"></span>
+          <div><b>发布后学生立即可见，且不可撤销。</b>如需修改分数，只能逐份重新评分并再次发布通知。</div>
+        </div>
+
+        <div class="card t-scope">
+          <div class="card-title">影响范围</div>
+          <div class="t-scope-row">
+            <span class="t-scope-icon" data-icon="scores"></span>
+            <div class="t-scope-main">
+              <div class="t-scope-title">发布 12 份成绩</div>
+              <div class="t-scope-sub">学生将立即在「我的成绩」看到分数与 AI 评语。</div>
+            </div>
+            <span class="t-scope-side">12 份</span>
+          </div>
+          <div class="t-scope-row">
+            <span class="t-scope-icon t-scope-icon--warn" data-icon="alert"></span>
+            <div class="t-scope-main">
+              <div class="t-scope-title">分数低于 60 的有 2 份</div>
+              <div class="t-scope-sub">建议逐份复核；批量通过会直接发布。</div>
+              <div class="t-names"><b>孙浩然 56 分</b> · <b>郑一诺 48 分</b></div>
+            </div>
+            <span class="t-scope-side is-warn">建议复核</span>
+          </div>
+          <div class="t-scope-row">
+            <span class="t-scope-icon" data-icon="message"></span>
+            <div class="t-scope-main">
+              <div class="t-scope-title">含教师评语的 4 份</div>
+              <div class="t-scope-sub">教师评语会随成绩一并发给学生。</div>
+            </div>
+            <span class="t-scope-side">4 份</span>
+          </div>
+          <div class="t-scope-row">
+            <span class="t-scope-icon" data-icon="users"></span>
+            <div class="t-scope-main">
+              <div class="t-scope-title">涉及 2 个班级</div>
+              <div class="t-scope-sub">计算机 2301 班 7 份 · 2302 班 5 份。</div>
+            </div>
+            <span class="t-scope-side">2 个班</span>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <div class="actionbar">
+    <button type="button" class="btn btn--secondary" data-goto="teacher-batch-select">先看这 2 份</button>
+    <button type="button" class="btn btn--danger">确认发布 12 份</button>
+  </div>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

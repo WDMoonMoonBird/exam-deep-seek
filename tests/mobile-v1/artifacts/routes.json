@@ -1,0 +1,325 @@
+{
+  "total": 32,
+  "rows": [
+    {
+      "path": "/m",
+      "name": "MobileLanding",
+      "file": "./views/public/Landing.vue",
+      "meta": {
+        "mobile": true,
+        "public": true,
+        "title": "移动端"
+      }
+    },
+    {
+      "path": "/m/login",
+      "name": "MobileLogin",
+      "file": "./views/public/Login.vue",
+      "meta": {
+        "mobile": true,
+        "public": true,
+        "title": "登录"
+      }
+    },
+    {
+      "path": "/m/doc",
+      "name": "MobileDoc",
+      "file": "./views/public/Doc.vue",
+      "meta": {
+        "mobile": true,
+        "public": true,
+        "title": "使用文档"
+      }
+    },
+    {
+      "path": "/m/404",
+      "name": "MobileError404",
+      "file": "./views/public/Error404.vue",
+      "meta": {
+        "mobile": true,
+        "public": true,
+        "title": "页面不存在"
+      }
+    },
+    {
+      "path": "/m/403",
+      "name": "MobileError403",
+      "file": "./views/public/Error403.vue",
+      "meta": {
+        "mobile": true,
+        "public": true,
+        "title": "无权限"
+      }
+    },
+    {
+      "path": "/m/500",
+      "name": "MobileError500",
+      "file": "./views/public/Error500.vue",
+      "meta": {
+        "mobile": true,
+        "public": true,
+        "title": "服务异常"
+      }
+    },
+    {
+      "path": "/m/platform/install",
+      "name": "MobilePlatformInstall",
+      "file": "./views/platform/PlatformInstall.vue",
+      "meta": {
+        "mobile": true,
+        "public": true,
+        "title": "安装到主屏"
+      }
+    },
+    {
+      "path": "/m/platform/splash",
+      "name": "MobilePlatformSplash",
+      "file": "./views/platform/PlatformSplash.vue",
+      "meta": {
+        "mobile": true,
+        "public": true,
+        "title": "启动屏"
+      }
+    },
+    {
+      "path": "/m/platform/states",
+      "name": "MobilePlatformStates",
+      "file": "./views/platform/StatesOverview.vue",
+      "meta": {
+        "mobile": true,
+        "public": true,
+        "title": "状态体系"
+      }
+    },
+    {
+      "path": "/m/student/home",
+      "name": "MobileStudentHome",
+      "file": "./views/student/StudentHome.vue",
+      "meta": {
+        "mobile": true,
+        "role": "student",
+        "title": "学生首页"
+      }
+    },
+    {
+      "path": "/m/student/assignments",
+      "name": "MobileStudentAssignments",
+      "file": "./views/student/Assignments.vue",
+      "meta": {
+        "mobile": true,
+        "role": "student",
+        "title": "我的作业"
+      }
+    },
+    {
+      "path": "/m/student/assignments/:id",
+      "name": "MobileStudentAssignmentDetail",
+      "file": "./views/student/AssignmentDetail.vue",
+      "meta": {
+        "mobile": true,
+        "role": "student",
+        "title": "作业详情"
+      }
+    },
+    {
+      "path": "/m/student/assignments/:id/answer",
+      "name": "MobileStudentAnswer",
+      "file": "./views/student/Answer.vue",
+      "meta": {
+        "mobile": true,
+        "role": "student",
+        "title": "作答"
+      }
+    },
+    {
+      "path": "/m/student/assignments/:id/done",
+      "name": "MobileStudentDone",
+      "file": "./views/student/Done.vue",
+      "meta": {
+        "mobile": true,
+        "role": "student",
+        "title": "已提交"
+      }
+    },
+    {
+      "path": "/m/student/scores",
+      "name": "MobileStudentScores",
+      "file": "./views/student/Scores.vue",
+      "meta": {
+        "mobile": true,
+        "role": "student",
+        "title": "我的成绩"
+      }
+    },
+    {
+      "path": "/m/student/scores/:assignmentId",
+      "name": "MobileStudentScoreDetail",
+      "file": "./views/student/ScoreDetail.vue",
+      "meta": {
+        "mobile": true,
+        "role": "student",
+        "title": "成绩详情"
+      }
+    },
+    {
+      "path": "/m/student/profile",
+      "name": "MobileStudentProfile",
+      "file": "./views/student/Profile.vue",
+      "meta": {
+        "mobile": true,
+        "role": "student",
+        "title": "我的"
+      }
+    },
+    {
+      "path": "/m/teacher/home",
+      "name": "MobileTeacherHome",
+      "file": "./views/teacher/Home.vue",
+      "meta": {
+        "mobile": true,
+        "role": "teacher",
+        "title": "工作台"
+      }
+    },
+    {
+      "path": "/m/teacher/assignments",
+      "name": "MobileTeacherAssignments",
+      "file": "./views/teacher/Assignments.vue",
+      "meta": {
+        "mobile": true,
+        "role": "teacher",
+        "title": "作业"
+      }
+    },
+    {
+      "path": "/m/teacher/assignments/:id",
+      "name": "MobileTeacherAssignmentDetail",
+      "file": "./views/teacher/AssignmentDetail.vue",
+      "meta": {
+        "mobile": true,
+        "role": "teacher",
+        "title": "作业详情"
+      }
+    },
+    {
+      "path": "/m/teacher/review",
+      "name": "MobileTeacherReviewQueue",
+      "file": "./views/teacher/ReviewQueue.vue",
+      "meta": {
+        "mobile": true,
+        "role": "teacher",
+        "title": "评分审核"
+      }
+    },
+    {
+      "path": "/m/teacher/review/:submissionId",
+      "name": "MobileTeacherReviewDetail",
+      "file": "./views/teacher/ReviewDetail.vue",
+      "meta": {
+        "mobile": true,
+        "role": "teacher",
+        "title": "审核详情"
+      }
+    },
+    {
+      "path": "/m/teacher/review/:submissionId/code",
+      "name": "MobileTeacherReviewCode",
+      "file": "./views/teacher/ReviewCode.vue",
+      "meta": {
+        "mobile": true,
+        "role": "teacher",
+        "title": "代码只读"
+      }
+    },
+    {
+      "path": "/m/teacher/review/:submissionId/diff",
+      "name": "MobileTeacherReviewDiff",
+      "file": "./views/teacher/ReviewDiff.vue",
+      "meta": {
+        "mobile": true,
+        "role": "teacher",
+        "title": "代码差异"
+      }
+    },
+    {
+      "path": "/m/teacher/batch",
+      "name": "MobileTeacherBatchSelect",
+      "file": "./views/teacher/BatchSelect.vue",
+      "meta": {
+        "mobile": true,
+        "role": "teacher",
+        "title": "批量审核"
+      }
+    },
+    {
+      "path": "/m/teacher/batch/confirm",
+      "name": "MobileTeacherBatchConfirm",
+      "file": "./views/teacher/BatchConfirm.vue",
+      "meta": {
+        "mobile": true,
+        "role": "teacher",
+        "title": "确认批量审核"
+      }
+    },
+    {
+      "path": "/m/teacher/assign/new",
+      "name": "MobileTeacherAssignWizard",
+      "file": "./views/teacher/AssignWizard.vue",
+      "meta": {
+        "mobile": true,
+        "role": "teacher",
+        "title": "布置作业"
+      }
+    },
+    {
+      "path": "/m/teacher/questions",
+      "name": "MobileTeacherQuestions",
+      "file": "./views/teacher/Questions.vue",
+      "meta": {
+        "mobile": true,
+        "role": "teacher",
+        "title": "题库"
+      }
+    },
+    {
+      "path": "/m/teacher/classes/:classId",
+      "name": "MobileTeacherClass",
+      "file": "./views/teacher/Class.vue",
+      "meta": {
+        "mobile": true,
+        "role": "teacher",
+        "title": "班级详情"
+      }
+    },
+    {
+      "path": "/m/teacher/profile",
+      "name": "MobileTeacherProfile",
+      "file": "./views/teacher/Profile.vue",
+      "meta": {
+        "mobile": true,
+        "role": "teacher",
+        "title": "我的"
+      }
+    },
+    {
+      "path": "/m/teacher/code/unsupported",
+      "name": "MobileTeacherCodeUnsupported",
+      "file": "./views/teacher/CodeUnsupported.vue",
+      "meta": {
+        "mobile": true,
+        "role": "teacher",
+        "title": "手机编辑说明"
+      }
+    },
+    {
+      "path": "/m/:pathMatch(.*)*",
+      "name": "MobileNotFound",
+      "file": "./views/public/Error404.vue",
+      "meta": {
+        "mobile": true,
+        "public": true,
+        "title": "页面不存在"
+      }
+    }
+  ]
+}

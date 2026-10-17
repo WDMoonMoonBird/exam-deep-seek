@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>管理概览 · Deadpan 判题</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+/* ============ 管理概览（admin-home）页内样式：只用令牌 ============ */
+.ah-head { display: flex; align-items: flex-start; padding: 14px var(--m-gutter) 0; }
+.ah-greet { font-size: var(--m-fs-body-sm); color: var(--text-tertiary); }
+.ah-name { margin-top: 3px; font-size: var(--m-fs-title-1); line-height: 1.3; font-weight: 700; letter-spacing: var(--m-tracking-tight); color: var(--text-strong); }
+.ah-role { display: flex; align-items: center; margin-top: 4px; font-size: var(--m-fs-caption); color: var(--text-tertiary); }
+.ah-role .tag { margin-left: 6px; height: 20px; }
+.ah-head-actions { display: flex; align-items: center; flex: none; margin-left: 8px; }
+.ah-bell { position: relative; }
+.ah-bell .dot { position: absolute; top: 9px; right: 9px; width: 7px; height: 7px; border-radius: 50%; background: var(--red-600); box-shadow: 0 0 0 2px var(--bg-canvas); }
+.ah-avatar { margin-left: 8px; }
+
+.ah-tip { margin-top: 14px; }
+
+/* KPI */
+.ah-home .sec .link, .sec .link { min-height: var(--m-touch-min); padding: 0 2px; }
+.ah-kpis { display: grid; grid-template-columns: repeat(2, 1fr); grid-gap: 10px; gap: 10px; }
+.ah-kpi { padding: 13px 14px; border-radius: 14px; }
+.ah-kpi .v { font-size: 27px; font-weight: 650; line-height: 1.1; letter-spacing: -0.02em; }
+.ah-kpi .k { margin-top: 2px; }
+.ah-kpi .note { margin-top: 7px; font-size: 11.5px; line-height: 1.45; color: var(--text-tertiary); }
+.ah-kpi .note b { color: var(--text-secondary); font-weight: var(--m-fw-medium); }
+.ah-kpi--online .v { color: var(--text-brand); }
+.ah-kpi--online .live { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--green-600); margin-right: 5px; vertical-align: 2px; }
+
+/* 系统状态 */
+.ah-status { margin-top: 12px; }
+.ah-status-head { display: flex; align-items: center; }
+.ah-status-ico { width: 38px; height: 38px; border-radius: 11px; background: var(--status-success-bg); color: var(--status-success-fg); display: flex; align-items: center; justify-content: center; flex: none; margin-right: 11px; }
+.ah-status-ico .icon { width: 20px; height: 20px; }
+.ah-status-head .card-title { line-height: 1.35; }
+.ah-status-metrics { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--border-subtle); }
+.ah-metric { position: relative; padding: 0 6px 0 14px; }
+.ah-metric:first-child { padding-left: 0; }
+.ah-metric + .ah-metric::before { content: ""; position: absolute; left: 0; top: 3px; bottom: 3px; width: 1px; background: var(--border-subtle); }
+.ah-metric b { display: block; font-size: 21px; font-weight: 650; line-height: 1.15; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; color: var(--text-strong); }
+.ah-metric b small { font-size: 11px; font-weight: 500; color: var(--text-tertiary); margin-left: 1px; }
+.ah-metric span { display: block; margin-top: 2px; font-size: 11.5px; color: var(--text-tertiary); }
+.ah-status-foot { display: flex; align-items: center; margin-top: 12px; font-size: 11.5px; color: var(--text-tertiary); }
+.ah-status-foot .icon { width: 13px; height: 13px; margin-right: 5px; }
+.ah-status-foot .tag { margin-left: auto; }
+
+/* 异常 */
+.ah-alerts { overflow: hidden; }
+.ah-alerts .rowitem { width: 100%; text-align: left; min-height: 62px; align-items: flex-start; }
+.ah-alerts .row-main { display: flex; flex-direction: column; min-width: 0; }
+.ah-alerts .row-title, .ah-alerts .row-sub { display: block; }
+.ah-alerts .row-title { white-space: normal; overflow: visible; line-height: 1.4; }
+.ah-alerts .row-sub { font-size: var(--m-fs-caption); }
+.ah-alerts .tag { margin-right: 10px; margin-top: 1px; height: 21px; min-width: 42px; justify-content: center; }
+.ah-alert-note { margin-top: 8px; padding: 0 2px; font-size: var(--m-fs-caption); color: var(--text-tertiary); }
+
+/* 快捷入口 */
+.ah-quick { display: grid; grid-template-columns: repeat(3, 1fr); grid-gap: 10px; gap: 10px; }
+.ah-tile { display: flex; flex-direction: column; align-items: flex-start; padding: 13px 12px; min-height: 96px;
+  background: var(--card-bg); border: 1px solid var(--card-bd); border-radius: 14px; text-align: left;
+  transition: transform var(--m-duration-press) var(--m-ease-out); }
+.ah-tile:active { transform: scale(0.97); }
+.ah-tile-ico { width: 34px; height: 34px; border-radius: 10px; background: var(--bg-selected); color: var(--text-brand); display: flex; align-items: center; justify-content: center; }
+.ah-tile-ico .icon { width: 18px; height: 18px; }
+.ah-tile-label { margin-top: 10px; font-size: 13.5px; font-weight: var(--m-fw-semibold); color: var(--text-primary); }
+.ah-tile-sub { margin-top: 1px; font-size: 11px; color: var(--text-tertiary); }
+.ah-tile--muted { border-style: dashed; background: var(--bg-surface-2); }
+.ah-tile--muted .ah-tile-ico { background: var(--bg-sunken); color: var(--text-secondary); }
+.ah-tile--muted .ah-tile-sub { color: var(--status-warning-fg); }
+
+.ah-foot { margin-top: 18px; padding: 0 var(--m-gutter); text-align: center; font-size: 11px; color: var(--text-tertiary); }
+</style>
+</head>
+<body class="screen" data-screen="admin-home" data-bottom="tabbar">
+  <div data-tabbar="admin" data-active="home"></div>
+
+  <div class="app">
+    <main class="scroll">
+      <!-- 问候 + 身份 -->
+      <header class="ah-head">
+        <div class="grow">
+          <div class="ah-greet">下午好，</div>
+          <h1 class="ah-name">王建国</h1>
+          <div class="ah-role">Deadpan 大学 · 信息中心<span class="tag tag--accent">超级管理员</span></div>
+        </div>
+        <div class="ah-head-actions">
+          <button type="button" class="iconbtn ah-bell" aria-label="通知（1 条未读）">
+            <span data-icon="bell"></span><i class="dot" aria-hidden="true"></i>
+          </button>
+          <span class="avatar avatar--brand ah-avatar" aria-hidden="true">王</span>
+        </div>
+      </header>
+
+      <!-- 只读提示 -->
+      <div class="page ah-tip">
+        <div class="readonly-tip">
+          <span data-icon="info" aria-hidden="true"></span>
+          <div>只读模式：移动端仅用于查看数据，新增 / 编辑 / 高风险配置请在电脑端完成。</div>
+        </div>
+      </div>
+
+      <!-- KPI -->
+      <div class="sec"><h2>今日概览</h2><span class="sec-note">截至 16:32</span></div>
+      <div class="page">
+        <div class="ah-kpis">
+          <div class="stat ah-kpi">
+            <div class="v tnum">1,286</div>
+            <div class="k">用户总数</div>
+            <div class="note">教师 <b>96</b> · 学生 <b>1,190</b></div>
+          </div>
+          <div class="stat ah-kpi">
+            <div class="v tnum">42</div>
+            <div class="k">班级</div>
+            <div class="note">覆盖 <b>4</b> 个学院 · 本学期</div>
+          </div>
+          <div class="stat ah-kpi ah-kpi--online">
+            <div class="v tnum"><i class="live" aria-hidden="true"></i>318</div>
+            <div class="k">当前在线</div>
+            <div class="note">峰值 <b>402</b>（15:20）</div>
+          </div>
+          <div class="stat ah-kpi">
+            <div class="v tnum">1,203</div>
+            <div class="k">今日 AI 评分</div>
+            <div class="note">完成 <b>1,180</b> · 进行中 <b>23</b></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 系统状态 -->
+      <div class="sec"><h2>系统状态</h2><button type="button" class="link" data-goto="admin-monitor">实时监控<span data-icon="chevron-right" aria-hidden="true"></span></button></div>
+      <div class="page">
+        <div class="card ah-status">
+          <div class="ah-status-head">
+            <span class="ah-status-ico" aria-hidden="true" data-icon="check-circle"></span>
+            <div class="grow">
+              <div class="card-title">全部服务正常</div>
+              <div class="card-sub">Web · 评分 Worker · 数据库</div>
+            </div>
+            <span class="tag tag--success"><i class="dot"></i>正常</span>
+          </div>
+          <div class="ah-status-metrics">
+            <div class="ah-metric"><b>23</b><span>评分队列（进行中）</span></div>
+            <div class="ah-metric"><b>186<small>ms</small></b><span>平均响应</span></div>
+            <div class="ah-metric"><b>98.1<small>%</small></b><span>任务完成率</span></div>
+          </div>
+          <div class="ah-status-foot">
+            <span data-icon="clock" aria-hidden="true"></span>最近检查 16:32:10
+            <span class="tag tag--neutral">每 30 秒刷新</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 今日异常 -->
+      <div class="sec"><h2>今日异常</h2><span class="sec-note">2 条 · 均已恢复</span></div>
+      <div class="page">
+        <div class="card card--flush ah-alerts">
+          <button type="button" class="rowitem rowitem--tap" data-goto="admin-monitor">
+            <span class="tag tag--danger">5xx</span>
+            <span class="row-main">
+              <span class="row-title">API 网关 5xx 错误 3 次</span>
+              <span class="row-sub">14:32 · 影响 2 分钟 · 已自动恢复</span>
+            </span>
+            <span class="chevron" data-icon="chevron-right" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="rowitem rowitem--tap" data-goto="admin-monitor">
+            <span class="tag tag--warning">超时</span>
+            <span class="row-main">
+              <span class="row-title">评分任务超时 1 次</span>
+              <span class="row-sub">09:18 · 已自动重试成功</span>
+            </span>
+            <span class="chevron" data-icon="chevron-right" aria-hidden="true"></span>
+          </button>
+        </div>
+        <p class="ah-alert-note">今日共 2 条异常：1 个 5xx、1 个超时，未影响学生提交。</p>
+      </div>
+
+      <!-- 快捷入口 -->
+      <div class="sec"><h2>快捷入口</h2></div>
+      <div class="page">
+        <div class="ah-quick">
+          <button type="button" class="ah-tile" data-goto="admin-directory">
+            <span class="ah-tile-ico" aria-hidden="true" data-icon="users"></span>
+            <span class="ah-tile-label">组织目录</span>
+            <span class="ah-tile-sub">42 个班级</span>
+          </button>
+          <button type="button" class="ah-tile" data-goto="admin-monitor">
+            <span class="ah-tile-ico" aria-hidden="true" data-icon="activity"></span>
+            <span class="ah-tile-label">实时监控</span>
+            <span class="ah-tile-sub">在线 318 人</span>
+          </button>
+          <button type="button" class="ah-tile ah-tile--muted" aria-disabled="true">
+            <span class="ah-tile-ico" aria-hidden="true" data-icon="settings"></span>
+            <span class="ah-tile-label">管理后台</span>
+            <span class="ah-tile-sub">请在电脑端</span>
+          </button>
+        </div>
+      </div>
+
+      <p class="ah-foot">数据每 30 秒自动刷新 · 只读快照 16:32:10</p>
+    </main>
+  </div>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>

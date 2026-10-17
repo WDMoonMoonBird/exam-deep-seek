@@ -1,0 +1,222 @@
+{
+  "checks": [
+    {
+      "id": "B0",
+      "title": "git 变更不含 server/**、prisma/**、迁移",
+      "status": "PASS",
+      "detail": "tracked+untracked 均无 server/、prisma/、migrations 路径"
+    },
+    {
+      "id": "B1",
+      "title": "client/package.json 与 lockfile 无新增依赖",
+      "status": "PASS",
+      "detail": "git diff HEAD 两文件为空"
+    },
+    {
+      "id": "B2",
+      "title": "共享/桌面文件无越权修改",
+      "status": "PASS",
+      "detail": "仅有 client/src/router/index.js、client/src/main.js 两个受控入口改动；client/src/mobile/** 新增"
+    },
+    {
+      "id": "S1",
+      "title": "mobile 源码无延期/缺失 API 字符串",
+      "status": "PASS",
+      "detail": "去注释后所有以 / 开头的字符串均未命中 /admin、urge、handoff、notification、scores/overview、batch-review、batch-publish、export-review、聚合/排名"
+    },
+    {
+      "id": "S2",
+      "title": "mobile 未引入禁用依赖",
+      "status": "PASS",
+      "detail": "外部 import 仅来自 vue, vue-router, dompurify"
+    },
+    {
+      "id": "S3",
+      "title": "无新 axios 实例",
+      "status": "PASS",
+      "detail": "mobile 源码未 import/创建 axios，请求统一走 client/src/api/request.js"
+    },
+    {
+      "id": "S4",
+      "title": "静态 API 路径均在契约白名单前缀内",
+      "status": "PASS",
+      "detail": "共 16 个字面量路径全部命中白名单前缀"
+    },
+    {
+      "id": "F1",
+      "title": "mobileFeatures 默认仅 multiSchoolLogin=true",
+      "status": "PASS",
+      "detail": "13 个开关，唯一 true=multiSchoolLogin"
+    },
+    {
+      "id": "F2",
+      "title": "isMobileFeatureEnabled 语义正确",
+      "status": "PASS",
+      "detail": "false 开关返回 false"
+    },
+    {
+      "id": "R1",
+      "title": "31 条契约路由齐全且无 /m/admin",
+      "status": "PASS",
+      "detail": "契约 31 条全部存在；实际 32 条（含 1 条 /m 兜底）"
+    },
+    {
+      "id": "R2",
+      "title": "/m 兜底 404 且最后注册",
+      "status": "PASS",
+      "detail": "extra=/m/:pathMatch(.*)* name=MobileNotFound"
+    },
+    {
+      "id": "R3",
+      "title": "路由均懒加载且组件文件存在",
+      "status": "PASS",
+      "detail": "32 条路由均 () => import() 且文件落盘"
+    },
+    {
+      "id": "R4",
+      "title": "每个路由页有 h1 或 MobileAppBar（h1 由组件渲染）",
+      "status": "PASS",
+      "detail": "31 个路由页均有 h1 来源"
+    },
+    {
+      "id": "R5",
+      "title": "每个路由页使用 MobileLayout/.m-screen",
+      "status": "PASS",
+      "detail": "31 个路由页均挂载移动骨架"
+    },
+    {
+      "id": "R6",
+      "title": "34 个页面文件（9 公共/平台 + 11 学生 + 14 教师）",
+      "status": "PASS",
+      "detail": "views/**/*.vue = 34"
+    },
+    {
+      "id": "C1",
+      "title": "mobile.css 不覆盖全局 html/body/:root",
+      "status": "PASS",
+      "detail": ".m-screen 作用域外无全局选择器（tokens 文件变量除外）"
+    },
+    {
+      "id": "C2",
+      "title": "页面 scoped 样式无硬编码 hex（代码调色板豁免）",
+      "status": "PASS",
+      "detail": "未发现令牌外颜色字面量"
+    }
+  ],
+  "observations": [
+    {
+      "id": "B2-obs",
+      "detail": "工作区存在与本任务无关的未跟踪文件（非 client 源码，不判定）",
+      "files": [
+        "\"\\345\\256\\241\\346\\237\\245\\346\\200\\273\\346\\212\\245\\345\\221\\212-\\345\\244\\215\\345\\256\\241.md\""
+      ]
+    },
+    {
+      "id": "T1-obs",
+      "detail": "模板中出现 v1 延期文案关键词（需按运行 DOM 判定是否渲染）",
+      "items": [
+        {
+          "file": "client/src/mobile/views/public/Doc.vue",
+          "label": "催交",
+          "line": "催交",
+          "text": "<div>催交、通知提醒等能力暂未开放，本版本不提供。</div>",
+          "ln": 135
+        },
+        {
+          "file": "client/src/mobile/views/public/Error500.vue",
+          "label": "请求编号",
+          "line": "请求编号",
+          "text": "<span class=\"err-v\">服务异常（HTTP 500）· 当前版本不展示请求编号</span>",
+          "ln": 47
+        },
+        {
+          "file": "client/src/mobile/views/public/Error500.vue",
+          "label": "请求编号",
+          "line": "请求编号",
+          "text": "本页不展示伪造的请求编号；排查时请把「当前地址 + 发生时间」提供给管理员。",
+          "ln": 64
+        },
+        {
+          "file": "client/src/mobile/views/teacher/AssignmentDetail.vue",
+          "label": "最高分",
+          "line": "最高分",
+          "text": "<div class=\"kv\"><span class=\"k\">计分口径</span><span class=\"v\">{{ assignment.scorePo",
+          "ln": 131
+        },
+        {
+          "file": "client/src/mobile/views/teacher/ReviewDetail.vue",
+          "label": "AI 分项",
+          "line": "分项",
+          "text": "<div class=\"card-title\">AI 分项</div>",
+          "ln": 84
+        },
+        {
+          "file": "client/src/mobile/views/teacher/ReviewDetail.vue",
+          "label": "AI 分项",
+          "line": "分项",
+          "text": "<p v-else-if=\"!projectBreakdown.length\" class=\"help mt8\">AI 未返回分项明细，请结合整段评语人工评分。",
+          "ln": 91
+        }
+      ]
+    }
+  ],
+  "findings": [],
+  "summary": {
+    "passed": 17,
+    "failed": 0,
+    "observations": 2,
+    "findings": {
+      "P0": 0,
+      "P1": 0,
+      "P2": 0
+    },
+    "changedPaths": {
+      "tracked": [
+        "client/src/mobile/views/teacher/ReviewCode.vue",
+        "client/src/mobile/views/teacher/ReviewDetail.vue"
+      ],
+      "untracked": [
+        "docs/mobile-app/preview-standalone.zip",
+        "docs/mobile-app/preview-standalone/SCREENS.md",
+        "docs/mobile-app/preview-standalone/assets/02-design-tokens.css",
+        "docs/mobile-app/preview-standalone/assets/gallery.css",
+        "docs/mobile-app/preview-standalone/assets/gallery.js",
+        "docs/mobile-app/preview-standalone/assets/screen.css",
+        "docs/mobile-app/preview-standalone/assets/screen.js",
+        "docs/mobile-app/preview-standalone/assets/screens.js",
+        "docs/mobile-app/preview-standalone/assets/tokens.css",
+        "docs/mobile-app/preview-standalone/index.html",
+        "docs/mobile-app/preview-standalone/screens/_kitchen-sink.html",
+        "docs/mobile-app/preview-standalone/screens/_template.html",
+        "docs/mobile-app/preview-standalone/screens/admin-directory.html",
+        "docs/mobile-app/preview-standalone/screens/admin-home.html",
+        "docs/mobile-app/preview-standalone/screens/admin-monitor.html",
+        "docs/mobile-app/preview-standalone/screens/error-403.html",
+        "docs/mobile-app/preview-standalone/screens/error-404.html",
+        "docs/mobile-app/preview-standalone/screens/error-500.html",
+        "docs/mobile-app/preview-standalone/screens/platform-install.html",
+        "docs/mobile-app/preview-standalone/screens/platform-splash.html",
+        "docs/mobile-app/preview-standalone/screens/public-doc.html",
+        "docs/mobile-app/preview-standalone/screens/public-landing.html",
+        "docs/mobile-app/preview-standalone/screens/public-login.html",
+        "docs/mobile-app/preview-standalone/screens/states-overview.html",
+        "docs/mobile-app/preview-standalone/screens/student-answer-code.html",
+        "docs/mobile-app/preview-standalone/screens/student-answer-objective.html",
+        "docs/mobile-app/preview-standalone/screens/student-answer-sheet.html",
+        "docs/mobile-app/preview-standalone/screens/student-assignment-detail.html",
+        "docs/mobile-app/preview-standalone/screens/student-assignment-done.html",
+        "docs/mobile-app/preview-standalone/screens/student-assignments.html",
+        "docs/mobile-app/preview-standalone/screens/student-home.html",
+        "docs/mobile-app/preview-standalone/screens/student-profile.html",
+        "docs/mobile-app/preview-standalone/screens/student-score-detail.html",
+        "docs/mobile-app/preview-standalone/screens/student-scores.html",
+        "docs/mobile-app/preview-standalone/screens/student-submit-confirm.html",
+        "docs/mobile-app/preview-standalone/screens/teacher-assign-wizard.html",
+        "docs/mobile-app/preview-standalone/screens/teacher-assignment-detail.html",
+        "docs/mobile-app/preview-standalone/screens/teacher-assignments.html",
+        "docs/mobile-app/preview-standalone/screens/teacher-batch-confirm.html",
+        "docs/mobile-app/preview-standalone/screens/teacher-batch-select.html"
+      ]
+    }
+  }
+}

@@ -35,6 +35,19 @@ app.use(Antd);
 //   · 极端情况（router 不可用）由 request.js 的 base 感知兜底实现接手（同样带 ?expired=1）。
 setAuthRedirect(() => {
   try {
+    // ★T0（mobile v1）：401 时若当前在 /m 移动端，必须跳移动登录页（/m/login），
+    //   否则移动用户会被踢到桌面 /login（移动端未注册该页的移动体验、且违背契约 §3 守卫口径）。
+    //   桌面路径行为保持原样：/login?expired=1。
+    const current = router.currentRoute.value;
+    const currentPath = current && typeof current.path === 'string' ? current.path : '';
+    const inMobile = currentPath === '/m' || currentPath.indexOf('/m/') === 0;
+    if (inMobile) {
+      const redirect = currentPath === '/m/login' ? '' : current.fullPath;
+      const query = redirect ? { expired: '1', redirect } : { expired: '1' };
+      const navMobile = router.push({ path: '/m/login', query });
+      if (navMobile && typeof navMobile.catch === 'function') navMobile.catch(() => { /* 已在该路由 / 导航被取消：忽略 */ });
+      return;
+    }
     const nav = router.push({ path: '/login', query: { expired: '1' } });
     if (nav && typeof nav.catch === 'function') nav.catch(() => { /* 已在该路由 / 导航被取消：忽略 */ });
   } catch { /* 忽略：交由 request.js 的兜底跳转 */ }

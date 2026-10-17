@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f9">
+<title>组织目录 · Deadpan 判题</title>
+<link rel="stylesheet" href="../../../../client/src/styles/tokens.css">
+<link rel="stylesheet" href="../../02-design-tokens.css">
+<link rel="stylesheet" href="../assets/screen.css">
+<style>
+/* ============ 组织目录（admin-directory）页内样式：只用令牌 ============ */
+.ad-head { display: flex; align-items: flex-start; padding: 14px var(--m-gutter) 0; }
+.ad-title { font-size: var(--m-fs-title-1); line-height: 1.3; font-weight: 700; letter-spacing: var(--m-tracking-tight); color: var(--text-strong); }
+.ad-sub { margin-top: 4px; font-size: var(--m-fs-caption); color: var(--text-tertiary); }
+.ad-head .tag { flex: none; margin-top: 3px; margin-left: 10px; }
+
+.ad-search { padding: 14px var(--m-gutter) 0; }
+.ad-search .searchbar { height: var(--m-touch-min); }
+.ad-seg button { height: var(--m-touch-min); }
+.ad-seg { margin: 12px var(--m-gutter) 0; }
+.ad-tip { margin-top: 12px; }
+.ad-panels { margin-top: 4px; }
+.ad-panel { display: none; }
+.ad-panel.is-active { display: block; }
+
+.ad-group-head { display: flex; align-items: baseline; justify-content: space-between; margin: 20px var(--m-gutter) 8px; }
+.ad-group-head h2 { font-size: var(--m-fs-body); font-weight: var(--m-fw-semibold); color: var(--text-primary); letter-spacing: 0.01em; }
+.ad-group-head span { font-size: var(--m-fs-caption); color: var(--text-tertiary); }
+.ad-list { margin: 0 var(--m-gutter); }
+.ad-list .rowitem { width: 100%; text-align: left; min-height: 60px; }
+.ad-list .row-main { display: flex; flex-direction: column; min-width: 0; }
+.ad-list .row-title, .ad-list .row-sub { display: block; }
+.ad-list .rowitem .tag { flex: none; margin-left: 10px; }
+.ad-list .avatar { margin-right: 12px; }
+.ad-side { flex: none; margin-left: 10px; font-size: var(--m-fs-caption); color: var(--text-tertiary); }
+.ad-note { margin: 12px var(--m-gutter) 0; padding: 10px 12px; border-radius: 10px; background: var(--bg-surface-2); font-size: var(--m-fs-caption); line-height: 1.6; color: var(--text-tertiary); }
+
+/* 学校信息卡 */
+.ad-school { margin: 16px var(--m-gutter) 0; }
+.ad-school-head { display: flex; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--border-subtle); }
+.ad-school-mark { width: 44px; height: 44px; border-radius: 13px; background: var(--brand-600); color: var(--text-on-brand); display: flex; align-items: center; justify-content: center; flex: none; }
+.ad-school-mark .icon { width: 23px; height: 23px; }
+.ad-school-main { flex: 1; min-width: 0; margin-left: 12px; }
+.ad-school-main h2 { font-size: var(--m-fs-title-3); font-weight: 700; }
+.ad-school-main p { margin-top: 2px; font-size: var(--m-fs-caption); color: var(--text-tertiary); }
+.ad-school .kv { padding: 9px 0; }
+.ad-school .kv:first-of-type { margin-top: 4px; }
+
+.ad-foot { margin-top: 8px; padding: 18px var(--m-gutter) 0; text-align: center; font-size: 11px; color: var(--text-tertiary); }
+</style>
+</head>
+<body class="screen" data-screen="admin-directory" data-bottom="tabbar">
+  <div data-tabbar="admin" data-active="directory"></div>
+
+  <div class="app">
+    <main class="scroll">
+      <header class="ad-head">
+        <div class="grow">
+          <h1 class="ad-title">组织目录</h1>
+          <div class="ad-sub">Deadpan 大学 · 4 个学院 · 1,286 人</div>
+        </div>
+        <span class="tag tag--neutral">只读</span>
+      </header>
+
+      <div class="ad-search">
+        <div class="searchbar">
+          <span data-icon="search" aria-hidden="true"></span>
+          <input id="dir-q" type="search" placeholder="搜索班级、教师或学生" aria-label="搜索组织目录">
+        </div>
+      </div>
+
+      <!-- 分段：学校 / 班级 / 教师 / 学生 -->
+      <div class="seg ad-seg" data-tabgroup="directory" role="tablist" aria-label="目录分类">
+        <button type="button" role="tab" aria-selected="false" data-tab="school">学校</button>
+        <button type="button" role="tab" aria-selected="true" class="active" data-tab="classes">班级<span class="count">42</span></button>
+        <button type="button" role="tab" aria-selected="false" data-tab="teachers">教师<span class="count">96</span></button>
+        <button type="button" role="tab" aria-selected="false" data-tab="students">学生<span class="count">1,190</span></button>
+      </div>
+
+      <div class="page ad-tip">
+        <div class="readonly-tip">
+          <span data-icon="info" aria-hidden="true"></span>
+          <div>只读目录：新增、编辑与批量导入名单请在电脑端完成。</div>
+        </div>
+      </div>
+
+      <div class="ad-panels">
+        <!-- 学校 -->
+        <section class="ad-panel" data-tabpanel="school" aria-label="学校">
+          <div class="card ad-school">
+            <div class="ad-school-head">
+              <span class="ad-school-mark" aria-hidden="true"><span data-icon="logo"></span></span>
+              <div class="ad-school-main">
+                <h2>Deadpan 大学</h2>
+                <p>教育部直属 · 本科 · 上海市</p>
+              </div>
+              <span class="tag tag--info">本科</span>
+            </div>
+            <div class="kv"><span class="k">院校代码</span><span class="v mono">4111010001</span></div>
+            <div class="kv"><span class="k">学院数量</span><span class="v">4 个</span></div>
+            <div class="kv"><span class="k">用户总数</span><span class="v">1,286（教师 96 / 学生 1,190）</span></div>
+            <div class="kv"><span class="k">数据同步</span><span class="v">教务系统 · 今日 06:00</span></div>
+          </div>
+          <div class="ad-group-head"><h2>学院</h2><span>4 个</span></div>
+          <div class="list ad-list">
+            <button type="button" class="rowitem rowitem--tap">
+              <span class="rowicon" aria-hidden="true" data-icon="users"></span>
+              <span class="row-main"><span class="row-title">计算机学院</span><span class="row-sub">教师 32 · 班级 12</span></span>
+              <span class="chevron" data-icon="chevron-right" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="rowitem rowitem--tap">
+              <span class="rowicon" aria-hidden="true" data-icon="users"></span>
+              <span class="row-main"><span class="row-title">软件学院</span><span class="row-sub">教师 28 · 班级 14</span></span>
+              <span class="chevron" data-icon="chevron-right" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="rowitem rowitem--tap">
+              <span class="rowicon" aria-hidden="true" data-icon="users"></span>
+              <span class="row-main"><span class="row-title">信息工程学院</span><span class="row-sub">教师 20 · 班级 9</span></span>
+              <span class="chevron" data-icon="chevron-right" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="rowitem rowitem--tap">
+              <span class="rowicon" aria-hidden="true" data-icon="users"></span>
+              <span class="row-main"><span class="row-title">外国语学院</span><span class="row-sub">教师 16 · 班级 7</span></span>
+              <span class="chevron" data-icon="chevron-right" aria-hidden="true"></span>
+            </button>
+          </div>
+        </section>
+
+        <!-- 班级（默认） -->
+        <section class="ad-panel is-active" data-tabpanel="classes" aria-label="班级">
+          <div class="ad-group-head"><h2>计算机学院</h2><span>2 个班级</span></div>
+          <div class="list ad-list">
+            <button type="button" class="rowitem rowitem--tap">
+              <span class="rowicon" aria-hidden="true" data-icon="users"></span>
+              <span class="row-main"><span class="row-title">计算机 2301 班</span><span class="row-sub">45 人 · 教师 周子轩</span></span>
+              <span class="ad-side">2026 级</span>
+              <span class="chevron" data-icon="chevron-right" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="rowitem rowitem--tap">
+              <span class="rowicon" aria-hidden="true" data-icon="users"></span>
+              <span class="row-main"><span class="row-title">计算机 2302 班</span><span class="row-sub">43 人 · 教师 周子轩</span></span>
+              <span class="ad-side">2026 级</span>
+              <span class="chevron" data-icon="chevron-right" aria-hidden="true"></span>
+            </button>
+          </div>
+          <div class="ad-group-head"><h2>软件学院</h2><span>2 个班级</span></div>
+          <div class="list ad-list">
+            <button type="button" class="rowitem rowitem--tap">
+              <span class="rowicon" aria-hidden="true" data-icon="users"></span>
+              <span class="row-main"><span class="row-title">软件 2201 班</span><span class="row-sub">40 人 · 教师 陈晓</span></span>
+              <span class="ad-side">2025 级</span>
+              <span class="chevron" data-icon="chevron-right" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="rowitem rowitem--tap">
+              <span class="rowicon" aria-hidden="true" data-icon="users"></span>
+              <span class="row-main"><span class="row-title">软件 2202 班</span><span class="row-sub">42 人 · 教师 陈晓</span></span>
+              <span class="ad-side">2025 级</span>
+              <span class="chevron" data-icon="chevron-right" aria-hidden="true"></span>
+            </button>
+          </div>
+          <div class="ad-note">仅显示前 4 个班级 · 共 42 个。分页浏览、编辑与导入名单请在电脑端完成。</div>
+        </section>
+
+        <!-- 教师 -->
+        <section class="ad-panel" data-tabpanel="teachers" aria-label="教师">
+          <div class="ad-group-head"><h2>全部教师</h2><span>96 位 · 在职</span></div>
+          <div class="list ad-list">
+            <button type="button" class="rowitem rowitem--tap">
+              <span class="avatar avatar--sm" aria-hidden="true">周</span>
+              <span class="row-main"><span class="row-title">周子轩</span><span class="row-sub">T2026001 · 计算机学院 · 3 个班</span></span>
+              <span class="tag tag--success">在职</span>
+            </button>
+            <button type="button" class="rowitem rowitem--tap">
+              <span class="avatar avatar--sm" aria-hidden="true">陈</span>
+              <span class="row-main"><span class="row-title">陈晓</span><span class="row-sub">T2025008 · 软件学院 · 2 个班</span></span>
+              <span class="tag tag--success">在职</span>
+            </button>
+            <button type="button" class="rowitem rowitem--tap">
+              <span class="avatar avatar--sm" aria-hidden="true">刘</span>
+              <span class="row-main"><span class="row-title">刘思远</span><span class="row-sub">T2024012 · 信息工程学院 · 4 个班</span></span>
+              <span class="tag tag--success">在职</span>
+            </button>
+            <button type="button" class="rowitem rowitem--tap">
+              <span class="avatar avatar--sm" aria-hidden="true">赵</span>
+              <span class="row-main"><span class="row-title">赵敏</span><span class="row-sub">T2023006 · 外国语学院 · 2 个班</span></span>
+              <span class="tag tag--neutral">调岗待确认</span>
+            </button>
+          </div>
+          <div class="ad-note">教师账号由信息中心统一开通；新增教师请在电脑端「学校管理 → 教师」中操作。</div>
+        </section>
+
+        <!-- 学生 -->
+        <section class="ad-panel" data-tabpanel="students" aria-label="学生">
+          <div class="ad-group-head"><h2>计算机 2301 班</h2><span>45 位学生</span></div>
+          <div class="list ad-list">
+            <button type="button" class="rowitem rowitem--tap">
+              <span class="avatar avatar--sm" aria-hidden="true">李</span>
+              <span class="row-main"><span class="row-title">李明</span><span class="row-sub">2026001004 · 计算机 2301 班</span></span>
+              <span class="tag tag--success">已激活</span>
+            </button>
+            <button type="button" class="rowitem rowitem--tap">
+              <span class="avatar avatar--sm" aria-hidden="true">陈</span>
+              <span class="row-main"><span class="row-title">陈嘉懿</span><span class="row-sub">2025010101 · 计算机 2301 班</span></span>
+              <span class="tag tag--success">已激活</span>
+            </button>
+            <button type="button" class="rowitem rowitem--tap">
+              <span class="avatar avatar--sm" aria-hidden="true">周</span>
+              <span class="row-main"><span class="row-title">周予安</span><span class="row-sub">2025010104 · 计算机 2301 班</span></span>
+              <span class="tag tag--success">已激活</span>
+            </button>
+            <button type="button" class="rowitem rowitem--tap">
+              <span class="avatar avatar--sm" aria-hidden="true">李</span>
+              <span class="row-main"><span class="row-title">李思远</span><span class="row-sub">2025010107 · 计算机 2301 班</span></span>
+              <span class="tag tag--neutral">待激活</span>
+            </button>
+          </div>
+          <div class="ad-note">仅显示前 4 位 · 共 1,190 名学生。批量导入与重置密码请在电脑端完成。</div>
+        </section>
+      </div>
+
+      <p class="ad-foot">数据同步自教务系统 · 2026-10-17 06:00 · 移动端只读</p>
+    </main>
+  </div>
+
+  <script src="../assets/screens.js"></script>
+  <script src="../assets/screen.js"></script>
+</body>
+</html>
