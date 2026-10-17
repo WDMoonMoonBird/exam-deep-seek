@@ -3,7 +3,7 @@
   "appName": "Deadpan 判题",
   "webDir": "dist",
   "server": {
-    "url": "https://deadpan.asia/exam/m",
+    "url": "https://203.0.113.10/exam/m",
     "cleartext": false
   }
 }

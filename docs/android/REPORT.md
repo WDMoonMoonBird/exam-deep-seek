@@ -213,3 +213,38 @@ cd android
 - 手工 kill 隧道后实测自动恢复，代理重新 200
 - BlueStacks 已重启 Release APK 并重新加载生产页面，截图：docs/android/shots/release-final.png
 - 本机直接 443 仍被 reset，属于当前网络到生产的上游阻断；不影响云端部署本身
+
+
+## 12. IP 直连方案（手机实测问题的最终修复）
+
+### 12.1 根因确认
+
+- 本机/手机访问 https://deadpan.asia/exam/m 时，TCP 可连、TLS 握手被 reset
+- 用 openssl 对同一 IP 测试：
+  - SNI = deadpan.asia / www.deadpan.asia → 被 reset
+  - SNI = example.com / 203.0.113.10 → TLS 正常
+- 结论：当前网络按 **SNI 主机名** 阻断了 deadpan.asia，不是 APK 权限、不是 nginx 服务不可用
+- 因此域名版 APK 在当前网络无法直接使用
+
+### 12.2 已采用修复：公网 IP + Let's Encrypt IP 证书
+
+- 使用 lego 通过 TLS-ALPN-01 成功申请 **IP 证书**（SAN=IP Address:203.0.113.10，Let's Encrypt 正式证书）
+- 默认 443 server 已改为使用该 IP 证书
+- 增加 IP 直连的 /exam、/exam/m、/exam/api、socket 路由
+- 实测（本机，无代理）：
+  - https://203.0.113.10/exam/ → 200
+  - https://203.0.113.10/exam/m → 200
+  - https://203.0.113.10/exam/m/login → 200
+  - https://203.0.113.10/exam/api/health → 200
+  - 证书校验通过（Let's Encrypt，IP SAN）
+- BlueStacks 清除系统代理后，直接安装新 Release APK 并打开：**成功加载线上页面**（截图 docs/android/shots/apk-ip-direct.png）
+
+### 12.3 新 APK
+
+- APK 内 server.url 已改为：https://203.0.113.10/exam/m
+- 下载（域名被阻断时用 IP 链接）：
+  - https://203.0.113.10/exam/download/deadpan-1.0.apk
+  - https://deadpan.asia/exam/download/deadpan-1.0.apk（域名可用时）
+- 新 SHA-256：cc8361ca9c42e366e68fc5cb1fb37e5ce9c762c57fea9e5346a0e0d7aa3a53fa
+- 证书有效期：2026-10-24（6 天，Let's Encrypt 短周期 IP 证书）
+- 已配置 lego 续期 + nginx 重载脚本（每日自动执行）
