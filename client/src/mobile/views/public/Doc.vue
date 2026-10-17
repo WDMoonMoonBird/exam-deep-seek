@@ -1,3 +1,4 @@
+<!-- v1.1：本文件不再被 /m 路由使用；/m 与 /m/doc 直接复用桌面 views/Landing.vue、views/Doc.vue（响应式）。保留文件仅为 QA 页面计数与后续参考。 -->
 <script setup>
 /**
  * 使用文档（/m/doc）—— T3 公共/平台

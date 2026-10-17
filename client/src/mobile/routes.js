@@ -28,7 +28,7 @@ export const mobileRoutes = [
   {
     path: '/m',
     name: 'MobileLanding',
-    component: () => import('./views/public/Landing.vue'),
+    component: () => import('../views/Landing.vue'),
     meta: { mobile: true, public: true, title: '移动端' },
   },
   {
@@ -40,7 +40,7 @@ export const mobileRoutes = [
   {
     path: '/m/doc',
     name: 'MobileDoc',
-    component: () => import('./views/public/Doc.vue'),
+    component: () => import('../views/Doc.vue'),
     meta: { mobile: true, public: true, title: '使用文档' },
   },
   {

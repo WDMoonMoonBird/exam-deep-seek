@@ -39,7 +39,7 @@ if (pkgDiff) fail('B1', 'client/package.json 与 lockfile 无新增依赖', 'pac
 else pass('B1', 'client/package.json 与 lockfile 无新增依赖', 'git diff HEAD 两文件为空');
 
 const allowedPrefixes = ['client/src/mobile/', 'tests/mobile-v1/', 'docs/mobile-app/'];
-const allowedExact = new Set(['client/src/router/index.js', 'client/src/main.js']);
+const allowedExact = new Set(['client/src/router/index.js', 'client/src/main.js', 'client/src/views/Landing.vue', 'client/src/views/Doc.vue']);
 const sharedUnexpected = trackedChanged.filter((p) => !allowedPrefixes.some((x) => p.startsWith(x)) && !allowedExact.has(p));
 const outsideObservations = untracked.filter((p) => !allowedPrefixes.some((x) => p.startsWith(x)) && !allowedExact.has(p));
 if (sharedUnexpected.length) fail('B2', '共享/桌面文件无越权修改', 'tracked 修改超出允许集合', sharedUnexpected.map((p) => ({ file: p })), 'P1');
@@ -143,11 +143,12 @@ else pass('R3', '路由均懒加载且组件文件存在', routes.length + ' 条
 /* 每屏 h1 来源：route view 必须含 <h1 或 MobileAppBar（其余为子组件页例外） */
 const childScreens = new Set(['student/AnswerCode.vue', 'student/AnswerObjective.vue', 'student/SubmitConfirm.vue']);
 const h1Issues = [];
+const desktopReuse = new Set(['/m', '/m/doc']); // v1.1：欢迎/教师手册复用桌面响应式页面
 for (const r of routes) {
   const m = String(r.component || '').match(/import\(['"]([^'"]+)['"]\)/);
   if (!m) continue;
   const fileRel = path.relative(mobileDir, path.resolve(mobileDir, m[1])).replace(/\\/g, '/');
-  if (childScreens.has(fileRel)) continue;
+  if (childScreens.has(fileRel) || desktopReuse.has(r.path)) continue;
   const src = fs.readFileSync(path.resolve(mobileDir, m[1]), 'utf8');
   if (!/<h1[\s>]/.test(src) && !/<MobileAppBar/.test(src)) h1Issues.push({ route: r.path, file: fileRel });
 }
@@ -159,7 +160,7 @@ for (const r of routes) {
   const m = String(r.component || '').match(/import\(['"]([^'"]+)['"]\)/);
   if (!m) continue;
   const fileRel = path.relative(mobileDir, path.resolve(mobileDir, m[1])).replace(/\\/g, '/');
-  if (childScreens.has(fileRel)) continue;
+  if (childScreens.has(fileRel) || desktopReuse.has(r.path)) continue;
   const src = fs.readFileSync(path.resolve(mobileDir, m[1]), 'utf8');
   if (!/MobileLayout/.test(src) && !/m-screen/.test(src)) layoutIssues.push({ route: r.path, file: fileRel });
 }

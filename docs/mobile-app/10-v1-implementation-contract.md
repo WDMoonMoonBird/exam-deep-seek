@@ -34,6 +34,7 @@ client/src/mobile/
 ## 3. 路由表
 
 公共: /m (Landing), /m/login, /m/doc, /m/404, /m/403, /m/500, /m/platform/install, /m/platform/splash, /m/platform/states。
+> v1.1 交互调整：/m 与 /m/doc 直接复用桌面端 client/src/views/Landing.vue / Doc.vue（原页面本身响应式）；移动端只保留简化登录页，登录 logo 使用仓库根 学习中.svg（client/src/assets/学习中.svg）。
 学生: /m/student/home, /assignments, /assignments/:id, /assignments/:id/answer, /assignments/:id/done, /scores, /scores/:assignmentId, /profile（8 路由覆盖 11 实体屏; 答题卡/交卷确认是 Answer 页内 Sheet）。
 教师: /m/teacher/home, /assignments, /assignments/:id, /review, /review/:submissionId, /review/:submissionId/code, /review/:submissionId/diff, /batch, /batch/confirm, /assign/new, /questions, /classes/:classId, /profile, /code/unsupported（14 路由覆盖 14 实体屏）。
 组件路径: client/src/mobile/views/{public,platform,student,teacher}/PascalCase.vue（foundation 建占位，页面 Agent 覆盖同名文件）。

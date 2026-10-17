@@ -18,7 +18,7 @@
 | [preview/assets/](preview/assets/) | Mobile Screen Kit：`screen.css`（组件库）+ `screen.js`（状态栏/Tab/Sheet/Toast/二维码）+ `screens.js`（屏幕注册表） | ✅ |
 | [preview/tools/shot.mjs](preview/tools/shot.mjs) | 逐屏截图工具（浅色 iOS 默认；支持 `--theme=dark` / `--platform=android`） | ✅ |
 | 12 篇设计文档 | 见 §4 文档索引 | ✅ |
-| **v1 移动实现** | client/src/mobile/**：31 路由 / 34 实体屏、零后端、管理端后置；验收见 [tests/mobile-v1/REPORT.md](../tests/mobile-v1/REPORT.md) | ✅ 已实现 |
+| **v1 移动实现** | client/src/mobile/**：31 路由 / 34 实体屏（/m 与 /m/doc 复用桌面响应式页）、零后端、管理端后置；验收见 [tests/mobile-v1/REPORT.md](../tests/mobile-v1/REPORT.md) | ✅ 已实现 |
 
 > 设计稿为 v1 视觉基线；v1 实现见 `client/src/mobile/**`（管理端 3 屏延期未实现，D12 不取消）。37 屏的契约与 id 以 [preview/SCREENS.md](preview/SCREENS.md) 为准。
 

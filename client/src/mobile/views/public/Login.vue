@@ -17,8 +17,8 @@
 import { computed, nextTick, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import MobileLayout from '../../layout/MobileLayout.vue';
-import MobileAppBar from '../../layout/MobileAppBar.vue';
-import { MField, MIcon, MSheet } from '../../components/index.js';
+import logoUrl from '../../../assets/学习中.svg';
+import { MSheet } from '../../components/index.js';
 import request from '../../../api/request.js';
 import { AUTH_EXPIRED_MESSAGE } from '../../../api/apiError.js';
 import { errorCopyOf } from '../../../composables/errorCopy.js';
@@ -196,148 +196,78 @@ function goDesktopChangePassword() {
 
 <template>
   <MobileLayout bottom="none">
-    <MobileAppBar title="登录" back back-to="/m" />
+    <main class="lg-page">
+      <div class="lg-card">
+        <img :src="logoUrl" class="lg-logo" alt="Deadpan 判题" />
+        <h1 class="lg-title">Deadpan 判题</h1>
+        <p class="lg-desc">请登录以继续</p>
 
-    <main class="scroll">
-      <!-- 品牌 -->
-      <div class="lg-brand">
-        <span class="lg-logo" aria-hidden="true"><MIcon name="logo" /></span>
-        <div class="lg-name">Deadpan<small>判题</small></div>
-        <div class="lg-domain">DEADPAN UNIVERSITY · 校内网</div>
-      </div>
+        <p v-if="expiredNotice" class="lg-notice lg-notice--warning" role="alert">{{ expiredNotice }}，请重新输入密码登录。</p>
 
-      <!-- 欢迎 -->
-      <div class="lg-welcome">
-        <h2 class="lg-welcome-title">欢迎回来</h2>
-        <p>使用工号或学号登录；教师与学生共用同一个入口。</p>
-      </div>
-
-      <div class="lg-form">
-        <!-- 登录态过期提示（401 由 request.js/main.js 跳回本页并带 expired=1） -->
-        <div v-if="expiredNotice" class="banner banner--warning lg-banner" role="alert">
-          <MIcon name="alert" />
-          <div>{{ expiredNotice }}，请重新输入密码登录。</div>
-        </div>
-
-        <!-- 首登强制改密提示 -->
-        <div v-if="pwdResetNotice" class="banner banner--warning lg-banner" role="alert">
-          <MIcon name="lock" />
-          <div>
-            <b>需要先修改初始密码</b>
-            <p class="lg-banner-p">{{ pwdResetNotice }}</p>
-            <div class="lg-notice-actions">
-              <button type="button" class="btn btn--sm btn--primary" @click="goDesktopChangePassword">前往电脑端改密</button>
-              <button type="button" class="btn btn--sm btn--ghost" @click="pwdResetNotice = ''">我知道了</button>
-            </div>
+        <div v-if="pwdResetNotice" class="lg-notice lg-notice--warning" role="alert">
+          <b>需要先修改初始密码</b>
+          <p>{{ pwdResetNotice }}</p>
+          <div class="lg-notice-actions">
+            <button type="button" class="lg-linkbtn" @click="goDesktopChangePassword">前往电脑端改密</button>
+            <button type="button" class="lg-linkbtn" @click="pwdResetNotice = ''">我知道了</button>
           </div>
         </div>
 
-        <!-- 错误 banner：role=alert 让读屏即时播报；表单可再次提交（重试） -->
-        <div v-if="errorMsg" id="login-error" class="banner banner--danger lg-banner" role="alert">
-          <MIcon name="alert" />
-          <div>
-            <b>{{ errorMsg }}</b>
-            <p class="lg-banner-p">请检查后重新提交；连续失败请稍后再试，或联系任课教师 / 信息中心。</p>
-          </div>
-        </div>
+        <p v-if="errorMsg" id="login-error" class="lg-error" role="alert">{{ errorMsg }}</p>
 
-        <form novalidate class="lg-form-inner" @submit.prevent="handleLogin">
-          <MField label="账号" for-id="login-account" required hint="教师用工号（如 T2026001），学生用学号">
-            <div class="input-wrap">
-              <span class="input-icon" aria-hidden="true"><MIcon name="user" /></span>
-              <input
-                id="login-account"
-                ref="accountEl"
-                v-model="account"
-                class="input"
-                :class="{ 'input-error': !!errorMsg }"
-                type="text"
-                name="username"
-                autocomplete="username"
-                autocapitalize="off"
-                spellcheck="false"
-                enterkeyhint="next"
-                placeholder="工号 / 学号"
-                :disabled="loading"
-                :aria-invalid="!!errorMsg"
-                :aria-describedby="errorMsg ? 'login-error' : undefined"
-                @keydown.enter.prevent="focusField('password')"
-              />
-            </div>
-          </MField>
+        <form class="lg-form" novalidate @submit.prevent="handleLogin">
+          <label class="sr-only" for="login-account">用户名（工号/学号）</label>
+          <input
+            id="login-account"
+            ref="accountEl"
+            v-model="account"
+            class="lg-input"
+            type="text"
+            name="username"
+            autocomplete="username"
+            autocapitalize="off"
+            spellcheck="false"
+            enterkeyhint="next"
+            placeholder="用户名（工号/学号）"
+            :disabled="loading"
+            :aria-invalid="!!errorMsg"
+            :aria-describedby="errorMsg ? 'login-error' : undefined"
+            @keydown.enter.prevent="focusField('password')"
+          />
 
-          <MField label="密码" for-id="login-password" required>
-            <div class="input-wrap lg-has-eye">
-              <span class="input-icon" aria-hidden="true"><MIcon name="lock" /></span>
-              <input
-                id="login-password"
-                ref="passwordEl"
-                v-model="password"
-                class="input"
-                :class="{ 'input-error': !!errorMsg }"
-                :type="showPassword ? 'text' : 'password'"
-                name="password"
-                autocomplete="current-password"
-                enterkeyhint="done"
-                placeholder="请输入密码"
-                :disabled="loading"
-                :aria-invalid="!!errorMsg"
-                :aria-describedby="errorMsg ? 'login-error' : undefined"
-              />
-              <span class="input-suffix">
-                <button
-                  type="button"
-                  class="lg-eye"
-                  :aria-label="showPassword ? '隐藏密码' : '显示密码'"
-                  :aria-pressed="showPassword"
-                  @click="showPassword = !showPassword"
-                >
-                  <MIcon name="eye" />
-                </button>
-              </span>
-            </div>
-          </MField>
-
-          <!-- 记住我：只记账号，不存密码 -->
-          <div class="lg-remember">
+          <div class="lg-pass">
+            <label class="sr-only" for="login-password">密码</label>
+            <input
+              id="login-password"
+              ref="passwordEl"
+              v-model="password"
+              class="lg-input"
+              :type="showPassword ? 'text' : 'password'"
+              name="password"
+              autocomplete="current-password"
+              enterkeyhint="done"
+              placeholder="密码"
+              :disabled="loading"
+              :aria-invalid="!!errorMsg"
+              :aria-describedby="errorMsg ? 'login-error' : undefined"
+            />
             <button
               type="button"
-              class="switch"
-              :class="{ on: rememberMe }"
-              role="switch"
-              :aria-checked="rememberMe"
-              aria-labelledby="remember-label"
-              @click="rememberMe = !rememberMe"
-            ></button>
-            <div class="lg-remember-main">
-              <b id="remember-label">记住账号</b>
-              <span>只保存账号，不会保存密码；公共机房请关闭</span>
-            </div>
+              class="lg-eye"
+              :aria-label="showPassword ? '隐藏密码' : '显示密码'"
+              :aria-pressed="showPassword"
+              @click="showPassword = !showPassword"
+            >{{ showPassword ? '隐藏' : '显示' }}</button>
           </div>
 
-          <div class="lg-submit">
-            <button type="submit" class="btn btn--primary btn--block btn--lg" :disabled="loading">
-              <span v-if="loading" class="spinner" aria-hidden="true"></span>{{ loading ? '登录中…' : '登录' }}
-            </button>
-          </div>
+          <label class="lg-remember">
+            <input v-model="rememberMe" type="checkbox" />
+            <span>记住账号</span>
+          </label>
+
+          <button type="submit" class="lg-submit" :disabled="loading">{{ loading ? '登录中…' : '登录' }}</button>
         </form>
-
-        <div class="lg-doc">
-          <RouterLink class="btn btn--ghost" to="/m/doc"><MIcon name="book" />使用文档</RouterLink>
-        </div>
-
-        <div class="lg-hint">
-          <MIcon name="info" />
-          <div>账号由学校统一分配。如无法登录，请联系任课教师或信息中心重置密码。</div>
-        </div>
       </div>
-
-      <!-- 底部版权 -->
-      <footer class="lg-foot">
-        <p>© 2026 Deadpan 大学 · 信息中心</p>
-        <p>Deadpan 判题 v2.1.0 · 仅限校内网访问</p>
-        <p>登录遇到问题？联系任课教师或系统管理员（信息中心）</p>
-      </footer>
     </main>
 
     <!-- 多学校择校（业务码 1002） -->
@@ -347,85 +277,116 @@ function goDesktopChangePassword() {
       subtitle="该账号存在于多个学校，请选择目前就读的学校"
       :close-on-mask="!loading"
     >
-      <div v-if="schoolError" class="banner banner--danger mb12" role="alert">
-        <MIcon name="alert" />
-        <div>{{ schoolError }}</div>
-      </div>
-      <div class="list lg-school-list">
+      <div v-if="schoolError" class="lg-error" role="alert">{{ schoolError }}</div>
+      <div class="lg-school-list">
         <button
           v-for="school in schoolOptions"
           :key="school.officialCode || school.name"
           type="button"
-          class="rowitem lg-school-row"
-          :class="{ 'rowitem--selected': selectedCode === school.officialCode }"
+          class="lg-school-row"
+          :class="{ 'lg-school-row--selected': selectedCode === school.officialCode }"
           :aria-pressed="selectedCode === school.officialCode"
           :disabled="loading"
           @click="selectedCode = school.officialCode"
         >
-          <span class="radio" :class="{ on: selectedCode === school.officialCode }" aria-hidden="true"></span>
-          <span class="row-main">
-            <span class="row-title">{{ school.name }}</span>
-            <span class="row-sub">院校代码 {{ school.officialCode }}</span>
+          <span class="lg-radio" :class="{ on: selectedCode === school.officialCode }" aria-hidden="true"></span>
+          <span class="lg-school-main">
+            <b>{{ school.name }}</b>
+            <small>院校代码 {{ school.officialCode }}</small>
           </span>
-          <MIcon v-if="selectedCode === school.officialCode" name="check" />
         </button>
       </div>
       <template #foot>
-        <button type="button" class="btn btn--primary btn--block" :disabled="loading" @click="confirmSchool">
-          <span v-if="loading" class="spinner" aria-hidden="true"></span>{{ loading ? '登录中…' : '确认登录' }}
-        </button>
-        <button type="button" class="btn btn--ghost btn--block" :disabled="loading" @click="cancelSchool">返回重新输入</button>
+        <button type="button" class="lg-submit" :disabled="loading" @click="confirmSchool">{{ loading ? '登录中…' : '确认登录' }}</button>
+        <button type="button" class="lg-linkbtn lg-linkbtn--block" :disabled="loading" @click="cancelSchool">返回重新输入</button>
       </template>
     </MSheet>
   </MobileLayout>
 </template>
 
 <style scoped>
-/* ============ 登录页页内样式：只用令牌 ============ */
-.lg-brand { display: flex; flex-direction: column; align-items: center; padding: 18px var(--m-gutter) 0; text-align: center; }
-.lg-logo { width: 58px; height: 58px; border-radius: 17px; display: flex; align-items: center; justify-content: center;
-  background: var(--brand-600); color: var(--text-on-brand); box-shadow: var(--shadow-md); }
-.lg-logo .icon { width: 30px; height: 30px; stroke-width: 1.9; }
-.lg-name { margin-top: 12px; font-size: var(--m-fs-title-2); font-weight: 700; letter-spacing: var(--m-tracking-tight); color: var(--text-strong); }
-.lg-name small { margin-left: 5px; font-size: var(--m-fs-caption); font-weight: 500; color: var(--text-tertiary); }
-.lg-domain { margin-top: 4px; font-size: var(--m-fs-caption); color: var(--text-tertiary); letter-spacing: var(--m-tracking-wide); }
+/* 简化后的移动登录：与桌面登录同构，只保留品牌、账号、密码、记住账号、登录 */
+.lg-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px var(--m-gutter);
+  box-sizing: border-box;
+}
+.lg-card { width: 100%; max-width: 380px; text-align: center; }
+.lg-logo { width: 56px; height: 56px; margin-bottom: 16px; display: inline-block; }
+.lg-title { margin: 0; font-size: 28px; line-height: 1.25; font-weight: 700; letter-spacing: var(--m-tracking-tight); color: var(--text-strong); }
+.lg-desc { margin: 8px 0 30px; font-size: 15px; line-height: 1.5; color: var(--text-tertiary); }
 
-.lg-welcome { padding: 22px var(--m-gutter) 0; }
-.lg-welcome-title { font-size: var(--m-fs-display); line-height: var(--m-lh-display); font-weight: 700; letter-spacing: var(--m-tracking-tight); }
-.lg-welcome p { margin-top: 5px; font-size: var(--m-fs-body-sm); line-height: 1.55; color: var(--text-secondary); }
-
-.lg-form { padding: 18px var(--m-gutter) 0; }
-.lg-banner { margin-bottom: 16px; }
-.lg-banner-p { margin-top: 4px; font-size: var(--m-fs-body-sm); line-height: 1.55; }
-.lg-notice-actions { display: flex; flex-wrap: wrap; margin-top: 10px; }
-.lg-notice-actions .btn + .btn { margin-left: 8px; }
-.lg-form-inner { display: block; }
-.lg-has-eye .input { padding-right: 50px; }
-.lg-eye { width: var(--m-touch-min); height: var(--m-touch-min); display: flex; align-items: center; justify-content: center;
-  border-radius: 10px; color: var(--text-tertiary); }
+.lg-form { text-align: left; }
+.lg-input {
+  width: 100%;
+  height: 48px;
+  box-sizing: border-box;
+  padding: 0 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 16px;
+  font-family: inherit;
+  outline: none;
+}
+.lg-input::placeholder { color: var(--text-tertiary); }
+.lg-input:focus { border-color: var(--brand-600); box-shadow: 0 0 0 2px var(--brand-100, rgba(22, 119, 255, 0.16)); }
+.lg-input:disabled { opacity: 0.65; }
+.lg-pass { position: relative; margin-top: 12px; }
+.lg-pass .lg-input { padding-right: 62px; }
+.lg-eye {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  width: 54px;
+  height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-brand);
+  font-size: 14px;
+  font-family: inherit;
+}
 .lg-eye:active { background: var(--m-pressed); }
-.lg-eye .icon { width: 20px; height: 20px; }
-.lg-remember { display: flex; align-items: center; margin-top: 18px; }
-.lg-remember-main { flex: 1; min-width: 0; margin-left: 10px; }
-.lg-remember-main b { display: block; font-size: var(--m-fs-body); font-weight: var(--m-fw-medium); color: var(--text-primary); }
-.lg-remember-main span { display: block; margin-top: 1px; font-size: var(--m-fs-caption); color: var(--text-tertiary); }
-.lg-submit { margin-top: 22px; }
-.lg-submit .btn { height: var(--m-btn-h); }
-.lg-doc { display: flex; justify-content: center; margin-top: 14px; }
-.lg-doc .btn { height: var(--m-touch-min); padding: 0 12px; font-size: var(--m-fs-body-sm); font-weight: var(--m-fw-medium); }
-.lg-hint { display: flex; align-items: flex-start; margin-top: 16px; padding: 12px 14px; border-radius: var(--m-radius-card-sm);
-  background: var(--bg-surface-2); border: 1px dashed var(--border-default); font-size: var(--m-fs-caption); line-height: 1.6; color: var(--text-tertiary); }
-.lg-hint .icon { width: 15px; height: 15px; margin-right: 7px; flex: none; margin-top: 1px; }
 
-.lg-foot { margin: 26px var(--m-gutter) 0; padding-top: 16px; border-top: 1px solid var(--border-subtle); text-align: center; }
-.lg-foot p { font-size: 11.5px; line-height: 1.7; color: var(--text-tertiary); }
-.lg-foot p:nth-child(2) { font-variant-numeric: tabular-nums; }
+.lg-remember { display: flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 14px; line-height: 1.4; color: var(--text-secondary); cursor: pointer; user-select: none; }
+.lg-remember input { width: 18px; height: 18px; margin: 0; accent-color: var(--brand-600); }
+
+.lg-submit {
+  width: 100%;
+  height: 50px;
+  margin-top: 20px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--brand-600);
+  color: var(--text-on-brand);
+  font-size: 16px;
+  font-weight: 600;
+  font-family: inherit;
+}
+.lg-submit:disabled { opacity: 0.65; }
+.lg-linkbtn { border: 0; background: transparent; color: var(--text-brand); font-size: 14px; font-family: inherit; padding: 6px 0; margin-right: 14px; }
+.lg-linkbtn--block { display: block; width: 100%; text-align: center; margin: 4px 0 0; }
+
+.lg-error { margin: 0 0 12px; color: var(--status-danger-fg); font-size: 14px; line-height: 1.5; text-align: left; }
+.lg-notice { margin: 0 0 16px; padding: 10px 12px; border-radius: 8px; text-align: left; font-size: 14px; line-height: 1.55; }
+.lg-notice--warning { background: var(--status-warning-bg); color: var(--status-warning-fg); }
+.lg-notice p { margin: 4px 0 0; }
+.lg-notice-actions { display: flex; flex-wrap: wrap; margin-top: 8px; }
 
 .lg-school-list { margin-top: 4px; }
-.lg-school-row { width: 100%; text-align: left; }
-.lg-school-row .radio { margin-right: 12px; }
-.lg-school-row .row-main { display: flex; flex-direction: column; }
-.lg-school-row .row-title { font-size: var(--m-fs-body); }
-.lg-school-row .row-sub { font-size: var(--m-fs-caption); }
-.lg-school-row .icon { flex: none; margin-left: 10px; color: var(--text-brand); }
+.lg-school-row { display: flex; align-items: center; width: 100%; padding: 12px 0; border: 0; border-bottom: 1px solid var(--border-subtle); background: transparent; color: var(--text-primary); text-align: left; font-family: inherit; }
+.lg-school-row:last-child { border-bottom: 0; }
+.lg-school-row--selected { color: var(--text-brand); }
+.lg-radio { width: 18px; height: 18px; flex: none; margin-right: 12px; border: 1.5px solid var(--border-strong); border-radius: 50%; box-sizing: border-box; }
+.lg-radio.on { border: 5px solid var(--brand-600); }
+.lg-school-main { display: flex; flex-direction: column; min-width: 0; }
+.lg-school-main b { font-size: 15px; font-weight: 500; }
+.lg-school-main small { margin-top: 2px; font-size: 12px; color: var(--text-tertiary); }
+
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 </style>

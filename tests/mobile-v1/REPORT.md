@@ -263,3 +263,11 @@ node client/scripts/verify-frontend.mjs --no-build
 | 拦截结论 | 通过（P1 已闭环）；可合入 feat/mobile-app |
 
 > 说明：QA smoke 脚本按文件头要求使用 dev server（5174）；用 vite preview 时 mock 的 /api 前缀与构建环境不同会误报 Answer 空数据，这不是产品回归，正式验收以 dev server 结果为准。
+
+
+### 10.4 v1.1 交互调整（2026-10-17 晚）
+- /m 欢迎页与 /m/doc 教师使用手册改为直接复用桌面端 client/src/views/Landing.vue / Doc.vue（桌面页本身响应式）；旧移动自定义页保留但不再挂路由，仅作参考。
+- /m/login 按桌面登录同构简化：logo 改回 学习中.svg（与根目录同一文件），保留账号/密码/显示密码/记住账号/登录，去掉品牌 D、页脚、提示块、使用文档等冗余元素；多学校 1002 选择与首登改密提示仍保留。
+- 桌面 Landing/Doc 在 /m 上下文把登录/文档/返回登录链接改走移动端（桌面行为不变）。
+- QA 脚本已同步：/m、/m/doc 不要求 .m-screen，桌面手册正文不参与移动端延期文案扫描；smoke 结论更新为 33 页/0 console/0 P0/P1/P2。
+- 复验：build exit 0；verify-frontend 71/0；eslint 0；static-check 17/0；smoke 33/0/0/0。
