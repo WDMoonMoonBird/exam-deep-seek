@@ -1,10 +1,10 @@
 {
-  "note": "R3-SUPPLY 供应链 audit 冻结基线（2026-10-18，公网 registry 实跑）。首次 CI 后如计数变化，仅 high/critical 新增才 FAIL；本机镜像 audit bulk 404，故基线由本机对 registry.npmjs.org 实跑冻结。",
+  "note": "R3-SUPPLY 供应链 audit 冻结基线（2026-10-18，公网 registry 实跑）。server 的 proxy-addr critical 已通过 overrides@2.0.8 修复；client critical tar 仍为 @capacitor/cli 传递依赖（major 升级待排期）。仅 high/critical 新增才 FAIL。",
   "generatedAt": "2026-10-18",
   "registry": "https://registry.npmjs.org",
   "server": {
     "high": 15,
-    "critical": 1,
+    "critical": 0,
     "moderate": 7,
     "low": 1
   },
