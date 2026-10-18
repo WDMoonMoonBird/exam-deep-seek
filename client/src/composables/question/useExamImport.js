@@ -14,6 +14,12 @@ import * as XLSX from 'xlsx';
 import { DEFAULT_TYPE_SCORES, normalizeItem, detectCodeLang } from './questionPure.js';
 import { errorCopyOf } from '../errorCopy.js';   // ★W1-r2（t4）：SSE 通道不走 axios 拦截器 ⇒ 文案在此手动对齐统一口径
 
+// ★P2-XLSX（2026-10-18）：xlsx@0.18.5 无修复版本（原型污染/ReDoS）⇒ 前端先做输入上限缓解。
+//   长期方案：服务端隔离解析或替换为 exceljs；上限值为经验值，可按业务调整。
+const MAX_XLSX_FILE_BYTES = 8 * 1024 * 1024; // 8MB
+const MAX_XLSX_ROWS = 5000;
+const MAX_XLSX_COLS = 100;
+
 export function useExamImport({ questionKind, subQuestions, newSq, loadSq, objectiveSettings }) {
 // 上传
 const showUploadExam = ref(false);
@@ -38,9 +44,29 @@ async function handleUploadExam(file){
       console.log('[上传试卷] mammoth 解析完成，字符数:', text.length);
     }
     else if(ext==='xlsx'){
+      // ★P2-XLSX：先在解析前限制文件大小，避免恶意/超大文件直接进入 SheetJS
+      if (file.size && file.size > MAX_XLSX_FILE_BYTES) {
+        uploadError.value = 'Excel 文件过大（上限 8MB）';
+        uploadAnalyzing.value = false;
+        return false;
+      }
       console.log('[上传试卷] 使用 xlsx 解析...');
       const wb=XLSX.read(await file.arrayBuffer());
-      for(const sn of wb.SheetNames){const ws=wb.Sheets[sn];text+=XLSX.utils.sheet_to_csv(ws)+'\n';}
+      for(const sn of wb.SheetNames){
+        const ws=wb.Sheets[sn];
+        const ref=ws && ws['!ref'];
+        if (ref) {
+          const range=XLSX.utils.decode_range(ref);
+          const rows=range.e.r-range.s.r+1;
+          const cols=range.e.c-range.s.c+1;
+          if (rows>MAX_XLSX_ROWS || cols>MAX_XLSX_COLS) {
+            uploadError.value = `Excel 行/列超限（上限 ${MAX_XLSX_ROWS} 行 / ${MAX_XLSX_COLS} 列）`;
+            uploadAnalyzing.value = false;
+            return false;
+          }
+        }
+        text+=XLSX.utils.sheet_to_csv(ws)+'\n';
+      }
       console.log('[上传试卷] xlsx 解析完成，字符数:', text.length);
     }
     else{uploadError.value='不支持的文件格式';uploadAnalyzing.value=false;return false;}

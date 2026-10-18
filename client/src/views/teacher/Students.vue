@@ -495,10 +495,33 @@ async function handleUploadFile(file) {
       return false;
     }
 
+    // ★P2-XLSX（2026-10-18）：xlsx@0.18.5 无修复版本 ⇒ 先限制文件大小与行列，长期换解析库/服务端隔离
+    const MAX_XLSX_FILE_BYTES = 8 * 1024 * 1024;
+    const MAX_XLSX_ROWS = 5000;
+    const MAX_XLSX_COLS = 100;
+    if (file.size && file.size > MAX_XLSX_FILE_BYTES) {
+      uploadResult.errors.push('Excel 文件过大（上限 8MB）');
+      uploadModalOpen.value = false;
+      uploadResultOpen.value = true;
+      return false;
+    }
     // 解析 Excel
     const data = await file.arrayBuffer();
     const wb = XLSX.read(data);
-    const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const ref = ws && ws['!ref'];
+    if (ref) {
+      const range = XLSX.utils.decode_range(ref);
+      const rows = range.e.r - range.s.r + 1;
+      const cols = range.e.c - range.s.c + 1;
+      if (rows > MAX_XLSX_ROWS || cols > MAX_XLSX_COLS) {
+        uploadResult.errors.push(`Excel 行/列超限（上限 ${MAX_XLSX_ROWS} 行 / ${MAX_XLSX_COLS} 列）`);
+        uploadModalOpen.value = false;
+        uploadResultOpen.value = true;
+        return false;
+      }
+    }
+    const raw = XLSX.utils.sheet_to_json(ws);
     if (!raw.length) {
       uploadResult.errors.push('文件为空或未包含有效数据');
       uploadModalOpen.value = false;
