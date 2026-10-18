@@ -13,6 +13,13 @@ ssl.pfx
 *_nginx.zip
 # 服务端环境变量（client/.env.development 与 .env.production 为公开 URL 配置，保留跟踪）
 server/.env.*
+# ★R26（2026-10-18）：任何层级的 .env 派生文件默认忽略（原只精确忽略根 .env ⇒ .env.local/.env.production 等会漏）
+.env
+.env.*
+# 例外：示例文件与前端公开配置必须继续可跟踪（negation 必须写在忽略规则之后）
+!.env.example
+!client/.env.development
+!client/.env.production
 DEV_LOG.md
 server/test/e2e/.e2e-state.json
 server/test-results/

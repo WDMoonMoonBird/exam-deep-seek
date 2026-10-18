@@ -79,8 +79,9 @@ mysql exam_system -e "SELECT id,status,written_count,skipped_count,LEFT(last_err
 Type=simple
 Restart=always
 RestartSec=5
+# ★R3-WORKER-ARGS：连接串只从 EnvironmentFile（600）注入，**不要**写 --db-url（argv 同机可读）
 ExecStart=/usr/bin/node scripts/r2b5-worker.mjs \
-  --db-url ${DATABASE_URL} --allow-db exam_system --allow-prod --reuse-checker \
+  --allow-db exam_system --allow-prod --reuse-checker \
   --device bash --device-arg scripts/dsh-grader/run.sh \
   --device-arg --submissions --device-arg ${GRADER_SUBMISSIONS} --device-arg --allow-identical
 ```
@@ -100,7 +101,7 @@ ExecStart=/usr/bin/node scripts/r2b5-worker.mjs \
      ```
    - **★fail-closed（不回落默认源目录）**：`<ROOT>/<assignmentId>` 不存在或为空 ⇒ 打印 `MATERIALS_MISSING assignment=<id> path=<dir>`，该 job 记 `needs_rerun` + `last_error=materials_missing_for_assignment:<id>`，**不写分**、**不回落**装置的默认 `实验/`；解析成功则打 `MATERIALS_RESOLVED assignment=<id> dir=<dir> submissions=<n> source=manifest|zipcount`，`WORKER_START` 也会打印 `materials_root=<值或(unset:device-default)>`。
    - **向后兼容**：未设 `DSH_GRADER_MATERIALS_ROOT` ⇒ 行为与既有完全一致（装置默认源目录 + 启动时的 `--submissions`）。
-   - **用法**：`node scripts/r2b20-export-materials.mjs --assignment <作业id> --out <目录> [--db-url <url>] [--allow-db <库名>] [--allow-prod]`；测试/演练可加 `--uploads-root <夹具目录>` 重定位 uploads 根（不改真实 uploads）。
+   - **用法**：`node scripts/r2b20-export-materials.mjs --assignment <作业id> --out <目录> [--db-url <url>] [--allow-db <库名>] [--allow-prod]`（★R3-WORKER-ARGS：推荐 **export DATABASE_URL** 后省略 `--db-url`，避免连接串进 argv）；测试/演练可加 `--uploads-root <夹具目录>` 重定位 uploads 根（不改真实 uploads）。
    - **产出（装置契约）**：`标准工程包.zip`、`评分标准.md`（`questions.scoring_rubric`）、`题目描述.md`（标题 + `questions.material`，**文件名必须这个**）、每个提交一个 `<real_name>.zip`（重名追加 `-<username>`）、`export-manifest.json`（submissionId → zip 名 / 来源路径 / 各自 sha256 / 份数 / questionId / 生成时刻）。
    - **确定性**：同一输入两次导出，各 zip 与各 md 的 sha256 **逐一相同**（zip 条目按字节序排序、DOS 时间戳固定 1980-01-01、无随机/时间字段）⇒ 可复算、可比对；`export-manifest.json` 除 `generated_at` 外逐字段相同。
    - **只读 + 护栏**：不写平台 DB、不改 `server/uploads/**`（只写 `--out`）；生产库需 `--allow-db <库名>` + `--allow-prod` 且**连接前**校验（缺开关 ⇒ `EXPORT_FAIL reason=allow_db_required:<库名>`、rc=2、不连接）；作业没有**恰好一个** project 型题目 ⇒ `EXPORT_FAIL reason=project_question_not_unique:<n>`（不猜）。
@@ -108,8 +109,10 @@ ExecStart=/usr/bin/node scripts/r2b5-worker.mjs \
      ```bash
      cd /opt/exam/server
      OUT=/var/lib/dsh-grader/materials/assignment-311
+     # ★R3-WORKER-ARGS：连接串经 env 传入（脚本缺 --db-url 时读 DATABASE_URL；argv 同机可见，勿用 --db-url）
+     export DATABASE_URL='mysql://<user>:<pass>@127.0.0.1:3306/exam_system'
      node scripts/r2b20-export-materials.mjs --assignment 311 --out "$OUT" \
-       --db-url "mysql://<user>:<pass>@127.0.0.1:3306/exam_system" --allow-db exam_system --allow-prod
+       --allow-db exam_system --allow-prod
      # 期望：EXPORT_TARGET db=exam_system prod=yes ⇒ EXPORT_OK n=<份> question=<id> standard_sha256=… rubric_len=… out=…
      # 之后按 §4 以 --source-dir "$OUT" 拉起装置（配 --reuse-checker 时为零 LLM）
      ```

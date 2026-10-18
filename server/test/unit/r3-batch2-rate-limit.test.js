@@ -73,7 +73,10 @@ describe('R3-RATE · 登录全局失败守卫', () => {
     expect(await fresh.isBlocked()).toBe(false);
   });
 
-  it('生产阈值常量固定为 100 次/分钟（不随单测漂移）', () => {
-    expect(LOGIN_GLOBAL_FAIL_MAX).toBe(100);
+  it('★P2-RATE-a：登录熔断阈值 env 可配（默认 300，clamp 10–10000）', () => {
+    const envSet = process.env.LOGIN_GLOBAL_FAIL_MAX != null && process.env.LOGIN_GLOBAL_FAIL_MAX !== '';
+    if (!envSet) expect(LOGIN_GLOBAL_FAIL_MAX).toBe(300);   // 未设 env 时的默认值（不再硬编码 100）
+    expect(LOGIN_GLOBAL_FAIL_MAX).toBeGreaterThanOrEqual(10);
+    expect(LOGIN_GLOBAL_FAIL_MAX).toBeLessThanOrEqual(10000);
   });
 });

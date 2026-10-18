@@ -55,7 +55,11 @@ describe('gradeSubmission — 提示词构建', () => {
     const body = JSON.parse(lastFetchArgs.init.body);
     const userContent = body.messages[1].content;
     expect(userContent).not.toContain('## 题目材料');
-    expect(userContent).toContain('## 题目1');
+    // ★P2-INJ-a：小题标题改为随机 nonce 围栏（不再裸拼接 ## 标题）
+    const title = parsePairedFence(userContent, 'SUBQUESTION_TITLE_DATA');
+    expect(title).not.toBeNull();
+    expect(title.inner).toContain('题目1');
+    expect(userContent).not.toContain('## 题目1');
   });
 
   // D3: 有文本材料时包含
@@ -176,7 +180,9 @@ describe('gradeSubmission — 提示词构建', () => {
     });
     const body = JSON.parse(lastFetchArgs.init.body);
     const userContent = body.messages[1].content;
-    expect(userContent).toContain('## 题目');
+    const title = parsePairedFence(userContent, 'SUBQUESTION_TITLE_DATA');
+    expect(title).not.toBeNull();
+    expect(title.inner).toContain('题目');
   });
 });
 

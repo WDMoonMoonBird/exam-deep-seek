@@ -1,0 +1,76 @@
+# 供应链安全门禁 —— ★R3-SUPPLY（P1，2026-10-18 / H7·R26）
+# 口径：
+#  · audit 使用公网 registry（本地/CI 镜像源 npmmirror 不支持 audit bulk 接口，实测 404）；
+#  · 基线感知：仅当 high/critical 计数**新增**才 FAIL（首次运行自动记录基线并上传 artifact）；
+#  · gitleaks **只扫工作树（--no-git）** 且 --redact（不回显/不落真实密钥值）—— 全历史扫描当前无 baseline，
+#    历史遗留凭据会让首次 CI 恒红；历史清理/allowlist 冻结登记为独立专项（见 DEPLOY-CHECKLIST），不阻塞本门禁；
+#  · SBOM 用 CycloneDX，server/client 各一份；工具失败不阻断主流程（continue-on-error），artifact 供审计。
+name: security-scan
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  npm_config_registry: https://registry.npmjs.org/
+
+jobs:
+  supply-chain:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: npm audit — server (baseline-aware)
+        working-directory: server
+        run: |
+          npm audit --package-lock-only --json --audit-level=high > "$GITHUB_WORKSPACE/audit-server.json" || true
+
+      - name: npm audit — client (baseline-aware)
+        working-directory: client
+        run: |
+          npm audit --package-lock-only --json --audit-level=high > "$GITHUB_WORKSPACE/audit-client.json" || true
+
+      - name: Baseline gate (仅新增 high/critical 才 FAIL)
+        run: |
+          node .github/scripts/audit-baseline-check.mjs server audit-server.json .github/security/audit-baseline.json
+          node .github/scripts/audit-baseline-check.mjs client audit-client.json .github/security/audit-baseline.json
+
+      - name: gitleaks (working-tree secret scan, redacted)
+        # ★P2-SUPPLY-a（A batch3 复核）：`--no-git` 只扫工作树 —— 全历史无 baseline 会因历史失效凭据恒红；
+        #   allowlist/baseline 冻结与历史清理登记为独立专项；本门禁目标 = **阻止新凭据入库**。
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz" -o /tmp/gitleaks.tgz
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+          /tmp/gitleaks detect --source . --no-git --redact --exit-code 1
+
+      - name: SBOM — server (CycloneDX)
+        working-directory: server
+        continue-on-error: true
+        run: npx --yes @cyclonedx/cyclonedx-npm --package-lock-only --output-file "$GITHUB_WORKSPACE/sbom-server.cdx.json"
+
+      - name: SBOM — client (CycloneDX)
+        working-directory: client
+        continue-on-error: true
+        run: npx --yes @cyclonedx/cyclonedx-npm --package-lock-only --output-file "$GITHUB_WORKSPACE/sbom-client.cdx.json"
+
+      - name: Upload supply-chain evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: supply-chain-evidence
+          path: |
+            audit-server.json
+            audit-client.json
+            sbom-server.cdx.json
+            sbom-client.cdx.json
+          if-no-files-found: warn

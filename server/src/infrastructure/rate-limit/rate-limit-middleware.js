@@ -14,6 +14,13 @@ import { InMemoryRateLimiter } from './in-memory-rate-limiter.js';
 
 export const RATE_LIMIT_MESSAGE = '请求过于频繁，请稍后再试';
 
+/** 解析正整数 env（非法/越界 ⇒ 回落默认并 clamp；供阈值按部署调整，缺失环境变量不影响既有测试） */
+function envPositiveInt(name, fallback, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}) {
+  const raw = Number(process.env && process.env[name]);
+  if (!Number.isFinite(raw)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(raw)));
+}
+
 /**
  * 默认限流键：已鉴权入口用 user:<id>（同一账号跨 IP 也聚合）；未鉴权/早于 auth 的入口回落 ip:<ip>。
  * @param {object} req
@@ -67,10 +74,17 @@ export function createRateLimitMiddleware({
   return middleware;
 }
 
-/** 登录全局失败速率（R16）：100 次失败/分钟（显著高于正常失败量）⇒ 登录端点短时熔断（**不锁账号**） */
+/**
+ * ★P2-RATE-a（2026-10-18，A batch2 复核）：登录全局失败熔断的阈值**可配**（原硬编码 100/min 是「攻击者维持
+ *   100 次失败/分即可让所有人登录被 429」的全局 DoS 杠杆）——
+ *   · `LOGIN_GLOBAL_FAIL_MAX`（默认 300；clamp 10–10000）：高于正常失败量一个量级；
+ *   · `LOGIN_GLOBAL_FAIL_WINDOW_MS`（默认 60000；clamp 1s–10min）：需要更短熔断窗口时设为 10000 等，
+ *     攻击成本不变但误伤时长缩短（与 nginx 登录边缘 20r/s 叠加评估）。
+ *   app.js 在熔断打开瞬间打一条 warn 告警（不随每次被拒请求刷屏）。
+ */
 export const LOGIN_GLOBAL_FAIL_KEY = 'global:login:fail';
-export const LOGIN_GLOBAL_FAIL_MAX = 100;
-export const LOGIN_GLOBAL_FAIL_WINDOW_MS = 60 * 1000;
+export const LOGIN_GLOBAL_FAIL_MAX = envPositiveInt('LOGIN_GLOBAL_FAIL_MAX', 300, { min: 10, max: 10000 });
+export const LOGIN_GLOBAL_FAIL_WINDOW_MS = envPositiveInt('LOGIN_GLOBAL_FAIL_WINDOW_MS', 60 * 1000, { min: 1000, max: 600000 });
 
 /**
  * 登录全局失败守卫：跨 IP 的「每账号只试 1 次」喷洒三键都不达阈值，必须另有全局面。

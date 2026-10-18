@@ -370,8 +370,16 @@ export function redactLogLine(line) {
   const out = [];
   let buf = '';
   const flush = () => {
-    const longEnough = buf.length >= 11 && buf.length !== 13 && buf[0] === '1';   // 13 位 epoch 毫秒保留
-    out.push(longEnough ? buf.slice(0, 3) + '****' + buf.slice(-4) : buf);
+    // ★P2-R13-a（A batch2/batch3 复核，2026-10-18）：长数字掩码规则两轮收敛 ——
+    //   ① 13 位 epoch 毫秒（首位 1 且 ∈ [1.5e12, 2.1e12]）保留：否则日志时间线全废、排障失效；
+    //   ② 其余 **length ≥ 11 的任意长数字**一律掩码为 3+****+后 4（**取消原「首位必须 1」限制** ——
+    //      非 1 开头的长 ID/订单号等同样是敏感标识，旧规则会漏掩）。
+    //   ③ 短数字（10 位及以下，如端口/状态码）不误伤。
+    const numeric = buf.length >= 11 ? Number(buf) : NaN;
+    const isEpochMillis = buf.length === 13 && buf[0] === '1' && Number.isFinite(numeric)
+      && numeric >= 1.5e12 && numeric <= 2.1e12;
+    const looksSensitive = buf.length >= 11 && !isEpochMillis;
+    out.push(looksSensitive ? buf.slice(0, 3) + '****' + buf.slice(-4) : buf);
     buf = '';
   };
   for (const ch of s) {

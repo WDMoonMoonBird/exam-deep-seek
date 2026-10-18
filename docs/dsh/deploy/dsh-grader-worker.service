@@ -28,8 +28,10 @@ Environment=DSH_GRADER_BIN=/opt/dsh/runtime/cli/bin/dsh
 # 僵尸 running 回收阈值：必须 > 单次运行超时（见 README「运维约定」；缺省 15 分钟）。
 Environment=DSH_WORKER_STALE_RUNNING_MS=900000
 
+# ★R3-WORKER-ARGS（P1，2026-10-18）：**连接串只从 EnvironmentFile（600）注入，禁止写进 argv**
+#   （原 `--db-url ${DATABASE_URL}` 会让含口令的 URL 出现在 `ps aux` / `/proc/<pid>/cmdline`，同机任意用户可读）。
+#   `scripts/r2b5-worker.mjs` 缺 `--db-url` 时会读 `process.env.DATABASE_URL`（再回退 server/.env）⇒ 无需参数。
 ExecStart=/usr/bin/node scripts/r2b5-worker.mjs --once \
-  --db-url ${DATABASE_URL} \
   --allow-db exam_system --allow-prod \
   --reuse-checker \
   --device bash \
@@ -41,6 +43,15 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=dsh-grader-worker
 Nice=5
+
+# ★R3-WORKER-ARGS（可选加固，部署时按需启用；启用前先创建专用用户并把 env 文件 chown 给它）：
+#User=dsh-grader
+#Group=dsh-grader
+#ProtectSystem=strict
+#ProtectHome=true
+#PrivateTmp=true
+#ReadWritePaths=/tmp /srv/grader/materials
+# 云上验证：tr '\0' ' ' < /proc/<worker-pid>/cmdline 不得包含 mysql://（见 DEPLOY-CHECKLIST R3-WORKER-ARGS）
 
 [Install]
 WantedBy=multi-user.target

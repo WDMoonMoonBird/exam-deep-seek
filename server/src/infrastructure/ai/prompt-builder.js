@@ -62,7 +62,10 @@ export function buildGradingUserMessage({ material, subQuestionTitle, subQuestio
     parts.push('## 题目材料\n' + fencedDataBlock('MATERIAL_DATA', material));
   }
   parts.push(
-    '## ' + (subQuestionTitle || '题目') + '\n' + fencedDataBlock('SUBQUESTION_DATA', subQuestionContent)
+    // ★P2-INJ-a（A batch2 复核）：小题标题是**教师可控字段** —— 原 `## <subQuestionTitle>` 落在围栏外，
+    //   标题内可注入换行/标题/伪围栏 ⇒ 改为「标题」与「题目内容」两段随机 nonce 围栏（不含任何裸拼接）。
+    '## 小题标题\n' + fencedDataBlock('SUBQUESTION_TITLE_DATA', subQuestionTitle || '题目')
+    + '\n\n## 题目内容\n' + fencedDataBlock('SUBQUESTION_DATA', subQuestionContent)
     + '\n\n## 参考答案\n' + fencedDataBlock('REFERENCE_ANSWER_DATA', referenceAnswer || '（无）')
     + '\n\n## 学生提交的答案\n' + fencedDataBlock('STUDENT_ANSWER_DATA', studentAnswer || '（空）')
     + '\n\n## 评分要求\n满分：' + maxScore + ' 分\n请判断题目类型（编程题/理论题/混合题），选择合适的评分标准，根据参考答案对学生答案进行评分。'

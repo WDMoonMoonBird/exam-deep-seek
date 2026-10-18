@@ -133,10 +133,14 @@ describe('buildGradingUserMessage — 评分 user message 分支', () => {
     maxScore: 30,
   };
 
-  it('无 material → 不含材料段', () => {
+  it('无 material → 不含材料段；小题标题进入 SUBQUESTION_TITLE_DATA 围栏（★P2-INJ-a）', () => {
     const p = buildGradingUserMessage({ ...base, material: null });
     expect(p).not.toContain('## 题目材料');
-    expect(p).toContain('## 小题1');
+    expect(p).toContain('## 小题标题');
+    const title = parsePairedFence(p, 'SUBQUESTION_TITLE_DATA');
+    expect(title).not.toBeNull();
+    expect(title.inner).toContain('小题1');
+    expect(parsePairedFence(p, 'SUBQUESTION_DATA')).not.toBeNull();
   });
 
   it('有文本 material → 含材料段且带原文', () => {
@@ -150,10 +154,12 @@ describe('buildGradingUserMessage — 评分 user message 分支', () => {
     expect(p).not.toContain('## 题目材料');
   });
 
-  it('subQuestionTitle 缺省 → 使用默认标题「题目」', () => {
+  it('subQuestionTitle 缺省 → 围栏内使用默认标题「题目」', () => {
     const p = buildGradingUserMessage({ ...base, subQuestionTitle: '' });
-    expect(p).toContain('## 题目');
-    expect(p).not.toContain('## 小题1');
+    const title = parsePairedFence(p, 'SUBQUESTION_TITLE_DATA');
+    expect(title).not.toBeNull();
+    expect(title.inner).toContain('题目');
+    expect(p).not.toContain('小题1');
   });
 
   it('完整消息包含参考答案/学生答案/评分要求/满分', () => {
@@ -173,8 +179,11 @@ describe('buildGradingUserMessage — 评分 user message 分支', () => {
     expect(mat.inner).toContain('<p>材料</p>');
     const endIdx = p.indexOf('<<<MATERIAL_DATA_' + mat.nonce + '_END>>>');
     expect(endIdx).toBeGreaterThan(-1);
-    expect(p.slice(endIdx, endIdx + 80)).toContain('## 小题1');   // 围栏 END 后仍空行接下一段
-    expect(p.indexOf('## 小题1')).toBeGreaterThan(endIdx);
+    expect(p.slice(endIdx, endIdx + 80)).toContain('## 小题标题');   // 围栏 END 后仍空行接下一段
+    expect(p.indexOf('## 小题标题')).toBeGreaterThan(endIdx);
+    const title = parsePairedFence(p, 'SUBQUESTION_TITLE_DATA');
+    expect(title).not.toBeNull();
+    expect(title.inner).toContain('小题1');
   });
 });
 

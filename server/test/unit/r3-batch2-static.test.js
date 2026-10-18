@@ -96,12 +96,29 @@ describe('R3-R11 · temp 目录归属凭据（静态）', () => {
   });
 });
 
-describe('R3-RATE · 路有接线（静态）', () => {
-  it('app.js 接登录全局失败守卫；projectController 接限流中间件', () => {
+describe('R3-RATE · 路由接线（静态）', () => {
+  it('app.js 接登录全局失败守卫 + P2-RATE-a 阈值可配/熔断告警', () => {
     const app = readServer('src/app.js');
-    const pc = readServer('src/controllers/projectController.js');
     expect(app).toContain('createLoginGlobalFailureGuard');
     expect(app).toContain('loginGlobalFailureGuard');
+    expect(app).toContain('LOGIN_GLOBAL_FAIL_MAX');
+    expect(app).toContain('LOGIN_GLOBAL_FAIL_WINDOW_MS');
+    expect(app).toContain('LOGIN_GLOBAL_CIRCUIT_OPEN');
+  });
+  it('P2-RATE-b：学生提交限流移到 routes/student.js（鉴权后、user 键）', () => {
+    const routes = readServer('src/routes/student.js');
+    expect(routes).toContain('createRateLimitMiddleware');
+    expect(routes).toContain('submitProjectRateLimit');
+    expect(routes.indexOf('router.use(auth')).toBeGreaterThan(-1);
+    expect(routes.indexOf('submitProjectRateLimit')).toBeGreaterThan(routes.indexOf('router.use(auth'));
+    expect(routes).toMatch(/project\/:questionId\/submit',\s*submitProjectRateLimit/);
+    const rl = readServer('src/infrastructure/rate-limit/rate-limit-middleware.js');
+    expect(rl).toContain('LOGIN_GLOBAL_FAIL_MAX');
+    expect(rl).toMatch(/envPositiveInt\('LOGIN_GLOBAL_FAIL_MAX',\s*300/);
+  });
+  it('教师上传仍走 projectController 限流（不回归）', () => {
+    const pc = readServer('src/controllers/projectController.js');
     expect(pc).toContain('createRateLimitMiddleware');
+    expect(pc).toContain('uploadPackageRateLimit');
   });
 });

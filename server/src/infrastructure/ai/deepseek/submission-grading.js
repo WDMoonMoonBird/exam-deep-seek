@@ -30,7 +30,10 @@ export async function gradeSubmission({ material, subQuestionTitle, subQuestionC
   if (material && material.replace(/<[^>]*>/g, '').trim()) {
     parts.push('## 题目材料\n' + fencedDataBlock('MATERIAL_DATA', material));
   }
-  parts.push('## ' + (subQuestionTitle || '题目') + '\n' + fencedDataBlock('SUBQUESTION_DATA', subQuestionContent)
+  parts.push(
+    // ★P2-INJ-a（legacy submission-grading 同源修复）：标题进围栏，消除围栏外教师可控明文
+    '## 小题标题\n' + fencedDataBlock('SUBQUESTION_TITLE_DATA', subQuestionTitle || '题目')
+    + '\n\n## 题目内容\n' + fencedDataBlock('SUBQUESTION_DATA', subQuestionContent)
     + '\n\n## 参考答案\n' + fencedDataBlock('REFERENCE_ANSWER_DATA', referenceAnswer || '（无）')
     + '\n\n## 学生提交的答案\n' + fencedDataBlock('STUDENT_ANSWER_DATA', studentAnswer || '（空）')
     + '\n\n## 评分要求\n满分：' + limit + ' 分\n请判断题目类型（编程题/理论题/混合题），选择合适的评分标准，根据参考答案对学生答案进行评分。');

@@ -23,7 +23,7 @@ import auth from './middleware/auth.js';
 import requireRole from './middleware/role.js';
 import projectAssetGuard from './middleware/projectAssetGuard.js';
 import { cspMiddleware } from './middleware/csp.js';
-import { createRateLimitMiddleware, createLoginGlobalFailureGuard } from './infrastructure/rate-limit/rate-limit-middleware.js';   // ★R3-RATE（M5/R16）
+import { createRateLimitMiddleware, createLoginGlobalFailureGuard, LOGIN_GLOBAL_FAIL_MAX, LOGIN_GLOBAL_FAIL_WINDOW_MS } from './infrastructure/rate-limit/rate-limit-middleware.js';   // ★R3-RATE（M5/R16）/ P2-RATE-a
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -63,6 +63,8 @@ app.use(express.json({ limit: '10mb' }));
 // ★R3-RATE（R16）：登录**全局失败速率**守卫 —— 跨 IP、每账号只试 1 次的密码喷洒在下面三键上都不达阈值，
 //   必须另有公共熔断面（阈值 100 次失败/分钟，显著高于正常失败量；仅短时熔断登录端点、不锁任何账号）。
 const loginGlobalFailureGuard = createLoginGlobalFailureGuard();
+// ★P2-RATE-a：熔断**告警**只在「打开」瞬间打一条（避免攻击持续期间每个被拒请求都刷日志）
+let loginGlobalCircuitWarned = false;
 
 // 登录失败限流（防暴力破解）—— 逻辑已迁移至 InMemoryRateLimiter（RateLimiterPort），经 app.locals.rateLimiter 取用
 // ★H5：账号 + IP 维度 —— 只按 IP 时，同一出口（NAT/网关）后的攻击者刷满即锁死所有用户；
@@ -83,8 +85,19 @@ app.use('/api/auth/login', async (req, res, next) => {
   const acctKey = identity ? `acct:${identity.username}@${identity.schoolCode}` : null;
   // ★N11/t24：与 schoolCode 解耦的全局账号键（`acct#global:` 命名空间 ⇒ 不与逐校键/username 内容撞键）
   const userKey = identity ? `acct#global:${identity.username}` : null;
-  // ★R3-RATE（R16）：全局失败速率熔断（先于三键判定；超限只需 429，不泄漏账号是否存在）
-  if (await loginGlobalFailureGuard.isBlocked()) {
+  // ★R3-RATE（R16）+ ★P2-RATE-a：全局失败速率熔断（先于三键判定；超限只需 429，不泄漏账号是否存在）
+  const globalBlocked = await loginGlobalFailureGuard.isBlocked();
+  if (globalBlocked && !loginGlobalCircuitWarned) {
+    loginGlobalCircuitWarned = true;
+    logger.warn({
+      event: 'LOGIN_GLOBAL_CIRCUIT_OPEN',
+      threshold: LOGIN_GLOBAL_FAIL_MAX,
+      windowMs: LOGIN_GLOBAL_FAIL_WINDOW_MS,
+    }, '登录全局失败熔断已开启（跨 IP 喷洒防护；不锁账号，窗口过后自动恢复）—— 请关注是否为攻击流量');
+  } else if (!globalBlocked && loginGlobalCircuitWarned) {
+    loginGlobalCircuitWarned = false;   // 窗口滑出后复位，下一轮攻击可再次告警
+  }
+  if (globalBlocked) {
     return res.status(429).json({ code: 1003, message: '登录失败次数过多，请稍后再试', data: null });
   }
   if (await app.locals.rateLimiter.isBlocked(ipKey)
@@ -209,9 +222,7 @@ app.post('/api/internal/graded', (req, res) => {
 //   鉴权后能拿到 req.user 的写入口（学生提交 / 教师上传工程包）改在控制器内用 user 维度键（更精细）。
 //   阈值 10 次/分钟/键：远宽于正常交互（教师一次备课通常 <5 次生成），只挡脚本化刷 LLM。
 const llmEntranceRateLimit = createRateLimitMiddleware({ max: 10, windowMs: 60000 });
-//   学生实训题提交（interface 层不得 import infrastructure ⇒ 在装配处按 IP 维度挂）
-const studentSubmitRateLimit = createRateLimitMiddleware({ max: 10, windowMs: 60000, message: '提交过于频繁，请稍后再试' });
-app.use('/api/student/assignments/:assignmentId/project/:questionId/submit', studentSubmitRateLimit);
+//   学生实训题提交限流已移至 routes/student.js（★P2-RATE-b：鉴权后按 user:<id> 计，避免同 NAT 误伤）
 
 // 精确路径白名单（正则；避免 app.use 前缀匹配把 /parse-exam-stream 之类计两次）
 const LLM_ENTRANCE_PATTERNS = [
@@ -222,6 +233,8 @@ const LLM_ENTRANCE_PATTERNS = [
   /^\/api\/teacher\/assignments\/\d+\/grade$/,
   /^\/api\/teacher\/submissions\/\d+\/regrade$/,
   /^\/api\/teacher\/submissions\/\d+\/project\/regrade$/,
+  /^\/api\/admin\/submissions\/\d+\/project\/regrade$/,   // ★P2-RATE-c：管理员实训重评（routes/admin.js:19）
+  /^\/api\/teacher\/projects\/\d+\/submissions\/\d+\/regrade$/,   // ★P2-RATE-c：教师项目提交重评（routes/projects.js:42）
 ];
 app.use((req, res, next) => (
   LLM_ENTRANCE_PATTERNS.some((re) => re.test(req.path)) ? llmEntranceRateLimit(req, res, next) : next()
