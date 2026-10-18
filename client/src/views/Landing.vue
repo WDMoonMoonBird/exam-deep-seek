@@ -650,6 +650,10 @@ a { color: inherit; text-decoration: none; }
 .hero-inner { position: relative; max-width: 1240px; margin: 0 auto; padding: var(--space-12) var(--space-8) var(--space-12);
   display: grid; grid-template-columns: minmax(0, .92fr) minmax(0, 1.28fr); gap: var(--space-12); align-items: center; }
 /* 首屏进场：文案与窗口各淡入上移一次（reduced-motion 下关闭） */
+/* 1081–1200：双栏文案列只有 413–456px，放不下三个 CTA（实测 420px）→ 该区间先堆叠，避免按钮换行 */
+@media (min-width: 1081px) and (max-width: 1200px) {
+  .hero-inner { grid-template-columns: 1fr; gap: var(--space-8); }
+}
 .hero-copy { animation: fadeUp .5s cubic-bezier(.16,1,.3,1) both; }
 .shot { animation: fadeUp .6s .08s cubic-bezier(.16,1,.3,1) both; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }

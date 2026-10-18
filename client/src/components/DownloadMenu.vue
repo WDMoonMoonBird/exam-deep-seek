@@ -94,12 +94,12 @@ onUnmounted(() => {
 
 <template>
   <div ref="rootRef" class="dl" :class="{ 'dl--lg': props.size === 'lg' }">
-    <a v-if="defaultItem" class="dl-main" :href="hrefFor(defaultItem)" :download="defaultItem.file" @click="close">
+    <a v-if="defaultItem" class="dl-main" :href="hrefFor(defaultItem)" :download="defaultItem.file" :aria-label="mainLabel" :title="mainLabel" @click="close">
       <PlatformIcon :id="defaultItem.id" />
       <span class="dl-label">{{ mainLabel }}</span>
       <span class="dl-label-short">下载</span>
     </a>
-    <button v-else type="button" class="dl-main" :aria-expanded="open" aria-haspopup="menu" aria-controls="dl-panel" @click="toggle">
+    <button v-else type="button" class="dl-main" :aria-expanded="open" aria-haspopup="menu" aria-controls="dl-panel" :aria-label="mainLabel" :title="mainLabel" @click="toggle">
       <PlatformIcon id="" />
       <span class="dl-label">{{ mainLabel }}</span>
       <span class="dl-label-short">下载</span>
@@ -194,6 +194,13 @@ onUnmounted(() => {
 .dl-panel-note { margin: 8px 10px 4px; font-size: 11.5px; line-height: 1.5; color: var(--text-tertiary); }
 .dl-pop-enter-active, .dl-pop-leave-active { transition: opacity var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out); }
 .dl-pop-enter-from, .dl-pop-leave-to { opacity: 0; transform: translateY(-4px); }
+
+/* 双栏 hero（>1080，文案列只有 472px）：「下载 macOS 版」太长会换行 → 用图标 + 下载 */
+@media (min-width: 1081px) {
+  .dl--lg .dl-label { display: none; }
+  .dl--lg .dl-label-short { display: inline; }
+  .dl--lg .dl-main { padding: 0 var(--space-3); }
+}
 
 @media (max-width: 640px) {
   .dl, .dl--lg { flex: 1 1 0; min-width: 0; height: 40px; }
