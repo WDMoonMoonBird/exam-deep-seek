@@ -63,16 +63,33 @@
 
 **文案口径**：面向用户不写「DSH 是什么」（对外是内部装置），只写「评分单位改为一份作业、一次造尺 N 次量、重复评分不重复消耗、分数写回平台」+ 生产验证数字。
 
-## 四、实现方案（待拍板后做）
+## 四、实现（已完成）
 
-| 方案 | 优点 | 缺点 |
-|---|---|---|
-| **A. 静态 JSON（推荐）** `client/src/data/changelog.js`，手写 11 条 | 文案可控、零构建依赖、可直接上线 | 每次要手写一条 |
-| B. 构建脚本从 git log 生成候选 | 不漏更新 | 噪音多、仍需人工写摘要 |
-| **A+B 混合（最终建议）** | 脚本产出「候选清单」放到 PR 描述，人工确认后改 JSON | 多一步流程 |
+已落地（纯前端，静态数据，不调接口）：
 
-组件：`ChangelogDrawer.vue`（入口在 `views/Landing.vue` 导航；`?changelog=1` 可直接打开，便于分享）。
-未读红点：`localStorage['changelog:lastSeen']` 与最新条目日期比较。
+| 文件 | 内容 |
+|---|---|
+| `client/src/data/changelog.js` | 12 条数据（date/label/category/title/summary/detail/tags/hot），顶部注释写维护口径 |
+| `client/src/components/ChangelogDrawer.vue` | antd Drawer：标题+统计、分类筛选胶囊（带计数）、时间线、置顶条展开「实测数据」、空态 |
+| `client/src/views/Landing.vue` | 导航入口（未读红点）+ 页脚入口 + `?changelog=1` 深链 + 打开即写 `changelog:lastSeen` |
+
+**外对文案**：统一写「DeepSeek Harness」全名，不在访客页面解释内部代号。
+
+**验证明细**（Playwright，1440×900 / 390×844）：
+
+| 检查 | 结果 |
+|---|---|
+| 入口按钮 / 页脚按钮 / 未读红点 | 全部存在 ✓ |
+| 抽屉宽度（桌面 / 手机） | 520px / 390px（=100%）✓ |
+| 标题与统计 | 「更新日志」+「10 月 9 日以来 · 12 次大更新 / 459 次提交」✓ |
+| 条数 / 首条 | 12 条；首条 =「实训题评分改由 DeepSeek Harness 执行」且默认展开实测数据 ✓ |
+| 筛选 | 全部 12 / 评分 2 / 移动端 2 / 作业 2 / 其余各 1；点「移动端」→ 2 条 ✓ |
+| Esc 关闭 / 遮罩关闭 | ✓ |
+| 深链 `?changelog=1` | 直接打开，12 条 ✓ |
+| 未读标记 | 打开后写 `changelog:lastSeen=2026-10-18`，红点消失 ✓ |
+| 横向溢出 / JS 异常 | 桌面 0 / 0；手机 0 / 0 ✓ |
+
+**维护流程**：发版前跑 `git log --since=<上次更新> --pretty='%h %ad %s' --date=short` → 按「只收用户可感知的大更新」挑 → 改 `changelog.js`（新条目放最前）→ 更新 `CHANGELOG_SINCE` / `CHANGELOG_COMMITS`。
 
 ## 五、待确认
 

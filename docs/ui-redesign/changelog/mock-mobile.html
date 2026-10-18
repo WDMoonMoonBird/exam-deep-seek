@@ -524,8 +524,8 @@ body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC",
     <li class="item is-hot">
       <span class="dot"></span>
       <div class="meta"><b>10-12</b><span class="pill pill--brand">评分</span><span class="tag">新功能</span><span class="tag">重大</span></div>
-      <h4>实训题评分改由 DSH 装置执行<span class="new">新</span></h4>
-      <p>评分单位从「一次 LLM 调用」改为「一份作业一次造尺、N 次量」：DSH 装置在隔离环境跑标准包与判据，带锚点校验与失败即停。</p>
+      <h4>实训题评分改由 DeepSeek Harness 执行<span class="new">新</span></h4>
+      <p>评分单位从「一次 LLM 调用」改为「一份作业一次造尺、N 次量」：DeepSeek Harness 在隔离环境跑标准包与判据，带锚点校验与失败即停。</p>
       <div class="detail"><b>实测数据</b><p>同一提交重复评分命中缓存不再消耗 LLM（本次零 LLM）；分数写回平台。353 作业生产验证：62 份成绩 / 写出 59 份 / 与基线逐位一致，59 份均不低于旧分，均值 81.9 → 84.6。已上云（pm2 dsh-grader-worker）。</p></div>
     </li>
     <li class="item">

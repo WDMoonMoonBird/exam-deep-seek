@@ -15,10 +15,12 @@
  * 登录态：未登录 → 主按钮「教师登录」；已登录 → 「进入控制台」（按角色进各自首页）。
  * 公开访问：本页不读接口，无网络请求；进入系统后才走各自的守卫。
  */
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useUserStore } from '../stores/user.js';
 import ThemeToggle from '../components/ThemeToggle.vue';
+import ChangelogDrawer from '../components/ChangelogDrawer.vue';
+import { CHANGELOG_LATEST } from '../data/changelog.js';
 
 const userStore = useUserStore();
 const route = useRoute();
@@ -48,6 +50,12 @@ const androidApkHref = 'https://203.0.113.10/exam/download/deadpan-1.1.apk';
 /** 开源仓库地址：外链（不走 BASE 前缀），页脚最底部展示 */
 const REPO_URL = 'https://gitee.com/WD_MoonMoonBird/exam-deep-seek';
 
+/* ===== 更新日志：入口在导航 + 页脚；?changelog=1 可直接打开（便于分享） ===== */
+const changelogOpen = ref(false);
+const changelogUnread = ref(false);
+function openChangelog() { changelogOpen.value = true; }
+watch(changelogOpen, (v) => { if (v) changelogUnread.value = false; });
+
 /* ===== ① 控制台窗口：由**侧栏**切换视图（原来那行「题库管理/评分审核/作业管理 可点击切换」已按用户要求取消） ===== */
 const activeView = ref('questions');
 /** 「新增题目」下拉：演示用 —— 只弹出菜单，不进新建页；点外部/Esc 关闭 */
@@ -72,6 +80,9 @@ function onDocKeydown(e) {
 onMounted(() => {
   document.addEventListener('pointerdown', onDocPointerdown);
   document.addEventListener('keydown', onDocKeydown);
+  // 更新日志：未读红点 + 深链 ?changelog=1
+  try { changelogUnread.value = localStorage.getItem('changelog:lastSeen') !== CHANGELOG_LATEST; } catch { changelogUnread.value = true; }
+  try { if (new URLSearchParams(location.search).get('changelog') === '1') changelogOpen.value = true; } catch { /* 忽略 */ }
 });
 onUnmounted(() => {
   document.removeEventListener('pointerdown', onDocPointerdown);
@@ -185,6 +196,10 @@ const rubricPublished = ref(false);
           <a class="nav-link" :href="docHref" target="_blank" rel="noopener">
             <svg class="icon" aria-hidden="true"><use href="#lg-book" /></svg>使用文档
           </a>
+          <button type="button" class="nav-link nav-link-btn" @click="openChangelog">
+            更新日志
+            <span v-if="changelogUnread" class="clog-unread" aria-label="有未读更新" />
+          </button>
           <ThemeToggle />
           <a class="btn btn-primary btn-sm" :href="loggedIn ? consoleHref : loginHref">
             {{ loggedIn ? '进入控制台' : '教师登录' }}
@@ -550,6 +565,7 @@ const rubricPublished = ref(false);
         <span class="sep" aria-hidden="true"></span>
         <span>面向高校编程课的 AI 评分平台 · 校内网部署</span>
         <span class="foot-links">
+          <button type="button" class="foot-btn" @click="openChangelog">更新日志</button>
           <a :href="docHref" target="_blank" rel="noopener">使用文档</a>
           <a :href="loggedIn ? consoleHref : loginHref">{{ loggedIn ? '进入控制台' : '教师登录' }}</a>
           <a href="#capability">系统能力</a>
@@ -563,6 +579,8 @@ const rubricPublished = ref(false);
         </span>
       </div>
     </footer>
+
+    <ChangelogDrawer v-model:open="changelogOpen" />
 
     <!-- 图标雪碧（lg- 前缀避免与其它页面/组件的 symbol id 冲突） -->
     <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -599,6 +617,10 @@ a { color: inherit; text-decoration: none; }
 .nav-links { margin-left: auto; display: flex; align-items: center; gap: var(--space-1); }
 .nav-link { display: inline-flex; align-items: center; gap: var(--space-1); height: 34px; padding: 0 var(--space-3); border-radius: var(--radius-md); color: var(--text-secondary); font-size: var(--fs-body); }
 .nav-link:hover { background: var(--bg-surface-2); color: var(--text-primary); }
+.nav-link-btn { position: relative; border: 0; background: transparent; font-family: inherit; cursor: pointer; }
+.clog-unread { position: absolute; top: 7px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--status-danger-fg); }
+.foot-btn { border: 0; background: transparent; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+.foot-btn:hover { color: var(--text-brand); }
 
 /* ===== 按钮 ===== */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); height: 40px; padding: 0 var(--space-5);
@@ -896,6 +918,8 @@ a { color: inherit; text-decoration: none; }
 @media (max-width: 768px) {
   .nav-inner, .section-inner { padding: 0 var(--space-4); }
   .nav-link { display: none; }
+  /* 更新日志在手机端保留（其余导航链接隐藏，入口靠它 + 页脚） */
+  .nav-link.nav-link-btn { display: inline-flex; }
   .hero h1 { font-size: 30px; }
   .hero-inner { padding: var(--space-6) var(--space-4); }
   .frame-body { grid-template-columns: 1fr; }
