@@ -1,0 +1,602 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>更新日志稿</title>
+<style>/* ============================================================================
+ * Exam-DeepSeek · 设计令牌（运行时副本）
+ *
+ * 引入方式：main.js 中在 ./style.css 之后 import，保证同名令牌以本文件为准。
+ * 设计说明：docs/ui-redesign/02-design-tokens.md（含 antd 映射表与验收命令）
+ * 唯一性约定：**本文件是前端令牌的唯一来源**；改动后请同步更新设计文档中的说明。
+ *
+ * Wave 0 已知的、刻意接受的同名覆盖（仅此 5 个，影响面已逐一核对）：
+ *   --radius-sm  8px  → 6px   影响 3 处（3 个 Layout 的 .user-area，2px 差异）
+ *   --radius-md  11px → 8px   未使用
+ *   --radius-lg  18px → 12px  未使用
+ *   --radius-pill 9999px → 999px  未使用
+ *   --font-display 'SF Pro Display',system-ui,… → 同族系统栈（渲染等价：都不存在 SF Pro Display 字体文件）
+ * 其余 94 处旧颜色令牌（--blue/--ink/--canvas/--hairline）**未做别名映射**，保持原值不动，
+ * 待 Wave 1 逐页替换后删除。
+ * ==========================================================================*/
+
+/* ============================================================================
+ * Exam-DeepSeek · Design Tokens v1.0
+ * 分支 feat/ui-redesign · 方法论 afrexai-ui-design-system Phase 3 / Phase 10
+ *
+ * 三层结构：
+ *   1) Primitive  原始值（色阶 / 字号 / 间距 / 圆角 / 阴影 / 时长 / 层级）
+ *   2) Semantic   语义（surface / text / border / status / score / density）
+ *   3) Component  组件（button / input / table / card / tag / sider / topbar …）
+ *
+ * 规则：业务代码只允许使用第 2、3 层；第 1 层仅在令牌文件内部引用。
+ * 兼容：Chrome 69 兜底 —— 不使用 color-mix() / oklch() / :is() / 容器查询 /
+ *       aspect-ratio / flex gap（用 margin 或 grid gap 代替）。
+ * ==========================================================================*/
+
+:root {
+  /* ---------------------------------------------------------------- 1. 原始值 */
+  /* 中性色（冷灰，用于所有界面骨架） */
+  --gray-0:   #ffffff;
+  --gray-25:  #fbfcfd;
+  --gray-50:  #f6f7f9;
+  --gray-100: #eef0f4;
+  --gray-200: #e2e5ea;
+  --gray-300: #cfd4dc;
+  --gray-400: #a5acb8;
+  --gray-450: #8b929e;   /* 3.13:1 —— 用于输入框边界（WCAG 1.4.11 需 ≥3:1） */
+  --gray-500: #6b7280;   /* 4.83:1 —— 修正原 #78808d 只有 3.98:1，不满足 AA 正文 */
+  --gray-600: #545c69;
+  --gray-800: #232935;
+  --gray-900: #141922;
+  --gray-950: #0b0f16;
+
+  /* 品牌蓝（基准 #0066cc，源自现有 --blue） */
+  --brand-50:  #eff6ff;
+  --brand-200: #bfdbfe;
+  --brand-300: #8ec5ff;
+  --brand-400: #4d9bf5;
+  --brand-500: #1f7ae0;
+  --brand-600: #0066cc;
+  --brand-700: #0055ab;
+  --brand-800: #064a8c;
+
+  /* 成功 */
+  --green-50:  #ecfdf3;  --green-200: #a6f4c5;
+  --green-600: #039855;
+  --green-700: #027a48;
+
+  /* 警告 */
+  --amber-50:  #fffaeb;  --amber-200: #fedf89;
+  --amber-400: #fdb022;  --amber-600: #dc6803;
+  --amber-700: #b54708;
+
+  /* 危险 */
+  --red-50:    #fef3f2;  --red-200: #fecdca;
+  --red-500: #f04438;  --red-600: #d92d20;
+  --red-700:   #b42318;
+
+  /* 紫（实训题 / 项目类标识） */
+  --violet-50: #f4f3ff;  --violet-100: #ebe9fe;
+  --violet-600: #6938ef;
+
+  /* 字号（中文友好：正文 14px / 行高 1.6） */
+  --fs-display-1: 32px;
+  --fs-display-2: 26px;
+  --fs-title-1:   22px;  --lh-title-1:   1.35;
+  --fs-title-2:   18px;
+  --fs-title-3:   16px;
+  --fs-body-lg:   15px;
+  --fs-body:      14px;  --lh-body:      1.6;
+  --fs-body-sm:   13px;
+  --fs-caption:   12px;  --lh-caption:   1.5;
+  --fs-code:      13px;  --lh-code:      1.6;
+
+  --fw-regular: 400; --fw-medium: 500; --fw-semibold: 600; --fw-bold: 700;
+  --tracking-tight: -0.01em;   /* 大标题 */
+  --tracking-normal: 0;
+  --tracking-wide: 0.02em;     /* 全大写小标签 */
+
+  /* 间距（4px 基数） */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+  --space-4: 16px;  --space-5: 20px; --space-6: 24px; --space-8: 32px;
+  --space-10: 40px; --space-12: 48px;
+
+  /* 圆角 */
+  --radius-xs: 4px; --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+  --radius-xl: 16px; --radius-pill: 999px;
+
+  /* 阴影（克制：只用于抬升层级，不用于装饰） */
+  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.08), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 4px 12px -2px rgba(16, 24, 40, 0.10), 0 2px 6px -2px rgba(16, 24, 40, 0.06);
+  --shadow-lg: 0 12px 32px -8px rgba(16, 24, 40, 0.16), 0 4px 12px -4px rgba(16, 24, 40, 0.08);
+  --shadow-xl: 0 24px 48px -12px rgba(16, 24, 40, 0.24);
+  --ring-focus: 0 0 0 3px rgba(31, 122, 224, 0.28);
+  --ring-danger: 0 0 0 3px rgba(240, 68, 56, 0.22);
+
+  /* 浮层（文档页 lightbox 等）：遮罩与浮层内控件底。取值与原字面量逐字相同（R-28 收口，零视觉变化）；
+     亮暗同值——浮层本来就压在内容之上，不随主题翻转（与原实现一致）。 */
+  --overlay-scrim: rgba(0, 0, 0, 0.85);
+  --overlay-control-bg: rgba(255, 255, 255, 0.15);
+  --overlay-control-bg-hover: rgba(255, 255, 255, 0.3);
+
+  /* 动效 */
+  --duration-instant: 90ms;
+  --duration-fast: 150ms;
+  --duration-base: 220ms;
+  --duration-slow: 320ms;
+  /* 循环动画（loading spin / 上传脉冲）：与 UI 过渡刻度不同域，取等值以免改变转速（R-25 收口） */
+  --duration-loop-spin: 800ms;
+  --duration-loop-pulse: 1200ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --transition-control: color var(--duration-fast) var(--ease-out),
+                        background-color var(--duration-fast) var(--ease-out),
+                        border-color var(--duration-fast) var(--ease-out),
+                        box-shadow var(--duration-fast) var(--ease-out);
+  --transition-surface: transform var(--duration-base) var(--ease-out),
+                        opacity var(--duration-base) var(--ease-out),
+                        box-shadow var(--duration-base) var(--ease-out);
+
+  /* 层级 */
+  --z-sticky: 100;  --z-topbar: 300;
+  --z-dropdown: 1000; --z-modal-mask: 1100; --z-modal: 1200; --z-drawer: 1250;
+  --z-message: 1300; --z-tooltip: 1400; --z-lightbox: 1500;
+
+  /* 字体：macOS 用系统 UI 字体，Windows/机房机回落 Segoe UI + 雅黑 */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+               "Hiragino Sans GB", "Microsoft YaHei", "Source Han Sans SC",
+               "Noto Sans CJK SC", "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--font-sans);
+  --font-mono: "SFMono-Regular", "SF Mono", MonacoDSH, Menlo, Consolas,
+               "Liberation Mono", "Courier New", monospace;
+
+  /* 布局骨架 */
+  --layout-sider-w: 232px;
+  --layout-sider-w-collapsed: 64px;
+  --layout-topbar-h: 56px;
+  --layout-content-max: 1560px;
+  --layout-subnav-h: 44px;
+
+  /* ------------------------------------------------------------ 2. 语义：密度 */
+  /* comfortable = 学生端 / 公开文档；compact = 教师端 / 管理端 */
+  --control-h-sm: 28px; --control-h: 36px; --control-h-lg: 44px;
+  --table-row-h: 64px;  --table-cell-pad-y: 14px; --table-cell-pad-x: 16px;    /* v2：与 compact 统一 */
+  --page-pad-y: 28px;   --page-pad-x: 32px;
+  --panel-pad: 20px;    --stack-gap: 16px;
+}
+[data-density="compact"] {
+  --control-h-sm: 26px; --control-h: 32px; --control-h-lg: 38px;
+  --table-row-h: 64px;  --table-cell-pad-y: 14px;  --table-cell-pad-x: 16px;   /* v2：单行 50 / 两行 64（原 44） */
+  --page-pad-y: 20px;   --page-pad-x: 24px;
+  --panel-pad: 16px;    --stack-gap: 12px;
+  /* 组件层别名必须在同一子树重新声明：自定义属性在「声明它的元素」上完成 var() 替换后才继承，
+     因此 :root 上的 --input-h / --card-pad 会带着 comfortable 的数值继承进来，
+     不会跟随子树里的 --control-h / --panel-pad 变化（nav-dev 实测发现，captain 修正）。 */
+  --input-h: var(--control-h);
+  --card-pad: var(--panel-pad);
+}
+
+/* ------------------------------------------------------------ 2. 语义：浅色主题 */
+:root {
+  /* 背景 */
+  --bg-canvas: var(--gray-50);        /* 页面底色 */
+  --bg-surface: var(--gray-0);        /* 卡片 / 面板 / 表格 */
+  --bg-surface-2: var(--gray-25);     /* 次级面板、表头 */
+  --bg-sunken: var(--gray-100);       /* 内嵌区（代码块底、只读区） */
+  --bg-inverse: var(--gray-950);      /* 深色侧栏 */
+  /* 代码/日志面：语义 =「无论主题都必须保持深色的内容面」（终端、代码块、日志）。
+     与 --bg-inverse 的区别：后者的语义是「当前面的反色」（浅色主题下用于侧栏/浮层），
+     两个概念不同——代码面不应随主题翻转。当前浅色与深色主题下取值一致，改动零视觉变化。 */
+  --code-bg: var(--gray-950);
+  --code-fg: rgba(255, 255, 255, 0.72);
+  --bg-hover: var(--gray-100);
+  --bg-active: var(--gray-200);
+  --bg-selected: var(--brand-50);
+  --bg-disabled: var(--gray-100);
+  --bg-overlay: rgba(11, 15, 22, 0.48);
+  --bg-mask-strong: rgba(11, 15, 22, 0.72);   /* 图片灯箱 */
+
+  /* 文本 */
+  --text-strong: var(--gray-950);
+  --text-primary: var(--gray-900);
+  --text-secondary: var(--gray-600);
+  --text-tertiary: var(--gray-500);
+  --text-disabled: var(--gray-400);
+  --text-inverse: var(--gray-0);
+  --text-inverse-muted: rgba(255, 255, 255, 0.72);
+  --text-inverse-subtle: rgba(255, 255, 255, 0.48);
+  --text-link: var(--brand-600);
+  /* 品牌色强调文本（分数/题号/KPI/图标）：与 --text-link 取值相同但语义不同（避免把分数渲染成链接语义）。
+     亮 = brand-600（5.57:1 on 白）；暗 = brand-300（9.72:1 on #141922）—— 见 docs/reports/b3-tokens/T4-F4-方案.md */
+  --text-brand: var(--brand-600);
+  --text-on-brand: var(--gray-0);
+
+  /* 边框 */
+  --border-subtle: var(--gray-100);
+  --border-default: var(--gray-200);
+  --border-strong: var(--gray-300);
+  --border-focus: var(--brand-500);
+  --border-danger: var(--red-500);
+
+  /* 状态语义 */
+  --status-success-fg: var(--green-700);  --status-success-bg: var(--green-50);  --status-success-bd: var(--green-200);
+  --status-warning-fg: var(--amber-700);  --status-warning-bg: var(--amber-50);  --status-warning-bd: var(--amber-200);
+  --status-danger-fg:  var(--red-700);    --status-danger-bg:  var(--red-50);    --status-danger-bd:  var(--red-200);
+  --status-info-fg:    var(--brand-700);  --status-info-bg:    var(--brand-50);  --status-info-bd:    var(--brand-200);
+  --status-neutral-fg: var(--gray-600);   --status-neutral-bg: var(--gray-100);  --status-neutral-bd: var(--gray-200);
+  --status-accent-fg:  var(--violet-600); --status-accent-bg:  var(--violet-50); --status-accent-bd:  var(--violet-100);
+
+  /* 评分语义（分数、等级、进度） */
+  --score-excellent: var(--green-600);
+  --score-good:      var(--brand-600);
+  --score-pass:      var(--amber-600);
+  --score-fail:      var(--red-600);
+  --score-track:     var(--gray-100);
+
+  /* 图表 / 可视化顺序色 */
+}
+
+/* ------------------------------------------------------------ 2. 语义：深色主题 */
+[data-theme="dark"] {
+  --bg-canvas: var(--gray-950);
+  --bg-surface: var(--gray-900);
+  --bg-surface-2: var(--gray-800);
+  --bg-sunken: #0f131a;
+  --bg-inverse: var(--gray-0);
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --bg-active: rgba(255, 255, 255, 0.10);
+  --bg-selected: rgba(31, 122, 224, 0.18);
+  --bg-disabled: rgba(255, 255, 255, 0.06);
+  --bg-overlay: rgba(0, 0, 0, 0.64);
+
+  --text-strong: var(--gray-0);
+  --text-primary: #e8eaee;
+  --text-secondary: #a9b0bb;
+  --text-tertiary: #8b929e;
+  --text-disabled: #5b626e;
+  --text-inverse: var(--gray-950);
+  --text-link: var(--brand-300);
+  --text-brand: var(--brand-300);   /* 同 --text-link 取值、不同语义（见亮色块注释） */
+
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.12);
+  --border-strong: rgba(255, 255, 255, 0.20);
+  --border-focus: var(--brand-400);
+
+  --status-success-fg: #6ce9a6; --status-success-bg: rgba(3, 152, 85, 0.16); --status-success-bd: rgba(3, 152, 85, 0.36);
+  --status-warning-fg: #fec84b; --status-warning-bg: rgba(220, 104, 3, 0.16); --status-warning-bd: rgba(220, 104, 3, 0.36);
+  --status-danger-fg:  #fda29b; --status-danger-bg:  rgba(217, 45, 32, 0.16); --status-danger-bd:  rgba(217, 45, 32, 0.36);
+  --status-info-fg:    #8ec5ff; --status-info-bg:    rgba(0, 102, 204, 0.20); --status-info-bd:    rgba(0, 102, 204, 0.40);
+  --status-neutral-fg: #a9b0bb; --status-neutral-bg: rgba(255, 255, 255, 0.08); --status-neutral-bd: rgba(255, 255, 255, 0.14);
+  /* accent（紫）此前漏配暗色值 → 暗色下仍是浅紫底 + 深紫字（视觉上一块亮色）。按本块其余 5 个三元组的同一模式补齐：
+     fg 用同族 -300 级亮色（与 #6ce9a6/#fec84b/#fda29b/#8ec5ff 同级），bg/bd 用 violet-500 的半透明叠加（与 --bg-selected 的 18% 手法一致）。
+     实测对比度 = #c4b5fd 叠在 rgba(122,90,248,.18) 之上约 7.95:1（≥4.5）。 */
+  --status-accent-fg: #c4b5fd; --status-accent-bg: rgba(122, 90, 248, 0.18); --status-accent-bd: rgba(122, 90, 248, 0.40);
+
+  --score-excellent: #32d583; --score-good: #4d9bf5; --score-pass: #fdb022; --score-fail: #f97066;
+  --score-track: rgba(255, 255, 255, 0.10);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 12px 32px -8px rgba(0, 0, 0, 0.6);
+}
+
+/* ------------------------------------------------------------ 3. 组件级令牌 */
+:root {
+  /* 按钮 */
+  --btn-radius: var(--radius-md);
+  --btn-pad-x: var(--space-4);
+  --btn-font-weight: var(--fw-medium);
+  --btn-primary-bg: var(--brand-600);
+  --btn-primary-bg-hover: var(--brand-700);
+  --btn-primary-bg-active: var(--brand-800);
+  --btn-primary-fg: var(--text-on-brand);
+  --btn-default-bg: var(--bg-surface);
+  --btn-default-bg-hover: var(--gray-50);
+  --btn-default-bd: var(--border-strong);
+  --btn-text-fg: var(--text-link);
+  --btn-danger-bg: var(--red-600);
+  --btn-disabled-bg: var(--bg-disabled);
+  --btn-disabled-fg: var(--text-disabled);
+  --btn-disabled-bd: var(--border-default);
+
+  /* 输入 / 选择 / 日期 */
+  --input-h: var(--control-h);
+  --input-radius: var(--radius-md);
+  --input-bd: var(--gray-450);        /* 3.13:1，满足 WCAG 1.4.11 的非文本对比度 */
+  --input-bd-hover: var(--brand-400);
+  --input-bd-focus: var(--brand-500);
+  --input-bg: var(--bg-surface);
+  --input-bg-disabled: var(--bg-disabled);
+  --input-ph: var(--text-tertiary);
+  --input-pad-x: var(--space-3);
+  --input-ring: var(--ring-focus);
+
+  /* 表格 */
+  --table-header-bg: var(--bg-surface-2);
+  --table-header-fg: var(--text-tertiary);      /* v2：表头降一档，把注意力让给数据 */
+  --table-header-fw: var(--fw-medium);
+  --table-header-fs: var(--fs-caption);         /* v2：12px 小字 + 字距，表头更"标签化" */
+  --table-header-tracking: var(--tracking-wide);
+  --table-head-pad-y: 12px;                     /* v2：表头高 44 = 12×2 + 20 */
+  --table-row-accent: var(--brand-600);         /* v2：悬停/选中行的左侧 2px 强调条 */
+  --table-row-accent-w: 2px;
+  --table-header-h: 44px;   /* 行高直接用密度层的 --table-row-h */
+  --table-row-hover: var(--gray-50);
+  --table-row-selected: var(--brand-50);
+  --table-bd: var(--border-subtle);
+  /* 单元格内距直接用密度层的 --table-cell-pad-y / --table-cell-pad-x */
+  --table-sticky-shadow: 0 6px 12px -8px rgba(16, 24, 40, 0.18);
+
+  /* 卡片 / 面板 */
+  --card-bg: var(--bg-surface);
+  --card-bd: var(--border-default);
+  --card-radius: var(--radius-lg);
+  --card-pad: var(--panel-pad);
+  --card-shadow: none;                 /* 平面优先，靠边框分层 */
+  --card-shadow-raised: var(--shadow-sm);
+
+  /* 标签 / 徽标 */
+  --tag-radius: var(--radius-sm);
+  --tag-h: 22px;
+  --tag-pad-x: var(--space-2);
+  --tag-fs: var(--fs-caption);
+
+  /* 侧栏 —— 随主题翻转，取值原则（2026-10-11 用户要求）：「跟内容区拉开一档面色即可，不用纯白/纯黑」。
+     浅色 = --gray-100（比内容区 --bg-canvas（gray-50）深一档的浅灰面），深色 = --gray-900（见深色块）。
+     为什么不用 --bg-inverse：它的语义是「当前面的反色」，浅色主题下恒为近黑，侧栏因此永远是深色。
+     为什么也不用 --bg-surface：浅色下它是纯白（与顶栏同色），深色下与内容区同色 —— 两种主题都谈不上「色差」。
+     --sider-fg-active（选中项文字）两种主题下都保持白色：选中药丸底色是 brand-600（白字实测 5.57:1）。
+     下列注释里的对比度为验收实测值（Playwright 读计算样式 + WCAG 相对亮度实算，含半透明色的合成）。 */
+  --sider-bg: var(--gray-100);
+  --sider-fg: var(--gray-600);            /* 菜单项文字：灰底 5.91:1 */
+  --sider-fg-strong: var(--gray-900);     /* 悬停文字 / Logo 文字：灰底 15.44:1（悬停底 gray-200 上是 13.95:1） */
+  --sider-fg-active: var(--gray-0);       /* 选中项文字（压在 brand-600 药丸上） */
+  --sider-bd: var(--border-default);      /* 右侧分隔线：浅色下侧栏与画布同属浅色系，靠这条线把边界讲清楚 */
+  --sider-item-h: 40px;
+  --sider-item-radius: var(--radius-md);
+  --sider-item-gap: 2px;
+  --sider-item-pad-x: var(--space-3);
+  --sider-item-hover-bg: var(--gray-200); /* 悬停底：比侧栏面色再深一档（用 gray-100 会与侧栏同色、看不出来） */
+  --sider-item-hover-fg: var(--sider-fg-strong);
+  --sider-item-active-bg: var(--brand-600);
+  --sider-group-fg: var(--gray-600);      /* 分组标题 12px：灰底 5.91:1（gray-500 在灰底上仅 4.24:1，不达 AA） */
+  --sider-icon-size: 16px;
+
+  /* 顶栏 */
+  --topbar-bg: var(--bg-surface);
+  --topbar-bd: var(--border-default);
+  --topbar-h: var(--layout-topbar-h);
+  --topbar-shadow-scrolled: var(--shadow-sm);
+
+  /* 页头 */
+  --page-header-gap: var(--space-4);
+  --page-title-fs: var(--fs-title-1);
+  --page-title-fw: var(--fw-semibold);
+  --page-desc-fs: var(--fs-body);
+  --page-desc-fg: var(--text-secondary);
+
+  /* 空态 / 加载 / 错误 */
+  --empty-icon-size: 56px;
+  --empty-fg: var(--text-tertiary);
+  --empty-title-fs: var(--fs-title-3);
+  --skeleton-bg: var(--gray-100);
+  --skeleton-sheen: rgba(255, 255, 255, 0.65);
+
+  /* 评分面板 */
+  --score-value-fs: 40px;
+  --score-value-fw: var(--fw-semibold);
+
+  /* 动作条（底部固定） */
+  --actionbar-h: 64px;
+  --actionbar-bg: var(--bg-surface);
+  --actionbar-bd: var(--border-default);
+  --actionbar-shadow: 0 -6px 16px -8px rgba(16, 24, 40, 0.16);
+}
+
+/* -------------------------------------------- 深色主题的组件级修正（必须放在组件令牌之后） */
+[data-theme="dark"] {
+  /* 侧栏：深色主题下取 --gray-900（比内容区 --bg-canvas（gray-950 = #0b0f16）浅一档的深灰面），与顶栏/卡片同面。
+     改前它与内容区同为 #0b0f16 —— 两者之间其实没有任何色差；浅色分支见上面的组件级令牌块，
+     新增的三个 --sider-* 令牌同此原则成对维护。 */
+  --bg-inverse: #0b0f16;
+  --text-inverse: #ffffff;
+  --text-inverse-muted: rgba(255, 255, 255, 0.72);
+  --text-inverse-subtle: rgba(255, 255, 255, 0.48);
+  --sider-bg: var(--gray-900);
+  --sider-fg: rgba(255, 255, 255, 0.72);
+  --sider-fg-strong: #ffffff;
+  --sider-fg-active: #ffffff;
+  --sider-bd: transparent;
+  --sider-item-hover-bg: rgba(255, 255, 255, 0.08);
+  --sider-item-hover-fg: #ffffff;
+  --sider-item-active-bg: var(--brand-600);
+  --sider-group-fg: rgba(255, 255, 255, 0.48);
+  --skeleton-sheen: rgba(255, 255, 255, 0.08);
+  /* 代码/日志面：深色主题下显式重声明为同一深色值（本对令牌不随主题翻转） */
+  --code-bg: var(--gray-950);
+  --code-fg: rgba(255, 255, 255, 0.72);
+  /* 表格行态：--table-row-* 原先只有浅色 primitive（--gray-50/--brand-50），暗色下沿用会得到「浅底浅字」（实测 1.12:1）。
+     这里改指随主题切换的语义令牌（与 t32 在组件侧的临时兜底取值一致，故该兜底可删）。 */
+  --table-row-hover: var(--bg-hover);
+  --table-row-selected: var(--bg-selected);
+}
+
+/* ------------------------------------------------------------ 工具类（最小集） */
+.tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.text-mono { font-family: var(--font-mono); }
+
+/* 焦点可见性（Chrome 69 无 :focus-visible，用类回落；现代浏览器走 :focus-visible） */
+:focus-visible { outline: none; box-shadow: var(--ring-focus); border-radius: var(--radius-sm); }
+/* 现代浏览器：仅在键盘聚焦时支出焦点环；鼠标点击不显示 */
+:focus:not(:focus-visible) { outline: none; }
+/* Chrome 69 等不认识 :focus-visible 的浏览器：@supports 判定为 false → 这里必须给出焦点环 */
+@supports not selector(:focus-visible) {
+  :focus { outline: none; box-shadow: var(--ring-focus); border-radius: var(--radius-sm); }
+}
+/* 能力检测兜底（04-interaction-a11y.md §6 的 isLegacyBrowser() 会给 html 加 .legacy） */
+html.legacy :focus { outline: none; box-shadow: var(--ring-focus); border-radius: var(--radius-sm); }
+
+/* ------------------------------------------------------------ 动效降级 */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-instant: 1ms; --duration-fast: 1ms; --duration-base: 1ms;
+    --duration-slow: 1ms; --duration-loop-spin: 1ms; --duration-loop-pulse: 1ms;
+  }
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}
+</style><style>
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+.page { min-height: 100vh; background: var(--bg-canvas); position: relative; }
+.nav { display: flex; align-items: center; gap: 10px; height: 64px; padding: 0 32px; background: var(--bg-surface); border-bottom: 1px solid var(--border-subtle); }
+.nav img { width: 30px; height: 30px; }
+.nav b { font-size: 17px; color: var(--text-strong); }
+.navlinks { margin-left: auto; display: flex; align-items: center; gap: 22px; font-size: 14px; color: var(--text-secondary); }
+.navlinks a { position: relative; cursor: pointer; }
+.navlinks a.on { color: var(--brand-600); font-weight: 600; }
+.navlinks .cta { padding: 7px 14px; border-radius: 8px; background: var(--brand-600); color: #fff; font-weight: 500; }
+.reddot { position: absolute; top: -3px; right: -8px; width: 6px; height: 6px; border-radius: 50%; background: #ef4444; }
+.hero { max-width: 1080px; margin: 0 auto; padding: 120px 32px; }
+.hero h1 { margin: 0 0 16px; font-size: 44px; line-height: 1.25; letter-spacing: -0.5px; color: var(--text-strong); }
+.hero p { margin: 0 0 28px; font-size: 16px; color: var(--text-secondary); }
+.herobtns { display: flex; gap: 12px; }
+.btn { padding: 11px 20px; border-radius: 10px; border: 1px solid var(--card-bd); background: var(--card-bg); color: var(--text-primary); font-size: 14px; font-weight: 500; }
+.btn--primary { background: var(--brand-600); border-color: var(--brand-600); color: #fff; }
+.mask { position: fixed; inset: 0; background: rgba(16,24,40,.45); }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 520px; background: var(--card-bg); border-left: 1px solid var(--card-bd);
+  box-shadow: -24px 0 60px rgba(8,12,20,.18); display: flex; flex-direction: column; }
+.dhead { display: flex; align-items: flex-start; justify-content: space-between; padding: 20px 22px 14px; border-bottom: 1px solid var(--border-subtle); }
+.dhead h3 { margin: 0 0 4px; font-size: 20px; color: var(--text-strong); }
+.dhead p { margin: 0; font-size: 12.5px; color: var(--text-tertiary); }
+.close { width: 32px; height: 32px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--text-tertiary); font-size: 15px; cursor: pointer; }
+.close:hover { background: var(--bg-surface-2); }
+.filters, .mfilters { display: flex; gap: 8px; padding: 12px 22px; overflow-x: auto; border-bottom: 1px solid var(--border-subtle); }
+.chip { flex: none; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--card-bd); background: var(--bg-surface-2);
+  font-size: 12.5px; color: var(--text-secondary); white-space: nowrap; }
+.chip.on { background: var(--brand-600); border-color: var(--brand-600); color: #fff; font-weight: 500; }
+.listwrap, .mlist { flex: 1; overflow: auto; padding: 18px 22px 28px; }
+.timeline { list-style: none; margin: 0; padding: 0 0 0 18px; position: relative; }
+.timeline::before { content: ""; position: absolute; left: 4px; top: 6px; bottom: 6px; width: 2px; background: var(--border-subtle); }
+.item { position: relative; padding: 0 0 20px 4px; }
+.item .dot { position: absolute; left: -18px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: var(--card-bg);
+  border: 2px solid var(--brand-600); }
+.item.is-hot .dot { background: var(--brand-600); box-shadow: 0 0 0 4px rgba(0,102,204,.14); }
+.meta { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; flex-wrap: wrap; }
+.meta b { font-size: 12px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; letter-spacing: .3px; }
+.pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 500; }
+.pill--brand { background: var(--brand-50); color: var(--brand-700); }
+.pill--ok { background: #f0fdf4; color: #15803d; }
+.pill--warn { background: #fffbeb; color: #b45309; }
+.pill--danger { background: #fef2f2; color: #b91c1c; }
+.tag { font-size: 11px; color: var(--text-tertiary); border: 1px dashed var(--border-default); border-radius: 999px; padding: 1px 7px; }
+.new { margin-left: 8px; font-size: 10px; font-weight: 700; color: #fff; background: #ef4444; border-radius: 4px; padding: 1px 5px; vertical-align: 2px; }
+.item h4 { margin: 0 0 4px; font-size: 14.5px; color: var(--text-strong); line-height: 1.4; }
+.item p { margin: 0; font-size: 12.5px; line-height: 1.7; color: var(--text-secondary); }
+.detail { margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: var(--bg-surface-2); border: 1px solid var(--border-subtle); }
+.detail b { font-size: 11.5px; color: var(--text-tertiary); display: block; margin-bottom: 3px; }
+.detail p { font-size: 12px; }
+.more { margin: 6px 0 0; font-size: 11.5px; color: var(--text-tertiary); text-align: center; }
+/* 手机 */
+.phone { width: 390px; height: 844px; background: var(--bg-canvas); overflow: hidden; display: flex; flex-direction: column;
+  border-radius: 44px; box-shadow: 0 0 0 10px #15181f, 0 0 0 11px #2a2f3a, 0 26px 60px rgba(8,12,20,.45); }
+.sbar { height: 48px; flex: none; display: flex; align-items: flex-end; justify-content: space-between; padding: 0 24px 6px; font-size: 13px; font-weight: 600; color: var(--text-strong); }
+.sicons { font-size: 9px; letter-spacing: 1px; display: inline-flex; align-items: center; gap: 4px; }
+.bat { width: 18px; height: 9px; border: 1px solid currentColor; border-radius: 2px; position: relative; display: inline-block; }
+.bat::after { content: ""; position: absolute; inset: 1px 6px 1px 1px; background: currentColor; border-radius: 1px; }
+.mhead { display: flex; align-items: center; gap: 10px; padding: 4px 16px 12px; }
+.mhead h3 { margin: 0; font-size: 20px; color: var(--text-strong); }
+.mcount { margin-left: auto; font-size: 12px; color: var(--text-tertiary); }
+.back { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--card-bd); background: var(--card-bg); color: var(--text-secondary); font-size: 20px; line-height: 1; }
+.mfilters { border-bottom: 1px solid var(--border-subtle); padding: 0 16px 12px; }
+.mlist { padding: 16px 16px 24px; }
+</style></head>
+<body>
+  <div class="phone">
+    <div class="sbar"><b>9:41</b><span class="sicons">●●● <i class="bat"></i></span></div>
+    <header class="mhead"><button class="back" aria-label="返回">‹</button><h3>更新日志</h3><span class="mcount">11 条</span></header>
+    <div class="mfilters"><span class="chip on">全部</span><span class="chip">新功能</span><span class="chip">体验优化</span><span class="chip">安全</span></div>
+    <div class="mlist">
+      <ol class="timeline">
+    <li class="item">
+      <span class="dot"></span>
+      <div class="meta"><b>10-18</b><span class="pill pill--brand">移动端</span><span class="tag">新功能</span></div>
+      <h4>教师端移动版上线（v1）</h4>
+      <p>工作台 / 作业 / 评分审核 / 布置作业 四页打通，手机上可完成「看进度 → 逐份审核 → 发布」。</p>
+      
+    </li>
+    <li class="item">
+      <span class="dot"></span>
+      <div class="meta"><b>10-18</b><span class="pill pill--brand">移动端</span><span class="tag">新功能</span></div>
+      <h4>安卓版 APK 可下载</h4>
+      <p>欢迎页新增安卓版入口，扫码安装即可用；启动直达登录页。</p>
+      
+    </li>
+    <li class="item">
+      <span class="dot"></span>
+      <div class="meta"><b>10-14</b><span class="pill pill--brand">作业</span><span class="tag">新功能</span></div>
+      <h4>提交与评分：三个开关</h4>
+      <p>取最高 / 取最后一次成绩、是否允许补交、答案是否可见 —— 布置作业时按题型带默认值，并给出成本提示。</p>
+      
+    </li>
+    <li class="item is-hot">
+      <span class="dot"></span>
+      <div class="meta"><b>10-13</b><span class="pill pill--ok">手册</span><span class="tag">体验优化</span></div>
+      <h4>教师手册改为「可播放演示」<span class="new">新</span></h4>
+      <p>8 段真实界面复刻替代全部截图：进章节自动播放、可暂停重播；右上角「放大演示」支持要点放大与手机 2×。</p>
+      <div class="detail"><b>包含范围</b><p>覆盖：快速入门 / 班级 / 学生 / 团队 / 题库 / 实训题 / 布置作业 / 评分审核。演示是真实 DOM 复刻，可跟随深浅色、可键盘操作，不再依赖图片。</p></div>
+    </li>
+    <li class="item">
+      <span class="dot"></span>
+      <div class="meta"><b>10-13</b><span class="pill pill--warn">错误页</span><span class="tag">新功能</span></div>
+      <h4>错误页体系与真状态码</h4>
+      <p>404 / 403 / 500 等 16 个状态页（中文、深浅色、自动重试）；未知路径与超限上传返回真实状态码。</p>
+      
+    </li>
+    <li class="item">
+      <span class="dot"></span>
+      <div class="meta"><b>10-13</b><span class="pill pill--ok">评分</span><span class="tag">体验优化</span></div>
+      <h4>AI 评分更好读</h4>
+      <p>新增自然语言总评；按班查看失分项分布；批改记录区分「未生成 / 缓存命中 / 本次生成」三态。</p>
+      
+    </li>
+    <li class="item">
+      <span class="dot"></span>
+      <div class="meta"><b>10-13</b><span class="pill pill--danger">安全</span><span class="tag">安全与稳定</span></div>
+      <h4>账号与链路加固</h4>
+      <p>改密后旧令牌立即失效；JWT 弱密钥快速失败；上传超限返回 413；新增 CSP（先观察模式）。</p>
+      
+    </li>
+    <li class="item">
+      <span class="dot"></span>
+      <div class="meta"><b>10-12</b><span class="pill pill--brand">作业</span><span class="tag">体验优化</span></div>
+      <h4>布置作业改为一页式</h4>
+      <p>题目单选、班级带人数、起止时间默认「今天 18:00 ~ 一周后」、支持存草稿与离开确认。</p>
+      
+    </li>
+    <li class="item">
+      <span class="dot"></span>
+      <div class="meta"><b>10-12</b><span class="pill pill--ok">列表</span><span class="tag">体验优化</span></div>
+      <h4>列表样式统一（v2）</h4>
+      <p>11 个列表页统一行高与对齐，主列改两行式（标题 + 次要信息），密度更稳、扫读更快。</p>
+      
+    </li>
+    <li class="item">
+      <span class="dot"></span>
+      <div class="meta"><b>10-12</b><span class="pill pill--brand">个人</span><span class="tag">新功能</span></div>
+      <h4>「我的信息」卡片</h4>
+      <p>教师 / 学生 / 管理员三端同形态：头像姓名角色 + 关键字段 + 一键复制，支持展开收起。</p>
+      
+    </li>
+    <li class="item">
+      <span class="dot"></span>
+      <div class="meta"><b>10-11</b><span class="pill pill--ok">欢迎页</span><span class="tag">体验优化</span></div>
+      <h4>欢迎页重构 + 二维码</h4>
+      <p>新的首屏结构与动效；页脚加入开源地址与站点二维码，方便扫码进入。</p>
+      
+    </li></ol>
+      <p class="more">只展示影响使用的更新</p>
+    </div>
+  </div></body></html>
