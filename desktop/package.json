@@ -7,11 +7,12 @@
   "type": "module",
   "main": "src/main/index.mjs",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12"
   },
   "scripts": {
     "start": "electron .",
     "test": "node --test test/*.test.mjs",
+    "test:gui": "node --test test/gui-smoke.test.mjs",
     "build:dist": "node scripts/build-dist.mjs",
     "build:dist:dry": "node scripts/build-dist.mjs --dry-run",
     "pack:dir": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",
@@ -19,6 +20,7 @@
   },
   "devDependencies": {
     "electron": "^44.0.0",
-    "electron-builder": "^26.0.0"
+    "electron-builder": "^26.0.0",
+    "playwright-core": "^1.64.1"
   }
 }

@@ -20,6 +20,11 @@ files:
 extraResources:
   - from: ../dist-desktop
     to: dist
+    # 包洁癖：构建清单与 macOS 噪声文件不随包分发（legacy 裁剪在 build-dist 阶段完成）
+    filter:
+      - "**/*"
+      - "!**/.DS_Store"
+      - "!.desktop-build.json"
 
 asar: true
 # 壳无原生依赖，跳过 node-gyp 重建（避免构建机缺工具链）
@@ -34,6 +39,8 @@ electronLanguages:
 afterPack: scripts/after-pack-adhoc-sign.cjs
 
 mac:
+  # 应用图标（由 client/resources/icon.png 经 iconset 生成；相对 desktop/ 项目目录）
+  icon: resources/icon.icns
   target:
     - target: dmg
       arch: [arm64]

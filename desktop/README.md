@@ -21,21 +21,32 @@
 | `scripts/build-dist.mjs` | `client/dist` → `dist-desktop` 裁剪 legacy | node:fs/path |
 | `scripts/after-pack-adhoc-sign.cjs` | macOS ad-hoc 重签名 | node:child_process |
 
-## 开发（本轮不要求安装依赖）
+## 开发
 
 ```bash
-cd desktop && npm install        # 只装 desktop 依赖（electron / electron-builder），不装 client/server
+cd desktop && npm install        # 只装 desktop 依赖（electron / electron-builder / playwright-core），不装 client/server
 npm run build:dist               # 需要 client/dist 已构建；输出仓库根 dist-desktop/
 npm run build:dist:dry           # 只打印 legacy 裁剪计划，不写盘
-npm start                        # 启动 Electron（本轮不验收 GUI；端口 47821）
+
+# npm allow-scripts 策略会跳过 electron postinstall；首次需要 dev Electron binary 时手动执行：
+ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ node node_modules/electron/install.js
+env -u ELECTRON_RUN_AS_NODE node_modules/.bin/electron --version   # → v44.9.0
+
+npm start                        # 启动 Electron（端口 47821）
 ```
+
+> 注意：本环境若导出 `ELECTRON_RUN_AS_NODE=1`，`electron --version` 会打印 Node 版本而非 Electron 版本；
+> 用 `env -u ELECTRON_RUN_AS_NODE` 验证。`node_modules/electron/dist/version` 应等于 `44.9.0`。
 
 ## 测试
 
 ```bash
-cd desktop && npm test                       # = node --test test/*.test.mjs
+cd desktop && npm test                       # = node --test test/*.test.mjs（纯模块/服务/打包静态）
+cd desktop && npm run test:gui               # = node --test test/gui-smoke.test.mjs（C 提供；需 dev Electron binary）
 cd desktop && node --test test/*.test.mjs    # Node 内置 node:test；不启动 Electron
 ```
+
+GUI 冒烟用 `playwright-core` 的 `_electron` 驱动（仅 devDependency，**不下载浏览器**；Electron 二进制由 `electron` 包提供）。
 
 > 注：本仓库 Node（v24）下 `node --test test/`（目录位置参数）会报 MODULE_NOT_FOUND，必须用 glob 或 `node --test`（cwd=desktop）。
 
@@ -72,9 +83,16 @@ cd desktop && node --test test/*.test.mjs    # Node 内置 node:test；不启动
 
 ```bash
 npm run dist:mac     # CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --arm64
+# 网络无法直连 GitHub 时改用镜像（仅影响 electron zip 下载，不改构建配置）：
+ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ \
+ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ \
+npm run dist:mac
 ```
 
 - 产物：`desktop/release/Deadpan-<version>-arm64.dmg`；发布附 SHA-256。
+- 图标：`resources/icon.icns`（由 `client/resources/icon.png` 经 iconset 生成，见 `resources/README.md`），`mac.icon` 已指向它。
+- Node：`engines.node >=22.12`；`desktop/package-lock.json` 的 `resolved` 全部指向**官方 registry**（npmjs.org），
+  本机若需镜像加速 `npm install`，请用 `--registry=https://registry.npmmirror.com/` 临时覆盖，不要提交镜像 URL 的 lockfile。
 - 签名：afterPack 用 `codesign --force --deep --sign -`（ad-hoc）；Gatekeeper **不会**通过（预期），
   首次安装按「系统设置 → 隐私与安全性 → 仍要打开」；如提示已损坏，核对 SHA-256 后
   `xattr -dr com.apple.quarantine "/Applications/Deadpan 判题.app"`。
@@ -85,6 +103,7 @@ npm run dist:mac     # CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac 
 - **legacy 裁剪**：只裁 `monaco-legacy/`、`*-legacy-*.js`、`polyfills-legacy-*.js`（Electron 44 Chromium 不需要旧内核）；
   **不裁**现代 `monaco/vs/**`（含 worker，格式化依赖），也不裁 `error-pages/`。
 - **preload 为 `.cjs`**：`sandbox:true` 下不支持 ESM preload（A 基线 §3.4）；不得为迁移到 `.mjs` 关闭 sandbox。
+- **包洁癖**：`build-dist` 跳过 `.DS_Store`；electron-builder `extraResources.filter` 排除 `.desktop-build.json` 与 `**/.DS_Store`（legacy 裁剪规则不变）。
 - **不支持旧内核 / 本机开发端口**：桌面不跑 Vite（5173）与后端（3000）；反代只连配置的远端服务器。
 - **Round 1 范围**：可测试脚手架；未安装依赖、未启动 GUI、未跑 DMG、未做诊断页/菜单/自动更新/公证。
 - `client/dist` 只读：构建产物一律输出到仓库根 `dist-desktop/`（已 gitignore）。

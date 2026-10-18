@@ -29,6 +29,16 @@ export const LEGACY_RULES = Object.freeze([
   { id: 'legacy-polyfills', test: (rel) => /(?:^|\/)polyfills-legacy-[^/]*\.js$/.test(rel) },
 ]);
 
+/** 噪声文件（不进入桌面产物；独立于 legacy 裁剪规则，不计入 pruned 统计） */
+export const NOISE_BASENAMES = Object.freeze(['.DS_Store']);
+
+export function isNoisePath(relPath) {
+  const rel = normalizeRelativePath(relPath);
+  if (rel === '') return false;
+  const base = rel.slice(rel.lastIndexOf('/') + 1);
+  return NOISE_BASENAMES.includes(base);
+}
+
 export function normalizeRelativePath(relPath) {
   return String(relPath == null ? '' : relPath).replace(/\\/g, '/').replace(/^\/+/, '');
 }
@@ -155,6 +165,7 @@ export function copyAndPrune({ srcDir = DEFAULT_SRC, outDir = DEFAULT_OUT, dryRu
   const filter = (source) => {
     const rel = normalizeRelativePath(path.relative(srcRoot, source));
     if (rel === '') return true;
+    if (isNoisePath(rel)) return false;
     return !shouldPrune(rel);
   };
   fsImpl.cpSync(srcRoot, outRoot, { recursive: true, filter });
