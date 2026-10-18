@@ -250,3 +250,15 @@ export function isMacosVersionSupported(version, minimumMajor = MIN_MACOS_MAJOR)
   const major = Number(String(version == null ? '' : version).split('.')[0]);
   return Number.isInteger(major) && major > 0 && major >= minimumMajor;
 }
+
+/**
+ * 平台感知的启动检查（HOTFIX-2）：darwin 走 macOS 主版本检查；win32/linux 放行；
+ * 未知平台拒绝（fail-closed）。纯函数（platform/version 由调用方传入），便于单测。
+ * 背景：旧实现无条件把 process.getSystemVersion() 当 macOS 版本比较，Windows 10.x < 13 被误判。
+ */
+export function isPlatformSupported(platform, version, { minimumMacosMajor = MIN_MACOS_MAJOR } = {}) {
+  const name = String(platform == null ? '' : platform).toLowerCase();
+  if (name === 'darwin') return isMacosVersionSupported(version, minimumMacosMajor);
+  if (name === 'win32' || name === 'linux') return true;
+  return false;
+}

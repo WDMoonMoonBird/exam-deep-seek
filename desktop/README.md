@@ -21,6 +21,17 @@
 | `scripts/build-dist.mjs` | `client/dist` → `dist-desktop` 裁剪 legacy | node:fs/path |
 | `scripts/after-pack-adhoc-sign.cjs` | macOS ad-hoc 重签名 | node:child_process |
 
+## 系统要求 / 平台检查
+
+- **macOS**：13.0 Ventura 或更高（Electron 44 基线；打包配置 `mac.minimumSystemVersion=13.0`），仅 Apple Silicon（arm64）。
+- **Windows**：**Windows 10 或更高**（x64；Electron 44 支持范围；NSIS 安装包无额外最低系统字段）。
+- **Linux**：v0 不提供产物（未验证）。
+- 启动时按平台检查（`config.mjs` 的 `isPlatformSupported(platform, version)`）：
+  - `darwin` → 校验 macOS 主版本（低于 13 才提示「需要 macOS 13+」）；
+  - `win32` / `linux` → 放行（不再把 Windows 10.x 误当 macOS 版本比较）；
+  - 未知平台 → 拒绝启动（fail-closed）。
+- 启动日志会记录 `platform/version/Electron`，诊断时先看这一行。
+
 ## 开发
 
 ```bash

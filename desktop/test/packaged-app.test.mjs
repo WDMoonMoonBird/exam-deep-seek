@@ -11,7 +11,7 @@
  *     serverUrl 配置（备份/恢复），不接生产账号；
  *   · 与 gui-smoke 通过 helpers.acquireGuiLock() 串行（固定端口 47821 + 同一 userData 配置）；
  *   · 缺失 packaged app / 非 darwin / 无 GUI / playwright-core 缺失 / 端口占用 ⇒ **skip 不 fail**；
- *   · 截图写 reports/desktop/test/packaged-app.png；HOTFIX-1 起断言打包 app 版本与 package.json 一致（0.1.1）。
+ *   · 截图写 reports/desktop/test/packaged-app.png；HOTFIX-1 起断言打包 app 版本与 package.json 一致（HOTFIX-2 起为 0.1.2）。
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -185,7 +185,7 @@ test('packaged 冒烟：打包后 app 启动 → /exam/ 窗口就绪 → 无未�
     assert.equal(appInfo.runAsNode, undefined, 'Electron 主进程不应以 ELECTRON_RUN_AS_NODE 模式运行');
     assert.equal(appInfo.electron, '44.9.0');
     assert.equal(appInfo.version, pkg.version, '打包 app 版本应与 package.json 一致');
-    assert.equal(pkg.version, '0.1.1', 'HOTFIX-1 版本快照应为 0.1.1');
+    assert.equal(pkg.version, '0.1.2', 'HOTFIX-2 版本快照应为 0.1.2');
     assert.match(appInfo.resourcesPath, /Deadpan 判题\.app[\\/]Contents[\\/]Resources$/);
     assert.equal(fs.existsSync(path.join(appInfo.resourcesPath, 'dist', 'index.html')), true, 'packaged app 内 Resources/dist/index.html 缺失');
 

@@ -1,6 +1,6 @@
 {
   "name": "exam-deepseek-desktop",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "author": "Deadpan",
   "description": "Deadpan 判题 Electron 桌面壳（形态 B2：本地 dist + loopback 同源反代，零后端改动）",

@@ -9,7 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   DEFAULT_SERVER_URL, MIN_MACOS_MAJOR, configPath, ensureConfigFile, isInsecureServerUrl,
-  isMacosVersionSupported, loadConfig, readCaPem,
+  isPlatformSupported, loadConfig, readCaPem,
 } from './config.mjs';
 import { startContentServer } from './content-server.mjs';
 import { createProxy } from './proxy.mjs';
@@ -85,8 +85,17 @@ function createMainWindow() {
 }
 
 async function bootstrap() {
-  if (!isMacosVersionSupported(process.getSystemVersion())) {
-    fail('系统版本过低', '需要 macOS ' + MIN_MACOS_MAJOR + ' 或更高（当前 ' + process.getSystemVersion() + '）。');
+  const platform = process.platform;
+  const systemVersion = process.getSystemVersion();
+  log.info('平台：' + platform + ' ' + systemVersion + '（Electron ' + process.versions.electron + '）');
+
+  // 平台感知检查（HOTFIX-2）：只有 macOS 才做 macOS 版本判断；Windows/Linux 直接放行
+  if (!isPlatformSupported(platform, systemVersion)) {
+    if (platform === 'darwin') {
+      fail('系统版本过低', '需要 macOS ' + MIN_MACOS_MAJOR + ' 或更高（当前 ' + systemVersion + '）。');
+    } else {
+      fail('平台不受支持', '当前平台 “' + platform + '” 不在支持范围（支持 macOS ' + MIN_MACOS_MAJOR + '+ / Windows 10+）。');
+    }
     return;
   }
 

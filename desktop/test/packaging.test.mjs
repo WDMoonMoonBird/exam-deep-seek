@@ -11,7 +11,7 @@
  *       Gatekeeper 预期（本机 disabled 时 skip）、DMG 名称/大小/UDIF、build-dist manifest/legacy=0/现代 Monaco worker；
  *       R4-2：Windows NSIS 配置/产物静态检查（exe 缺失则 skip）+ F1 manifest noise 口径；
  *       R4-5/W1：Windows locales 平台级 electronLanguages（en-US.pak + zh-CN.pak）与新 exe SHA-256 回归；
- *       HOTFIX-1：快照版本 0.1.1（新 mac DMG / win exe SHA；三树 index 仍 bd782577…）。
+ *       HOTFIX-1/2：快照版本 0.1.2（新 mac DMG / win exe SHA；三树 index 仍 bd782577…）。
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -43,10 +43,10 @@ const WIN_UNPACKED_EXE = path.join(RELEASE_DIR, 'win-unpacked', 'Deadpan 判题.
 const WIN_LOCALES_DIR = path.join(RELEASE_DIR, 'win-unpacked', 'locales');
 const WIN_DIST = path.join(RELEASE_DIR, 'win-unpacked', 'resources', 'dist');
 const ICON_ICO = path.join(DESKTOP_DIR, 'resources', 'icon.ico');
-// HOTFIX-1 / 0.1.1 产物快照（2026-10-18）；重打包需同步更新
-const EXPECTED_VERSION = '0.1.1';
-const EXPECTED_DMG_SHA256 = '9535ba0c380367eb62c1dc8aab3ba81e84cb3afd1d9dde294b202e2f633ce9a9';
-const EXPECTED_WIN_EXE_SHA256 = '582e6496e4d06ef8e5157bc14bd84870a92ae01b571c8fe4457403aad9b5fd6a';
+// HOTFIX-2 / 0.1.2 产物快照（2026-10-18）；重打包需同步更新
+const EXPECTED_VERSION = '0.1.2';
+const EXPECTED_DMG_SHA256 = '30305470a1f13478578f03c1038802663f963e3097405619d971eb2c2d6f0d93';
+const EXPECTED_WIN_EXE_SHA256 = '72ca2ff84bb977995c4df07b4df0b9c8ed3b3dd0a7b40583ccf85ea6d6a8412f';
 
 const IS_DARWIN = process.platform === 'darwin';
 const skipApp = !IS_DARWIN
@@ -242,16 +242,16 @@ test('Gatekeeper：ad-hoc 未公证包预期被 spctl 拒绝（本机 assessment
   assert.notEqual(assess.status, 0, 'ad-hoc 未公证包应被 spctl 拒绝：' + output(assess));
 });
 
-test('DMG：0.1.1 版本/名称/大小/SHA-256 快照（HOTFIX-1）', { skip: skipDmg }, (t) => {
-  assert.equal(pkg.version, EXPECTED_VERSION, 'package.json 版本应为 HOTFIX-1 的 ' + EXPECTED_VERSION);
+test('DMG：0.1.2 版本/名称/大小/SHA-256 快照（HOTFIX-2）', { skip: skipDmg }, (t) => {
+  assert.equal(pkg.version, EXPECTED_VERSION, 'package.json 版本应为 HOTFIX-2 的 ' + EXPECTED_VERSION);
   assert.equal(path.basename(DMG_PATH), 'Deadpan-' + EXPECTED_VERSION + '-arm64.dmg');
   const size = fs.statSync(DMG_PATH).size;
   assert.ok(size > 100 * 1024 * 1024, 'DMG 体积异常偏小（可能漏打 dist）：' + size);
   assert.ok(size < 200 * 1024 * 1024, 'DMG 体积异常偏大：' + size);
 
   const sha256 = sha256File(DMG_PATH);
-  assert.equal(sha256, EXPECTED_DMG_SHA256, 'DMG SHA-256 与 HOTFIX-1 0.1.1 快照不一致（重建后需同步更新 EXPECTED_DMG_SHA256）');
-  t.diagnostic('DMG 0.1.1：' + size + ' B（' + (size / 1024 / 1024).toFixed(1) + ' MiB），sha256=' + sha256);
+  assert.equal(sha256, EXPECTED_DMG_SHA256, 'DMG SHA-256 与 HOTFIX-2 0.1.2 快照不一致（重建后需同步更新 EXPECTED_DMG_SHA256）');
+  t.diagnostic('DMG 0.1.2：' + size + ' B（' + (size / 1024 / 1024).toFixed(1) + ' MiB），sha256=' + sha256);
 });
 
 test('DMG：UDIF 容器可解析（hdiutil imageinfo 退出 0）', { skip: skipDmg }, () => {
@@ -337,9 +337,9 @@ test('Windows 产物：NSIS 安装包类型/大小/SHA-256/无 latest.yml；win-
   assert.ok(size > 90 * 1024 * 1024, 'Windows 安装包体积异常偏小（可能漏打 dist）：' + size);
   assert.ok(size < 160 * 1024 * 1024, 'Windows 安装包体积异常偏大：' + size);
 
-  // HOTFIX-1：0.1.1 重打包后的 exe 快照（SHA 变化说明重新打包/前端变更）
+  // HOTFIX-2：0.1.2 重打包后的 exe 快照（SHA 变化说明重新打包/前端变更）
   const sha256 = sha256File(WIN_EXE);
-  assert.equal(sha256, EXPECTED_WIN_EXE_SHA256, 'Windows exe SHA-256 与 R4-5 基线不一致（重新打包后需同步更新 EXPECTED_WIN_EXE_SHA256）');
+  assert.equal(sha256, EXPECTED_WIN_EXE_SHA256, 'Windows exe SHA-256 与 HOTFIX-2 0.1.2 快照不一致（重新打包后需同步更新 EXPECTED_WIN_EXE_SHA256）');
   t.diagnostic('Windows exe：' + size + ' B（' + (size / 1024 / 1024).toFixed(1) + ' MiB），sha256=' + sha256);
 
   const installer = run('file', [WIN_EXE]);

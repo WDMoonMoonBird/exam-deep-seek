@@ -1,17 +1,19 @@
 /**
  * config.test.mjs —— desktop/src/main/config.mjs 纯逻辑单元测试（任务 T4）。
  * 覆盖：默认端口 47821、serverUrl 校验、非法配置拒绝、保留端口、CA/外链规范化、userData 配置读写；
- *       HOTFIX-1：默认 serverUrl=https://deadpan.asia、首启模板、旧配置迁移（保留字段/幂等/坏 JSON 不覆盖/合法 URL 不覆盖）。
+ *       HOTFIX-1：默认 serverUrl=https://deadpan.asia、首启模板、旧配置迁移（保留字段/幂等/坏 JSON 不覆盖/合法 URL 不覆盖）；
+ *       HOTFIX-2：isPlatformSupported（darwin 校验 / win32+linux 放行 / 未知平台拒绝）+ index.mjs 平台感知静态断言。
  */
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { cleanupTempDirs, makeTempDir } from './helpers.mjs';
 import {
   CONFIG_FILE_NAME, DEFAULT_PORT, DEFAULT_SERVER_URL, MAX_PORT, MIN_MACOS_MAJOR, MIN_PORT, RESERVED_PORTS,
-  configPath, configTemplate, ensureConfigFile, isInsecureServerUrl, isMacosVersionSupported, loadConfig,
+  configPath, configTemplate, ensureConfigFile, isInsecureServerUrl, isMacosVersionSupported, isPlatformSupported, loadConfig,
   migrateConfig, normalizeCaFile, normalizeExternalOrigins, normalizePort, normalizeServerUrl, parseConfig,
   readCaPem, readConfigFile, runtimeOrigin, writeConfigFile,
 } from '../src/main/config.mjs';
@@ -298,4 +300,47 @@ test('runtimeOrigin / isMacosVersionSupported', () => {
   assert.equal(isMacosVersionSupported(''), false);
   assert.equal(isMacosVersionSupported(null), false);
   assert.equal(isMacosVersionSupported('abc'), false);
+});
+
+test('isPlatformSupported：darwin 校验版本、win32/linux 放行、未知平台 fail-closed（HOTFIX-2）', () => {
+  // Windows 版本号（10.x / 6.1）不得被当成 macOS 版本判定
+  assert.equal(isPlatformSupported('win32', '10.0.19045'), true);
+  assert.equal(isPlatformSupported('win32', '10.0.22631'), true);
+  assert.equal(isPlatformSupported('win32', '6.1.7601'), true);
+  assert.equal(isPlatformSupported('linux', '5.15.0'), true);
+  // darwin 仍按 macOS 最低版本校验
+  assert.equal(isPlatformSupported('darwin', '13'), true);
+  assert.equal(isPlatformSupported('darwin', '13.5.1'), true);
+  assert.equal(isPlatformSupported('darwin', '26.1'), true);
+  assert.equal(isPlatformSupported('darwin', '12'), false);
+  assert.equal(isPlatformSupported('darwin', '12.7.1'), false);
+  // 平台名大小写不敏感
+  assert.equal(isPlatformSupported('DARWIN', '14.0'), true);
+  assert.equal(isPlatformSupported('Win32', '10.0'), true);
+  // 未知/空平台 fail-closed
+  assert.equal(isPlatformSupported('freebsd', '14'), false);
+  assert.equal(isPlatformSupported('unknown', ''), false);
+  assert.equal(isPlatformSupported('', ''), false);
+  assert.equal(isPlatformSupported(null, null), false);
+  // minimumMacosMajor 覆盖：只影响 darwin，不影响 win/linux
+  assert.equal(isPlatformSupported('darwin', '13', { minimumMacosMajor: 14 }), false);
+  assert.equal(isPlatformSupported('darwin', '14', { minimumMacosMajor: 14 }), true);
+  assert.equal(isPlatformSupported('win32', '10.0', { minimumMacosMajor: 99 }), true);
+});
+
+test('index.mjs 平台检查：isPlatformSupported(platform, systemVersion)，不再无条件 macOS 检查（HOTFIX-2 静态断言）', () => {
+  const desktopDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const indexPath = path.join(desktopDir, 'src', 'main', 'index.mjs');
+  const source = fs.readFileSync(indexPath, 'utf8');
+
+  assert.match(source, /const platform = process\.platform;/);
+  assert.match(source, /const systemVersion = process\.getSystemVersion\(\);/);
+  assert.match(source, /if \(!isPlatformSupported\(platform, systemVersion\)\)/);
+  // 回归防护：不得再直接调用 isMacosVersionSupported，也不得把系统版本当 macOS 版本检查
+  assert.equal(/!isMacosVersionSupported\s*\(/.test(source), false, 'index 不应再直接无条件调用 isMacosVersionSupported');
+  assert.equal(/isMacosVersionSupported\(\s*process\.getSystemVersion/.test(source), false, 'index 不应把系统版本直接当 macOS 版本检查');
+
+  const configImport = /import\s*\{([\s\S]*?)\}\s*from\s*'\.\/config\.mjs';/.exec(source);
+  assert.ok(configImport, 'index.mjs 应从 ./config.mjs 导入');
+  assert.match(configImport[1], /isPlatformSupported/, 'index.mjs 应导入 isPlatformSupported');
 });

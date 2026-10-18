@@ -2,44 +2,32 @@
 
 - Worktree: `.agents/worktrees/feat/desktop-shell`
 - Branch: `feat/desktop-shell`
-- Plan: `docs/desktop/2026-10-18-electron-desktop-plan.md`
-- Phase: **FINAL ACCEPTED (v0.1.1 internal, Hotfix 1)**
-- Hotfix commit: `fc8b7491e3bbef82c670cae3dfa88b4af698d67e` ｜ tag `desktop-v0.1.1-internal`
+- Phase: **ACCEPTED (v0.1.2 internal; Windows real-machine smoke pending)**
 - Last updated: 2026-10-18
 
-## Final artifacts (only distribute 0.1.1)
+## Final artifacts (only distribute 0.1.2)
 
 | 产物 | 值 |
 |---|---|
-| macOS DMG | `desktop/release/Deadpan-0.1.1-arm64.dmg`（125,623,893 B） |
-| macOS SHA-256 | `9535ba0c380367eb62c1dc8aab3ba81e84cb3afd1d9dde294b202e2f633ce9a9` |
-| Windows NSIS | `desktop/release/Deadpan-0.1.1-x64.exe`（112,070,556 B） |
-| Windows SHA-256 | `582e6496e4d06ef8e5157bc14bd84870a92ae01b571c8fe4457403aad9b5fd6a` |
-| frontend snapshot | index.html `bd782577…d3f060`（三树一致） |
-| tests | 139 tests / 138 pass / 0 fail / 1 skip；GUI 1/1；packaged 1/1 |
-| docs | `FINAL-ACCEPTANCE.md`、`HOTFIX-1-CONFIG.md` |
+| macOS DMG | `desktop/release/Deadpan-0.1.2-arm64.dmg`（125,624,322 B） |
+| macOS SHA-256 | `30305470a1f13478578f03c1038802663f963e3097405619d971eb2c2d6f0d93` |
+| Windows NSIS | `desktop/release/Deadpan-0.1.2-x64.exe`（112,070,949 B） |
+| Windows SHA-256 | `72ca2ff84bb977995c4df07b4df0b9c8ed3b3dd0a7b40583ccf85ea6d6a8412f` |
+| frontend snapshot | index.html `bd782577…d3f060` |
+| tests | 141 tests / 140 pass / 0 fail / 1 skip；GUI 1/1；packaged 1/1 |
 
-## Hotfix 1
+## Hotfixes
 
-- v0.1.0 首启 config.json serverUrl 为空 → 启动失败。
-- 0.1.1：默认 https://deadpan.asia；已有空/缺失配置自动迁移（保留字段）；坏 JSON 不覆盖。
-- 当前机器 config 已手工修复并备份；建议安装 0.1.1 覆盖。
-- 旧 0.1.0 产物已归档 `desktop/release/archive-0.1.0/`，不要分发。
+- Hotfix 1：首启 config serverUrl 空 → 默认 https://deadpan.asia + 迁移。
+- Hotfix 2：Windows 误报 macOS 13 → isPlatformSupported 平台感知检查。
+- 旧产物归档 `desktop/release/archive-0.1.0/`、`archive-0.1.1/`。
 
-## Rounds
+## Blocking manual gate
 
-- R1 脚手架 (112 tests, A PASS)
-- R2 macOS DMG + ad-hoc (124 tests, A PASS)
-- R3 GUI + 图标 + 包洁癖 (125 tests, A PASS)
-- R4 Windows + packaged + 一致性 (137 tests, A PASS)
-- Hotfix 1 config 默认/迁移 (139 tests, A PASS)
-
-## Residual manual items
-
-- Windows 真机安装/SmartScreen/图标/locale；Gatekeeper 干净 Mac；真实 0.1.0→0.1.1 升级烟测；E3 网关 12m；签名/公证 v0 决策；真实 API/WS 联调。
-- 快照冻结：前端变更必须 mac+win 同时重建并记录快照哈希。
+- **Windows 10/11 真机安装 0.1.2 启动冒烟**（发布前必须）。
+- 其余：Gatekeeper 干净 Mac、真实升级、E3 12m、签名口径、真实 API/WS。
 
 ## Scope
 
-- 无 client/**、server/**、根 package/lockfile 改动；后端零改动。
-- 分支尚未合并 master / 尚未推送。
+- 无 client/server/根 package/lockfile 改动；后端零改动。
+- 分支未合并 master / 未推送。
