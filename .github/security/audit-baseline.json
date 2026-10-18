@@ -1,12 +1,17 @@
 {
-  "note": "★R3-SUPPLY 供应链 audit 冻结基线（首次 CI 运行若当前值为 null ⇒ 记录并上传 artifact，由 Lead 按 audit-*.json 的 metadata.vulnerabilities 计数冻结入库；之后仅当 high/critical 计数新增才 FAIL）。本机镜像源 npmmirror 不实现 audit bulk 接口（实测 404）⇒ 基线值只能由 CI 公网 registry 获取。",
+  "note": "R3-SUPPLY 供应链 audit 冻结基线（2026-10-18，公网 registry 实跑）。首次 CI 后如计数变化，仅 high/critical 新增才 FAIL；本机镜像 audit bulk 404，故基线由本机对 registry.npmjs.org 实跑冻结。",
   "generatedAt": "2026-10-18",
+  "registry": "https://registry.npmjs.org",
   "server": {
-    "high": null,
-    "critical": null
+    "high": 15,
+    "critical": 1,
+    "moderate": 7,
+    "low": 1
   },
   "client": {
-    "high": null,
-    "critical": null
+    "high": 15,
+    "critical": 1,
+    "moderate": 45,
+    "low": 0
   }
 }

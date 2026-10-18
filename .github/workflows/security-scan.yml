@@ -33,12 +33,12 @@ jobs:
       - name: npm audit — server (baseline-aware)
         working-directory: server
         run: |
-          npm audit --package-lock-only --json --audit-level=high > "$GITHUB_WORKSPACE/audit-server.json" || true
+          npm audit --package-lock-only --json --audit-level=high --registry=https://registry.npmjs.org > "$GITHUB_WORKSPACE/audit-server.json" || true
 
       - name: npm audit — client (baseline-aware)
         working-directory: client
         run: |
-          npm audit --package-lock-only --json --audit-level=high > "$GITHUB_WORKSPACE/audit-client.json" || true
+          npm audit --package-lock-only --json --audit-level=high --registry=https://registry.npmjs.org > "$GITHUB_WORKSPACE/audit-client.json" || true
 
       - name: Baseline gate (仅新增 high/critical 才 FAIL)
         run: |
