@@ -45,3 +45,9 @@ docs/**/*.pdf
 
 # 探针/假装置若被以裸 flag 当路径调用，会在仓库根留下 --xxx/ 目录（已发生两次）
 --*/
+
+# ===== Electron 桌面端构建产物（本地生成，不入库）=====
+dist-desktop/
+desktop/release/
+desktop/node_modules/
+desktop/.vite/

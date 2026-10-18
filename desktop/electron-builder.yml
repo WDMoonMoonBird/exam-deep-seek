@@ -1,0 +1,51 @@
+# ============================================================================
+# electron-builder 配置 —— macOS arm64 / DMG / ad-hoc 签名 / 无公证 / 无自动更新
+# 依据 docs/desktop/2026-10-18-electron-desktop-plan.md §4.2；v0 仅内部 DMG 分发。
+# 注意：本配置**不含**公证（notarize:false）、不含自动更新（无 publish/updater）、
+#       不使用 Developer ID（identity:null）；构建时另设 CSC_IDENTITY_AUTO_DISCOVERY=false。
+# ============================================================================
+appId: asia.deadpan.exam.desktop
+productName: Deadpan 判题
+copyright: Copyright © 2026 Deadpan
+
+directories:
+  output: release
+  buildResources: resources
+
+# 只打包壳代码；前端产物经 extraResources 落到 Resources/dist（不发到 App 内 asar）
+files:
+  - src/**/*
+  - package.json
+
+extraResources:
+  - from: ../dist-desktop
+    to: dist
+
+asar: true
+# 壳无原生依赖，跳过 node-gyp 重建（避免构建机缺工具链）
+npmRebuild: false
+electronLanguages:
+  - zh-CN
+  - en-US
+
+# ad-hoc 重签（见 scripts/after-pack-adhoc-sign.cjs）
+afterPack: scripts/after-pack-adhoc-sign.cjs
+
+mac:
+  target:
+    - target: dmg
+      arch: [arm64]
+  # identity: null ⇒ 不找 Developer ID；签名由 afterPack 的 codesign --sign - 完成
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  notarize: false
+  minimumSystemVersion: "13.0"
+  category: public.app-category.education
+  extendInfo:
+    # 连接校内服务器时需要「本地网络」权限（计划 §4.5）；文案会出现在系统弹窗中
+    NSLocalNetworkUsageDescription: 用于连接学校内网的考试服务器。
+
+dmg:
+  artifactName: Deadpan-${version}-arm64.dmg
+  title: ${productName}

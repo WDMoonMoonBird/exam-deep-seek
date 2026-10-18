@@ -1,0 +1,23 @@
+{
+  "name": "exam-deepseek-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Deadpan 判题 Electron 桌面壳（形态 B2：本地 dist + loopback 同源反代，零后端改动）",
+  "type": "module",
+  "main": "src/main/index.mjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.mjs",
+    "build:dist": "node scripts/build-dist.mjs",
+    "build:dist:dry": "node scripts/build-dist.mjs --dry-run",
+    "pack:dir": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",
+    "dist:mac": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --arm64"
+  },
+  "devDependencies": {
+    "electron": "^44.0.0",
+    "electron-builder": "^26.0.0"
+  }
+}

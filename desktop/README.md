@@ -1,0 +1,90 @@
+# desktop/ —— Electron 桌面壳（Round 1 脚手架）
+
+形态 **B2**：本地 `dist-desktop` 静态内容服务 + 固定端口 loopback 同源反代，**零后端改动、零前端改动**。
+详见 `docs/desktop/2026-10-18-electron-desktop-plan.md` 与 `docs/desktop/team/CONVENTIONS.md`。
+
+## 目录 / 职责（一模块一职责，目标 ≤300 行、硬上限 400）
+
+| 文件 | 职责 | 依赖 |
+|---|---|---|
+| `src/main/config.mjs` | 配置模型 + 校验 + userData 读写（纯逻辑） | node:fs/path（可注入） |
+| `src/main/path-safety.mjs` | 路径规范化 / SPA fallback 分类 / 防目录穿越（纯函数） | node:path |
+| `src/main/csp.mjs` | 等价 CSP + 安全响应头构造（纯函数） | 无 |
+| `src/main/proxy-headers.mjs` | 反代头处理 + Host 白名单（纯函数） | 无 |
+| `src/main/security-policy.mjs` | Electron 安全策略纯决策（导航/外开/权限/下载） | 无 |
+| `src/main/content-server.mjs` | 本地静态内容服务（仅 127.0.0.1；start/stop） | http/fs + path-safety + csp + static-assets |
+| `src/main/static-assets.mjs` | MIME / 缓存策略 / 流式文件响应（纯 IO 封装） | node:fs/path（可注入） |
+| `src/main/proxy.mjs` | 固定远端 HTTP/WS 反代（流式） | http/https/stream + proxy-headers |
+| `src/main/security.mjs` | 把安全决策装配到 session/webContents（无算法） | security-policy |
+| `src/main/index.mjs` | 组合根：单实例/窗口/启停/崩溃处理（≤200 行） | 以上全部 |
+| `src/preload/index.cjs` | 极窄桥（只读平台信息，不暴露 fs/ipc） | electron contextBridge |
+| `scripts/build-dist.mjs` | `client/dist` → `dist-desktop` 裁剪 legacy | node:fs/path |
+| `scripts/after-pack-adhoc-sign.cjs` | macOS ad-hoc 重签名 | node:child_process |
+
+## 开发（本轮不要求安装依赖）
+
+```bash
+cd desktop && npm install        # 只装 desktop 依赖（electron / electron-builder），不装 client/server
+npm run build:dist               # 需要 client/dist 已构建；输出仓库根 dist-desktop/
+npm run build:dist:dry           # 只打印 legacy 裁剪计划，不写盘
+npm start                        # 启动 Electron（本轮不验收 GUI；端口 47821）
+```
+
+## 测试
+
+```bash
+cd desktop && npm test                       # = node --test test/*.test.mjs
+cd desktop && node --test test/*.test.mjs    # Node 内置 node:test；不启动 Electron
+```
+
+> 注：本仓库 Node（v24）下 `node --test test/`（目录位置参数）会报 MODULE_NOT_FOUND，必须用 glob 或 `node --test`（cwd=desktop）。
+
+纯模块（config/path-safety/csp/proxy-headers/security-policy/security/content-server/proxy/static-assets/build-dist）均可在普通 Node 下 `import`；
+`content-server` 支持 `port: 0`，测试用 `127.0.0.1:0` 启停。
+
+## 配置
+
+`<userData>/config.json`（macOS：`~/Library/Application Support/Deadpan-Exam-Desktop/config.json`，首启自动生成模板）：
+
+```json
+{ "serverUrl": "https://deadpan.asia", "port": 47821, "externalOrigins": [], "caFile": null }
+```
+
+- `serverUrl`：固定远端服务器 **origin**（必填；可配置内网 CA `caFile`，但不提供关闭证书校验的开关）。
+  **生产分发必须使用 https**；配置成 `http://` 时启动会打警告（令牌/数据明文传输，仅限本机开发联调）。
+- `port`：本地固定端口（默认 47821，1024–65535，禁占 3000/5173）；端口决定 localStorage origin，**不能随机换端口**。
+- `externalOrigins`：允许交给系统浏览器打开的外链白名单（仅 https；默认空 = 全部拦截）。
+
+> ⚠️ 切换 `serverUrl` 后请**退出登录并清理登录态**：token 存在 localStorage 且按 origin 存储，旧 token 会被发往新服务器。
+
+## 本地服务安全/运行口径（R1 修复后）
+
+- **Origin 校验**：HTTP 与 WebSocket upgrade 同规则 —— 请求带 `Origin` 时**必须严格等于** `http://127.0.0.1:<port>`，否则 403；
+  无 `Origin`（导航/同源 GET）放行。只"剥离 Origin 不清洗请求"不够，入站侧必须拒绝。
+- **CSP 默认 enforce**：本地内容服务响应默认下发 `Content-Security-Policy`（与 Web 端 nginx enforce 一致，指令串逐条等价）；
+  可用 `env.CSP_MODE=report-only` 回退观察模式、`CSP_MODE=off` 关闭。`csp.mjs` 纯函数默认仍是 report-only（单测口径不变）。
+- **显式长超时**：`server.requestTimeout = 15 分钟`、`headersTimeout = 60 秒`（50MB 慢网上传/长轮询不套用 Node 默认 5 分钟）。
+- **source map 永不外发**：`*.map` 请求一律 404（与 Web 端 nginx 口径一致）。
+- **build-dist 输出约束**：真实 CLI 的 `--out` 必须位于仓库根内且不得等于仓库根（否则 exit 2，且不会执行删除）；
+  程序化调用（测试用临时目录）不受此约束，但仍禁止输出目录与源目录重叠或为文件系统根。
+
+## 构建 DMG（macOS arm64 / ad-hoc / 无公证 / 无自动更新）
+
+```bash
+npm run dist:mac     # CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --arm64
+```
+
+- 产物：`desktop/release/Deadpan-<version>-arm64.dmg`；发布附 SHA-256。
+- 签名：afterPack 用 `codesign --force --deep --sign -`（ad-hoc）；Gatekeeper **不会**通过（预期），
+  首次安装按「系统设置 → 隐私与安全性 → 仍要打开」；如提示已损坏，核对 SHA-256 后
+  `xattr -dr com.apple.quarantine "/Applications/Deadpan 判题.app"`。
+- 无自动更新、无公证、无 Apple Developer 账号、仅 arm64（Intel Mac 不支持）。
+
+## 本期口径与已知限制
+
+- **legacy 裁剪**：只裁 `monaco-legacy/`、`*-legacy-*.js`、`polyfills-legacy-*.js`（Electron 44 Chromium 不需要旧内核）；
+  **不裁**现代 `monaco/vs/**`（含 worker，格式化依赖），也不裁 `error-pages/`。
+- **preload 为 `.cjs`**：`sandbox:true` 下不支持 ESM preload（A 基线 §3.4）；不得为迁移到 `.mjs` 关闭 sandbox。
+- **不支持旧内核 / 本机开发端口**：桌面不跑 Vite（5173）与后端（3000）；反代只连配置的远端服务器。
+- **Round 1 范围**：可测试脚手架；未安装依赖、未启动 GUI、未跑 DMG、未做诊断页/菜单/自动更新/公证。
+- `client/dist` 只读：构建产物一律输出到仓库根 `dist-desktop/`（已 gitignore）。
