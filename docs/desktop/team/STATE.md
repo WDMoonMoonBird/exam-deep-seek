@@ -4,6 +4,7 @@
 - Branch: `feat/desktop-shell`
 - Plan: `docs/desktop/2026-10-18-electron-desktop-plan.md`
 - Phase: **FINAL ACCEPTED (v0.1.1 internal, Hotfix 1)**
+- Hotfix commit: `fc8b7491e3bbef82c670cae3dfa88b4af698d67e` ｜ tag `desktop-v0.1.1-internal`
 - Last updated: 2026-10-18
 
 ## Final artifacts (only distribute 0.1.1)
