@@ -3,6 +3,7 @@
 - Worktree: `.agents/worktrees/feat/desktop-shell`
 - Branch: `feat/desktop-shell`
 - Phase: **ACCEPTED (v0.1.2 internal; Windows real-machine smoke pending)**
+- Hotfix commit: `572472f8c5510d8dc0f6ca8d48b9ec3082337e42` ｜ tag `desktop-v0.1.2-internal`
 - Last updated: 2026-10-18
 
 ## Final artifacts (only distribute 0.1.2)
