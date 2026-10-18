@@ -98,12 +98,37 @@ npm run dist:mac
   `xattr -dr com.apple.quarantine "/Applications/Deadpan 判题.app"`。
 - 无自动更新、无公证、无 Apple Developer 账号、仅 arm64（Intel Mac 不支持）。
 
+## 构建 Windows（x64 / NSIS / 无签名 / 无自动更新）
+
+```bash
+cd desktop
+npx electron-builder --win nsis --x64            # 产物：desktop/release/Deadpan-<version>-x64.exe + win-unpacked/
+# 需镜像时（本机网络常访问不了 GitHub）：
+ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ \
+ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ \
+npx electron-builder --win nsis --x64
+```
+
+- 配置：`win.target=nsis`、`arch=x64`、`icon=resources/icon.ico`、`artifactName=Deadpan-<version>-x64.<ext>`；
+  NSIS `oneClick:false`、`perMachine:true`、`allowToChangeInstallationDirectory:true`。
+- **无代码签名**（无证书/无 signtoolOptions）：安装时 SmartScreen 会提示「未知发布者」，内部试用可接受；
+  v0 不接 publish / autoUpdater，手动分发安装包。
+- **交叉构建（实测）**：electron-builder 26.15.3 在 macOS 上可直接构建 NSIS，**不需要 wine**
+  （exe 资源编辑由 app-builder 原生完成）。首次构建经镜像下载 electron win32-x64 zip、`nsis-203.0.113.10`、
+  `nsis-resources-3.4.1`、`7zip-darwin-arm64`；离线机器需预置缓存。
+- **locale（W1 修复）**：必须**按平台**配置 —— `mac.electronLanguages=[zh_CN,en]`（匹配 `*.lproj`）、
+  `win.electronLanguages=[en-US,zh-CN]`（匹配 `locales/*.pak`）。**不要用全局 electronLanguages**：
+  mac 命名用于 win 会全不匹配 ⇒ `win-unpacked/locales` 被清空。
+  Windows 产物 `win-unpacked/locales/` 应恰为 `en-US.pak` + `zh-CN.pak`（约 1.18 MB）。
+- Windows 10/11 均受 Electron 44 支持；不提供 32 位/arm64 Windows 目标。
+
 ## 本期口径与已知限制
 
 - **legacy 裁剪**：只裁 `monaco-legacy/`、`*-legacy-*.js`、`polyfills-legacy-*.js`（Electron 44 Chromium 不需要旧内核）；
   **不裁**现代 `monaco/vs/**`（含 worker，格式化依赖），也不裁 `error-pages/`。
 - **preload 为 `.cjs`**：`sandbox:true` 下不支持 ESM preload（A 基线 §3.4）；不得为迁移到 `.mjs` 关闭 sandbox。
-- **包洁癖**：`build-dist` 跳过 `.DS_Store`；electron-builder `extraResources.filter` 排除 `.desktop-build.json` 与 `**/.DS_Store`（legacy 裁剪规则不变）。
+- **包洁癖**：`build-dist` 跳过 `.DS_Store`（统计口径：`copied` 不含噪声，`noise/noiseBytes` 单列并写入 manifest）；
+  electron-builder `extraResources.filter` 排除 `.desktop-build.json` 与 `**/.DS_Store`（legacy 裁剪规则不变）。
 - **不支持旧内核 / 本机开发端口**：桌面不跑 Vite（5173）与后端（3000）；反代只连配置的远端服务器。
 - **Round 1 范围**：可测试脚手架；未安装依赖、未启动 GUI、未跑 DMG、未做诊断页/菜单/自动更新/公证。
 - `client/dist` 只读：构建产物一律输出到仓库根 `dist-desktop/`（已 gitignore）。

@@ -13,6 +13,7 @@
     "start": "electron .",
     "test": "node --test test/*.test.mjs",
     "test:gui": "node --test test/gui-smoke.test.mjs",
+    "test:packaged": "node --test test/packaged-app.test.mjs",
     "build:dist": "node scripts/build-dist.mjs",
     "build:dist:dry": "node scripts/build-dist.mjs --dry-run",
     "pack:dir": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",

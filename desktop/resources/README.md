@@ -2,7 +2,12 @@
 
 electron-builder 的 `buildResources` 目录（图标等构建期资源）。
 
-## icon.icns
+## 图标总览
+
+- `icon.icns`：macOS 应用图标（`mac.icon`）。
+- `icon.ico`：Windows 应用/安装包图标（`win.icon`），含 16/32/48/64/128/256 六种尺寸，由同一张源图生成。
+
+## icon.icns（macOS）
 
 已内置应用图标 `icon.icns`（615 KB），来源：`client/resources/icon.png`（1024×1024，**只读**，未修改该文件）。
 
@@ -19,4 +24,18 @@ done
 iconutil -c icns /tmp/deadpan.iconset -o desktop/resources/icon.icns
 ```
 
-配置入口：`electron-builder.yml` 的 `mac.icon: resources/icon.icns`；未提供时 electron-builder 会回退 Electron 默认图标。
+## icon.ico（Windows）
+
+生成 `icon.ico`（需要 Pillow）：
+
+```bash
+python3 - <<'PY'
+from PIL import Image
+Image.open("client/resources/icon.png").convert("RGBA").save(
+    "desktop/resources/icon.ico", format="ICO",
+    sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
+PY
+```
+
+配置入口：`electron-builder.yml` 的 `mac.icon: resources/icon.icns` 与 `win.icon: resources/icon.ico`；
+未提供时 electron-builder 会回退 Electron 默认图标。

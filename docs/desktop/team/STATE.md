@@ -5,36 +5,37 @@
 - Base commit: `2f77967d55e11b37cdb32db44b40c02220f79bf6`
 - Round 1 commit/tag: `213f7ca` / `desktop-r1-scaffold`
 - Round 2 commit/tag: `548bf09` / `desktop-r2-dmg`
-- Round 3 commit/tag: `80e297e04f6ce7cf52086040e6f740811d0f4c7c` / `desktop-r3-gui`
+- Round 3 commit/tag: `80e297e` / `desktop-r3-gui`
+- Round 4 commit/tag: pending / `desktop-r4-win`
 - Plan: `docs/desktop/2026-10-18-electron-desktop-plan.md`
-- Round: 3 ✅ PASS
-- Phase: Round 4 queued
+- Round: 4 ✅ PASS
+- Phase: **FINAL ACCEPTED (v0.1.0 internal)**
 - Last updated: 2026-10-18
 
-## Round 3 result
+## Final artifacts
 
-- A/T24 终验 PASS；C/T22 回归 125 例（124 pass / 0 fail / 1 skip）；GUI 冒烟 1/1 pass；D/T23 no-op；B/T21 no-op。
-- DMG：125,620,525 B，sha256 `f90fe37c…6f2cca6`；图标替换默认 Electron 图标；adhoc 签名不变。
-- 范围：仅 desktop 变更（图标/构建/测试/package/lockfile/README）+ 报告；client/server/根 package 零改动。
-- 摘要：`docs/desktop/team/ROUND-3-SUMMARY.md`。
+| 产物 | 值 |
+|---|---|
+| macOS DMG | `desktop/release/Deadpan-0.1.0-arm64.dmg`（125,625,337 B） |
+| macOS SHA-256 | `c5e0d67e0fc64a63687bad0dd105cefe094e0d8aeb9350e06c55795b42b8f05e` |
+| Windows NSIS | `desktop/release/Deadpan-0.1.0-x64.exe`（112,070,236 B） |
+| Windows SHA-256 | `b7b4f1621ea95907520532a46bd3f517eeba4152a479666d564bc300bad7691d` |
+| frontend snapshot | index.html `bd782577…d3f060`（mac/win/dist-desktop 三树一致） |
+| tests | 137 tests / 136 pass / 0 fail / 1 skip；GUI 1/1；packaged 1/1 |
+| final doc | `docs/desktop/team/FINAL-ACCEPTANCE.md` |
 
-## Round 4（queued）
+## Round 4 result
 
-| 任务 | Owner | 状态 | 依赖 | 内容 |
-|---|---|---|---|---|
-| task-26 R4-1 | D | queued | — | Windows target/NSIS 配置+尝试构建、F1 修复、packaged 冒烟准备 |
-| task-27 R4-2 | C | queued | R4-1 | packaged app 冒烟 + Windows/F1 测试 |
-| task-28 R4-3 | A | queued | R4-1 | Windows/packaged/F1 审查 |
-| task-29 R4-4 | B | queued | R4-3 | 按工单重构 |
-| task-30 R4-5 | C | queued | R4-4 | 回归 |
-| task-31 R4-6 | D | queued | R4-5 | 修复遗留 |
-| task-32 R4-7 | A | queued | R4-6 | 终验 |
-| task-33 R4-8 | Lead | queued | R4-7 | 验收 + 最终轮规划 |
+- A/T36 终验 PASS：W1（Windows locales）修复、F1 统计修复、packaged 冒烟、mac/win 前端快照统一。
+- mac DMG 与 win exe 均内嵌 `bd782577…` 快照；三树 390 文件 sha256 一致。
+- 范围：无 client/server/根 package/lockfile 改动；后端零改动。
+- B 工单 0；D no-op/修复按需；C 回归 137 例。
 
-## Risks / Notes
+## Residual manual items
 
-- R-GK：Gatekeeper 干净 Mac 复验（本机 assessments disabled）。
-- R-PKG：DMG 内 packaged app 启动未验证 → R4-2。
-- R-E3：网关 12m vs 50MB 上传，需运维。
-- dev-only CSP warning；F1 copied 统计；Windows 未签名/SmartScreen。
-- 后端冻结；client/server 禁止改动。
+- Windows 真机安装/启动/SmartScreen/PE 图标/locale 运行时。
+- Gatekeeper 干净 Mac 首次打开。
+- E3 网关 12m vs 50MB 上传（运维决策）。
+- 无 Authenticode/Developer ID/公证（v0 内部风险接受）。
+- 真实登录/API/WS 联调。
+- 前端快照冻结纪律：后续前端变更必须 mac+win 同时重建并记录快照哈希。

@@ -22,6 +22,8 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
+import { acquireGuiLock } from './helpers.mjs';
+
 const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESKTOP_DIR = path.resolve(__dirname, '..');
@@ -119,7 +121,14 @@ test('GUI 冒烟：Electron 启动 → /exam/ 窗口就绪 → 无未捕获异�
     t.skip('playwright-core 不可用：' + (error && error.message ? error.message : 'import 失败'));
     return;
   }
+  // R4-2：与 packaged-app 冒烟串行（node --test 并行跑文件，两者竞争固定端口与 userData config）
+  const guiLock = await acquireGuiLock();
+  if (!guiLock) {
+    t.skip('GUI 测试锁等待超时（其他 GUI 测试占用中）');
+    return;
+  }
   if (await isPortOpen(LOCAL_PORT)) {
+    guiLock.release();
     t.skip('端口 ' + LOCAL_PORT + ' 已被占用（可能有其他桌面实例运行；禁止 kill 其他进程）');
     return;
   }
@@ -263,5 +272,6 @@ test('GUI 冒烟：Electron 启动 → /exam/ 窗口就绪 → 无未捕获异�
       if (configBackup === null) fs.rmSync(CONFIG_PATH, { force: true });
       else fs.writeFileSync(CONFIG_PATH, configBackup);
     } catch { /* 恢复失败不影响测试结论 */ }
+    guiLock.release();
   }
 });

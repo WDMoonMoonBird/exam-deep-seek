@@ -29,11 +29,10 @@ extraResources:
 asar: true
 # 壳无原生依赖，跳过 node-gyp 重建（避免构建机缺工具链）
 npmRebuild: false
-# 注意：值是 Electron 的 locale 目录名（匹配 *.<lang>.lproj 的小写前缀）。
-# 写成 "zh-CN" 不会匹配 zh_CN.lproj（实测只保留 en）⇒ 用 zh_CN + en，达成"只留中/英"的计划意图。
-electronLanguages:
-  - zh_CN
-  - en
+# ★locale 必须按平台配置（W1 修复）：匹配规则是"想要的 locale 小写后与目录/文件名小写前缀比较"。
+#   · macOS：资源是 Resources/*.lproj（zh_CN.lproj / en.lproj）⇒ 用 zh_CN + en
+#   · Windows：资源是 locales/*.pak（zh-CN.pak / en-US.pak）⇒ 用 zh-CN + en-US
+#   全局写 mac 命名会命中 mac，但 Windows .pak 全不匹配 ⇒ locales 被清空（T28/W1）。
 
 # ad-hoc 重签（见 scripts/after-pack-adhoc-sign.cjs）
 afterPack: scripts/after-pack-adhoc-sign.cjs
@@ -51,9 +50,32 @@ mac:
   notarize: false
   minimumSystemVersion: "13.0"
   category: public.app-category.education
+  # macOS 用 .lproj 目录名（下划线）：仅保留中文 + 英文
+  electronLanguages:
+    - zh_CN
+    - en
   extendInfo:
     # 连接校内服务器时需要「本地网络」权限（计划 §4.5）；文案会出现在系统弹窗中
     NSLocalNetworkUsageDescription: 用于连接学校内网的考试服务器。
+
+# ===== Windows（x64 / NSIS / 无签名 / 无自动更新）=====
+# 非目标平台签名：不配置 certificateFile/signingHashAlgorithms/signtoolOptions；无 publish/updater。
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: resources/icon.ico
+  artifactName: Deadpan-${version}-x64.${ext}
+  # Windows 用 locales/*.pak 文件名（连字符）：仅保留 en-US + zh-CN（W1 修复）
+  electronLanguages:
+    - en-US
+    - zh-CN
+
+nsis:
+  oneClick: false
+  perMachine: true
+  allowToChangeInstallationDirectory: true
+  # 无代码签名（内部试用）；SmartScreen 提示可接受
 
 dmg:
   artifactName: Deadpan-${version}-arm64.dmg

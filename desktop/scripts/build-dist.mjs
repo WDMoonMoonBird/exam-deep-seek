@@ -54,19 +54,34 @@ export function shouldPrune(relPath) {
   return pruneReason(relPath) !== null;
 }
 
-/** 统计裁剪计划（纯函数）：entries = [{ path, size }] → { keep, prune, keptBytes, prunedBytes } */
+/**
+ * 统计裁剪计划（纯函数）：entries = [{ path, size }] → { keep, prune, noise, keptBytes, prunedBytes, noiseBytes }。
+ * noise（.DS_Store 等噪声）既不进入产物、也不计入 copied（F1：与 copy filter 口径一致）。
+ */
 export function planPrune(entries) {
   const keep = [];
   const prune = [];
+  const noise = [];
   for (const entry of Array.isArray(entries) ? entries : []) {
     const rel = normalizeRelativePath(entry && entry.path);
     const size = Number(entry && entry.size) || 0;
+    if (isNoisePath(rel)) {
+      noise.push({ path: rel, size });
+      continue;
+    }
     const reason = pruneReason(rel);
     if (reason) prune.push({ path: rel, size, reason });
     else keep.push({ path: rel, size });
   }
   const sum = (items) => items.reduce((total, item) => total + item.size, 0);
-  return { keep, prune, keptBytes: sum(keep), prunedBytes: sum(prune) };
+  return {
+    keep,
+    prune,
+    noise,
+    keptBytes: sum(keep),
+    prunedBytes: sum(prune),
+    noiseBytes: sum(noise),
+  };
 }
 
 /** 递归列出文件（相对路径 + 字节数；不跟随符号链接目录） */
@@ -156,6 +171,8 @@ export function copyAndPrune({ srcDir = DEFAULT_SRC, outDir = DEFAULT_OUT, dryRu
     copied: plan.keep.length,
     pruned: plan.prune.length,
     prunedBytes: plan.prunedBytes,
+    noise: plan.noise.length,
+    noiseBytes: plan.noiseBytes,
     prunedPaths: plan.prune.map((item) => item.path),
   };
   if (dryRun === true) return result;
@@ -177,6 +194,8 @@ export function copyAndPrune({ srcDir = DEFAULT_SRC, outDir = DEFAULT_OUT, dryRu
     copied: plan.keep.length,
     pruned: plan.prune.length,
     prunedBytes: plan.prunedBytes,
+    noise: plan.noise.length,
+    noiseBytes: plan.noiseBytes,
     prunedPaths: plan.prune.map((item) => item.path),
   };
   const manifestPath = path.join(outRoot, MANIFEST_FILE);
@@ -238,7 +257,10 @@ export function main(argv = process.argv.slice(2), {
     return 2;
   }
   const prefix = result.dryRun ? '[build-dist] dry-run（未写盘）' : '[build-dist] 完成';
-  log.log(prefix + '：保留 ' + result.copied + ' 个文件，裁剪 ' + result.pruned + ' 个（-' + formatBytes(result.prunedBytes) + '）');
+  const noiseText = result.noise > 0
+    ? '，跳过噪声 ' + result.noise + ' 个（-' + formatBytes(result.noiseBytes) + '）'
+    : '';
+  log.log(prefix + '：保留 ' + result.copied + ' 个文件，裁剪 ' + result.pruned + ' 个（-' + formatBytes(result.prunedBytes) + '）' + noiseText);
   log.log('[build-dist] 源：' + result.srcDir);
   log.log('[build-dist] 输出：' + result.outDir);
   if (result.dryRun && result.prunedPaths && result.prunedPaths.length > 0) {

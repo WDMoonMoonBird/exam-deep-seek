@@ -170,3 +170,42 @@ export function createFakeLog() {
     error(message) { entries.error.push(String(message)); },
   };
 }
+
+const GUI_LOCK_PATH = path.join(os.tmpdir(), 'deadpan-desktop-gui-smoke.lock');
+
+/**
+ * GUI 冒烟跨进程互斥锁（R4-2）：node --test 默认并行跑测试文件，dev 冒烟（gui-smoke）与
+ * packaged 冒烟（packaged-app）会竞争固定端口 47821 与 userData config；用文件锁串行化。
+ * 返回 { release() }；等待超时返回 null（调用方应 skip 而非失败）。超过 staleMs 的锁视为陈旧并清理。
+ */
+export async function acquireGuiLock({ timeoutMs = 90_000, staleMs = 5 * 60_000 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const fd = fs.openSync(GUI_LOCK_PATH, 'wx');
+      fs.writeSync(fd, String(process.pid));
+      fs.closeSync(fd);
+      return {
+        path: GUI_LOCK_PATH,
+        release() {
+          try {
+            if (fs.readFileSync(GUI_LOCK_PATH, 'utf8').trim() === String(process.pid)) {
+              fs.rmSync(GUI_LOCK_PATH, { force: true });
+            }
+          } catch { /* 已释放 */ }
+        },
+      };
+    } catch (err) {
+      if (err && err.code !== 'EEXIST') throw err;
+      try {
+        const stat = fs.statSync(GUI_LOCK_PATH);
+        if (Date.now() - stat.mtimeMs > staleMs) {
+          fs.rmSync(GUI_LOCK_PATH, { force: true });
+          continue;
+        }
+      } catch { /* 锁刚被释放，重试 */ }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+  return null;
+}
