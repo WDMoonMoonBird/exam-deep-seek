@@ -6,7 +6,7 @@
 - Round 1 commit/tag: `213f7ca` / `desktop-r1-scaffold`
 - Round 2 commit/tag: `548bf09` / `desktop-r2-dmg`
 - Round 3 commit/tag: `80e297e` / `desktop-r3-gui`
-- Round 4 commit/tag: pending / `desktop-r4-win`
+- Round 4 commit/tag: `54c73f236710375671f2d2b625ebd648b5863a5b` / `desktop-r4-win` ｜ final tag `desktop-v0.1.0-internal`
 - Plan: `docs/desktop/2026-10-18-electron-desktop-plan.md`
 - Round: 4 ✅ PASS
 - Phase: **FINAL ACCEPTED (v0.1.0 internal)**
