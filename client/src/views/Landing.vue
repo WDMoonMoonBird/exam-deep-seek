@@ -221,10 +221,6 @@ const rubricPublished = ref(false);
               客观题自动判分；主观题与实训工程包由 AI 按你的评分标准给出分数与评语，教师只做终审。
             </p>
             <div class="cta-row">
-              <a class="btn btn-primary btn-lg" :href="loggedIn ? consoleHref : loginHref">
-                {{ loggedIn ? '进入控制台' : '教师登录' }}
-                <svg class="icon" aria-hidden="true"><use href="#lg-arrow" /></svg>
-              </a>
               <a class="btn btn-ghost btn-lg" :href="docHref" target="_blank" rel="noopener">
                 <svg class="icon" aria-hidden="true"><use href="#lg-book" /></svg>查看使用文档
               </a>
@@ -650,10 +646,6 @@ a { color: inherit; text-decoration: none; }
 .hero-inner { position: relative; max-width: 1240px; margin: 0 auto; padding: var(--space-12) var(--space-8) var(--space-12);
   display: grid; grid-template-columns: minmax(0, .92fr) minmax(0, 1.28fr); gap: var(--space-12); align-items: center; }
 /* 首屏进场：文案与窗口各淡入上移一次（reduced-motion 下关闭） */
-/* 1081–1200：双栏文案列只有 413–456px，放不下三个 CTA（实测 420px）→ 该区间先堆叠，避免按钮换行 */
-@media (min-width: 1081px) and (max-width: 1200px) {
-  .hero-inner { grid-template-columns: 1fr; gap: var(--space-8); }
-}
 .hero-copy { animation: fadeUp .5s cubic-bezier(.16,1,.3,1) both; }
 .shot { animation: fadeUp .6s .08s cubic-bezier(.16,1,.3,1) both; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
@@ -943,8 +935,11 @@ a { color: inherit; text-decoration: none; }
   .sec-head h2 { font-size: var(--fs-title-1); }
 
   /* 两个 CTA 并排一行、各占一半（按钮保留、字号与内距收一档：46 → 40） */
-  .cta-row { flex-direction: row; gap: var(--space-2); }
-  .cta-row .btn { flex: 1 1 0; min-width: 0; padding: 0 var(--space-2); font-size: var(--fs-body-sm); }
+  /* 两个 CTA：用 grid 两等分（flex 在该行会按内容撑出不等宽：实测 191/159） */
+  .cta-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+  .cta-row .btn { flex: 1 1 0; min-width: 0; padding: 0 var(--space-4); font-size: var(--fs-body-sm); }
+  /* 只剩两个 CTA：文档按钮在手机上省掉图标，两按钮才等宽（图标 16+8=24px 的 min-content 差） */
+  .cta-row .btn .icon { display: none; }
   .btn-lg { height: 40px; font-size: var(--fs-body-sm); }
   .btn { white-space: nowrap; }                     /* 「新增题目」这类按钮不再折成两行 */
   .nav-links .btn-sm { height: 34px; }

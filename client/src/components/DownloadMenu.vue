@@ -37,6 +37,8 @@ const currentPlatform = ref('unknown');
 
 const defaultItem = computed(() => defaultDownloadFor(currentPlatform.value, items));
 const mainLabel = computed(() => (defaultItem.value ? '下载 ' + defaultItem.value.label + ' 版' : '下载客户端'));
+/* 窄屏（≤640）放不下「 版」：保留平台名，去掉后缀，保证不截断 */
+const slimLabel = computed(() => (defaultItem.value ? '下载 ' + defaultItem.value.label : '下载客户端'));
 
 function hrefFor(item) { return withAppBase('/download/' + item.file); }
 
@@ -97,12 +99,12 @@ onUnmounted(() => {
     <a v-if="defaultItem" class="dl-main" :href="hrefFor(defaultItem)" :download="defaultItem.file" :aria-label="mainLabel" :title="mainLabel" @click="close">
       <PlatformIcon :id="defaultItem.id" />
       <span class="dl-label">{{ mainLabel }}</span>
-      <span class="dl-label-short">下载</span>
+      <span class="dl-label-slim">{{ slimLabel }}</span>
     </a>
     <button v-else type="button" class="dl-main" :aria-expanded="open" aria-haspopup="menu" aria-controls="dl-panel" :aria-label="mainLabel" :title="mainLabel" @click="toggle">
       <PlatformIcon id="" />
       <span class="dl-label">{{ mainLabel }}</span>
-      <span class="dl-label-short">下载</span>
+      <span class="dl-label-slim">{{ slimLabel }}</span>
     </button>
     <button
       type="button"
@@ -161,7 +163,7 @@ onUnmounted(() => {
 .dl-main:active { background: var(--bg-active); }
 .dl-main:focus-visible { outline: none; box-shadow: var(--ring-focus); }
 .dl-label { overflow: hidden; text-overflow: ellipsis; }
-.dl-label-short { display: none; }
+.dl-label-slim { display: none; }
 .dl-ico { width: 17px; height: 17px; flex: none; color: var(--text-secondary); }
 .dl-caret { width: 34px; flex: none; display: grid; place-items: center; border: 0;
   border-left: 1px solid var(--border-subtle); background: var(--bg-surface-2); color: var(--text-secondary);
@@ -195,19 +197,13 @@ onUnmounted(() => {
 .dl-pop-enter-active, .dl-pop-leave-active { transition: opacity var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out); }
 .dl-pop-enter-from, .dl-pop-leave-to { opacity: 0; transform: translateY(-4px); }
 
-/* 双栏 hero（>1080，文案列只有 472px）：「下载 macOS 版」太长会换行 → 用图标 + 下载 */
-@media (min-width: 1081px) {
-  .dl--lg .dl-label { display: none; }
-  .dl--lg .dl-label-short { display: inline; }
-  .dl--lg .dl-main { padding: 0 var(--space-3); }
-}
-
 @media (max-width: 640px) {
   .dl, .dl--lg { flex: 1 1 0; min-width: 0; height: 40px; }
   .dl--lg .dl-main { padding: 0 var(--space-2); font-size: var(--fs-body-sm); }
-  .dl-label { display: none; }
-  .dl-label-short { display: inline; }
   .dl-main { flex: 1; justify-content: center; padding: 0 var(--space-2); }
+  .dl-label { display: none; }
+  .dl-label-slim { display: inline; }
+  .dl-caret { width: 30px; }
   .dl-ico { width: 16px; height: 16px; }
 }
 
