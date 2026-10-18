@@ -228,7 +228,7 @@ const rubricPublished = ref(false);
               <a class="btn btn-ghost btn-lg" :href="docHref" target="_blank" rel="noopener">
                 <svg class="icon" aria-hidden="true"><use href="#lg-book" /></svg>查看使用文档
               </a>
-              <DownloadMenu />
+              <DownloadMenu size="lg" />
             </div>
             <ul class="trust">
               <li><svg class="icon" aria-hidden="true"><use href="#lg-check" /></svg>客观题自动批改</li>
@@ -917,8 +917,6 @@ a { color: inherit; text-decoration: none; }
 @media (max-width: 768px) {
   .nav-inner, .section-inner { padding: 0 var(--space-4); }
   .nav-link { display: none; }
-  /* 更新日志在手机端保留（其余导航链接隐藏，入口靠它 + 页脚） */
-  .nav-link.nav-link-btn { display: inline-flex; }
   .hero h1 { font-size: 30px; }
   .hero-inner { padding: var(--space-6) var(--space-4); }
   .frame-body { grid-template-columns: 1fr; }
