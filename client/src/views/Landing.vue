@@ -171,8 +171,8 @@ const steps = [
   { t: '建题', d: '主观题 / 客观题 / 实训题统一建题，小题分值与总分自动核对' },
   { t: '布置作业', d: '按班级下发，设置起止时间与是否允许重交' },
   { t: '学生提交', d: '在线作答或上传标准工程包，草稿自动保存' },
-  { t: 'AI 评分', d: 'Worker 每 2 秒取件、8 并发调用，按评分标准给分' },
-  { t: '教师审核', d: '查看 AI 分数与评语，改分、补评语、标记异常' },
+  { t: 'AI 逐份批改', d: 'AI Agent 按评分标准逐份批改，给分并写评语' },
+  { t: '老师复核', d: '看一眼 AI 的分数和评语，改分或补评语即可' },
   { t: '发布成绩', d: '一键发布，学生端即时可见分数与反馈' },
 ];
 const activeStep = ref(3);
@@ -215,10 +215,9 @@ const rubricPublished = ref(false);
             <span class="pill">
               <svg class="icon" aria-hidden="true"><use href="#lg-shield" /></svg>校内网部署 · 教师端
             </span>
-            <h1>面向高校编程课的<br /><em>AI 评分平台</em></h1>
+            <h1>面向计算机类课程的<br /><em>AI 评分平台</em></h1>
             <p class="lead">
-              从建题、布置、学生提交，到 AI 评分、教师审核、成绩发布 —— 一学期的作业流程收进一个控制台。
-              客观题自动判分；主观题与实训工程包由 AI 按你的评分标准给出分数与评语，教师只做终审。
+              从建题、布置、学生提交，到 AI 评分、教师审核、成绩发布 —— 一学期的作业流程收进一个控制台。客观题自动判分；主观题与实训工程包由 AI 按你的评分标准给出分数与评语，教师只做终审。
             </p>
             <div class="cta-row">
               <a class="btn btn-ghost btn-lg" :href="docHref" target="_blank" rel="noopener">
@@ -227,9 +226,9 @@ const rubricPublished = ref(false);
               <DownloadMenu size="lg" />
             </div>
             <ul class="trust">
-              <li><svg class="icon" aria-hidden="true"><use href="#lg-check" /></svg>客观题自动批改</li>
-              <li><svg class="icon" aria-hidden="true"><use href="#lg-check" /></svg>实训工程包 AI 评审</li>
-              <li><svg class="icon" aria-hidden="true"><use href="#lg-check" /></svg>校内网私有化部署</li>
+              <li><svg class="icon" aria-hidden="true"><use href="#lg-check" /></svg>逐份批改，不是抽样</li>
+              <li><svg class="icon" aria-hidden="true"><use href="#lg-check" /></svg>老师一键复核发布</li>
+              <li><svg class="icon" aria-hidden="true"><use href="#lg-check" /></svg>DeepSeek Harness 驱动</li>
             </ul>
           </div>
 
@@ -432,8 +431,8 @@ const rubricPublished = ref(false);
         <div class="section-inner">
           <div class="sec-head">
             <div class="eyebrow">评分流程</div>
-            <h2>一条闭环，六步走完</h2>
-            <p>学生提交后由评分 Worker 自动取件评分，结果实时推送到「评分审核」；教师改分与评语即最终成绩。</p>
+            <h2>从布置作业到出成绩，六步走完</h2>
+            <p>学生提交后，AI Agent 自动逐份批改，结果实时出现在「评分审核」；老师改分、写评语，确认发布后学生即可看到成绩。</p>
           </div>
           <ol class="flow">
             <li v-for="(s, i) in steps" :key="s.t">
