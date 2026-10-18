@@ -24,9 +24,11 @@ extraResources:
 asar: true
 # 壳无原生依赖，跳过 node-gyp 重建（避免构建机缺工具链）
 npmRebuild: false
+# 注意：值是 Electron 的 locale 目录名（匹配 *.<lang>.lproj 的小写前缀）。
+# 写成 "zh-CN" 不会匹配 zh_CN.lproj（实测只保留 en）⇒ 用 zh_CN + en，达成"只留中/英"的计划意图。
 electronLanguages:
-  - zh-CN
-  - en-US
+  - zh_CN
+  - en
 
 # ad-hoc 重签（见 scripts/after-pack-adhoc-sign.cjs）
 afterPack: scripts/after-pack-adhoc-sign.cjs

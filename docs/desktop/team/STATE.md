@@ -3,40 +3,38 @@
 - Worktree: `.agents/worktrees/feat/desktop-shell`
 - Branch: `feat/desktop-shell`
 - Base commit: `2f77967d55e11b37cdb32db44b40c02220f79bf6`
-- Round 1 commit: `213f7ca625c42fb1729f4b4cac6a7cf005023ab1`
-- Round 1 tag: `desktop-r1-scaffold`
+- Round 1 commit: `213f7ca` ｜ tag `desktop-r1-scaffold`
+- Round 2 commit: pending (T17 commit) ｜ tag `desktop-r2-dmg`
 - Plan: `docs/desktop/2026-10-18-electron-desktop-plan.md`
-- Round: 1 ✅ PASS
-- Phase: Round 2 queued
+- Round: 2 ✅ PASS
+- Phase: Round 3 queued
 - Last updated: 2026-10-18
 
-## Round 1 result
+## Round 2 result
 
-- A/T8 终验 PASS；C/T6 回归 112/112 PASS，两条命令 EXIT=0；D/T7 F1-F9 修复闭环；B/T5 no-op（0 工单）。
-- GodFile：0（最大 content-server 288≤300，index 173 仅组合）。
-- 范围：无 client/server/root/lockfile 改动；后端零改动。
-- 交付：`desktop/**`（主进程 10 模块 + preload + build/sign 脚本 + tests 112）+ `docs/desktop/**` + `reports/desktop/**`。
-- 摘要：`docs/desktop/team/ROUND-1-SUMMARY.md`。
+- A/T16 终验 PASS；C/T14 回归 124 例（123 pass / 0 fail / 1 skip）；D/T15 no-op；B/T13 no-op。
+- DMG：`desktop/release/Deadpan-0.1.0-arm64.dmg`（124,723,942 B，sha256 `b379d52d…024b1b1c`）。
+- ad-hoc 验证：`Signature=adhoc`、`TeamIdentifier=not set`、codesign verify OK；无公证/自动更新。
+- 范围：仅 desktop 构建配置/package/lockfile/测试/报告；client/server/根 package/lockfile 零改动。
+- 摘要：`docs/desktop/team/ROUND-2-SUMMARY.md`。
 
-## Round 2（待执行）
+## Round 3（queued）
 
-目标：用实际 client/dist 出 macOS arm64 DMG，ad-hoc 签名并验证；C 补打包/静态测试；A 审查；B 按工单；C 回归；A 终验；Lead 验收。
-
-| 任务 | Owner | 状态 | 依赖 | 范围 |
+| 任务 | Owner | 状态 | 依赖 | 内容 |
 |---|---|---|---|---|
-| R2-1 安装 desktop 依赖 + 生成 dist-desktop + DMG + ad-hoc | D | queued | — | `desktop/**`、`dist-desktop/**` |
-| R2-2 打包/静态测试 | C | queued | R2-1 | `desktop/test/**`、`reports/desktop/test/**` |
-| R2-3 打包审查 | A | queued | R2-1 | `reports/desktop/review/**` |
-| R2-4 按工单重构 | B | queued | R2-3 | 仅工单文件 |
-| R2-5 回归 | C | queued | R2-4 | `desktop/test/**` |
-| R2-6 修复遗留 | D | queued | R2-5 | `desktop/**` |
-| R2-7 终验 | A | queued | R2-6 | `reports/desktop/review/**` |
-| R2-8 Lead 验收 | Lead | queued | R2-7 | `docs/desktop/team/**` |
+| task-18 R3-1 | D | queued | — | GUI 冒烟准备、图标、开发 Electron、engines/lockfile/包洁癖 |
+| task-19 R3-2 | C | queued | R3-1 | Playwright-Electron GUI 冒烟 |
+| task-20 R3-3 | A | queued | R3-1 | GUI/图标/包洁癖审查 |
+| task-21 R3-4 | B | queued | R3-3 | 按工单重构 |
+| task-22 R3-5 | C | queued | R3-4 | 回归 |
+| task-23 R3-6 | D | queued | R3-5 | 修复遗留 |
+| task-24 R3-7 | A | queued | R3-6 | 终验 |
+| task-25 R3-8 | Lead | queued | R3-7 | 验收 + Round 4 规划 |
 
-## Blockers / Risks
+## Risks / Notes
 
-- R1 E3：网关 `client_max_body_size 12m` vs 50MB 上传，Round 2 前需运维决策或书面接受。
-- R2：Round 2 需要安装 desktop 依赖；若网络/下载失败，记录并降级为静态打包验证。
-- Real client/dist 来自主工作区（只读）；不得写 `client/**`。
-- 无 Apple 账号：ad-hoc 签名 + 手动 DMG；no notarization / no auto-update。
+- R-GK：Gatekeeper 干净 Mac 复验（本机 assessments disabled）。
+- R-GUI：GUI 未启动；electron postinstall 未跑。
+- R-E3：网关 12m vs 50MB 上传，需运维。
+- 默认图标、lockfile npmmirror、engines、.DS_Store/manifest 随包 → R3。
 - 后端冻结；client/server 禁止改动。
