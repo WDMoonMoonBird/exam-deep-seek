@@ -56,12 +56,12 @@ jobs:
       - name: SBOM — server (CycloneDX)
         working-directory: server
         continue-on-error: true
-        run: npx --yes @cyclonedx/cyclonedx-npm --package-lock-only --output-file "$GITHUB_WORKSPACE/sbom-server.cdx.json"
+        run: npx --yes @cyclonedx/cyclonedx-npm@6.0.1 --package-lock-only --output-file "$GITHUB_WORKSPACE/sbom-server.cdx.json"
 
       - name: SBOM — client (CycloneDX)
         working-directory: client
         continue-on-error: true
-        run: npx --yes @cyclonedx/cyclonedx-npm --package-lock-only --output-file "$GITHUB_WORKSPACE/sbom-client.cdx.json"
+        run: npx --yes @cyclonedx/cyclonedx-npm@6.0.1 --package-lock-only --output-file "$GITHUB_WORKSPACE/sbom-client.cdx.json"
 
       - name: Upload supply-chain evidence
         if: always()

@@ -1,6 +1,7 @@
 /**
  * W19（R2-B5）：DB 级闸的**跨进程**实测 —— 两个 worker 进程并发，limit=1 ⇒ 只允许一个进程真正启动装置。
- * 判据：共享 span 日志只有 1 条（另一个进程因 DB 闸拿不到 job）；两个进程退出码均 0。
+ * ★task-40：R1 迁移后 DB 限制「每 assignment 至多一个活动 job」⇒ W19-1 的「同作业两个 pending」
+ *   改为**两个作业各一条 pending**（两个独立 assignment），闸语义对（全局 DB 闸 limit=1）不变。
  * 仅测试库；自建探针行并在 afterAll 清理。
  */
 import fs from 'node:fs';
@@ -14,7 +15,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.resolve(__dirname, '../..');
 
 const tag = 'w19-gate-' + Date.now();
-let assignmentId = null;
+const assignmentIds = [];
 let spanLog = null;
 
 function runWorkerOnce(extraEnv) {
@@ -32,19 +33,24 @@ function runWorkerOnce(extraEnv) {
   });
 }
 
+async function mkAssignmentWithPendingJob(suffix) {
+  const teacher = await prisma.user.findFirst({ where: { role: 'teacher' }, select: { id: true } });
+  const a = await prisma.assignment.create({ data: { teacherId: teacher.id, title: tag + '-' + suffix, startTime: new Date('2026-05-01'), endTime: new Date('2099-01-01') } });
+  assignmentIds.push(a.id);
+  await prisma.gradingJob.create({ data: { assignmentId: a.id, checkerId: 'sha256:' + (suffix === 'a' ? 'a' : 'b').repeat(64), status: 'pending' } });
+  return a.id;
+}
+
 describe('W19 DB 级闸（跨进程）', () => {
   beforeAll(async () => {
     spanLog = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'w19-')), 'spans.log');
-    const teacher = await prisma.user.findFirst({ where: { role: 'teacher' }, select: { id: true } });
-    const a = await prisma.assignment.create({ data: { teacherId: teacher.id, title: tag, startTime: new Date('2026-05-01'), endTime: new Date('2099-01-01') } });
-    assignmentId = a.id;
-    await prisma.gradingJob.create({ data: { assignmentId, checkerId: 'sha256:' + 'a'.repeat(64), status: 'pending' } });
-    await prisma.gradingJob.create({ data: { assignmentId, checkerId: 'sha256:' + 'b'.repeat(64), status: 'pending' } });
+    await mkAssignmentWithPendingJob('a');
+    await mkAssignmentWithPendingJob('b');
   }, 30000);
 
   afterAll(async () => {
-    await prisma.gradingJob.deleteMany({ where: { assignmentId } });
-    await prisma.assignment.deleteMany({ where: { id: assignmentId } });
+    await prisma.gradingJob.deleteMany({ where: { assignmentId: { in: assignmentIds } } });
+    await prisma.assignment.deleteMany({ where: { id: { in: assignmentIds } } });
   });
 
   it('W19-1 两进程并发（limit=1）⇒ 只有一个进程启动装置（span=1），另一进程拿不到 job', async () => {
@@ -53,7 +59,6 @@ describe('W19 DB 级闸（跨进程）', () => {
     expect(r2.code).toBe(0);
     const spans = fs.existsSync(spanLog) ? fs.readFileSync(spanLog, 'utf8').trim().split(String.fromCharCode(10)).filter(Boolean) : [];
     expect(spans).toHaveLength(1); // ★DB 级闸：第二个进程没有并发拉起装置
-    // 两个进程的消费计数：一个 consumed=1，另一个 consumed=0（拿不到 job）
     const consumed = [r1, r2].map((r) => Number((r.out.match(/consumed=(\d+)/) || [])[1] || -1)).sort();
     expect(consumed).toEqual([0, 1]);
   }, 60000);
@@ -61,9 +66,8 @@ describe('W19 DB 级闸（跨进程）', () => {
   it('W19-2 闸释放后可继续消费（第二次调用把第二个 job 跑完）', async () => {
     const r = await runWorkerOnce({});
     expect(r.code).toBe(0);
-    // 前一轮只有一个 job 被消费；这一轮补上另一个（或闸满时留到下一轮）
-    const pending = await prisma.gradingJob.count({ where: { assignmentId, status: 'pending' } });
-    const running = await prisma.gradingJob.count({ where: { assignmentId, status: 'running' } });
+    const pending = await prisma.gradingJob.count({ where: { assignmentId: { in: assignmentIds }, status: 'pending' } });
+    const running = await prisma.gradingJob.count({ where: { assignmentId: { in: assignmentIds }, status: 'running' } });
     expect(running).toBe(0); // 无遗留 running（闸已释放、job 已落定）
     expect(pending).toBeLessThanOrEqual(1);
   }, 60000);

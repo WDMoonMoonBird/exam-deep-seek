@@ -15,6 +15,9 @@ const WORKER = path.resolve(__dirname, '../../scripts/r2b5-worker.mjs');
 const tag = 'w43-clock-' + Date.now();
 let assignmentId = null;
 let questionId = null;
+let teacherId = null;
+/** ★task-40：R1 约束「每 assignment 至多一个活动 job」⇒ 探针 job 各用独立 assignment */
+const extraAssignmentIds = [];
 
 /** 走**生产领取语句**把 pending 行置为 running（写方时钟 = CURRENT_TIMESTAMP(3)） */
 async function claimLikeProduction(jobId) {
@@ -22,13 +25,21 @@ async function claimLikeProduction(jobId) {
   expect(Number(affected)).toBe(1);
   return prisma.gradingJob.findUnique({ where: { id: jobId }, select: { status: true } });
 }
+async function mkAssignment(suffix) {
+  const a = await prisma.assignment.create({ data: { teacherId, title: tag + '-' + suffix, startTime: new Date('2026-05-01'), endTime: new Date('2099-01-01') } });
+  extraAssignmentIds.push(a.id);
+  return a.id;
+}
+/** ★task-40：每个探针 job 独立 assignment（R1：活动 job 每作业至多一条） */
 async function mkJob(suffix) {
-  return prisma.gradingJob.create({ data: { assignmentId, checkerId: tag + '-' + suffix, status: 'pending' } });
+  const aid = await mkAssignment(suffix);
+  return prisma.gradingJob.create({ data: { assignmentId: aid, checkerId: tag + '-' + suffix, status: 'pending' } });
 }
 
 describe('W43 回收器时钟口径', () => {
   beforeAll(async () => {
     const teacher = await prisma.user.findFirst({ where: { role: 'teacher' }, select: { id: true } });
+    teacherId = teacher.id;
     const q = await prisma.question.create({ data: { teacherId: teacher.id, title: tag, type: 'project', difficulty: 'medium', material: 'm', scoringRubric: 'r', maxScore: 100 } });
     questionId = q.id;
     const a = await prisma.assignment.create({ data: { teacherId: teacher.id, title: tag, startTime: new Date('2026-05-01'), endTime: new Date('2099-01-01') } });
@@ -38,9 +49,10 @@ describe('W43 回收器时钟口径', () => {
   }, 60000);
 
   afterAll(async () => {
-    await prisma.gradingJob.deleteMany({ where: { assignmentId } });
-    await prisma.assignmentQuestion.deleteMany({ where: { assignmentId } });
-    await prisma.assignment.deleteMany({ where: { id: assignmentId } });
+    const allAsg = [assignmentId, ...extraAssignmentIds].filter(Boolean);
+    await prisma.gradingJob.deleteMany({ where: { assignmentId: { in: allAsg } } });
+    await prisma.assignmentQuestion.deleteMany({ where: { assignmentId: { in: allAsg } } });
+    await prisma.assignment.deleteMany({ where: { id: { in: allAsg } } });
     await prisma.question.deleteMany({ where: { id: questionId } });
   }, 60000);
 
@@ -85,7 +97,8 @@ describe('W43 回收器时钟口径', () => {
   }, 60000);
 
   it('★W43-6 两个写方（Prisma @updatedAt 与生产领取语句）在修复后都是 UTC ⇒ 新行一律不会被误回收', async () => {
-    const viaPrisma = await prisma.gradingJob.create({ data: { assignmentId, checkerId: tag + '-prisma', status: 'running' } });
+    const prismaAsg = await mkAssignment('prismawrite');
+    const viaPrisma = await prisma.gradingJob.create({ data: { assignmentId: prismaAsg, checkerId: tag + '-prisma', status: 'running' } });
     const viaClaim = await mkJob('claimwrite');
     await claimLikeProduction(viaClaim.id);
     const rows = await prisma.$queryRawUnsafe(

@@ -16,6 +16,10 @@ const STUB = path.join(SERVER, 'scripts', 'stub-device.mjs');
 const tag = 'w42-stale-' + Date.now();
 let assignmentId = null;
 let questionId = null;
+let teacherId = null;
+let studentId = null;
+/** ★task-40：R1 约束「每 assignment 至多一个活动 job」⇒ 探针 job 各用独立 assignment，统一登记清理 */
+const extraAssignmentIds = [];
 const future = new Date('2099-01-01');
 
 async function backdate(jobId, minutes) {
@@ -23,29 +27,39 @@ async function backdate(jobId, minutes) {
   //   否则夹具与判据同错相消 ⇒ 假绿（t65 即由该缺陷漏检）。
   await prisma.$executeRawUnsafe('UPDATE grading_jobs SET updated_at = (UTC_TIMESTAMP(3) - INTERVAL ? MINUTE) WHERE id = ?', minutes, jobId);
 }
+async function mkAssignment(suffix) {
+  const a = await prisma.assignment.create({ data: { teacherId, title: tag + '-' + suffix, startTime: new Date('2026-05-01'), endTime: future } });
+  extraAssignmentIds.push(a.id);
+  return a.id;
+}
+/** ★task-40：每个探针 job 独立 assignment（R1：活动 job 每作业至多一条） */
 async function mkJob(checkerIdSuffix, status, attempts = 0) {
-  return prisma.gradingJob.create({ data: { assignmentId, checkerId: tag + '-' + checkerIdSuffix, status, attempts } });
+  const aid = await mkAssignment(checkerIdSuffix);
+  return prisma.gradingJob.create({ data: { assignmentId: aid, checkerId: tag + '-' + checkerIdSuffix, status, attempts } });
 }
 
 describe('W42 僵尸 running 回收', () => {
   beforeAll(async () => {
     const teacher = await prisma.user.findFirst({ where: { role: 'teacher' }, select: { id: true } });
+    teacherId = teacher.id;
     const q = await prisma.question.create({ data: { teacherId: teacher.id, title: tag, type: 'project', difficulty: 'medium', material: 'm', scoringRubric: 'r', maxScore: 100 } });
     questionId = q.id;
     const a = await prisma.assignment.create({ data: { teacherId: teacher.id, title: tag, startTime: new Date('2026-05-01'), endTime: future } });
     assignmentId = a.id;
     await prisma.assignmentQuestion.create({ data: { assignmentId, questionId, sortOrder: 1 } });
     const u = await prisma.user.create({ data: { username: tag + '-stu', password: 'x', role: 'student', realName: tag + '-real1' } });
+    studentId = u.id;
     await prisma.submission.create({ data: { assignmentId, questionId, studentId: u.id, status: 'submitted' } });
     await prisma.gradingJob.deleteMany({ where: { assignmentId } });
   }, 60000);
 
   afterAll(async () => {
-    await prisma.gradingJob.deleteMany({ where: { assignmentId } });
-    await prisma.submission.deleteMany({ where: { assignmentId } });
-    await prisma.gradingChecker.deleteMany({ where: { assignmentId } });
-    await prisma.assignmentQuestion.deleteMany({ where: { assignmentId } });
-    await prisma.assignment.deleteMany({ where: { id: assignmentId } });
+    const allAsg = [assignmentId, ...extraAssignmentIds].filter(Boolean);
+    await prisma.gradingJob.deleteMany({ where: { assignmentId: { in: allAsg } } });
+    await prisma.submission.deleteMany({ where: { assignmentId: { in: allAsg } } });
+    await prisma.gradingChecker.deleteMany({ where: { assignmentId: { in: allAsg } } });
+    await prisma.assignmentQuestion.deleteMany({ where: { assignmentId: { in: allAsg } } });
+    await prisma.assignment.deleteMany({ where: { id: { in: allAsg } } });
     await prisma.question.deleteMany({ where: { id: questionId } });
     await prisma.user.deleteMany({ where: { username: { startsWith: tag } } });
   }, 60000);
@@ -86,13 +100,16 @@ describe('W42 僵尸 running 回收', () => {
     await prisma.gradingJob.update({ where: { id: fresh.id }, data: { status: 'failed', lastError: 'cleanup' } });
   }, 60000);
 
-  it('★W42-3 活动键语义：DB 层本就禁止「同 (assignment,checker) 两条活动行」（回收的冲突分支是防御性的）', async () => {
-    const pending = await mkJob('conflict', 'pending', 0);
-    // 活动键（R2-B12）保证：同 (assignment, checker) 的 pending+running 不可能共存 ⇒ 冲突只能来自历史/异常数据
+  it('★W42-3 活动键语义：R1 迁移后 DB 禁止「同 assignment 两条活动行」（冲突分支是防御性的）', async () => {
+    const aid = await mkAssignment('conflict');
+    const pending = await prisma.gradingJob.create({ data: { assignmentId: aid, checkerId: tag + '-conflict', status: 'pending', attempts: 0 } });
+    // active_assignment_key 唯一（status ∈ pending/running）⇒ 同作业第二条活动行必 P2002
     let code = null;
-    try { await mkJob('conflict', 'running', 1); } catch (e) { code = e.code; }
+    try {
+      await prisma.gradingJob.create({ data: { assignmentId: aid, checkerId: tag + '-conflict-2', status: 'running', attempts: 1 } });
+    } catch (e) { code = e.code; }
     expect(code).toBe('P2002');
-    const active = await prisma.gradingJob.findMany({ where: { assignmentId, checkerId: tag + '-conflict', status: { in: ['pending', 'running'] } } });
+    const active = await prisma.gradingJob.findMany({ where: { assignmentId: aid, status: { in: ['pending', 'running'] } } });
     expect(active).toHaveLength(1);
     expect(active[0].id).toBe(pending.id);
   }, 60000);
@@ -119,7 +136,11 @@ describe('W42 僵尸 running 回收', () => {
   }, 60000);
 
   it('★W42-4 回收后可正常领取并完成一个 job（端到端，stub 装置）', async () => {
-    const stale = await mkJob('e2e', 'running', 1);
+    // R1：活动 job 独占 assignment ⇒ e2e 用专属作业（含题目/提交，供 stub 消费落分）
+    const e2eAsg = await mkAssignment('e2e');
+    await prisma.assignmentQuestion.create({ data: { assignmentId: e2eAsg, questionId, sortOrder: 1 } });
+    await prisma.submission.create({ data: { assignmentId: e2eAsg, questionId, studentId, status: 'submitted' } });
+    const stale = await prisma.gradingJob.create({ data: { assignmentId: e2eAsg, checkerId: tag + '-e2e', status: 'running', attempts: 1 } });
     await backdate(stale.id, 20);
     const r = await reclaimStaleRunning({ prisma, staleMs: 15 * 60 * 1000, maxAttempts: 3 });
     const reclaimed = await prisma.gradingJob.findUnique({ where: { id: stale.id }, select: { status: true } });
@@ -134,7 +155,7 @@ describe('W42 僵尸 running 回收', () => {
     const after = await prisma.gradingJob.findUnique({ where: { id: stale.id }, select: { status: true, writtenCount: true } });
     expect(after.status).toBe('done');
     expect(after.writtenCount).toBe(1);
-    const sub = await prisma.submission.findFirst({ where: { assignmentId }, select: { aiScore: true } });
+    const sub = await prisma.submission.findFirst({ where: { assignmentId: e2eAsg }, select: { aiScore: true } });
     expect(sub.aiScore).toBe(77);
     expect(r.toPending).toBeGreaterThanOrEqual(1);
     for (const d of fs.readdirSync('/tmp').filter((x) => x.startsWith('r2b4-job-' + stale.id + '-'))) fs.rmSync(path.join('/tmp', d), { recursive: true, force: true });

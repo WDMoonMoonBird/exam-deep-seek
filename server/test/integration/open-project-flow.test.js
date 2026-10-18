@@ -27,6 +27,7 @@ import {
   PROJECT_ROLE, OPEN_PROJECT_ROLE, buildOpenProjectGradePrompt,
 } from '../../src/infrastructure/ai/deepseek/index.js';
 import { enqueueProjectGrade } from '../../src/services/projectGrading.js';
+import { normalizeFenceNonces } from '../helpers/prompt-fence.js';   // ★task-40：nonce 围栏结构等价（不再逐字节）
 
 /** 学生提交的单个源文件（单文件保证上下文文本确定，便于逐字节断言） */
 const STUDENT_FILE = 'src/main.js';
@@ -243,13 +244,13 @@ describe('开放性实训题全链路（建题无包 → 布置确认 → 提交
     expect(call.system).not.toBe(PROJECT_ROLE);
     expect(call.user).not.toContain('标准答案源码');
     expect(call.user).not.toContain('=== 标准答案');
-    // 与开放性构建函数逐字节一致（题目/要求/评分标准/学生源码/JSON 结构全部对得上）
-    expect(call.user).toBe(buildOpenProjectGradePrompt({
+    // ★task-40：与开放性构建函数结构一致（随机 nonce 围栏 ⇒ normalizeFenceNonces 后逐字节相等）
+    expect(normalizeFenceNonces(call.user)).toBe(normalizeFenceNonces(buildOpenProjectGradePrompt({
       title: baseTitle + '_题',
       description: '实现一个待办事项管理程序，支持增删改查',
       scoringRubric: '功能完整性 60 分：增删改查全部可用；代码规范 20 分；健壮性 20 分',
       studentFiles: EXPECTED_STUDENT_TEXT,
-    }));
+    })));
   });
 
   it('⑤ 两栏审核：standardFiles 为空（前端回落两栏）+ studentFiles/AI 评语齐全', async () => {
@@ -286,12 +287,12 @@ describe('开放性实训题全链路（建题无包 → 布置确认 → 提交
     expect(res.body.data.mode).toBe('open');
     expect(res.body.data.system).toBe(OPEN_PROJECT_ROLE);
     expect(res.body.data.user).not.toContain('标准答案源码');
-    expect(res.body.data.user).toBe(buildOpenProjectGradePrompt({
+    expect(normalizeFenceNonces(res.body.data.user)).toBe(normalizeFenceNonces(buildOpenProjectGradePrompt({
       title: baseTitle + '_题',
       description: '实现一个待办事项管理程序，支持增删改查',
       scoringRubric: '功能完整性 60 分：增删改查全部可用；代码规范 20 分；健壮性 20 分',
       studentFiles: PREVIEW_PLACEHOLDER,
-    }));
+    })));
   });
 
   it('⑦ 实际提示词端点 = 实评 prompt（所见即所用，逐字节一致）', async () => {
@@ -300,15 +301,15 @@ describe('开放性实训题全链路（建题无包 → 布置确认 → 提交
     expect(res.body.data.mode).toBe('open');
     expect(res.body.data.system).toBe(OPEN_PROJECT_ROLE);
     expect(res.body.data.user).not.toContain('标准答案源码');
-    // 与 ④ 捕获的真实评分 prompt 完全一致（同样按特征过滤取评分调用，不按下标）
-    expect(res.body.data.user).toBe(gradeCalls()[0].user);
-    // 与预览端点同构：仅学生源码段不同（占位符 vs 真实文件）
-    expect(res.body.data.user).toBe(buildOpenProjectGradePrompt({
+    // 与 ④ 捕获的真实评分 prompt 结构一致（随机 nonce ⇒ 归一化后逐字节相等；按特征过滤取评分调用，不按下标）
+    expect(normalizeFenceNonces(res.body.data.user)).toBe(normalizeFenceNonces(gradeCalls()[0].user));
+    // 与预览端点同构：仅学生源码段不同（占位符 vs 真实文件）；nonce 归一化后逐字节相等
+    expect(normalizeFenceNonces(res.body.data.user)).toBe(normalizeFenceNonces(buildOpenProjectGradePrompt({
       title: baseTitle + '_题',
       description: '实现一个待办事项管理程序，支持增删改查',
       scoringRubric: '功能完整性 60 分：增删改查全部可用；代码规范 20 分；健壮性 20 分',
       studentFiles: EXPECTED_STUDENT_TEXT,
-    }));
+    })));
     expect(res.body.data.user).toContain(EXPECTED_STUDENT_TEXT);
   });
 
