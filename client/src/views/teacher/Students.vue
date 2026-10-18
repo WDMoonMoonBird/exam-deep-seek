@@ -173,11 +173,12 @@
           </div>
         </div>
       </div>
-      <!-- ★H6（W2-P2d）：本次新建账号的一次性初始口令（仅显示一次；请立即转交本人） -->
+      <!-- ★R3-R14（R18）：学生初始口令 = 学号（用户裁定 D9 的临时状态，后端**不**强制首登改密）——
+           文案必须如实：不能写「一次性随机口令/必须修改」（H6 学生侧已按用户裁定回退）。 -->
       <div v-if="uploadResult.credentials.length" class="result-list cred-list">
         <p class="result-title mt-3">
-          一次性初始口令（<span class="tone-warning">{{ uploadResult.credentials.length }}</span> 名）——
-          <b>仅显示一次，请立即转交本人</b>，学生首次登录后必须修改。
+          初始口令（<span class="tone-warning">{{ uploadResult.credentials.length }}</span> 名）——
+          <b>初始口令即为学号，请转交本人</b>；学生首次登录后可自行修改（系统不强制首登改密）。
         </p>
         <div v-for="(c, i) in uploadResult.credentials" :key="'c'+i" class="cred-item">
           <span class="lp-mono">{{ c.username }}</span>
@@ -287,8 +288,10 @@ const uploadModalOpen = ref(false);
 const uploadFileList = ref([]);
 const uploading = ref(false);
 /**
- * ★H6（W2-P2d）：成功提示**统一读服务端 message**（一次性口令由服务端在 message 内回传）；
+ * ★H6（W2-P2d）+ ★R3-R14（R18）：成功提示**统一读服务端 message**（一次性口令由服务端在 message 内回传）；
  * 当响应携带一次性口令（data.initialPassword）时追加"仅显示一次"提醒 —— 客户端**不得自造口令文案**。
+ * ⚠️R3-R14：学生建号/重置口令 = **学号**（用户裁定 D9 临时状态，后端不置 mustChangePassword、不强制改密）；
+ *   学生链路服务端不返回 data.initialPassword ⇒ 本分支只对教师/管理员链路（真实随机临时口令）生效。
  */
 function successToast(res, fallback) {
   const text = (res && res.message) || fallback;

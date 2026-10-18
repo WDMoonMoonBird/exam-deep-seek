@@ -6,6 +6,8 @@ const routes = [
   // 已登录也留在本页（主按钮由「教师登录」变为「进入控制台」，按角色进各自首页），不强制跳走。
   { path: '/', component: () => import('../views/Landing.vue') },
   { path: '/login', component: () => import('../views/Login.vue') },
+  // ★R3-R5：首登/管理员重置后的强制改密页（只要求已登录；被 403/1005 闸门拦住的用户必须能进入，否则死循环）
+  { path: '/change-password', component: () => import('../views/ChangePassword.vue') },
   {
     path: '/admin',
     component: () => import('../views/admin/Layout.vue'),
@@ -150,9 +152,18 @@ router.beforeEach((to) => {
 
   if (to.path === '/login') {
     if (token && user) {
+      // ★R3-R5：仍处于「待强制改密」的用户回 /login 时直接送回改密页（否则回首页又会被 403 弹回）
+      if (user.mustChangePassword === true) return '/change-password?required=1';
       return `/${user.role === 'super_admin' ? 'admin' : user.role}`;
     }
     return true;
+  }
+
+  // ★R3-R5：强制改密页 —— 只要求「已登录」（后端闸门只拦业务接口，改密接口 PUT /auth/password 仍需要 token）；
+  //   不校验角色、不要求 mustChangePassword=true（普通自愿改密也可进入）；未登录仍回 /login。
+  //   **不能**像业务页那样把已登录用户重定向回首页 —— 那会让被闸门拦住的用户反复弹回业务页（死循环）。
+  if (to.path === '/change-password') {
+    return token && user ? true : '/login';
   }
 
   // 公开页：欢迎页与使用文档不需要登录态（欢迎页自身按登录态切换主按钮文案/去向）

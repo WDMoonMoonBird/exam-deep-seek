@@ -169,6 +169,48 @@ export function handleAuthExpired() {
   return true;
 }
 
+/**
+ * ★R3-R5（P1，2026-10-18）：**403 + code 1005 = 「必须先修改初始密码」的全局控制流**（不是错误）。
+ *
+ *   背景：后端闸门（server/src/middleware/auth.js:62）对非学生账号在 mustChangePassword=true 时
+ *   拒绝除 PUT /api/auth/password 外的所有已认证请求（HTTP 403 + code 1005）；登录响应已带
+ *   user.mustChangePassword（authController.js:181）。修复前桌面端零消费 ⇒ 进业务页后每条接口都弹
+ *   一条通用错误、且没有统一引导入口。
+ *
+ *   与 401 的差异（**不能合并**）：
+ *     · 1005 **不清 token** —— 改密接口本身仍需要登录态，清了 token 就永远进不了改密页（死循环）；
+ *     · 1005 **不弹通用错误 toast** —— 由改密页给出明确文案，避免每次数据请求刷屏；
+ *     · 与 401 一样**并发去重**（只跳一次），并留自检注入点（setPasswordChangeRedirect）供 node
+ *       环境下的门禁断言（verify-frontend ⑮ 同款接缝）。
+ *
+ *   跳转目标 '/change-password?required=1'：本文件兜底实现必须 **base 感知**（withAppBase ⇒ '/exam/...'）；
+ *   主路径由 main.js 用 router.replace 注入（SPA 内导航、不整页刷新）。
+ */
+let passwordChangeHandled = false;
+let redirectToChangePassword = () => {
+  try {
+    const target = withAppBase('/change-password') + '?required=1';
+    if (typeof window !== 'undefined' && window.location) window.location.assign(target);
+  } catch { /* 非浏览器环境（自检）忽略 */ }
+};
+
+export function setPasswordChangeRedirect(fn) {
+  if (typeof fn === 'function') redirectToChangePassword = fn;
+}
+
+/** 自检/改密成功后复位「已处置」标记（防一次会话内永久去重而漏掉后续重置场景） */
+export function resetPasswordChangeHandled() {
+  passwordChangeHandled = false;
+}
+
+/** 403/1005 唯一出口：去重 + 跳强制改密页；不清 token、不弹通用错误。 */
+export function handleMustChangePassword() {
+  if (passwordChangeHandled) return false;
+  passwordChangeHandled = true;
+  try { redirectToChangePassword(); } catch { /* 跳转失败不得再抛 */ }
+  return true;
+}
+
 request.interceptors.response.use(
   (res) => {
     const body = res.data;
@@ -176,6 +218,13 @@ request.interceptors.response.use(
       // ★W1-r2：先判**控制流码**（HTTP 2xx + code 1002 + data.schools）⇒ 照旧 resolve、不提示，把信封交给调用方
       //   （回归背景：t1 把"信封一律 reject"写死 ⇒ Login.vue 的选校分支不可达 ⇒ 多学校学生无法登录）
       if (isControlFlowEnvelope(res)) return body;
+      // ★R3-R5：业务信封形态的 1005（后端若改送 HTTP 2xx）同样按强制改密控制流处置：不弹通用错误、reject 给调用方
+      if (body.code === 1005) {
+        const gated = businessError(res);
+        handleMustChangePassword();
+        markNotified(gated);
+        return Promise.reject(gated);
+      }
       // ★业务码 ≠ 0 = 失败：一律 reject(ApiError)；静默请求不提示（调用方处理）；
       // 1007 软警告（需确认）与 HTTP 400 分支共用同一白名单 ⇒ 不弹"报错"，由页面确认框承接。
       const fail = businessError(res);
@@ -190,6 +239,13 @@ request.interceptors.response.use(
       handleAuthExpired();                                    // 401 已统一提示 + 跳转 ⇒ 不再走下面的通用提示
       // ★W8（t10）：必须登记"这次失败已提示过" —— handleAuthExpired 弹的就是统一文案；不登记的话，
       //   页面里的 safeLoad/safeSubmit 会拿同一个 ApiError 再弹一次同名提示（真浏览器实测到 2 条重复）。
+      markNotified(fail);
+      return Promise.reject(fail);
+    }
+    // ★R3-R5：403 + 1005 = 强制改密闸门（见文件上方 handleMustChangePassword 注释）。
+    //   **不清 token、不弹通用错误**，只做一次去重跳转；改密页承接文案与表单。
+    if (fail.status === 403 && fail.code === 1005) {
+      handleMustChangePassword();
       markNotified(fail);
       return Promise.reject(fail);
     }

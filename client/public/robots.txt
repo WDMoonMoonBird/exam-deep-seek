@@ -1,0 +1,20 @@
+# robots.txt — Exam-DeepSeek（★R3-M16，2026-10-18）
+# 只放行公开页面；登录后路由/接口/管理端一律 Disallow（noindex 由 nginx X-Robots-Tag 兜底，本文件为补充）。
+# 部署路径：/exam/robots.txt（nginx 精确 location → client/dist/robots.txt）。
+User-agent: *
+Allow: /exam/$
+Allow: /exam/login
+Allow: /exam/doc
+Allow: /exam/doc/demos
+
+# 隐私/内部路径：不索引、不抓取
+Disallow: /exam/admin/
+Disallow: /exam/teacher/
+Disallow: /exam/student/
+Disallow: /exam/api/
+Disallow: /exam/m/
+Disallow: /exam/change-password
+Disallow: /exam/error-pages/
+
+# 站点地图（仅公开页）
+Sitemap: https://deadpan.asia/exam/sitemap.xml

@@ -328,6 +328,59 @@ function execAsync(cmd) {
   });
 }
 
+// ===================== 日志脱敏（★L2 / ★R15） =====================
+
+/** 敏感键（小写匹配；单行内**全部**出现都会被替换，见 redactLogLine） */
+const LOG_SENSITIVE_KEYS = ['token', 'password', 'passwd', 'pwd', 'authorization', 'secret', 'apikey', 'api_key'];
+const LOG_APOS = String.fromCharCode(39);
+
+/**
+ * ★L2（W2-P2b）+ ★R15（P2，2026-10-18）：单行日志脱敏（导出以便无 DB 单测）。
+ *   · **多次出现**：每个敏感键循环 indexOf 直到找不到（原实现只处理首处，同一行第二个 `token=` 会漏）；
+ *     mask 后索引会漂移 ⇒ 每轮基于**当前串**重算 lower/索引，并跳过已替换段，避免死循环。
+ *   · `Authorization: Bearer <token>`：跳过 Bearer 前缀后掩码真正的凭据（原实现只掩到字面量 `Bearer`）。
+ *   · **数字掩码**：同一行多段 11 位手机号都被掩码（保留 3+****+后 4）；12 位及以上同规则，
+ *     但 **13 位 epoch 毫秒不掩**（否则日志时间戳全废、排障能力归零）。
+ * @param {unknown} line
+ * @returns {string}
+ */
+export function redactLogLine(line) {
+  let s = String(line == null ? '' : line);
+  for (const k of LOG_SENSITIVE_KEYS) {
+    let from = 0;
+    for (;;) {
+      const lower = s.toLowerCase();               // 每轮重算：替换改变长度/大小写
+      const idx = lower.indexOf(k, from);
+      if (idx === -1) break;
+      let i = idx + k.length;
+      while (i < s.length && (s[i] === '"' || s[i] === LOG_APOS || s[i] === ' ' || s[i] === ':' || s[i] === '=')) i += 1;
+      if (s.slice(i, i + 7).toLowerCase() === 'bearer ') i += 7;   // Authorization: Bearer <credential>
+      let j = i;
+      // ★R15：值终止符需含 `&`/`;`（query 形式的 password=x&password=y 才能逐段脱敏，且不吞掉后续键）
+      while (j < s.length && s[j] !== ' ' && s[j] !== '"' && s[j] !== LOG_APOS && s[j] !== ',' && s[j] !== '}' && s[j] !== '&' && s[j] !== ';') j += 1;
+      if (j > i) {
+        s = s.slice(0, i) + '<redacted>' + s.slice(j);
+        from = i + '<redacted>'.length;            // 跳过已替换值，继续找后续出现
+      } else {
+        from = idx + k.length;                     // 键后无值（如行尾 token=）：跳过该键
+        if (from <= idx) break;                    // 防御性：索引不前进即退出（防死循环）
+      }
+    }
+  }
+  const out = [];
+  let buf = '';
+  const flush = () => {
+    const longEnough = buf.length >= 11 && buf.length !== 13 && buf[0] === '1';   // 13 位 epoch 毫秒保留
+    out.push(longEnough ? buf.slice(0, 3) + '****' + buf.slice(-4) : buf);
+    buf = '';
+  };
+  for (const ch of s) {
+    if (ch >= '0' && ch <= '9') buf += ch;
+    else { flush(); out.push(ch); }
+  }
+  flush();
+  return out.join('');
+}
 export const getMonitor = async (_req, res) => {
   try {
     const result = { processes: [], logs: '', errors: [], system: {} };
@@ -372,36 +425,8 @@ export const getMonitor = async (_req, res) => {
         //   ① 日志里可能带 token / 口令 / 手机号（学生与教师的敏感数据）⇒ 必须脱敏；
         //   ② 单文件无上限读取 + 无总量上限 ⇒ 内存/响应体积与侦察面风险。
         //   实现刻意**不用正则字面量**（避免转义歧义），全部走字符串操作，便于逐条复核。
-        const SENSITIVE_KEYS = ['token', 'password', 'passwd', 'pwd', 'authorization', 'secret', 'apikey', 'api_key'];
         const MAX_LOG_BYTES = 256 * 1024;   // 单文件最多读尾部 256KB
         const MAX_TOTAL_LINES = 200;        // 响应内日志总行数上限
-        const APOS = String.fromCharCode(39);
-        function redactLogLine(line) {
-          let s = String(line == null ? '' : line);
-          const lower = s.toLowerCase();
-          for (const k of SENSITIVE_KEYS) {
-            const idx = lower.indexOf(k);
-            if (idx === -1) continue;
-            let i = idx + k.length;
-            while (i < s.length && (s[i] === '"' || s[i] === APOS || s[i] === ' ' || s[i] === ':' || s[i] === '=')) i += 1;
-            let j = i;
-            while (j < s.length && s[j] !== ' ' && s[j] !== '"' && s[j] !== APOS && s[j] !== ',' && s[j] !== '}') j += 1;
-            if (j > i) s = s.slice(0, i) + '<redacted>' + s.slice(j);
-          }
-          const out = [];
-          let buf = '';
-          const flush = () => {
-            if (buf.length === 11 && buf[0] === '1') out.push(buf.slice(0, 3) + '****' + buf.slice(7));
-            else out.push(buf);
-            buf = '';
-          };
-          for (const ch of s) {
-            if (ch >= '0' && ch <= '9') buf += ch;
-            else { flush(); out.push(ch); }
-          }
-          flush();
-          return out.join('');
-        }
         const readTail = (file, maxLines) => {
           const buf = fs.readFileSync(path.join(logDir, file));
           const slice = buf.length > MAX_LOG_BYTES ? buf.slice(buf.length - MAX_LOG_BYTES) : buf;

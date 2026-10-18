@@ -7,7 +7,8 @@ import logger from '../../../utils/logger.js';
 import { ABNORMAL_FEEDBACK } from '../../../constants.js';
 import { schemaScoreFeedback } from '../../../domain/services/deepseek/model-output-schema.js';   // ★M9/H8
 import { getBaseUrl, getApiKey, getModel } from './config.js';
-import { buildSystemPrompt, buildCriteriaDataBlock, DEFAULT_CRITERIA } from '../../../domain/services/deepseek/prompts.js';
+import { buildSystemPrompt, DEFAULT_CRITERIA } from '../../../domain/services/deepseek/prompts.js';
+import { criteriaDataBlock as buildCriteriaDataBlock, fencedDataBlock } from '../prompt-injection-guard.js';   // ★R3-LLM-INJ/FIX：随机 nonce 围栏
 
 /**
  * 调用 DeepSeek API 评分
@@ -22,22 +23,17 @@ import { buildSystemPrompt, buildCriteriaDataBlock, DEFAULT_CRITERIA } from '../
  * @returns {Promise<{score: number, feedback: string}>}
  */
 export async function gradeSubmission({ material, subQuestionTitle, subQuestionContent, referenceAnswer, studentAnswer, maxScore, scoringCriteria }) {
+  // ★R3-LLM-FIX（R23 同型）：maxScore 先做有限数归一（缺省/0/负数/非数字 ⇒ 100），schema 与 clamp 用**同一变量**
+  const limit = Number.isFinite(Number(maxScore)) && Number(maxScore) > 0 ? Number(maxScore) : 100;
+  // ★R3-LLM-FIX：材料/小题/参考答案/学生答案 = 数据段 ⇒ 随机 nonce 围栏（此前内联裸拼）
   const parts = [];
   if (material && material.replace(/<[^>]*>/g, '').trim()) {
-    parts.push(`## 题目材料\n${material}`);
+    parts.push('## 题目材料\n' + fencedDataBlock('MATERIAL_DATA', material));
   }
-  parts.push(`## ${subQuestionTitle || '题目'}
-${subQuestionContent}
-
-## 参考答案
-${referenceAnswer}
-
-## 学生提交的答案
-${studentAnswer}
-
-## 评分要求
-满分：${maxScore} 分
-请判断题目类型（编程题/理论题/混合题），选择合适的评分标准，根据参考答案对学生答案进行评分。`);
+  parts.push('## ' + (subQuestionTitle || '题目') + '\n' + fencedDataBlock('SUBQUESTION_DATA', subQuestionContent)
+    + '\n\n## 参考答案\n' + fencedDataBlock('REFERENCE_ANSWER_DATA', referenceAnswer || '（无）')
+    + '\n\n## 学生提交的答案\n' + fencedDataBlock('STUDENT_ANSWER_DATA', studentAnswer || '（空）')
+    + '\n\n## 评分要求\n满分：' + limit + ' 分\n请判断题目类型（编程题/理论题/混合题），选择合适的评分标准，根据参考答案对学生答案进行评分。');
   // ★L4：教师自定义标准降为 **user 段数据块**（system 已静态化，不再承载半可信输入）
   parts.push(buildCriteriaDataBlock(scoringCriteria || DEFAULT_CRITERIA));
   const userMessage = parts.join('\n\n');
@@ -94,8 +90,9 @@ ${studentAnswer}
       const parsed = JSON.parse(jsonMatch[0]);
       // ★M9/H8：统一 schema 校验（类型 + 区间）。不合法即抛 ⇒ 落进既有重试循环 ⇒ 三次后走既有
       //   return { score: 0, feedback: ABNORMAL_FEEDBACK } 分支；越界分值**在此被拒**（既有 clamp 保留为第二道，未弱化）
-      if (!schemaScoreFeedback(parsed, { maxScore })) throw new Error('返回格式不包含有效的 JSON');
-      const score = Math.max(0, Math.min(maxScore, parseInt(parsed.score) || 0));
+      const checked = schemaScoreFeedback(parsed, { maxScore: limit });
+      if (!checked) throw new Error('返回格式不包含有效的 JSON');
+      const score = Math.max(0, Math.min(limit, Math.round(checked.score)));
 
       return { score, feedback: parsed.feedback || '无评语' };
     } catch (err) {

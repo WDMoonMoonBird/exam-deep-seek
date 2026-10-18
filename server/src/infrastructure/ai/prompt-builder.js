@@ -4,7 +4,9 @@
  */
 
 // ★L4：system 提示的单一真源在 domain（含静态 system + 教师标准数据块），infra 侧不再各写一份语义
-import { buildSystemPrompt as domainBuildSystemPrompt, buildCriteriaDataBlock as domainCriteriaBlock, DEFAULT_CRITERIA as domainDefaultCriteria, PARSE_ROLE as domainParseRole, PARSE_RULES as domainParseRules, ROLE as domainRole, OUTPUT_FORMAT as domainOutputFormat, DEFAULT_PROJECT_CRITERIA as domainDefaultProjectCriteria, PROJECT_REVIEW_SYSTEM as domainProjectReviewSystem } from '../../domain/services/deepseek/prompts.js';
+import { buildSystemPrompt as domainBuildSystemPrompt, DEFAULT_CRITERIA as domainDefaultCriteria, PARSE_ROLE as domainParseRole, PARSE_RULES as domainParseRules, ROLE as domainRole, OUTPUT_FORMAT as domainOutputFormat, DEFAULT_PROJECT_CRITERIA as domainDefaultProjectCriteria, PROJECT_REVIEW_SYSTEM as domainProjectReviewSystem } from '../../domain/services/deepseek/prompts.js';
+// ★R3-LLM-INJ：随机 nonce 围栏（格式真源在 domain，CSPRNG 在 infra）——本文件禁止再手写固定围栏
+import { criteriaDataBlock, fencedDataBlock } from './prompt-injection-guard.js';
 
 /**
  * 评分默认标准 —— ★W2-D2（t41）：**委托 domain 的单一真源**（此前是本地字面量，与 domain 那份仅差两字：
@@ -39,7 +41,7 @@ export function buildSystemPrompt() {
 }
 
 /** ★L4：教师评分标准数据块（委托 domain 的单一真源） */
-export const buildCriteriaDataBlock = domainCriteriaBlock;
+export const buildCriteriaDataBlock = criteriaDataBlock;
 
 /**
  * 构建评分 user message（等价 gradeSubmission 内 parts 逻辑）。
@@ -53,14 +55,16 @@ export const buildCriteriaDataBlock = domainCriteriaBlock;
  * @returns {string}
  */
 export function buildGradingUserMessage({ material, subQuestionTitle, subQuestionContent, referenceAnswer, studentAnswer, maxScore, scoringCriteria }) {
+  // ★R3-LLM-FIX（P1，2026-10-18）：材料/小题/参考答案/学生答案均为**数据段** ⇒ 统一随机 nonce 围栏，
+  //   消除内联固定分隔（学生答案注入的最热路径）。标题保留为可读指令性小标题（不含教师数据时直接输出）。
   const parts = [];
   if (material && material.replace(/<[^>]*>/g, '').trim()) {
-    parts.push('## 题目材料\n' + material);
+    parts.push('## 题目材料\n' + fencedDataBlock('MATERIAL_DATA', material));
   }
   parts.push(
-    '## ' + (subQuestionTitle || '题目') + '\n' + subQuestionContent
-    + '\n\n## 参考答案\n' + referenceAnswer
-    + '\n\n## 学生提交的答案\n' + studentAnswer
+    '## ' + (subQuestionTitle || '题目') + '\n' + fencedDataBlock('SUBQUESTION_DATA', subQuestionContent)
+    + '\n\n## 参考答案\n' + fencedDataBlock('REFERENCE_ANSWER_DATA', referenceAnswer || '（无）')
+    + '\n\n## 学生提交的答案\n' + fencedDataBlock('STUDENT_ANSWER_DATA', studentAnswer || '（空）')
     + '\n\n## 评分要求\n满分：' + maxScore + ' 分\n请判断题目类型（编程题/理论题/混合题），选择合适的评分标准，根据参考答案对学生答案进行评分。'
   );
   // ★L4：教师标准不再进 system —— 作为 user 段的分隔数据块追加（缺省回落 DEFAULT_CRITERIA，标准始终进入 prompt）
@@ -92,16 +96,18 @@ export const PROJECT_REVIEW_SYSTEM = domainProjectReviewSystem;
  * @returns {string}
  */
 export function buildProjectReviewUserMessage({ standardFiles, submissionFiles, promptExtra }) {
+  // ★R3-LLM-FIX：标准/学生工程结构 + 教师附加要求均为数据段 ⇒ 随机 nonce 围栏
   return '## 标准工程文件结构\n'
-    + (standardFiles || '(无标准工程)')
+    + fencedDataBlock('STANDARD_TREE_DATA', standardFiles || '(无标准工程)')
     + '\n\n## 学生提交文件结构\n'
-    + (submissionFiles || '(无文件)')
+    + fencedDataBlock('SUBMISSION_TREE_DATA', submissionFiles || '(无文件)')
     + '\n\n## 评分要求\n请根据以下维度评分（满分100分）：\n- 代码质量（40分）：代码是否规范、命名是否合理、是否有适当的注释\n- 设计规范（30分）：项目结构是否合理、是否遵循设计模式\n- 功能完整性（30分）：是否实现了标准工程的核心功能\n\n'
-    + (promptExtra ? '## 教师附加要求\n' + promptExtra + '\n\n' : '')
+    + (promptExtra ? '## 教师附加要求\n' + fencedDataBlock('TEACHER_EXTRA_DATA', promptExtra) + '\n\n' : '')
     + '请严格按以下 JSON 格式返回，不要包含任何其他文字：\n{"score": <0-100之间的整数>, "feedback": "详细的评语和改进建议..."}';
 }
 
 /** 构建试卷解析 user message（等价 parseExamPaper 内逻辑） */
 export function buildParseUserMessage(paperText) {
-  return '现在开始提取以下试卷内容：\n---\n' + paperText + '\n---';
+  // ★R3-LLM-FIX：试卷全文是数据段（此前用固定 --- 分隔）⇒ 随机 nonce 围栏
+  return '现在开始提取以下试卷内容：\n' + fencedDataBlock('PAPER_TEXT_DATA', paperText || '');
 }

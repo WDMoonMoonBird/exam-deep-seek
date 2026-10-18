@@ -24,15 +24,16 @@ import MSkeleton from '../../components/MSkeleton.vue';
 import MStatusTag from '../../components/MStatusTag.vue';
 import { useCountdown } from '../../composables/useCountdown.js';
 import { useMobileToast } from '../../composables/useMobileToast.js';
+import { useAnswerDraft } from '../../composables/useAnswerDraft.js';
+import { useAnswerSubmit } from '../../composables/useAnswerSubmit.js';
 import request from '../../../api/request.js';
 import { withAppBase } from '../../../domain/appPath.js';
-import { safePut } from './studentRequests.js';
 import AnswerCode from './AnswerCode.vue';
 import AnswerObjective from './AnswerObjective.vue';
 import SubmitConfirm from './SubmitConfirm.vue';
 import {
   buildObjectiveAnswer, buildUnits, copyText, errorText, formatClock, formatRemaining,
-  limitInfo, niceNumber, objectiveHasAnswer, parseObjectiveAnswer, payload, runLimited,
+  limitInfo, niceNumber, objectiveHasAnswer, parseObjectiveAnswer, payload,
 } from './studentPure.js';
 
 const route = useRoute();
@@ -199,83 +200,13 @@ const readonlyNotice = computed(() => {
   return '';
 });
 
-/* ------------------------------------------------------------ 草稿保存 */
-
-let saveTimer = null;
-const saveState = ref('idle'); // idle | dirty | saving | saved | error
-const lastSavedAt = ref('');
-const saveNotice = ref('');
-
-function clockNow() {
-  const d = new Date();
-  return (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes();
-}
-function markDirty(key) {
-  if (!key) return;
-  dirty[key] = true;
-  saveState.value = 'dirty';
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => { saveTimer = null; saveDrafts(); }, 1500);
-}
-async function saveDrafts(options) {
-  const opts = options || {};
-  const keys = Object.keys(dirty).filter((key) => dirty[key]);
-  if (!keys.length) return true;
-  const targets = [];
-  keys.forEach((key) => {
-    const unit = unitByKey.value[key];
-    if (!unit || unit.type !== 'objective' || unitReadonly(unit)) {
-      delete dirty[key];
-      return;
-    }
-    targets.push(unit);
-  });
-  if (!targets.length) return true;
-  saveState.value = 'saving';
-  const results = await Promise.allSettled(targets.map(async (unit) => {
-    const body = {
-      questionId: unit.q.id,
-      answer: buildObjectiveAnswer(itemsOf(unit), objectiveAnswers[unit.key] || {}),
-    };
-    if (unit.sq) body.subQuestionId = unit.sq.id;
-    const outcome = await safePut('/student/assignments/' + assignmentId.value + '/draft', body, { silent: true });
-    if (!outcome.ok) throw outcome.error;
-    return { key: unit.key, message: outcome.message };
-  }));
-  let ok = 0;
-  results.forEach((result) => {
-    if (result.status !== 'fulfilled') return;
-    ok += 1;
-    delete dirty[result.value.key];
-    const message = result.value.message || '';
-    if (message.indexOf('跳过草稿') >= 0) saveNotice.value = message;
-  });
-  if (ok === targets.length) {
-    if (saveNotice.value) {
-      saveState.value = 'idle';
-    } else {
-      saveState.value = Object.keys(dirty).some((key) => dirty[key]) ? 'dirty' : 'saved';
-      if (saveState.value === 'saved') lastSavedAt.value = clockNow();
-    }
-  } else {
-    saveState.value = 'error';
-    if (!opts.silent) toast.show('草稿保存失败，可重试');
-  }
-  return ok === targets.length;
-}
-function retrySave() {
-  saveDrafts();
-}
-const saveText = computed(() => {
-  const unit = currentUnit.value;
-  if (!unit) return '';
-  if (unit.type !== 'objective') return '手机端不提供该题编辑，请复制链接到电脑继续';
-  if (currentReadonly.value) return readonlyNotice.value || '当前为只读状态';
-  if (saveState.value === 'saving') return '草稿保存中…';
-  if (saveState.value === 'error') return '草稿保存失败，点击重试';
-  if (saveState.value === 'saved') return '草稿已保存' + (lastSavedAt.value ? ' ' + lastSavedAt.value : '');
-  if (saveState.value === 'dirty') return '修改未保存，会自动保存';
-  return '答案会自动保存为草稿';
+/* ------------------------------------------------------------ 草稿保存（R3-ARCH 纯搬运） */
+// 实现搬至 ../../composables/useAnswerDraft.js；页面只注入状态依赖，行为与原实现一致
+const {
+  saveState, saveText, markDirty, saveDrafts, retrySave, cancelPendingSave, resetDraftState,
+} = useAnswerDraft({
+  assignmentId, unitByKey, dirty, objectiveAnswers, itemsOf, unitReadonly,
+  currentUnit, currentReadonly, readonlyNotice, toast,
 });
 
 /* ------------------------------------------------------------ 导航 / 标记 / 复制 */
@@ -359,124 +290,16 @@ const sheetGroups = computed(() => {
   });
   return groups;
 });
-
-/* ------------------------------------------------------------ 交卷 */
-
-const submitting = ref(false);
-const submitProgress = reactive({ done: 0, total: 0 });
-const submitResult = ref(null);
-const failedUnits = ref([]);
-const canSubmit = computed(() => !!assignment.value
-  && total.value > 0
-  && !isExpired.value
-  && !limitReached.value
-  && !submitting.value
-  && units.value.some((unit) => !unitReadonly(unit)));
-
-function submitBlockReason() {
-  if (isExpired.value) return '已过截止时间，无法提交';
-  if (limitReached.value) return limit.value.text;
-  if (!total.value) return '该作业暂无可作答题目';
-  return '';
-}
-function unitLabel(unit) {
-  const index = units.value.indexOf(unit);
-  return '第 ' + (index + 1) + ' 题 · ' + (unit.title || '未命名题目');
-}
-function submitCandidates() {
-  return units.value.filter((unit) => {
-    if (unitReadonly(unit)) return false;
-    if (!unitAnsweredState(unit)) return false;
-    if (unit.type === 'project') return false;
-    const status = unitStatuses[unit.key];
-    if (unit.type === 'code' && status && status !== 'draft') return false;
-    if (status && status !== 'draft' && !(assignment.value && assignment.value.allowResubmit)) return false;
-    return true;
-  });
-}
-function answerForSubmit(unit) {
-  if (unit.type === 'objective') {
-    return buildObjectiveAnswer(itemsOf(unit), objectiveAnswers[unit.key] || {});
-  }
-  return String(codeAnswers[unit.key] || '');
-}
-async function submitUnits(list) {
-  if (!list.length) return;
-  submitting.value = true;
-  submitProgress.done = 0;
-  submitProgress.total = list.length;
-  const outcomes = await runLimited(list, 3, async (unit) => {
-    try {
-      const body = { questionId: unit.q.id, answer: answerForSubmit(unit) };
-      if (unit.sq) body.subQuestionId = unit.sq.id;
-      await request.post('/student/assignments/' + assignmentId.value + '/submit', body, { silent: true });
-      unitStatuses[unit.key] = 'submitted';
-      delete dirty[unit.key];
-      return { ok: true, key: unit.key };
-    } catch (err) {
-      return { ok: false, unit, message: errorText(err) };
-    } finally {
-      submitProgress.done += 1;
-    }
-  });
-  submitting.value = false;
-  const failures = outcomes.filter((outcome) => !outcome.ok);
-  const ok = outcomes.length - failures.length;
-  if (!failures.length) {
-    submitResult.value = null;
-    failedUnits.value = [];
-    confirmOpen.value = false;
-    toast.show('提交成功');
-    try {
-      await router.replace('/m/student/assignments/' + assignmentId.value + '/done');
-    } catch { /* 导航失败不影响已提交结果 */ }
-    return;
-  }
-  failedUnits.value = failures.map((failure) => failure.unit);
-  submitResult.value = {
-    ok,
-    fail: failures.length,
-    failures: failures.map((failure) => ({ title: unitLabel(failure.unit), message: failure.message })),
-  };
-  toast.show(ok > 0 ? ok + ' 题成功，' + failures.length + ' 题失败，可重试' : '提交失败，请检查网络后重试');
-}
-function openConfirm() {
-  if (!canSubmit.value) {
-    toast.show(submitBlockReason() || '当前不可提交');
-    return;
-  }
-  const candidates = submitCandidates();
-  if (!candidates.length) {
-    if (units.value.some(unitAnsweredState)) toast.show('已作答题目均已提交，无需重复提交');
-    else if (units.value.some((unit) => unit.type === 'project' || unit.type === 'code')) toast.show('编程题 / 实训题请在电脑端提交，手机端暂无可提交的答案');
-    else toast.show('还没有可提交的答案');
-    return;
-  }
-  submitResult.value = null;
-  failedUnits.value = [];
-  confirmOpen.value = true;
-}
-function confirmSubmit() {
-  if (!canSubmit.value) return;
-  const candidates = submitCandidates();
-  if (!candidates.length) {
-    toast.show('没有可提交的答案');
-    return;
-  }
-  submitUnits(candidates);
-}
-function retrySubmit() {
-  const list = failedUnits.value.slice();
-  if (!list.length) return;
-  submitResult.value = null;
-  failedUnits.value = [];
-  submitUnits(list);
-}
-const confirmUnanswered = computed(() => unansweredUnits.value.map((unit) => ({
-  title: unitLabel(unit),
-  typeLabel: categoryLabel(unit),
-  score: unit.score == null ? null : niceNumber(unit.score),
-})));
+/* ------------------------------------------------------------ 交卷（R3-ARCH 纯搬运） */
+// 实现搬至 ../../composables/useAnswerSubmit.js；页面只注入状态依赖，行为与原实现一致
+const {
+  submitting, submitProgress, submitResult, canSubmit, confirmUnanswered,
+  openConfirm, confirmSubmit, retrySubmit,
+} = useAnswerSubmit({
+  assignment, total, units, isExpired, limitReached, limit, unitReadonly, unitAnsweredState,
+  unitStatuses, dirty, objectiveAnswers, codeAnswers, itemsOf, assignmentId, confirmOpen,
+  toast, router, unansweredUnits, categoryLabel,
+});
 
 /* ------------------------------------------------------------ 退出确认 / 数据加载 */
 
@@ -487,7 +310,7 @@ function requestLeave() {
 }
 async function confirmLeave() {
   leaveOpen.value = false;
-  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  cancelPendingSave();
   await saveDrafts({ silent: true });
   router.push('/m/student/assignments/' + assignmentId.value);
 }
@@ -498,9 +321,7 @@ function initState() {
   Object.keys(unitStatuses).forEach((key) => { delete unitStatuses[key]; });
   Object.keys(marked).forEach((key) => { delete marked[key]; });
   Object.keys(dirty).forEach((key) => { delete dirty[key]; });
-  saveState.value = 'idle';
-  lastSavedAt.value = '';
-  saveNotice.value = '';
+  resetDraftState();
   const currentBuilt = built.value;
   currentBuilt.units.forEach((unit) => {
     const submission = currentBuilt.byKey[unit.key] || null;
@@ -542,7 +363,7 @@ async function load() {
 
 function onVisibilityChange() {
   if (typeof document === 'undefined' || !document.hidden) return;
-  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  cancelPendingSave();
   saveDrafts({ silent: true });
 }
 function keepaliveFlush() {
@@ -573,12 +394,12 @@ onMounted(() => {
   window.addEventListener('pagehide', onPageHide);
 });
 onBeforeUnmount(() => {
-  if (saveTimer) clearTimeout(saveTimer);
+  cancelPendingSave();
   document.removeEventListener('visibilitychange', onVisibilityChange);
   window.removeEventListener('pagehide', onPageHide);
 });
 onBeforeRouteLeave(async () => {
-  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  cancelPendingSave();
   await saveDrafts({ silent: true });
   return true;
 });

@@ -96,4 +96,41 @@ export function extractFilesJson(content) {
   return null;
 }
 
+/**
+ * ★R3-LLM-OUT（R20）：提取**第一个平衡的 JSON 对象**（非贪婪）——
+ *   旧 parseWithSchema 用 /\\{[\\s\\S]*\\}/ 贪婪匹配，遇到两个 JSON 对象会跨对象吞并、必解析失败。
+ *   逐字符扫描（正确跳过字符串内的花括号与转义），括号栈归零处即候选；解析失败则从下一个 '{' 重试。
+ * @param {string} text 模型原始输出（可含 markdown 围栏/前后说明）
+ * @returns {object|null}
+ */
+export function extractFirstJsonObject(text) {
+  const s = String(text == null ? '' : text)
+    .replace(/```(?:json)?\s*/gi, '')
+    .replace(/```/g, '');
+  for (let start = s.indexOf('{'); start >= 0; start = s.indexOf('{', start + 1)) {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let i = start; i < s.length; i += 1) {
+      const ch = s[i];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (ch === '\\') escaped = true;
+        else if (ch === '"') inString = false;
+        continue;
+      }
+      if (ch === '"') { inString = true; continue; }
+      if (ch === '{' || ch === '[') depth += 1;
+      else if (ch === '}' || ch === ']') {
+        depth -= 1;
+        if (depth === 0) {
+          try { return JSON.parse(s.slice(start, i + 1)); } catch { break; }
+        }
+        if (depth < 0) break;
+      }
+    }
+  }
+  return null;
+}
+
 export { repairTruncatedJson, extractProjectGradeJson };

@@ -1,13 +1,42 @@
 import prisma from '../utils/prisma.js';
 import logger from '../utils/logger.js';
 
-function getSchoolId(req) { return req.query.schoolId ? +req.query.schoolId : null; }
+/**
+ * ★R3-R4（P1，2026-10-18）：query.schoolId 是**客户端可控输入**（桌面端 request.js 拦截器会自动
+ * 注入 localStorage 里的 currentSchool.id，而 currentSchool 又来自未做归属校验的 switch-school 返回值），
+ * 不能作为租户/授权基准。解析口径：未传 ⇒ null（沿用旧行为）；非正整数 ⇒ NaN（调用方 fail-closed 403）。
+ */
+function parseQuerySchoolId(raw) {
+  if (raw === undefined || raw === null || raw === '') return null;
+  const schoolId = Number(raw);
+  return Number.isInteger(schoolId) && schoolId > 0 ? schoolId : NaN;
+}
+
+/**
+ * ★R3-R4：教师是否属于该学校（判据与 interface/http/controllers/teacher/guards.js 的
+ * isTeacherInSchool 同源）。本文件**内联实现**以避免 controller → interface 反向依赖
+ * （层次门禁基线 0 条，见 server/scripts/check-layers.mjs）。
+ */
+async function isTeacherInSchool(teacherId, schoolId) {
+  const sid = Number(schoolId);
+  if (!Number.isInteger(sid) || sid <= 0) return false;
+  const link = await prisma.teacherSchool.findFirst({
+    where: { teacherId, schoolId: sid },
+    select: { schoolId: true },
+  });
+  return !!link;
+}
 
 // ===== 我的团队列表 =====
 export const getTeams = async (req, res) => {
   try {
-    const schoolId = getSchoolId(req);
-    if (!schoolId) return res.json({ code: 0, data: [] });
+    const schoolId = parseQuerySchoolId(req.query.schoolId);
+    // 未传 schoolId：维持既有语义（无当前学校视图 ⇒ 空列表）
+    if (schoolId === null) return res.json({ code: 0, data: [] });
+    // ★R3-R4：query 校必须经 teacherSchool 归属校验；非法/跨校一律 fail-closed 403
+    if (!(await isTeacherInSchool(req.user.id, schoolId))) {
+      return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+    }
 
     const list = await prisma.team.findMany({
       where: {
@@ -61,14 +90,15 @@ export const getTeam = async (req, res) => {
 export const createTeam = async (req, res) => {
   try {
     const { name } = req.body;
-    const schoolId = getSchoolId(req);
-    if (!name || !schoolId) return res.status(400).json({ code: 1001, message: '参数错误', data: null });
+    const schoolId = parseQuerySchoolId(req.query.schoolId);
+    if (!name || schoolId === null || Number.isNaN(schoolId)) {
+      return res.status(400).json({ code: 1001, message: '参数错误', data: null });
+    }
     // 归属校验（round 6）：不得在自己不属于的学校建团队（判据同 switchClassSchool 的 teacherSchool）
-    const inSchool = await prisma.teacherSchool.findFirst({
-      where: { teacherId: req.user.id, schoolId },
-      select: { schoolId: true },
-    });
-    if (!inSchool) return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+    // ★R3-R4：复用本地 helper（判据不变，行为等价）——建团队路径签名服务器数据同源校验，不存在跨校注入面。
+    if (!(await isTeacherInSchool(req.user.id, schoolId))) {
+      return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+    }
 
     const team = await prisma.team.create({
       data: {
@@ -102,6 +132,20 @@ export const updateTeam = async (req, res) => {
       if (!member) return res.status(403).json({ code: 1003, message: '无权操作', data: null });
     }
 
+    // ★R3-R4（P1，2026-10-18）：**授权基准改为 team.schoolId（服务端数据）**，query.schoolId 只做一致性核对。
+    //   修复前：teacherIds/classIds 的校验基准取自 req.query.schoolId ⇒ 多校教师传 ?schoolId=另一校
+    //   即可把另一校教师/班级写进本团队（跨校授权注入）。现口径（全部前置到写库动作之前，零部分写入）：
+    //     ① team.schoolId 缺失（历史脏行）⇒ fail-closed 403，绝不回退 query；
+    //     ② 操作者必须仍属于团队所在校（成员关系之外再绑学校，防离校后仍可操控团队）；
+    //     ③ query.schoolId 存在时必须等于 team.schoolId（旧客户端传本校 query 的行为不变）。
+    if (!team.schoolId || !(await isTeacherInSchool(req.user.id, team.schoolId))) {
+      return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+    }
+    const requestedSchoolId = parseQuerySchoolId(req.query.schoolId);
+    if (requestedSchoolId !== null && requestedSchoolId !== team.schoolId) {
+      return res.status(403).json({ code: 1003, message: '无权操作', data: null });
+    }
+
     const { name, teacherIds, classIds } = req.body;
     // 内容校验（round 7 · 阻断 C6-1）：classIds 必须 ⊆ 本人可见班级（直连 ∪ 团队），
     // 且**前置到全部写库动作之前**——否则「挂他人班级进自有团队」会先改名成功再 403（部分写入），
@@ -110,7 +154,8 @@ export const updateTeam = async (req, res) => {
     // 空数组 = 清空团队班级关联（只减不增）⇒ 放行，语义同 canTeacherManageClasses。
     // 治理边界：本轮只校验「内容归属」，成员/创建者可否改名单 = 拍板项 R6-P10（未扩大）。
     if (classIds?.length) {
-      const visibleIds = await getVisibleClassIds(req.user.id, getSchoolId(req));
+      // ★R3-R4：可见集基准 = team.schoolId（不再使用 query.schoolId）
+      const visibleIds = await getVisibleClassIds(req.user.id, team.schoolId);
       if (!classIds.every(cid => visibleIds.includes(+cid))) {
         return res.status(403).json({ code: 1003, message: '无权操作', data: null });
       }
@@ -120,7 +165,7 @@ export const updateTeam = async (req, res) => {
     //   空数组 = 清空成员（只减不增）⇒ 放行；与 classIds 同层、**前置到全部写库动作之前**。
     if (teacherIds?.length) {
       const schoolTeachers = await prisma.teacherSchool.findMany({
-        where: { schoolId: getSchoolId(req) },
+        where: { schoolId: team.schoolId },   // ★R3-R4：本校教师集合基准 = team.schoolId
         select: { teacherId: true },
       });
       const allowedTeacherIds = new Set(schoolTeachers.map((t) => t.teacherId));

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { extractZipSafely } from '../utils/projectArchive.js';
 // ★R2-B62（F-T54-1）：multer 错误映射**复用**教师上传那一条（不再本地新写一份口径）
 import { multerErrorResponse } from '../infrastructure/teacher/uploads.js';
+import { createRateLimitMiddleware } from '../infrastructure/rate-limit/rate-limit-middleware.js';   // ★R3-RATE（M5）
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECTS_UPLOAD_DIR = path.join(__dirname, '../../uploads/projects');
@@ -62,20 +63,82 @@ async function canManageProjectClasses(req, classIds) {
   return classIds.every(cid => visible.has(+cid));
 }
 
+/** ★R3-R11：temp 目录归属凭据文件名（sidecar；位于 temp 根、不在 standard/ 内 ⇒ 不进项目文件树） */
+export const TEMP_OWNER_FILE = '.owner.json';
+/** ★R3-R11：temp 目录有效期（24h；过期未消费 ⇒ 拒绝 + 由 cleanupExpiredTempDirs 回收） */
+export const TEMP_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** ★R3-R11：写入归属凭据（uploadPackage 成功时调用；mode 0600 仅进程可读） */
+export function writeTempOwner(tempRoot, teacherId, createdAt = Date.now()) {
+  fs.mkdirSync(tempRoot, { recursive: true });
+  fs.writeFileSync(
+    path.join(tempRoot, TEMP_OWNER_FILE),
+    JSON.stringify({ teacherId: Number(teacherId), createdAt: Number(createdAt) }),
+    { mode: 0o600 },
+  );
+}
+
+/** 读取归属凭据；缺失/损坏一律 null（fail-closed） */
+function readTempOwner(tempRoot) {
+  try {
+    const obj = JSON.parse(fs.readFileSync(path.join(tempRoot, TEMP_OWNER_FILE), 'utf8'));
+    return obj && typeof obj === 'object' ? obj : null;
+  } catch { return null; }
+}
+
+/** 消费归属凭据（一次性使用：create/update 迁移前删除，防同 tempId 重放） */
+function removeTempOwner(tempRoot) {
+  try { fs.unlinkSync(path.join(tempRoot, TEMP_OWNER_FILE)); } catch { /* 已不存在 = 目标状态 */ }
+}
+
 /**
- * ★H1：临时目录标识校验（防路径穿越）。
- *   ① 白名单正则：只接受服务端 uploadPackage 生成的 temp_<毫秒>_<base36随机> 形状；
- *   ② 目录包含：用 path.relative 判定解析结果仍落在 PROJECTS_UPLOAD_DIR 内（拒绝 .. 逃逸/绝对路径）。
- * 任一不满足返回 null，调用方一律 400，且在任何写库/文件操作之前完成。
+ * ★H1 + ★R3-R11：临时目录解析（防路径穿越 + **归属绑定**）。
+ *   ① 白名单正则：只接受服务端 uploadPackage 生成的 temp_<毫秒>_<base36随机> 形状（形状不变）；
+ *   ② 目录包含：path.relative 判定解析结果仍落在 PROJECTS_UPLOAD_DIR 内（拒绝 .. 逃逸/绝对路径）；
+ *   ③ ★R3-R11：必须是**该教师本人**上传的 temp（sidecar teacherId 比对）且未过期（24h）；
+ *      缺失/不匹配/过期一律 null ⇒ 调用方返回既有的 400「非法临时目录标识」（不泄漏“存在但不属于你”）。
+ * @param {unknown} tempId
+ * @param {number|string} teacherId 当前登录教师 id（req.user.id）
+ * @returns {string|null}
  */
-function resolveTempDir(tempId) {
+export function resolveTempDir(tempId, teacherId) {
   const id = String(tempId ?? '');
   if (!/^temp_\d+_[a-z0-9]+$/.test(id)) return null;
   const root = path.resolve(PROJECTS_UPLOAD_DIR);
   const dir = path.resolve(root, id);
   const rel = path.relative(root, dir);
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
+  // ★R3-R11：归属 + TTL fail-closed（H1 的两项校验保留在上方）
+  const owner = readTempOwner(dir);
+  if (!owner) return null;
+  if (Number(owner.teacherId) !== Number(teacherId)) return null;
+  const createdAt = Number(owner.createdAt);
+  if (!Number.isFinite(createdAt) || createdAt <= 0) return null;
+  if (Date.now() - createdAt > TEMP_TTL_MS) return null;
   return dir;
+}
+
+/**
+ * ★R3-R11（纵深）：回收过期 temp 目录（TTL 优先取 sidecar.createdAt；遗留无 owner 的目录按名字里的毫秒时间戳）。
+ *   仅删形状合规的 temp_* 目录，返回删除数量；单个失败不影响其它（best-effort，绝不抛给调用方）。
+ * @param {{now?: number, limit?: number}} [opts]
+ * @returns {number}
+ */
+export function cleanupExpiredTempDirs({ now = Date.now(), limit = 200 } = {}) {
+  let removed = 0;
+  let entries = [];
+  try { entries = fs.readdirSync(PROJECTS_UPLOAD_DIR, { withFileTypes: true }); } catch { return 0; }
+  for (const ent of entries) {
+    if (removed >= limit) break;
+    if (!ent.isDirectory() || !/^temp_\d+_[a-z0-9]+$/.test(ent.name)) continue;
+    const dir = path.join(PROJECTS_UPLOAD_DIR, ent.name);
+    const owner = readTempOwner(dir);
+    const fallback = Number((ent.name.match(/^temp_(\d+)_/) || [])[1]);
+    const createdAt = owner && Number(owner.createdAt) > 0 ? Number(owner.createdAt) : fallback;
+    if (!Number.isFinite(createdAt) || now - createdAt <= TEMP_TTL_MS) continue;
+    try { fs.rmSync(dir, { recursive: true, force: true }); removed += 1; } catch { /* best-effort */ }
+  }
+  return removed;
 }
 
 // ==================== 实训任务 CRUD ====================
@@ -209,8 +272,10 @@ export const createProject = async (req, res) => {
     // ★H1：tempId 先白名单 + 目录包含校验（在任何写库/文件操作之前）；不合规 400
     let tempDir = null;
     if (tempId) {
-      tempDir = resolveTempDir(tempId);
+      tempDir = resolveTempDir(tempId, req.user.id);   // ★R3-R11：必须本人上传的 tempId
       if (!tempDir) return res.status(400).json({ code: 1001, message: '非法临时目录标识', data: null });
+      // ★R3-R11：归属凭据一次性消费（迁移前删除；同 tempId 不可重放）
+      removeTempOwner(tempDir);
     }
 
     // 创建任务 + 关联班级 + 文件树记录：整体放入交互式事务，中途失败整体回滚，避免孤儿数据
@@ -335,8 +400,10 @@ export const updateProject = async (req, res) => {
     // ★H1：tempId 先白名单 + 目录包含校验（在任何写库/文件操作之前）；不合规 400
     let tempDir = null;
     if (tempId) {
-      tempDir = resolveTempDir(tempId);
+      tempDir = resolveTempDir(tempId, req.user.id);   // ★R3-R11：必须本人上传的 tempId
       if (!tempDir) return res.status(400).json({ code: 1001, message: '非法临时目录标识', data: null });
+      // ★R3-R11：归属凭据一次性消费（迁移前删除；同 tempId 不可重放）
+      removeTempOwner(tempDir);
     }
 
     // 更新任务、班级关联、文件记录：整体放入交互式事务，中途失败回滚，避免孤儿数据
@@ -415,9 +482,14 @@ export const deleteProject = async (req, res) => {
 
 // ==================== 上传标准工程包 ====================
 
+/** ★R3-RATE（M5）：上传标准工程包入口应用层限流（user 维度；10 次/分钟） */
+const uploadPackageRateLimit = createRateLimitMiddleware({ max: 10, windowMs: 60000, message: '上传过于频繁，请稍后再试' });
+
 /** POST /upload-package — 上传 zip 并返回文件树 */
-export const uploadPackage = (req, res) => {
-  upload.single('file')(req, res, async (err) => {
+export const uploadPackage = (req, res, next) => {
+  // ★R3-RATE（M5）：先限流再解析 zip / 建文件树；超限 429 code 1003
+  uploadPackageRateLimit(req, res, () => {
+    upload.single('file')(req, res, async (err) => {
     if (err) {
       // ★R2-B62（F-T54-1）：与 studentController/教师上传**同口径** —— LIMIT_FILE_SIZE ⇒ 413 + code1403，其它 ⇒ 400 + 可读 message
       const m = multerErrorResponse(err);
@@ -443,6 +515,12 @@ export const uploadPackage = (req, res) => {
       const fileCount = flatList.filter(f => f.type === 'file').length;
       const totalSize = flatList.reduce((sum, f) => sum + (f.size || 0), 0);
 
+      // ★R3-R11：写入**归属绑定的最权威凭据**（temp 根 sidecar；standard/ 内文件树不含它）
+      //   ⇒ 后续 create/update 只接受本人上传的 tempId，猜中他人的也不可迁移/删除。
+      writeTempOwner(path.join(PROJECTS_UPLOAD_DIR, tempId), req.user.id, Date.now());
+      // ★R3-R11（纵深）：顺手回收过期 temp 目录（best-effort，失败不影响本次上传）
+      try { cleanupExpiredTempDirs(); } catch { /* 清理失败不影响上传 */ }
+
       logger.info({ tempId, fileCount, totalSize }, '标准工程包已上传');
       res.json({
         code: 0,
@@ -464,7 +542,8 @@ export const uploadPackage = (req, res) => {
       logger.error({ err: e }, '解压 zip 失败');
       res.status(500).json({ code: 2001, message: '解压失败: ' + msg, data: null });
     }
-  });
+    });
+  }).catch(next);
 };
 
 // ==================== 工具函数 ====================

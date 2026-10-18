@@ -7,6 +7,7 @@ import logger from '../../../utils/logger.js';
 import { schemaItemList } from '../../../domain/services/deepseek/model-output-schema.js';   // ★M9
 import { getBaseUrl, getApiKey, getModel } from './config.js';
 import { AUTOMATION_LEVELS, RUBRIC_ROLE } from '../../../domain/services/deepseek/prompts.js';
+import { fencedDataBlock } from '../prompt-injection-guard.js';   // ★R3-LLM-FIX：教师评分标准原文 = 数据段
 
 /**
  * 校验并规整分项列表：合计强制等于 maxScore（差额调整最后一项），非法项丢弃。
@@ -59,7 +60,8 @@ export function normalizeRubricItems(items, maxScore = 100) {
  * @returns {Promise<Array<{item: string, maxScore: number, automation_level: string}>|null>}
  */
 export async function summarizeRubricItems(rubricText, maxScore = 100) {
-  const userMessage = '【评分标准原文】\n' + (rubricText || '（无，请使用通用维度：功能完整性/代码规范性/健壮性）')
+  // ★R3-LLM-FIX：教师评分标准原文以随机 nonce 围栏包裹（此前内联在 user 段自由文本）
+  const userMessage = '【评分标准原文】\n' + fencedDataBlock('RUBRIC_TEXT_DATA', rubricText || '（无，请使用通用维度：功能完整性/代码规范性/健壮性）')
     + '\n\n【满分】' + maxScore + ' 分\n'
     + '请将评分标准精简为 3~12 个分项，并为每个分项标注 automation_level 自动化分类：\n'
     + '- deterministic（确定性）：可静态检查证据化的项，如文件/目录是否存在、是否使用某库（Router/Pinia 等）、CRUD/API 调用是否存在、数量阈值、语法检查等\n'

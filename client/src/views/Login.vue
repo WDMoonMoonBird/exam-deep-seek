@@ -114,6 +114,23 @@ const passwordInputRef = ref(null);
  *  两条分支的输入框都带 aria-invalid / aria-describedby（指向 #login-error），
  *  重新聚焦任一字段时读屏会再念一次错误。
  */
+/**
+ * ★R3-R5（P1，2026-10-18）：登录成功后的统一落地。
+ *   后端闸门（server/src/middleware/auth.js:62）在 mustChangePassword=true 时拦截除
+ *   PUT /api/auth/password 外的全部已认证接口（HTTP 403 + code 1005）⇒ 桌面端必须**先引导改密**再进业务页，
+ *   否则进首页后每条接口都 403、只弹通用错误且没有统一入口。
+ *   token 照常写入（改密接口本身需要登录态）；非登录入口触发的 1005（如会话中被管理员重置）
+ *   由 api/request.js 的全局 403/1005 处置兜底。
+ */
+function enterAfterLogin(user, token) {
+    userStore.setAuth(token, user);
+    if (user.mustChangePassword === true) {
+        router.replace({ path: '/change-password', query: { required: '1' } });
+        return;
+    }
+    router.push(user.role === 'super_admin' ? '/admin' : `/${user.role}`);
+}
+
 async function handleLogin () {
     if (!username.value || !password.value) {
         errorMsg.value = '请输入用户名和密码';
@@ -132,8 +149,7 @@ async function handleLogin () {
             selectedCode.value = res.data.schools[0]?.officialCode || '';
             return;
         }
-        userStore.setAuth(res.data.token, res.data.user);
-        router.push(res.data.user.role === 'super_admin' ? '/admin' : `/${res.data.user.role}`);
+        enterAfterLogin(res.data.user, res.data.token);
     } catch (err) {
         errorMsg.value = err?.response?.data?.message || '登录失败';
     } finally {
@@ -151,8 +167,7 @@ async function handleSelectSchool() {
             password: password.value,
             schoolCode: selectedCode.value,
         });
-        userStore.setAuth(res.data.token, res.data.user);
-        router.push(res.data.user.role === 'super_admin' ? '/admin' : `/${res.data.user.role}`);
+        enterAfterLogin(res.data.user, res.data.token);
     } catch (err) {
         errorMsg.value = err?.response?.data?.message || '登录失败';
     } finally {

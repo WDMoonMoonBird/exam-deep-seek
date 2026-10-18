@@ -8,6 +8,7 @@ import logger from '../../../utils/logger.js';
 import { getBaseUrl, getApiKey, getModel } from './config.js';
 import { PARSE_ROLE, PARSE_RULES } from '../../../domain/services/deepseek/prompts.js';
 import { schemaQuestions } from '../../../domain/services/deepseek/model-output-schema.js';   // ★M9
+import { fencedDataBlock } from '../prompt-injection-guard.js';   // ★R3-LLM-FIX：试卷全文 = 数据段 ⇒ 随机 nonce 围栏
 
 /** ★M10：请求与流式读取的统一超时口径（沿用非流式分支原有的 120s；流式用「停滞」口径，见下） */
 const REQUEST_TIMEOUT_MS = 120000;
@@ -24,7 +25,8 @@ function contentDigest(text) {
  * @returns {Promise<{questions: Array}>}
  */
 export async function parseExamPaper(paperText) {
-  const userMessage = `现在开始提取以下试卷内容：\n---\n${paperText}\n---`;
+  // ★R3-LLM-FIX：消除固定 `---` 分隔（R21）—— 试卷全文以随机 nonce 围栏包裹
+  const userMessage = '现在开始提取以下试卷内容：\n' + fencedDataBlock('PAPER_TEXT_DATA', paperText || '');
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
@@ -92,7 +94,8 @@ export async function parseExamPaper(paperText) {
  * @returns {Promise<{questions: Array}>}
  */
 export async function parseExamPaperStream(paperText, onProgress) {
-  const userMessage = `现在开始提取以下试卷内容：\n---\n${paperText}\n---`;
+  // ★R3-LLM-FIX：消除固定 `---` 分隔（R21）—— 试卷全文以随机 nonce 围栏包裹
+  const userMessage = '现在开始提取以下试卷内容：\n' + fencedDataBlock('PAPER_TEXT_DATA', paperText || '');
   const [BASE_URL, API_KEY, MODEL] = await Promise.all([getBaseUrl(), getApiKey(), getModel()]);
 
   onProgress({ phase: 'connecting' });

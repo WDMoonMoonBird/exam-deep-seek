@@ -224,6 +224,8 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
       // open：无标准包 → 评价式评分（prompt 不含「标准答案源码」段，system 用评审专家角色）
       mode: gradeMode,
       fixedItems,
+      // ★R3-LLM-FIX（R23）：题目实际满分（可 >100）→ project schema 上限；缺省/非法由 gradeProject 归一为 100
+      maxScore: Number(sub.question.maxScore) > 0 ? Number(sub.question.maxScore) : 100,
     };
 
     // 【M6 · 方案 b：显式让位】sidecar 不支持 open 语义与固定分项 —— 三条静态边界见

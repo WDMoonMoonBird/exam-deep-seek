@@ -14,6 +14,16 @@
  *   · socket.io 实时通道 ⇒ connect-src 'self' + ws:/wss:；
  *   · 图片/图标含 data:、文件图标字体 ⇒ img-src/font-src 放行 data:。
  * 明确**不放**的：`*`（通配）与任何外部 CDN 源（`http(s)://…`）；`frame-ancestors` 收口为 `'self'`（防点击劫持）。
+ *
+ * ★R3-NGX-HEADERS（P2，R9/R10，2026-10-18）：**与 nginx 的口径关系（部署前必读）**
+ *   · 线上 HTML 由 nginx 直供 ⇒ enforce 的**单一真源是 nginx**（nginx-exam.conf 的 map $exam_csp_policy；
+ *     安全头自本票起集中于 security-headers.inc，禁止在各 location 手抄）。策略串仍需与本文件 buildCspDirectives() 同步。
+ *   · 本中间件只作用于 **API 响应**；默认 report-only 时 API 响应会与 nginx 的 enforce 并存（浏览器按更严执行），
+ *     但审计/排障会看到「双口径」两个头。**部署口径**：nginx enforce 生效后，API 进程应设 `CSP_MODE=off`
+ *     （具体 env 由 R3-ENV 统一决定；本票只登记关系与现状，**不改默认值**以免破坏既有测试/行为）。
+ *   · R9 分签（不得写成已修）：`'unsafe-inline'` 移除 **blocked:build-nonce**（client/dist/index.html 有 5 段
+ *     构建期内联脚本，需构建期 nonce/hash 化，属独立专项，登记 DEPLOY-CHECKLIST 计划项）；`'unsafe-eval'`
+ *     移除需浏览器实测 ant-design-vue CSS-in-JS 探测的降级影响，未实测前**不修改策略串**。
  */
 import helmet from 'helmet';
 

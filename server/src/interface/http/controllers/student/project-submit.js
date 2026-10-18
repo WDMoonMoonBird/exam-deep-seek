@@ -21,6 +21,8 @@ import { extractZipSafely, decodeUploadName } from '../../../../utils/projectArc
 import { withSubmitLock } from './locks.js';
 import { assertStudentInAssignment, findProjectQuestionInAssignment } from './project-question.js';
 import { buildTreeSafe, readVersionContents } from './version-files.js';
+// ★R3-RATE（M5）：本文件属 interface 层，**禁止**直接 import infrastructure（check-layers 基线 0）⇒
+//   学生提交入口的限流改由 app.js 在路由装配处按 IP 维度统一挂载（早于 auth，键回落 ip）。
 
 /**
  * POST /student/assignments/:assignmentId/project/:questionId/submit
@@ -208,7 +210,9 @@ export async function submitProjectCore(req, res) {
           : msg;
         return res.status(400).json({ code: 1001, message: safeMsg, data: null });
       }
-      res.status(500).json({ code: 2001, message: '服务器错误: ' + msg, data: null });
+      // ★R13（P2，2026-10-18）：500 分支**不回显** err.message（可能含路径/表名/SQL 片段）——
+      //   固定文案对外，详细错误仍由上方 logger.error({ err }) 留在服务端日志（L2/L3 口径）。
+      res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });
     }
 }
 

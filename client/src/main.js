@@ -14,7 +14,7 @@ import { isLegacyBrowser } from './domain/browserCompat';
 import { installErrorRecovery } from './components/errorRecovery.js';   // ★R2-B52：chunk 失败自愈 + 全局错误可见
 import { installVersionWatcher } from './composables/appVersion.js';   // ★R2-B59：入口版本探测（有新版本 ⇒ 提示刷新）
 import { message } from 'ant-design-vue';
-import { setAuthRedirect } from './api/request.js';   // ★W8（t10/F1/F2）：401 的跳登录改成 SPA 内导航
+import { setAuthRedirect, setPasswordChangeRedirect } from './api/request.js';   // ★W8（t10/F1/F2）：401 跳登录；★R3-R5：403/1005 跳强制改密
 
 dayjs.locale('zh-cn');
 
@@ -49,6 +49,15 @@ setAuthRedirect(() => {
       return;
     }
     const nav = router.push({ path: '/login', query: { expired: '1' } });
+    if (nav && typeof nav.catch === 'function') nav.catch(() => { /* 已在该路由 / 导航被取消：忽略 */ });
+  } catch { /* 忽略：交由 request.js 的兜底跳转 */ }
+});
+
+// ★R3-R5：403/1005（首登 / 被管理员重置 ⇒ 必须先改密）的唯一出口在 request.js；这里注入 SPA 内跳转：
+//   与 401 一样避免整页刷新丢状态，且改密页不应留在浏览器历史里回退到业务页（router.replace）。
+setPasswordChangeRedirect(() => {
+  try {
+    const nav = router.replace({ path: '/change-password', query: { required: '1' } });
     if (nav && typeof nav.catch === 'function') nav.catch(() => { /* 已在该路由 / 导航被取消：忽略 */ });
   } catch { /* 忽略：交由 request.js 的兜底跳转 */ }
 });

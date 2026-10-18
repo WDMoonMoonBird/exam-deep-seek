@@ -23,6 +23,7 @@ import auth from './middleware/auth.js';
 import requireRole from './middleware/role.js';
 import projectAssetGuard from './middleware/projectAssetGuard.js';
 import { cspMiddleware } from './middleware/csp.js';
+import { createRateLimitMiddleware, createLoginGlobalFailureGuard } from './infrastructure/rate-limit/rate-limit-middleware.js';   // ★R3-RATE（M5/R16）
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -59,6 +60,10 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 
+// ★R3-RATE（R16）：登录**全局失败速率**守卫 —— 跨 IP、每账号只试 1 次的密码喷洒在下面三键上都不达阈值，
+//   必须另有公共熔断面（阈值 100 次失败/分钟，显著高于正常失败量；仅短时熔断登录端点、不锁任何账号）。
+const loginGlobalFailureGuard = createLoginGlobalFailureGuard();
+
 // 登录失败限流（防暴力破解）—— 逻辑已迁移至 InMemoryRateLimiter（RateLimiterPort），经 app.locals.rateLimiter 取用
 // ★H5：账号 + IP 维度 —— 只按 IP 时，同一出口（NAT/网关）后的攻击者刷满即锁死所有用户；
 //   只按账号时，攻击者可换 IP 无限猜。任一维命中即拦；**成功登录清账号维度**，IP 维度保持"仅失败累积"。
@@ -78,6 +83,10 @@ app.use('/api/auth/login', async (req, res, next) => {
   const acctKey = identity ? `acct:${identity.username}@${identity.schoolCode}` : null;
   // ★N11/t24：与 schoolCode 解耦的全局账号键（`acct#global:` 命名空间 ⇒ 不与逐校键/username 内容撞键）
   const userKey = identity ? `acct#global:${identity.username}` : null;
+  // ★R3-RATE（R16）：全局失败速率熔断（先于三键判定；超限只需 429，不泄漏账号是否存在）
+  if (await loginGlobalFailureGuard.isBlocked()) {
+    return res.status(429).json({ code: 1003, message: '登录失败次数过多，请稍后再试', data: null });
+  }
   if (await app.locals.rateLimiter.isBlocked(ipKey)
     || (acctKey && await app.locals.rateLimiter.isBlocked(acctKey))
     || (userKey && await app.locals.rateLimiter.isBlocked(userKey))) {
@@ -94,13 +103,18 @@ app.use('/api/auth/login', async (req, res, next) => {
       app.locals.rateLimiter.recordFailure(ipKey);
       if (acctKey) app.locals.rateLimiter.recordFailure(acctKey);
       if (userKey) app.locals.rateLimiter.recordFailure(userKey);   // ★N11：失败三键齐记
+      // ★R3-RATE（R16）：全局失败速率计数（不 await/不抛：限流器异常绝不阻断登录响应路径）
+      loginGlobalFailureGuard.recordFailure().catch(() => {});
     }
     return originalJson(body);
   };
   next();
 });
-// 定期清理过期记录
-setInterval(() => app.locals.rateLimiter.cleanup(), 600000);
+// 定期清理过期记录（含全局失败守卫；R3-RATE）
+setInterval(() => {
+  app.locals.rateLimiter.cleanup();
+  loginGlobalFailureGuard.cleanup();
+}, 600000);
 
 // 请求日志
 app.use((req, _res, next) => {
@@ -127,17 +141,47 @@ app.get('/api/health', (_req, res) => {
 // Worker 评分完成回调（内部用，需要共享密钥）
 // ★C2：**无字面量兜底** —— 未配置即拒绝启动（与 JWT_SECRET 断言同风格）；
 //   原「INTERNAL_SECRET || 硬编码默认值」让密钥随源码公开，且该端点经 /exam/api/ 公网可达 ⇒ 等同无鉴权。
+// ★R3-R3（P1，2026-10-18 / R12）：**强度校验** —— 与 config/jwtSecret.js 同风格：非空 + 长度下限 + 拒绝已知弱值/示例值。
+//   生产（NODE_ENV=production）≥32；非生产 ≥16（测试兜底值 test-only-internal-secret=25 字符不受影响）。
+//   错误信息只提示要求，**绝不回显密钥值**（历史弱值 ***REDACTED*** 等一旦出现直接拒绝启动）。
 const INTERNAL_SECRET = process.env.INTERNAL_SECRET;
 if (!INTERNAL_SECRET) {
   throw new Error('INTERNAL_SECRET 未配置：拒绝启动（不再回落到硬编码默认值；请在 server/.env 配置随机密钥）');
+}
+const INTERNAL_SECRET_MIN_LENGTH = process.env.NODE_ENV === 'production' ? 32 : 16;
+const WEAK_INTERNAL_SECRETS = new Set([
+  '***REDACTED***', 'internal-secret', 'changeme', '123456', 'password', 'secret', 'test',
+]);
+if (INTERNAL_SECRET.length < INTERNAL_SECRET_MIN_LENGTH || WEAK_INTERNAL_SECRETS.has(INTERNAL_SECRET.toLowerCase())) {
+  throw new Error(
+    `INTERNAL_SECRET 强度不足：要求不少于 ${INTERNAL_SECRET_MIN_LENGTH} 字符且不得为已知弱值/示例值（请在 server/.env 配置随机密钥）`
+  );
 }
 
 /**
  * ★C2：内部回调来源白名单 —— 仅回环地址，或 INTERNAL_ALLOWED_IPS 显式列出的可信代理。
  *   判定用**直连对端地址**（socket.remoteAddress）而非 req.ip：后者受 trust proxy 影响，
  *   会变成 X-Forwarded-For 里的客户端 IP（可伪造），不能作为来源凭据。
+ *
+ * ★R3-R3（P1，2026-10-18）：修复「白名单在 nginx 反代下恒真」——
+ *   生产部署 nginx 与 Node 同机，公网请求经 /exam/api/ 反代后 remoteAddress 恒为 127.0.0.1，
+ *   仅看地址无法区分「公网经代理」与「本机 worker 直连」。现口径：
+ *     · 携带任一代理头（nginx 必加 X-Forwarded-For/Proto）⇒ **视为公网入口，直接拒绝**；
+ *     · 无代理头且直连对端为回环 ⇒ 可信；其余仅当命中 INTERNAL_ALLOWED_IPS（**直连**的 worker 主机，
+ *       禁止填 nginx 代理 IP）⇒ 可信。
+ *   合法的评分 worker 固定直连 http://127.0.0.1:<PORT>/api/internal/graded（不带代理头），不受影响。
+ *   网关层另有 /exam/api/internal/ ⇒ 404 的封禁（nginx-exam.conf），两层互不依赖。
  */
+const PROXY_HEADERS = ['x-forwarded-for', 'x-forwarded-proto', 'x-forwarded-host', 'x-real-ip', 'forwarded'];
+
+function hasProxyHeaders(req) {
+  const headers = (req && req.headers) || {};
+  return PROXY_HEADERS.some((name) => headers[name] !== undefined);
+}
+
 function isTrustedInternalSource(req) {
+  // ★R3-R3：经反向代理转发的请求不是内部来源（否则「公网经 nginx」与「本机直连」不可区分）
+  if (hasProxyHeaders(req)) return false;
   const addr = (req.socket && req.socket.remoteAddress) || '';
   if (addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1') return true;
   const allow = (process.env.INTERNAL_ALLOWED_IPS || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -159,6 +203,29 @@ app.post('/api/internal/graded', (req, res) => {
   notifyGraded(schoolId, data);
   res.json({ code: 0 });
 });
+
+// ★R3-RATE（M5，P1）：**LLM 生成/解析/评分触发入口的应用层限流**（nginx 边缘限流之外的纵深）。
+//   这些入口在各自 router 内才鉴权 ⇒ 本层早于 auth，键回落为 IP（defaultRateLimitKey 已处理）；
+//   鉴权后能拿到 req.user 的写入口（学生提交 / 教师上传工程包）改在控制器内用 user 维度键（更精细）。
+//   阈值 10 次/分钟/键：远宽于正常交互（教师一次备课通常 <5 次生成），只挡脚本化刷 LLM。
+const llmEntranceRateLimit = createRateLimitMiddleware({ max: 10, windowMs: 60000 });
+//   学生实训题提交（interface 层不得 import infrastructure ⇒ 在装配处按 IP 维度挂）
+const studentSubmitRateLimit = createRateLimitMiddleware({ max: 10, windowMs: 60000, message: '提交过于频繁，请稍后再试' });
+app.use('/api/student/assignments/:assignmentId/project/:questionId/submit', studentSubmitRateLimit);
+
+// 精确路径白名单（正则；避免 app.use 前缀匹配把 /parse-exam-stream 之类计两次）
+const LLM_ENTRANCE_PATTERNS = [
+  /^\/api\/teacher\/parse-exam$/,
+  /^\/api\/teacher\/parse-exam-stream$/,
+  /^\/api\/teacher\/generate-reference$/,
+  /^\/api\/teacher\/questions\/\d+\/checker\/generate$/,
+  /^\/api\/teacher\/assignments\/\d+\/grade$/,
+  /^\/api\/teacher\/submissions\/\d+\/regrade$/,
+  /^\/api\/teacher\/submissions\/\d+\/project\/regrade$/,
+];
+app.use((req, res, next) => (
+  LLM_ENTRANCE_PATTERNS.some((re) => re.test(req.path)) ? llmEntranceRateLimit(req, res, next) : next()
+));
 
 // 路由
 app.use('/api/auth', authRoutes);
@@ -182,7 +249,9 @@ if (process.env.NODE_ENV === 'production') {
   //   扫描器打 /admin、/.env、/wp-login.php 也会拿到 200，既污染索引又掩盖真实 404。
   //   口径与 nginx 侧对齐（nginx-exam.conf 的公开入口短名单）⇒ 只对**已知前端前缀**回退外壳，其余交给 404；
   //   ★与 nginx 的协同：公网请求通常先由 nginx 判定（非白名单直接 404），本层只在"直连 Node"时兜底 ⇒ 不双重处理。
-  const SPA_PREFIXES = ['/login', '/doc', '/teacher', '/student', '/admin', '/exam'];
+  // ★R3-R5-F1（A batch1 复核 F1）：/change-password（强制改密页）是前端一级路由，必须列入外壳白名单，
+  //   否则直链/刷新 /exam/change-password 会 404（R3-R5 的 SPA 内跳转可用，但硬导航不通）。
+  const SPA_PREFIXES = ['/login', '/doc', '/change-password', '/teacher', '/student', '/admin', '/exam'];
   app.use((req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
     const p = req.path || '/';

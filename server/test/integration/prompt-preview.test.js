@@ -11,6 +11,7 @@ import { request, loginAsTeacher, getTestData } from './helpers.js';
 import prisma from '../../src/utils/prisma.js';
 import { standardDir, STANDARDS_ROOT } from '../../src/utils/projectPaths.js';
 import { buildSystemPrompt } from '../../src/infrastructure/ai/prompt-builder.js';   // ★W2-C9：与实评同口径的"真源"
+import { parsePairedFence, normalizeFenceNonces } from '../helpers/prompt-fence.js';   // ★R3-LLM-INJ：随机 nonce 围栏断言
 
 describe('AI 提示词查看（教师）', () => {
   let teacherToken;
@@ -82,12 +83,26 @@ describe('AI 提示词查看（教师）', () => {
     expect(sub.user).toContain('实现冒泡排序');
     expect(sub.user).toContain('参考答案');
     expect(sub.user).toContain('学生提交的答案将在此拼接');
-    // ★L4：标准改由 user 段的 CRITERIA_DATA 围栏携带（且落在围栏之内）
-    expect(sub.user).toContain('<<<CRITERIA_DATA');
-    expect(sub.user).toContain('CRITERIA_DATA>>>');
-    expect(sub.user).toContain('正确性60%');
-    const fence = sub.user.slice(sub.user.indexOf('<<<CRITERIA_DATA'), sub.user.indexOf('CRITERIA_DATA>>>'));
-    expect(fence).toContain('正确性60%');
+    // ★L4 + ★R3-LLM-INJ：标准改由 user 段的 CRITERIA_DATA **随机 nonce** 围栏携带（且落在围栏之内）
+    const fence = parsePairedFence(sub.user, 'CRITERIA_DATA');
+    expect(fence).not.toBeNull();
+    expect(fence.inner).toContain('正确性60%');
+  });
+
+  it('★R3-LLM-INJ：同一预览端点两次请求 nonce 不同、除 nonce 外结构相等', async () => {
+    const url = '/api/teacher/questions/' + codeQuestion.id + '/prompt-preview';
+    const r1 = await request().get(url).set('Authorization', 'Bearer ' + teacherToken);
+    const r2 = await request().get(url).set('Authorization', 'Bearer ' + teacherToken);
+    expect(r1.body.code).toBe(0);
+    expect(r2.body.code).toBe(0);
+    const u1 = r1.body.data.subs[0].user;
+    const u2 = r2.body.data.subs[0].user;
+    const f1 = parsePairedFence(u1, 'CRITERIA_DATA');
+    const f2 = parsePairedFence(u2, 'CRITERIA_DATA');
+    expect(f1).not.toBeNull();
+    expect(f2).not.toBeNull();
+    expect(f1.nonce).not.toBe(f2.nonce);
+    expect(normalizeFenceNonces(u1)).toBe(normalizeFenceNonces(u2));
   });
 
   it('实训题模板预览（开放性题目，无标准包）：mode=open + 无「标准答案源码」段', async () => {
@@ -110,8 +125,11 @@ describe('AI 提示词查看（教师）', () => {
     expect(r.body.data.mode).toBe('standard');
     expect(r.body.data.system).toContain('请对比标准答案和学生提交的项目代码');
     expect(r.body.data.system).not.toContain('没有标准答案');
-    expect(r.body.data.user).toContain('=== 标准答案源码');
-    expect(r.body.data.user).toContain('def main():');
+    // ★R3-LLM-INJ：项目 prompt 数据段改为随机 nonce 围栏（格式真源见 deepseek/project-grading.js）
+    expect(r.body.data.user).toContain('## 标准答案源码');
+    const stdFence = parsePairedFence(r.body.data.user, 'STANDARD_FILES_DATA');
+    expect(stdFence).not.toBeNull();
+    expect(stdFence.inner).toContain('def main():');
   });
 
   it('编程题实际提示词：含学生答案与评分标准', async () => {
@@ -129,8 +147,9 @@ describe('AI 提示词查看（教师）', () => {
     expect(r.body.data.system).not.toContain('正确性60%');
     expect(r.body.data.system).toBe(buildSystemPrompt());      // 预览 = 实评（同一构建函数，逐字节一致）
     expect(r.body.data.user).toContain('print(1)');
-    expect(r.body.data.user).toContain('<<<CRITERIA_DATA');
-    expect(r.body.data.user).toContain('正确性60%');
+    const fence = parsePairedFence(r.body.data.user, 'CRITERIA_DATA');
+    expect(fence).not.toBeNull();
+    expect(fence.inner).toContain('正确性60%');
     await prisma.submission.delete({ where: { id: sub.id } });
   });
 
@@ -167,8 +186,11 @@ describe('AI 提示词查看（教师）', () => {
     expect(r.body.code).toBe(0);
     expect(r.body.data.mode).toBe('standard');
     expect(r.body.data.system).toContain('请对比标准答案和学生提交的项目代码');
-    expect(r.body.data.user).toContain('=== 标准答案源码');
-    expect(r.body.data.user).toContain('def main():');
+    // ★R3-LLM-INJ：项目 prompt 数据段改为随机 nonce 围栏（格式真源见 deepseek/project-grading.js）
+    expect(r.body.data.user).toContain('## 标准答案源码');
+    const stdFence = parsePairedFence(r.body.data.user, 'STANDARD_FILES_DATA');
+    expect(stdFence).not.toBeNull();
+    expect(stdFence.inner).toContain('def main():');
     expect(r.body.data.user).toContain('【学生尚未提交有效版本】');
     await prisma.submission.delete({ where: { id: sub.id } });
   });

@@ -1,5 +1,6 @@
 import { gradeSubmission, gradeProject } from '../../src/infrastructure/ai/deepseek/index.js';
 import { ABNORMAL_FEEDBACK } from '../../src/constants.js';
+import { parsePairedFence, normalizeFenceNonces } from '../helpers/prompt-fence.js';
 
 // Mock 全局 fetch
 const originalFetch = global.fetch;
@@ -108,12 +109,32 @@ describe('gradeSubmission — 提示词构建', () => {
     expect(systemContent).not.toContain('代码正确性（60%）');
     expect(systemContent).not.toContain('代码效率（20%）');
     expect(systemContent).not.toContain('代码可读性（20%）');
-    // 新语义：默认标准在 **user** 段，且被数据围栏包裹（含"非指令"声明）
-    expect(userContent).toContain('<<<CRITERIA_DATA');
-    expect(userContent).toContain('CRITERIA_DATA>>>');
-    expect(userContent).toContain('代码正确性（60%）');
-    expect(userContent).toContain('代码效率（20%）');
-    expect(userContent).toContain('代码可读性（20%）');
+    // 新语义：默认标准在 **user** 段，且被随机 nonce 数据围栏包裹（含"非指令"声明）
+    const fence = parsePairedFence(userContent, 'CRITERIA_DATA');
+    expect(fence).not.toBeNull();
+    expect(fence.inner).toContain('代码正确性（60%）');
+    expect(fence.inner).toContain('代码效率（20%）');
+    expect(fence.inner).toContain('代码可读性（20%）');
+  });
+
+  // ★R3-LLM-INJ：两次请求 nonce 必须不同（CSPRNG）；除 nonce 外结构必须相等
+  it('★R3-LLM-INJ：两次评分请求 CRITERIA_DATA nonce 不同、除 nonce 外结构相等', async () => {
+    const req = {
+      material: null, subQuestionTitle: '题目1', subQuestionContent: '<p>写个排序</p>',
+      referenceAnswer: 'sorted(arr)', studentAnswer: 'arr.sort()', maxScore: 30,
+    };
+    captureFetch();
+    await gradeSubmission(req);
+    const first = JSON.parse(lastFetchArgs.init.body).messages[1].content;
+    captureFetch();
+    await gradeSubmission(req);
+    const second = JSON.parse(lastFetchArgs.init.body).messages[1].content;
+    const f1 = parsePairedFence(first, 'CRITERIA_DATA');
+    const f2 = parsePairedFence(second, 'CRITERIA_DATA');
+    expect(f1).not.toBeNull();
+    expect(f2).not.toBeNull();
+    expect(f1.nonce).not.toBe(f2.nonce);
+    expect(normalizeFenceNonces(first)).toBe(normalizeFenceNonces(second));
   });
 
   // D5: 自定义评分标准（★L4：仍不进 system；在 user 段**替换**默认标准而非叠加）
@@ -134,9 +155,11 @@ describe('gradeSubmission — 提示词构建', () => {
     // 旧语义：自定义标准出现在 system —— L4 已移除
     expect(systemContent).not.toContain('自定义评分标准');
     expect(systemContent).not.toContain('代码正确性（60%）');
-    // 新语义：自定义标准进 user 段的数据围栏，且**替换**默认标准
+    // 新语义：自定义标准进 user 段的随机 nonce 数据围栏，且**替换**默认标准
     expect(userContent).toContain('自定义评分标准：只看正确性');
-    expect(userContent).toContain('<<<CRITERIA_DATA');
+    const fence = parsePairedFence(userContent, 'CRITERIA_DATA');
+    expect(fence).not.toBeNull();
+    expect(fence.inner).toContain('自定义评分标准：只看正确性');
     expect(userContent).not.toContain('代码正确性（60%）');
   });
 

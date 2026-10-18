@@ -4,6 +4,7 @@
  */
 
 import { RULE_TYPES } from '../../../domain/services/checker/parsers.js';
+import { fencedDataBlock, injectionGuardClause } from '../prompt-injection-guard.js';   // ★R3-LLM-INJ：随机 nonce 围栏 + 防注入条款单一真源
 
 /** 规则 JSON 格式说明（prompt 注入，禁止注释） */
 const RULES_FORMAT = [
@@ -79,7 +80,10 @@ const GENERATE_SYSTEM = '你是一个高校实训题评分规则生成器。你�
   + '- 字段名必须是 item（规则中文描述），绝对不要用 name；subjective_items 必须输出（无主观项时输出空数组 []）；\n'
   + '- rule_type 只能使用白名单类型；params 必须真实可执行（文件路径必须来自标准包文件树，不得猜测）；\n'
   + '- 客观项必须能通过静态文件检查确定性判定；无法确定性判定的项才放入 subjective_items；\n'
-  + '- 客观项总分 + 主观项总分必须恰好等于 max_score。';
+  + '- 客观项总分 + 主观项总分必须恰好等于 max_score。\n'
+  // ★R3-LLM-INJ（R22，2026-10-18）：补防注入条款 —— 此前 GENERATE_SYSTEM 零防护，而 rubric/题目描述/
+  //   标准包文件树/校准反馈全部是半可信或可被数据带偏的输入（文件路径也可能被教师命名影响）。
+  + injectionGuardClause('评分标准、题目描述、标准工程包文件树与校准反馈（错误信息/扣分项/证据）', '数据文字');
 
 /** 规则 JSON 完整示例（格式锚点，防止模型字段漂移） */
 const RULES_EXAMPLE = [
@@ -104,17 +108,19 @@ const RULES_EXAMPLE = [
  * @returns {string}
  */
 export function buildGenerateUserPrompt(rubric, maxScore, fixedItems, stdFileTree, description, language) {
+  // ★R3-LLM-INJ（R21/R22）：rubric / 题目描述 / 文件树 / 固定分项均为**待处理数据** ⇒ 统一随机 nonce 围栏；
+  //   围栏由本文件顶部引入的 prompt-injection-guard 生成（唯一真源），禁止再手写固定分隔符。
   const fixed = (Array.isArray(fixedItems) && fixedItems.length > 0)
     ? '\n\n【固定分项（必须逐项覆盖，不得增删改；满分合计 ' + maxScore + ' 分）】\n'
-      + fixedItems.map((it, i) => (i + 1) + '. ' + it.item + automationLabel(it) + '（' + it.maxScore + ' 分）').join('\n')
+      + fencedDataBlock('FIXED_ITEMS_DATA', fixedItems.map((it, i) => (i + 1) + '. ' + it.item + automationLabel(it) + '（' + it.maxScore + ' 分）').join('\n'))
     : '';
   const treeSection = stdFileTree
-    ? '\n\n【标准工程包文件树（事实依据，请据此确定文件路径，不要猜测）】\n' + stdFileTree + '\n'
+    ? '\n\n【标准工程包文件树（事实依据，请据此确定文件路径，不要猜测）】\n' + fencedDataBlock('STD_FILE_TREE_DATA', stdFileTree) + '\n'
     : '';
   const descSection = (description && String(description).trim())
-    ? '【题目描述】\n' + String(description).trim() + '\n\n'
+    ? '【题目描述】\n' + fencedDataBlock('QUESTION_DESCRIPTION_DATA', String(description).trim()) + '\n\n'
     : '';
-  return '【评分标准】\n' + rubric + '\n\n'
+  return '【评分标准】\n' + fencedDataBlock('RUBRIC_DATA', rubric) + '\n\n'
     + '【满分】' + maxScore + ' 分' + fixed + '\n\n'
     + descSection
     + treeSection + '\n\n'
@@ -147,20 +153,20 @@ export function buildGenerateUserPrompt(rubric, maxScore, fixedItems, stdFileTre
  */
 function buildCalibrateUserPrompt(feedback, stdFileTree, fixedItems, prevRules) {
   const treeSection = stdFileTree
-    ? '\n\n【标准工程包文件树（事实依据：标准包实际存在的文件，请据此修正路径/正则等参数）】\n' + stdFileTree + '\n'
+    ? '\n\n【标准工程包文件树（事实依据：标准包实际存在的文件，请据此修正路径/正则等参数）】\n' + fencedDataBlock('STD_FILE_TREE_DATA', stdFileTree) + '\n'
     : '';
   const fixedSection = Array.isArray(fixedItems) && fixedItems.length > 0
-    ? '\n\n【固定分项（必须严格逐项覆盖，不得增删改）】\n' + fixedItems.map((it, i) => (i + 1) + '. ' + it.item + automationLabel(it) + '（' + it.maxScore + ' 分）').join('\n') + '\n'
+    ? '\n\n【固定分项（必须严格逐项覆盖，不得增删改）】\n' + fencedDataBlock('FIXED_ITEMS_DATA', fixedItems.map((it, i) => (i + 1) + '. ' + it.item + automationLabel(it) + '（' + it.maxScore + ' 分）').join('\n')) + '\n'
     : '';
   const prevRulesSection = prevRules
-    ? '\n\n【上一版规则（请基于它修正 rule_type/params/max_score，不要改写成代码）】\n' + JSON.stringify(prevRules, null, 2) + '\n'
+    ? '\n\n【上一版规则（请基于它修正 rule_type/params/max_score，不要改写成代码）】\n' + fencedDataBlock('PREV_RULES_DATA', JSON.stringify(prevRules, null, 2)) + '\n'
     : '';
   const PATH_RULES = '铁律：params.path/params.dir 必须来自【标准工程包文件树】中真实存在的文件/目录，绝对禁止编造文件路径；'
     + '正则匹配不到时，先依据文件片段调整正则或改用其他检查方式（如 contains_text 关键字），不要重复同一写法。';
   if (feedback && feedback.error) {
     return '以下评分规则在标准工程包上检查失败。请基于上一版规则修正规则参数（rule_type/params/max_score 等），不要改写成代码，也不要新增评分标准未提及的检查项。\n'
       + PATH_RULES + '\n'
-      + '【错误】' + String(feedback.error).slice(0, 1200) + '\n'
+      + '【错误】\n' + fencedDataBlock('CALIBRATION_ERROR_DATA', String(feedback.error).slice(0, 1200)) + '\n'
       + prevRulesSection + fixedSection + treeSection + '\n'
       + '只输出修正后的完整规则 JSON。';
   }
@@ -174,17 +180,17 @@ function buildCalibrateUserPrompt(feedback, stdFileTree, fixedItems, prevRules) 
     .join('\n');
   const defectSection = (feedback && Array.isArray(feedback.defectItems) && feedback.defectItems.length > 0)
     ? '\n【标准包缺陷候选（保留项，不要修改或删除）】以下规则引用的文件在标准包中不存在。若评分标准确实要求这些能力，请保留这些规则原样（标准包自身未实现，将交由教师确认处理）；它们不计入校准扣分。\n'
-      + feedback.defectItems.map((x, i) => (i + 1) + '. ' + x).join('\n') + '\n'
+      + fencedDataBlock('DEFECT_ITEMS_DATA', feedback.defectItems.map((x, i) => (i + 1) + '. ' + x).join('\n')) + '\n'
     : '';
   // 负例验证（Team A）：弱规则（区分度不足）进入修复反馈（Rule Repair）
   const weakRulesSection = (feedback && Array.isArray(feedback.weakRules) && feedback.weakRules.length > 0)
     ? '\n【弱规则（区分度不足）】以下规则在缺陷变体上仍通过，无法区分真实实现与表面实现，请改为更具体的检查（更精确的路径/内容/组合条件），不要删除该评分项：\n'
-      + feedback.weakRules.map((w) => '- ' + (w.item || ('规则 ' + w.id)) + '（' + w.id + '）：' + (w.reason || '')).join('\n') + '\n'
+      + fencedDataBlock('WEAK_RULES_DATA', feedback.weakRules.map((w) => '- ' + (w.item || ('规则 ' + w.id)) + '（' + w.id + '）：' + (w.reason || '')).join('\n')) + '\n'
     : '';
   return '以下评分规则在标准工程包上检查未得满分（缺陷候选除外）。标准工程包不应被扣分，说明其余规则参数有误（路径/正则/匹配方式/评分比例等）。'
     + '请基于上一版规则修正 rule_type/params/max_score，只针对以下扣分项调整，其他已正确的检查项不要改动，也不要改写成代码。\n'
     + PATH_RULES + '\n'
-    + '【扣分项】\n' + (failedItems || '（无扣分项，请检查 max_score 合计）') + defectSection + weakRulesSection
+    + '【扣分项】\n' + fencedDataBlock('FAILED_ITEMS_DATA', failedItems || '（无扣分项，请检查 max_score 合计）') + defectSection + weakRulesSection
     + prevRulesSection + fixedSection + treeSection + '\n'
     + '输出修正后的完整规则 JSON（规则格式与满分合计保持不变）。';
 }

@@ -28,6 +28,12 @@ export const useUserStore = defineStore('user', () => {
     safeSet('user', JSON.stringify(user.value));
   }
 
+  /** ★R3-R5：只更新用户对象（如改密成功后清 mustChangePassword），token 不变 */
+  function setUser(u) {
+    user.value = u;
+    safeSet('user', JSON.stringify(u));
+  }
+
   function logout() {
     token.value = '';
     user.value = null;
@@ -35,5 +41,5 @@ export const useUserStore = defineStore('user', () => {
     safeRemove('user');
   }
 
-  return { token, user, isLoggedIn, role, currentSchool, teacherSchools, setAuth, setCurrentSchool, logout };
+  return { token, user, isLoggedIn, role, currentSchool, teacherSchools, setAuth, setUser, setCurrentSchool, logout };
 });

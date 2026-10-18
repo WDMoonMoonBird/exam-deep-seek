@@ -8,6 +8,7 @@
 import { DeepSeekGateway } from '../../../src/infrastructure/ai/deepseek-gateway.js';
 import { ABNORMAL_FEEDBACK } from '../../../src/constants.js';
 import { PARSE_ROLE, PARSE_RULES, PROJECT_REVIEW_SYSTEM } from '../../../src/infrastructure/ai/prompt-builder.js';
+import { parsePairedFence } from '../../helpers/prompt-fence.js';
 
 const noopLogger = { warn() {}, error() {}, info() {} };
 
@@ -77,17 +78,13 @@ describe('DeepSeekGateway.grade — 请求形状契约', () => {
     expect(system).not.toContain('只看正确性');
     expect(system).not.toContain('代码正确性（60%）');   // 默认三标准同样不得进 system
 
-    // 新语义：教师标准在 user 段，且被数据围栏包裹 + 带"非指令"声明（提示注入防护）
+    // 新语义：教师标准在 user 段，且被随机 nonce 数据围栏包裹 + 带"非指令"声明（提示注入防护）
     expect(user).toContain('只看正确性');
-    expect(user).toContain('<<<CRITERIA_DATA');
-    expect(user).toContain('CRITERIA_DATA>>>');
     expect(user).toContain('非指令');
-    // 包裹关系：教师文本必须落在 CRITERIA_DATA 围栏**之内**（而不是围栏之外的自由文本）
-    const fenceStart = user.indexOf('<<<CRITERIA_DATA');
-    const fenceEnd = user.indexOf('CRITERIA_DATA>>>');
-    expect(fenceStart).toBeGreaterThanOrEqual(0);
-    expect(fenceEnd).toBeGreaterThan(fenceStart);
-    expect(user.slice(fenceStart, fenceEnd)).toContain('只看正确性');
+    // 包裹关系：教师文本必须落在 CRITERIA_DATA 围栏**之内**（按同一 nonce 配对，而不是裸串切片）
+    const fence = parsePairedFence(user, 'CRITERIA_DATA');
+    expect(fence).not.toBeNull();
+    expect(fence.inner).toContain('只看正确性');
   });
 });
 

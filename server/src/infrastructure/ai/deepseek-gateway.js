@@ -7,7 +7,7 @@
  */
 
 import { buildSystemPrompt, buildGradingUserMessage, PARSE_ROLE, PARSE_RULES, buildParseUserMessage, PROJECT_REVIEW_SYSTEM, buildProjectReviewUserMessage } from './prompt-builder.js';
-import { schemaScoreFeedback, schemaQuestions } from '../../domain/services/deepseek/model-output-schema.js';   // ★M9/H8
+import { schemaScoreFeedback, schemaQuestions, isFiniteNumber } from '../../domain/services/deepseek/model-output-schema.js';   // ★M9/H8 / ★R3-LLM-OUT（R23）
 
 export const ABNORMAL_FEEDBACK = '请联系老师';
 
@@ -98,9 +98,13 @@ export class DeepSeekGateway {
         if (!jsonMatch) throw new Error('返回格式不包含有效的 JSON');
 
         const parsed = JSON.parse(jsonMatch[0]);
-        if (!schemaScoreFeedback(parsed, { maxScore: req.maxScore })) throw new Error('返回格式不包含有效的 JSON');   // ★M9/H8：失败走既有重试⇒ABNORMAL_FEEDBACK
-        const score = Math.max(0, Math.min(req.maxScore, parseInt(parsed.score) || 0));
-        return { score, feedback: parsed.feedback || '无评语' };
+        // ★R3-LLM-OUT（R23）：schema 的 maxScore 缺省（100）与 clamp 必须用**同一个变量** —— 旧实现
+        //   调用方漏传时「schema 放行至 100、Math.min(undefined, …) ⇒ NaN」。0/负数/非数字同样回落 100。
+        const maxScore = isFiniteNumber(req.maxScore) && req.maxScore > 0 ? req.maxScore : 100;
+        const checked = schemaScoreFeedback(parsed, { maxScore });
+        if (!checked) throw new Error('返回格式不包含有效的 JSON');   // ★M9/H8：失败走既有重试⇒ABNORMAL_FEEDBACK
+        const score = Math.max(0, Math.min(maxScore, Math.round(checked.score)));
+        return { score, feedback: checked.feedback || '无评语' };
       } catch (err) {
         lastError = err;
         if (err.name === 'AbortError') this.logger.warn({ attempt }, 'DeepSeek API 超时，重试中');

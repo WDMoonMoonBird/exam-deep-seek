@@ -233,8 +233,10 @@ export async function generateChecker(questionId) {
     }
 
     if (!outcome) {
-      const snippet = output ? '；模型输出前 150 字符：' + String(output).slice(0, 150).replace(/\n/g, ' ') : '';
-      meta.log.push({ round, totalScore: null, detail: '本轮规则检查失败：' + lastErrMsg.slice(0, 300) + snippet });
+      // ★R3-LLM-OUT（L5）：**不再把模型输出片段写入 DB**（checkerMeta.log 会被前端读取/导出）——
+      //   仅保留可诊断的长度元数据；错误类别仍由 lastErrMsg 表达。
+      const outputLength = output ? String(output).length : 0;
+      meta.log.push({ round, totalScore: null, detail: '本轮规则检查失败：' + lastErrMsg.slice(0, 300), modelOutputLength: outputLength });
       lastFeedback = { error: lastErrMsg };
       await prisma.question.update({ where: { id }, data: { checkerMeta: meta } });
       logger.warn({ questionId: id, round, err: lastErrMsg }, 'checkerService: 本轮规则检查失败');

@@ -6,19 +6,21 @@
 import logger from '../../../utils/logger.js';
 import { getBaseUrl, getApiKey, getModel } from './config.js';
 import { GEN_ROLE, GEN_RULES } from '../../../domain/services/deepseek/prompts.js';
+import { fencedDataBlock } from '../prompt-injection-guard.js';   // ★R3-LLM-FIX：材料/题目/评分标准 = 数据段 ⇒ 随机 nonce 围栏
 
 /**
  * 调用 DeepSeek API 生成参考答案
  * @returns {Promise<string>} 参考答案代码
  */
 export async function generateReferenceAnswer({ material, stem, scoringCriteria }) {
+  // ★R3-LLM-FIX（P1）：材料/题目/评分标准均为数据段 ⇒ 随机 nonce 围栏（此前内联裸拼）
   const parts = [];
   if (material && material.replace(/<[^>]*>/g, '').trim()) {
-    parts.push(`## 题目材料\n${material.replace(/<[^>]*>/g, '')}`);
+    parts.push('## 题目材料\n' + fencedDataBlock('MATERIAL_DATA', material.replace(/<[^>]*>/g, '')));
   }
-  parts.push(`## 题目\n${(stem || '').replace(/<[^>]*>/g, '')}`);
+  parts.push('## 题目\n' + fencedDataBlock('STEM_DATA', (stem || '').replace(/<[^>]*>/g, '')));
   if (scoringCriteria) {
-    parts.push(`## 评分标准\n${scoringCriteria}`);
+    parts.push('## 评分标准\n' + fencedDataBlock('RUBRIC_DATA', scoringCriteria));
   }
   const userMessage = parts.join('\n\n') + '\n\n请根据以上内容编写参考答案：';
 

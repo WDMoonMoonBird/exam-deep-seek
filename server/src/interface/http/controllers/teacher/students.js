@@ -224,6 +224,23 @@ export const addStudent = async (req, res) => {
   }
 };
 
+/**
+ * ★R14（P2，2026-10-18）：批量导入单行失败的**安全文案**分类 ——
+ *   原始 e.message 可能含 Prisma/DB 内部细节（唯一键名/字段/表名/constraint），只写服务端日志，不回显给教师。
+ * 判据优先看 Prisma 错误码（稳定），其次才看少数已知文案；未知一律通用文案。
+ * @param {any} err
+ * @returns {string} 可安全回显的中文原因
+ */
+export function safeStudentImportErrorReason(err) {
+  const code = err && err.code;
+  const msg = String((err && err.message) || '');
+  if (code === 'P2002') return '学号已存在（用户名重复）';
+  if (code === 'P2003' || /Foreign key constraint/i.test(msg)) return '班级不存在或已被删除';
+  if (code === 'P2025') return '目标记录不存在';
+  if (code === 'P2000' || code === 'P2005' || code === 'P2006' || /too long|out of range/i.test(msg)) return '数据不合法（长度或取值超限）';
+  return '该行数据不合法，请检查后重试';
+}
+
 export const batchAddStudents = async (req, res) => {
   try {
     const { classId, students } = req.body;
@@ -311,7 +328,9 @@ export const batchAddStudents = async (req, res) => {
         });
         success++;
       } catch (e) {
-        errors.push({ username: s.username, reason: e.message });
+        // ★R14：原始错误只进服务端日志；回显用安全分类文案（不泄漏 Prisma/DB 内部细节）
+        logger.warn({ err: e, username: String(s && s.username) }, '批量导入学生单行失败');
+        errors.push({ username: s.username, reason: safeStudentImportErrorReason(e) });
       }
     }
 
