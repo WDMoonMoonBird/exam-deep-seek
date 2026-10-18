@@ -5,7 +5,7 @@
 - Base commit: `2f77967d55e11b37cdb32db44b40c02220f79bf6`
 - Round 1 commit/tag: `213f7ca` / `desktop-r1-scaffold`
 - Round 2 commit/tag: `548bf09` / `desktop-r2-dmg`
-- Round 3 commit/tag: pending / `desktop-r3-gui`
+- Round 3 commit/tag: `80e297e04f6ce7cf52086040e6f740811d0f4c7c` / `desktop-r3-gui`
 - Plan: `docs/desktop/2026-10-18-electron-desktop-plan.md`
 - Round: 3 ✅ PASS
 - Phase: Round 4 queued
