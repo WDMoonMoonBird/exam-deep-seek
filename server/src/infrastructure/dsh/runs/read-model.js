@@ -237,9 +237,13 @@ export function shapeUsageBlock({ row = null, teardownUsage = null, archive = nu
   const summarySession = shapeSummarySession({ row, teardownUsage, archive });
   if (row) {
     const judgeCost = numOrNull(row.cost_total);
+    // ★OP-2（D1-6，可选口径字段）：usage_json.cost_basis —— open 题按 API 调用时刻聚合（api_call_time），
+    //   普通题为 session_reference_time；UI 据此显示正确口径 note（不影响任何旧字段/普通题行为）。
+    const uj = parseMaybeJson(row.usage_json);
     return {
       available: true,
       source: 'grading_run_usage',
+      calls_basis: uj && uj.cost_basis ? String(uj.cost_basis) : null,
       summary_session: summarySession,
       cost_split: costSplit({ judgeCost, summaryCost: summarySession.cost_total }),
       model: row.model || null,

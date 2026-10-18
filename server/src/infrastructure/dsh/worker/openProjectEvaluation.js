@@ -13,6 +13,10 @@
  *   · graded=0 或 failed>0 ⇒ 调用方把 job 置 needs_rerun + last_error（open_grade_*），绝不伪造 done/假分；
  *   · 标准包题误入开放 job ⇒ 不评分，返回 open_job_on_standard_assignment（防误伤）。
  *
+ * OP-2（D1-3）：汇总本次 job 内**每次真实模型调用**的 token 用量（成功/失败份都计 —— 失败调用同样计费），
+ *   以 { model, calls[] } 挂在返回值 usage 上；run-once open 分支据此构造 grading_run_usage 行。
+ *   模型调用次数可 > graded 数（如重试/解析失败），不伪造。
+ *
  * 依赖可注入（C1 用）：gradeOne（默认 gradeProjectSubmission）、hasStdPackage（默认 hasStandardPackage）。
  */
 import logger from '../../../utils/logger.js';
@@ -100,7 +104,15 @@ export async function evaluateOpenProjectAssignment({
     return { ...out, reason: 'open_grade_no_pending_submission', questionId: Number(question.id) };
   }
 
-  // 4) 逐份评分：单份失败不中断（失败可见；已成功份保留）
+  // 4) 逐份评分：单份失败不中断（失败可见；已成功份保留）；★OP-2：同时汇总每次调用的 llmUsage
+  const usageCalls = [];
+  const collectUsage = (llmUsage, submissionId) => {
+    const list = llmUsage && Array.isArray(llmUsage.calls) ? llmUsage.calls : [];
+    for (const c of list) {
+      if (!c || typeof c !== 'object') continue;
+      usageCalls.push({ ...c, submissionId: Number.isFinite(submissionId) ? submissionId : null });
+    }
+  };
   for (const sub of submissions) {
     const submissionId = Number(sub.id);
     const studentId = Number(sub.studentId);
@@ -112,6 +124,8 @@ export async function evaluateOpenProjectAssignment({
     }
     try {
       const res = await gradeOne({ submissionId, questionId: Number(question.id), studentId, version });
+      // ★OP-2：成功/失败都先记真实调用（失败调用已计费；模型调用数 gte 评分份数）
+      collectUsage(res && res.llmUsage, submissionId);
       if (res && res.ok) {
         out.graded += 1;
       } else {
@@ -123,6 +137,8 @@ export async function evaluateOpenProjectAssignment({
       }
     } catch (err) {
       out.failed += 1;
+      // ★OP-2：异常 path 也把已发生的调用带出（gradeProject 在 err.llm_usage 上挂真实 token）
+      collectUsage(err && err.llm_usage, submissionId);
       if (out.failures.length < OPEN_GRADE_MAX_FAILURE_DETAILS) {
         out.failures.push({ submissionId, reason: 'exception:' + shortErr(err) });
       }
@@ -133,5 +149,6 @@ export async function evaluateOpenProjectAssignment({
   // 5) 汇总 reason（仅描述本次结果；job 终态由 run-once 依计数决定，不伪造绿）
   if (out.failed > 0) out.reason = 'open_grade_partial';
   else if (out.graded === 0) out.reason = 'open_grade_no_success';
-  return { ...out, questionId: Number(question.id) };
+  const usageModel = (usageCalls.find((c) => c && c.model) || {}).model || null;
+  return { ...out, questionId: Number(question.id), usage: { model: usageModel, calls: usageCalls } };
 }

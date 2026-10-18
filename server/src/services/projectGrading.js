@@ -286,12 +286,13 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
         } catch (err2) {
           logger.error({ err: err2, submissionId }, '实训题评分：AI 调用失败，标记失败');
           await markFailed(submissionId, 'AI 评分服务异常');
-          return { ok: false, reason: 'ai_failed' };
+          // ★OP-2（D1-2）：失败路径也透传本次真实模型调用用量（含 checker 降级前/后的调用）
+          return { ok: false, reason: 'ai_failed', llmUsage: (err2 && err2.llm_usage) || (aiErr && aiErr.llm_usage) || null };
         }
       } else {
         logger.error({ err: aiErr, submissionId, gradingMode }, '实训题评分：AI 调用失败，标记失败');
         await markFailed(submissionId, 'AI 评分服务异常');
-        return { ok: false, reason: 'ai_failed' };
+        return { ok: false, reason: 'ai_failed', llmUsage: (aiErr && aiErr.llm_usage) || null };
       }
     }
 
@@ -356,11 +357,12 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
       { submissionId, aiScore, gradingMode, elapsed: `${Date.now() - start}ms` },
       '实训题 AI 评分完成',
     );
-    return { ok: true, aiScore };
+    // ★OP-2（D1-2）：透传 legacy gradeProject 采集的本次调用用量（open 题 usage 汇总的输入）
+    return { ok: true, aiScore, llmUsage: result.llm_usage || null };
   } catch (err) {
     logger.error({ err, submissionId }, '实训题评分异常，标记失败');
     await markFailed(submissionId, '评分流程异常').catch(() => {});
-    return { ok: false, reason: 'exception' };
+    return { ok: false, reason: 'exception', llmUsage: (err && err.llm_usage) || null };
   } finally {
     release();
   }

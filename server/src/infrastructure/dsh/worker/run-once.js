@@ -13,6 +13,7 @@ import { loadAnchor, materializeAnchor, persistAnchor, readAnchorFromRunRoot } f
 import { findRulerByContentKey, resolvePollMs, resolveWaitMs, setJobContentKey } from '../ruler/dshRulerStore.js';
 import { captureSessionUsage, summarizeUsageForEvidence } from '../usage/dshSessionUsage.js';
 import { loadLlmPrices, persistRunUsage } from '../usage/dshRunUsageStore.js';
+import { buildOpenProjectUsage } from '../usage/openProjectUsage.js';   // ★OP-2：open 评价的多调用 usage 聚合
 import {
   bindResolvedRuler, completeClaimedRuler, failClaimedRuler, resolveAssignmentContent,
   resolveRulerForAssignment, writeRulerCheckerFiles,
@@ -159,6 +160,33 @@ async function runOnceInner({
         console.log('OPEN_PROJECT_DONE graded=0 failed=0 skipped=0 status=' + JOB_STATUS.needsRerun + ' job=' + job.id + ' error=' + reason);
         return { consumed: true, jobId: job.id, status: JOB_STATUS.needsRerun, reason: 'open_grade_exception' };
       }
+      // ★OP-2（D1-5）：按 job 汇总本次开放评价的真实模型调用用量并落 grading_run_usage（run_ref='job:<id>'）。
+      //   与普通批改路径同键同表（UPSERT 幂等）⇒ 管理员列表/详情零改动即命中同类型 usage。
+      //   fail-soft：任何失败只记日志，绝不改 job 终态；0 次调用不写行（避免把 open 显示成「零 LLM 复用」的假 0）。
+      let usage = null;
+      let usagePersisted = null;
+      const usageCalls = open && open.usage && Array.isArray(open.usage.calls) ? open.usage.calls : [];
+      if (usageCalls.length > 0) {
+        try {
+          const prices = await loadLlmPrices({ prisma }).catch(() => ({ table: null }));
+          usage = buildOpenProjectUsage({ calls: usageCalls, priceTable: prices.table });
+          if (usage) {
+            const persisted = await persistRunUsage({ prisma, runRef: 'job:' + job.id, jobId: job.id, usage, log: console });
+            usagePersisted = persisted.ok === true;
+            if (!usagePersisted) console.log('OPEN_PROJECT_USAGE=failed run_ref=job:' + job.id + ' reason=' + (persisted.reason || 'unknown'));
+            else console.log('OPEN_PROJECT_USAGE=persisted run_ref=job:' + job.id + ' model_calls=' + usage.totals.model_calls
+              + ' tokens_in=' + usage.totals.input_tokens + ' tokens_out=' + usage.totals.output_tokens
+              + ' cost=' + (usage.cost.cost_total === null ? 'na' : usage.cost.cost_total) + ' currency=' + usage.cost.currency
+              + ' tier=' + (usage.price_tier || 'na') + ' price_version=' + (usage.price_version || 'na'));
+          } else {
+            console.log('OPEN_PROJECT_USAGE=skipped reason=no_model_calls job=' + job.id);
+          }
+        } catch (err) {
+          console.log('OPEN_PROJECT_USAGE=failed run_ref=job:' + job.id + ' reason=' + String((err && err.message) || err).slice(0, 160));
+        }
+      } else {
+        console.log('OPEN_PROJECT_USAGE=skipped reason=no_model_calls job=' + job.id);
+      }
       const openDone = !!open && open.failed === 0 && open.graded > 0;
       const openStatus = openDone ? JOB_STATUS.done : JOB_STATUS.needsRerun;
       const openError = open && open.failed > 0
@@ -171,7 +199,12 @@ async function runOnceInner({
       console.log('OPEN_PROJECT_DONE graded=' + ((open && open.graded) || 0) + ' failed=' + ((open && open.failed) || 0)
         + ' skipped=' + ((open && open.skipped) || 0) + ' status=' + openStatus + ' job=' + job.id
         + (openError ? ' error=' + openError : ''));
-      return { consumed: true, jobId: job.id, status: openStatus, written: open ? open.graded : 0, skipped: open ? open.skipped : 0, reason: 'open_project', open };
+      return {
+        consumed: true, jobId: job.id, status: openStatus, written: open ? open.graded : 0, skipped: open ? open.skipped : 0,
+        reason: 'open_project', open,
+        usage: usage ? summarizeUsageForEvidence(usage) : null,
+        usagePersisted,
+      };
     }
 
     const runRoot = path.join(runRootBase, 'r2b4-job-' + job.id + '-' + Date.now());

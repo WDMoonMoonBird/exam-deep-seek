@@ -10,6 +10,8 @@ import { OPEN_PROJECT_ROLE, PROJECT_ROLE, PROJECT_SECURITY_CLAUSE, buildOpenProj
 import { extractFilesJson, extractProjectGradeJson } from '../../../domain/services/deepseek/json-extract.js';
 import { parseWithSchema, schemaProjectGrade, schemaSubjectiveItems } from '../../../domain/services/deepseek/model-output-schema.js';   // ★R3-LLM-OUT（H8/M9）：输出 schema 接线
 import { createFenceNonce, fencedDataBlock } from '../prompt-injection-guard.js';   // ★R3-LLM-INJ/FIX：随机 nonce 围栏（R21）
+// ★OP-2（D1-1）：采集每个 200 响应的 data.usage/data.model（此前被丢弃 ⇒ open 题调用成本不可见）
+import { collectLlmCallUsage, buildLlmUsage } from './llm-usage.js';
 
 /**
  * 调用 DeepSeek API 对实训题项目进行评分
@@ -47,6 +49,8 @@ export async function gradeProject({ title, description, scoringRubric, standard
     ? buildOpenProjectGradePrompt({ title, description, scoringRubric, studentFiles, fixedItems }, nonce)
     : buildProjectGradePrompt({ title, description, scoringRubric, standardFiles, studentFiles, fixedItems }, nonce);
 
+  // ★OP-2（D1-1）：逐次调用 token 采集（每次 200 响应都记，含随后解析失败重试的那次真实计费）
+  const llmCalls = [];
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const controller = new AbortController();
@@ -83,6 +87,9 @@ export async function gradeProject({ title, description, scoringRubric, standard
       if (!res.ok) throw new Error(`DeepSeek API ${res.status}`);
 
       const data = await res.json();
+      // ★OP-2（D1-1）：200 响应即计费 ⇒ 先采集 usage（解析/schema 失败重试前的这次调用也如实计入）
+      const callUsage = collectLlmCallUsage({ data, fallbackModel: MODEL, at: new Date() });
+      if (callUsage) llmCalls.push(callUsage);
       const choice = data.choices?.[0] || {};
       const content = choice.message?.content || '';
       // ★R3-LLM-OUT（H8/M9）：解析结果**必须过 schema**（越界分/NaN/缺字段在解析层拒绝，走既有重试）；
@@ -115,16 +122,21 @@ export async function gradeProject({ title, description, scoringRubric, standard
         });
       }
       logger.info({ totalScore: graded.totalScore, items: graded.breakdown?.length }, '项目评分完成');
-      return graded;
+      // ★OP-2（D1-1）：成功结果携带本次真实模型调用用量（新增键，向后兼容；调用方忽略无影响）
+      return { ...graded, llm_usage: buildLlmUsage(llmCalls) };
 
     } catch (err) {
       logger.warn({ attempt, err: err.message }, '项目评分失败');
+      // ★OP-2：失败也要把已发生的真实 token 带出（最终失败/降级路径的计费不丢）
+      if (err && typeof err === 'object') err.llm_usage = buildLlmUsage(llmCalls);
       if (attempt >= 3) throw err;
       await new Promise(r => setTimeout(r, 3000));
     }
   }
 
-  throw new Error('项目评分全部重试失败');
+  const exhausted = new Error('项目评分全部重试失败');
+  exhausted.llm_usage = buildLlmUsage(llmCalls);
+  throw exhausted;
 }
 
 /**

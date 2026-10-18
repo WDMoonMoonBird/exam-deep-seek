@@ -459,8 +459,13 @@ const usageAlert = computed(() => {
 
 const usageNote = computed(() => {
   const u = usage.value || {};
+  // ★OP-2（D1-6）：开放题自动评价 —— usage 来自 DeepSeek API 每次响应（按调用时刻聚合），
+  //   与普通题（teardown 前从 DSH 会话抽取）口径不同，如实注明；cache_write 不可得=0（非真实缓存写入）。
+  if (u.calls_basis === 'api_call_time') {
+    return '口径：开放题自动评价按每次模型调用（DeepSeek API usage）聚合；命中率 = cache_read/(cache_read+uncached_input)；费用按 system_configs.llm_prices 分档计算（' + (u.price_tier || '—') + ' 档）；cache_write 不可得=0（非真实缓存写入）；model_calls=模型响应次数（含重试）。';
+  }
   if (u.no_model_session === true) return '口径：本次运行无模型会话（复用命中/量尺等零 LLM 路径）⇒ token 全 0、费用 0；不伪造费用。';
-  return '口径：数据在 teardown 销毁会话**之前**抽取（<run-root>/out/session-usage.json）；命中率 = cache_read/(cache_read+uncached_input)；费用按 system_configs.llm_prices 分档计算（' + (u.price_tier || '—') + ' 档）。'
+  return '口径：数据在 teardown 销毁会话之前抽取（<run-root>/out/session-usage.json）；命中率 = cache_read/(cache_read+uncached_input)；费用按 system_configs.llm_prices 分档计算（' + (u.price_tier || '—') + ' 档）。'
     + (usageInfo.value.source === 'teardown_json' ? '（本行来自 run-teardown.json 摘要：旧运行无逐次分桶，calls 不可得）' : '');
 });
 
