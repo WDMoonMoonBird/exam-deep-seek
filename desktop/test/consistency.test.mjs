@@ -6,7 +6,8 @@
  *   · index.html + 全部 assets（含入口 js/css）逐文件 sha256 一致；
  *   · 新 mac DMG 存在、名称/大小/SHA-256、只读挂载后内部 app codesign adhoc + verify 通过；
  *   · release app（DMG 内容来源）codesign adhoc + verify；
- *   · Windows locales 恰 2 个 .pak（W1 防回归）、win exe SHA 未变。
+ *   · Windows locales 恰 2 个 .pak（W1 防回归）、win exe SHA 未变；
+ *   · HOTFIX-1：快照版本 0.1.1（新 DMG/exe SHA；三树 index.html 仍 `bd782577…`）。
  *
  * 只在 macOS + 产物存在时执行；产物缺失/挂载不可用时 skip，不 fail；只读产物、不联网。
  */
@@ -22,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESKTOP_DIR = path.resolve(__dirname, '..');
 const REPO_DIR = path.resolve(DESKTOP_DIR, '..');
+const pkg = JSON.parse(fs.readFileSync(path.join(DESKTOP_DIR, 'package.json'), 'utf8'));
 const RELEASE_DIR = path.join(DESKTOP_DIR, 'release');
 const DIST_DESKTOP = path.join(REPO_DIR, 'dist-desktop');
 const MAC_APP = path.join(RELEASE_DIR, 'mac-arm64', 'Deadpan 判题.app');
@@ -29,13 +31,14 @@ const MAC_DIST = path.join(MAC_APP, 'Contents', 'Resources', 'dist');
 const WIN_DIST = path.join(RELEASE_DIR, 'win-unpacked', 'resources', 'dist');
 const WIN_UNPACKED_EXE = path.join(RELEASE_DIR, 'win-unpacked', 'Deadpan 判题.exe');
 const WIN_LOCALES_DIR = path.join(RELEASE_DIR, 'win-unpacked', 'locales');
-const WIN_EXE = path.join(RELEASE_DIR, 'Deadpan-0.1.0-x64.exe');
-const DMG_PATH = path.join(RELEASE_DIR, 'Deadpan-0.1.0-arm64.dmg');
+const WIN_EXE = path.join(RELEASE_DIR, 'Deadpan-' + pkg.version + '-x64.exe');
+const DMG_PATH = path.join(RELEASE_DIR, 'Deadpan-' + pkg.version + '-arm64.dmg');
 
-// R4-9 快照（D/R4-9 重建后；重打包需同步更新）
+// HOTFIX-1 / 0.1.1 快照（三树 index.html 仍沿用 R4-9 前端快照；重打包需同步更新）
+const EXPECTED_VERSION = '0.1.1';
 const EXPECTED_INDEX_SHA256 = 'bd78257784dac098bacf2a708bac04af43c9aecc5002c2e0db22684ba0d3f060';
-const EXPECTED_DMG_SHA256 = 'c5e0d67e0fc64a63687bad0dd105cefe094e0d8aeb9350e06c55795b42b8f05e';
-const EXPECTED_WIN_EXE_SHA256 = 'b7b4f1621ea95907520532a46bd3f517eeba4152a479666d564bc300bad7691d';
+const EXPECTED_DMG_SHA256 = '9535ba0c380367eb62c1dc8aab3ba81e84cb3afd1d9dde294b202e2f633ce9a9';
+const EXPECTED_WIN_EXE_SHA256 = '582e6496e4d06ef8e5157bc14bd84870a92ae01b571c8fe4457403aad9b5fd6a';
 const EXPECTED_PAYLOAD_FILES = 390;
 const EXPECTED_ASSETS_FILES = 186;
 
@@ -145,12 +148,13 @@ test('入口 js/css：index.html 引用的现代入口资源在三树存在且 s
   t.diagnostic('入口资源三树一致：' + assetRefs.join(', '));
 });
 
-test('新 mac DMG：名称/大小/SHA-256 快照 + UDIF 容器可解析（R4-9 重建）', { skip: skipDmg }, () => {
-  assert.equal(path.basename(DMG_PATH), 'Deadpan-0.1.0-arm64.dmg');
+test('新 mac DMG：0.1.1 版本/名称/大小/SHA-256 快照 + UDIF 容器可解析（HOTFIX-1 重建）', { skip: skipDmg }, () => {
+  assert.equal(pkg.version, EXPECTED_VERSION, 'package.json 版本应为 HOTFIX-1 的 ' + EXPECTED_VERSION);
+  assert.equal(path.basename(DMG_PATH), 'Deadpan-' + EXPECTED_VERSION + '-arm64.dmg');
   const size = fs.statSync(DMG_PATH).size;
   assert.ok(size > 100 * 1024 * 1024 && size < 200 * 1024 * 1024, 'DMG 体积异常：' + size);
   const sha256 = sha256File(DMG_PATH);
-  assert.equal(sha256, EXPECTED_DMG_SHA256, 'DMG SHA-256 与 R4-9 快照不一致（重建后需同步更新 EXPECTED_DMG_SHA256）');
+  assert.equal(sha256, EXPECTED_DMG_SHA256, 'DMG SHA-256 与 HOTFIX-1 0.1.1 快照不一致（重建后需同步更新 EXPECTED_DMG_SHA256）');
 
   const imageinfo = run('hdiutil', ['imageinfo', DMG_PATH]);
   assert.equal(imageinfo.status, 0, 'hdiutil imageinfo 失败：' + output(imageinfo));
@@ -207,8 +211,9 @@ test('Windows 产物未回退：locales 恰 2 个 .pak（W1）+ exe SHA 未变 +
   const localeEntries = fs.readdirSync(WIN_LOCALES_DIR).sort();
   assert.deepEqual(localeEntries, ['en-US.pak', 'zh-CN.pak'], 'Windows locales 应恰为 en-US.pak + zh-CN.pak（W1）');
 
-  assert.equal(fs.existsSync(WIN_EXE), true, 'Windows 安装包缺失');
-  assert.equal(sha256File(WIN_EXE), EXPECTED_WIN_EXE_SHA256, 'Windows exe SHA-256 应保持 R4-9 快照（未重建）');
+  assert.equal(pkg.version, EXPECTED_VERSION);
+  assert.equal(fs.existsSync(WIN_EXE), true, 'Windows 0.1.1 安装包缺失：' + WIN_EXE);
+  assert.equal(sha256File(WIN_EXE), EXPECTED_WIN_EXE_SHA256, 'Windows exe SHA-256 应为 HOTFIX-1 0.1.1 快照');
 
   const unpacked = run('file', [WIN_UNPACKED_EXE]);
   assert.equal(unpacked.status, 0, 'file 命令失败：' + output(unpacked));

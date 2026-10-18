@@ -20,6 +20,8 @@ export const MAX_PORT = 65535;
 /** 开发期保留端口：Vite(5173)/后端 Express(3000) 不得被桌面壳占用（协作硬约束） */
 export const RESERVED_PORTS = Object.freeze([3000, 5173]);
 export const CONFIG_FILE_NAME = 'config.json';
+/** 首启/修复默认服务器（HOTFIX-1：首启模板不再写空串，避免启动即失败） */
+export const DEFAULT_SERVER_URL = 'https://deadpan.asia';
 /** macOS 最低支持版本（计划 §4.1；Electron 44 基线） */
 export const MIN_MACOS_MAJOR = 13;
 
@@ -100,12 +102,24 @@ export function normalizeCaFile(raw, baseDir = process.cwd()) {
 /** 首次启动写入的配置模板（serverUrl 留空 ⇒ 启动时明确报错并给出文件路径） */
 export function configTemplate() {
   return {
-    _comment: 'serverUrl 必填（例：https://deadpan.asia）；port 默认 47821，修改后需重启；externalOrigins/caFile 可留空。',
-    serverUrl: '',
+    _comment: 'serverUrl 默认 https://deadpan.asia（可改）；port 默认 47821，修改后需重启；externalOrigins/caFile 可留空。',
+    serverUrl: DEFAULT_SERVER_URL,
     port: DEFAULT_PORT,
     externalOrigins: [],
     caFile: null,
   };
+}
+
+/**
+ * 配置迁移（纯函数，HOTFIX-1）：已存在 config 的 serverUrl 缺失/空白时补默认值，
+ * 其余字段（port/externalOrigins/caFile/_comment 及未知字段）原样保留。
+ * 返回 { changed, config }；非对象或无需迁移时 changed=false。
+ */
+export function migrateConfig(raw) {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return { changed: false, config: raw };
+  const current = typeof raw.serverUrl === 'string' ? raw.serverUrl.trim() : '';
+  if (current !== '') return { changed: false, config: raw };
+  return { changed: true, config: { ...raw, serverUrl: DEFAULT_SERVER_URL } };
 }
 
 /** 解析配置对象（纯函数）：返回 { ok, config, errors[] }；未知字段忽略 */
@@ -167,13 +181,23 @@ export function writeConfigFile(filePath, config, { fsImpl = fs } = {}) {
   return filePath;
 }
 
-/** 首次启动确保 config.json 存在（生成模板，不覆盖已有文件） */
+/**
+ * 首次启动确保 config.json 存在；对已存在但 serverUrl 缺失/空白的旧配置做**迁移修复**
+ * （保留其它字段，原子写；HOTFIX-1）。返回 { filePath, created, repaired }。
+ * JSON 非法时不覆盖用户文件（交给 loadConfig 报明确错误）。
+ */
 export function ensureConfigFile({ userDataDir, fsImpl = fs } = {}) {
   const filePath = configPath(userDataDir);
   const read = readConfigFile(filePath, { fsImpl });
-  if (read.exists) return { filePath, created: false };
-  writeConfigFile(filePath, configTemplate(), { fsImpl });
-  return { filePath, created: true };
+  if (!read.exists) {
+    writeConfigFile(filePath, configTemplate(), { fsImpl });
+    return { filePath, created: true, repaired: false };
+  }
+  if (!read.ok) return { filePath, created: false, repaired: false };
+  const migration = migrateConfig(read.raw);
+  if (!migration.changed) return { filePath, created: false, repaired: false };
+  writeConfigFile(filePath, migration.config, { fsImpl });
+  return { filePath, created: false, repaired: true };
 }
 
 /** 加载并校验配置：返回 { ok, filePath, exists, config, errors[] } */

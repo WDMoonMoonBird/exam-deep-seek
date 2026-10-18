@@ -1,6 +1,7 @@
 /**
  * config.test.mjs —— desktop/src/main/config.mjs 纯逻辑单元测试（任务 T4）。
- * 覆盖：默认端口 47821、serverUrl 校验、非法配置拒绝、保留端口、CA/外链规范化、userData 配置读写。
+ * 覆盖：默认端口 47821、serverUrl 校验、非法配置拒绝、保留端口、CA/外链规范化、userData 配置读写；
+ *       HOTFIX-1：默认 serverUrl=https://deadpan.asia、首启模板、旧配置迁移（保留字段/幂等/坏 JSON 不覆盖/合法 URL 不覆盖）。
  */
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -9,9 +10,9 @@ import path from 'node:path';
 
 import { cleanupTempDirs, makeTempDir } from './helpers.mjs';
 import {
-  CONFIG_FILE_NAME, DEFAULT_PORT, MAX_PORT, MIN_MACOS_MAJOR, MIN_PORT, RESERVED_PORTS,
+  CONFIG_FILE_NAME, DEFAULT_PORT, DEFAULT_SERVER_URL, MAX_PORT, MIN_MACOS_MAJOR, MIN_PORT, RESERVED_PORTS,
   configPath, configTemplate, ensureConfigFile, isInsecureServerUrl, isMacosVersionSupported, loadConfig,
-  normalizeCaFile, normalizeExternalOrigins, normalizePort, normalizeServerUrl, parseConfig,
+  migrateConfig, normalizeCaFile, normalizeExternalOrigins, normalizePort, normalizeServerUrl, parseConfig,
   readCaPem, readConfigFile, runtimeOrigin, writeConfigFile,
 } from '../src/main/config.mjs';
 
@@ -24,6 +25,7 @@ test('常量：默认端口 47821 / 保留端口 3000+5173 / macOS 最低 13', (
   assert.deepEqual([...RESERVED_PORTS], [3000, 5173]);
   assert.equal(MIN_MACOS_MAJOR, 13);
   assert.equal(CONFIG_FILE_NAME, 'config.json');
+  assert.equal(DEFAULT_SERVER_URL, 'https://deadpan.asia', 'HOTFIX-1：默认 serverUrl 应为 https://deadpan.asia');
 });
 
 test('configPath：拼接 userData/config.json；空参数抛 TypeError', () => {
@@ -89,9 +91,11 @@ test('normalizeCaFile：空值通过；相对路径按 baseDir 解析；绝对�
   assert.equal(normalizeCaFile(123).ok, false);
 });
 
-test('configTemplate：首启模板 serverUrl 留空、端口默认 47821', () => {
+test('configTemplate：首启模板 serverUrl 默认 https://deadpan.asia、端口默认 47821（HOTFIX-1）', () => {
   const template = configTemplate();
-  assert.equal(template.serverUrl, '');
+  assert.equal(template.serverUrl, DEFAULT_SERVER_URL);
+  assert.equal(template.serverUrl, 'https://deadpan.asia');
+  assert.match(template._comment, /deadpan\.asia/);
   assert.equal(template.port, DEFAULT_PORT);
   assert.deepEqual(template.externalOrigins, []);
   assert.equal(template.caFile, null);
@@ -157,18 +161,22 @@ test('readConfigFile：文件不存在不算错误；坏 JSON 明确失败；合
   assert.deepEqual(good.raw, { serverUrl: 'https://deadpan.asia' });
 });
 
-test('userData 配置读写：ensure 生成模板、write/load 往返、坏 JSON 拒绝、缺失文件报错含路径', () => {
+test('userData 配置读写：首启模板可直接 load、write/load 往返、坏 JSON 拒绝、缺失文件报错含路径（HOTFIX-1）', () => {
   const userDataDir = makeTempDir('desktop-cfg-userdata-');
 
   const first = ensureConfigFile({ userDataDir });
   assert.equal(first.created, true);
+  assert.equal(first.repaired, false);
   assert.equal(fs.existsSync(first.filePath), true);
   assert.equal(path.basename(first.filePath), 'config.json');
-  assert.equal(ensureConfigFile({ userDataDir }).created, false);
+  const second = ensureConfigFile({ userDataDir });
+  assert.deepEqual({ created: second.created, repaired: second.repaired }, { created: false, repaired: false });
 
-  const notConfigured = loadConfig({ userDataDir });
-  assert.equal(notConfigured.ok, false);
-  assert.ok(notConfigured.errors.some((item) => item.includes('serverUrl')));
+  // HOTFIX-1：首启模板 serverUrl 已有默认值 ⇒ loadConfig 直接成功（不再要求用户手填）
+  const firstRun = loadConfig({ userDataDir });
+  assert.equal(firstRun.ok, true);
+  assert.equal(firstRun.config.serverUrl, DEFAULT_SERVER_URL);
+  assert.equal(firstRun.config.port, DEFAULT_PORT);
 
   writeConfigFile(first.filePath, { serverUrl: 'https://deadpan.asia', port: 47821, externalOrigins: [], caFile: null });
   const loaded = loadConfig({ userDataDir });
@@ -186,6 +194,75 @@ test('userData 配置读写：ensure 生成模板、write/load 往返、坏 JSON
   assert.equal(missing.ok, false);
   assert.equal(missing.exists, false);
   assert.ok(missing.errors[0].includes(missing.filePath));
+});
+
+test('migrateConfig：空/缺失/空白 serverUrl 补默认值并保留其他字段；合法 URL 不动（HOTFIX-1）', () => {
+  const empty = migrateConfig({ serverUrl: '', port: 48000, externalOrigins: ['https://docs.example.com'], caFile: 'ca.pem', custom: 'x' });
+  assert.equal(empty.changed, true);
+  assert.deepEqual(empty.config, {
+    serverUrl: DEFAULT_SERVER_URL, port: 48000, externalOrigins: ['https://docs.example.com'], caFile: 'ca.pem', custom: 'x',
+  });
+
+  const missing = migrateConfig({ port: 47821 });
+  assert.equal(missing.changed, true);
+  assert.equal(missing.config.serverUrl, DEFAULT_SERVER_URL);
+  assert.equal(missing.config.port, 47821);
+
+  const blank = migrateConfig({ serverUrl: '   ' });
+  assert.equal(blank.changed, true);
+  assert.equal(blank.config.serverUrl, DEFAULT_SERVER_URL);
+
+  const valid = { serverUrl: 'https://example.org', port: 47821 };
+  const untouched = migrateConfig(valid);
+  assert.equal(untouched.changed, false);
+  assert.equal(untouched.config, valid);
+
+  for (const raw of [null, undefined, 'str', 42, []]) {
+    assert.equal(migrateConfig(raw).changed, false);
+  }
+});
+
+test('ensureConfigFile 迁移：旧空 config 保留字段并修复、幂等、坏 JSON 不覆盖、合法 URL 不覆盖（HOTFIX-1）', () => {
+  const userDataDir = makeTempDir('desktop-cfg-migrate-');
+  fs.mkdirSync(userDataDir, { recursive: true });
+  const filePath = path.join(userDataDir, 'config.json');
+
+  // 模拟 v0.1.0 旧配置：serverUrl 为空串，其余字段/未知字段存在
+  const legacy = { _comment: 'legacy', serverUrl: '', port: 48000, externalOrigins: ['https://docs.example.com'], caFile: 'certs/ca.pem', custom: 'x' };
+  fs.writeFileSync(filePath, JSON.stringify(legacy, null, 2));
+  const repaired = ensureConfigFile({ userDataDir });
+  assert.deepEqual({ created: repaired.created, repaired: repaired.repaired }, { created: false, repaired: true });
+  const afterMigration = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  assert.equal(afterMigration.serverUrl, DEFAULT_SERVER_URL);
+  for (const key of ['_comment', 'port', 'externalOrigins', 'caFile', 'custom']) {
+    assert.deepEqual(afterMigration[key], legacy[key], '迁移应保留字段：' + key);
+  }
+  const loaded = loadConfig({ userDataDir });
+  assert.equal(loaded.ok, true);
+  assert.equal(loaded.config.serverUrl, DEFAULT_SERVER_URL);
+  assert.equal(loaded.config.port, 48000);
+
+  // 幂等：再次 ensure 不再改写
+  const contentAfterMigration = fs.readFileSync(filePath, 'utf8');
+  const again = ensureConfigFile({ userDataDir });
+  assert.deepEqual({ created: again.created, repaired: again.repaired }, { created: false, repaired: false });
+  assert.equal(fs.readFileSync(filePath, 'utf8'), contentAfterMigration);
+
+  // 合法 URL 不被覆盖
+  fs.writeFileSync(filePath, JSON.stringify({ serverUrl: 'https://example.org', port: 47821 }, null, 2));
+  const validContent = fs.readFileSync(filePath, 'utf8');
+  const validRun = ensureConfigFile({ userDataDir });
+  assert.equal(validRun.repaired, false);
+  assert.equal(fs.readFileSync(filePath, 'utf8'), validContent);
+
+  // 坏 JSON：不覆盖用户文件，loadConfig 明确报错
+  fs.writeFileSync(filePath, '{broken json');
+  const badRun = ensureConfigFile({ userDataDir });
+  assert.deepEqual({ created: badRun.created, repaired: badRun.repaired }, { created: false, repaired: false });
+  assert.equal(fs.readFileSync(filePath, 'utf8'), '{broken json');
+  const badLoad = loadConfig({ userDataDir });
+  assert.equal(badLoad.ok, false);
+  assert.match(badLoad.errors.join('\n'), /JSON/);
 });
 
 test('readCaPem：无 CA 返回 null；存在返回 PEM；缺失返回失败但不抛异常', () => {

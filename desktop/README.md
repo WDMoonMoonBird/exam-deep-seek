@@ -55,13 +55,20 @@ GUI 冒烟用 `playwright-core` 的 `_electron` 驱动（仅 devDependency，**�
 
 ## 配置
 
-`<userData>/config.json`（macOS：`~/Library/Application Support/Deadpan-Exam-Desktop/config.json`，首启自动生成模板）：
+`<userData>/config.json`（macOS：`~/Library/Application Support/Deadpan-Exam-Desktop/config.json`）。
+
+**首次启动**：自动生成配置，`serverUrl` 默认为 `https://deadpan.asia`（v0.1.1 起不再写空串）。
+若检测到已有配置的 `serverUrl` 为空（v0.1.0 首启模板问题），启动时会**自动迁移修复**
+（补默认值，保留 `port`/`externalOrigins`/`caFile` 等字段），无需手动编辑。
+
+**修改服务器地址**：编辑上述 `config.json` 的 `serverUrl` → 完全退出 App → 重新打开（端口 47821 固定）。
 
 ```json
 { "serverUrl": "https://deadpan.asia", "port": 47821, "externalOrigins": [], "caFile": null }
 ```
 
-- `serverUrl`：固定远端服务器 **origin**（必填；可配置内网 CA `caFile`，但不提供关闭证书校验的开关）。
+- `serverUrl`：固定远端服务器 **origin**，**默认 `https://deadpan.asia`**（可改；空白会被自动迁移修复；
+  可配置内网 CA `caFile`，但不提供关闭证书校验的开关）。
   **生产分发必须使用 https**；配置成 `http://` 时启动会打警告（令牌/数据明文传输，仅限本机开发联调）。
 - `port`：本地固定端口（默认 47821，1024–65535，禁占 3000/5173）；端口决定 localStorage origin，**不能随机换端口**。
 - `externalOrigins`：允许交给系统浏览器打开的外链白名单（仅 https；默认空 = 全部拦截）。

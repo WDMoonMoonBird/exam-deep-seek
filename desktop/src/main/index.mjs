@@ -8,8 +8,8 @@ import { app, BrowserWindow, dialog, session, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  MIN_MACOS_MAJOR, configPath, ensureConfigFile, isInsecureServerUrl, isMacosVersionSupported,
-  loadConfig, readCaPem,
+  DEFAULT_SERVER_URL, MIN_MACOS_MAJOR, configPath, ensureConfigFile, isInsecureServerUrl,
+  isMacosVersionSupported, loadConfig, readCaPem,
 } from './config.mjs';
 import { startContentServer } from './content-server.mjs';
 import { createProxy } from './proxy.mjs';
@@ -90,7 +90,11 @@ async function bootstrap() {
     return;
   }
 
-  ensureConfigFile({ userDataDir: USER_DATA_DIR });
+  const ensured = ensureConfigFile({ userDataDir: USER_DATA_DIR });
+  if (ensured.created) log.info('已生成配置模板：' + ensured.filePath);
+  if (ensured.repaired) {
+    log.warn('config.json 的 serverUrl 为空，已自动写入默认值 ' + DEFAULT_SERVER_URL + '（' + ensured.filePath + '）');
+  }
   const loaded = loadConfig({ userDataDir: USER_DATA_DIR });
   if (!loaded.ok) {
     fail('服务器配置无效', loaded.filePath + '\n\n' + loaded.errors.join('\n'));
