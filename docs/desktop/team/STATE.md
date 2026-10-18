@@ -4,7 +4,7 @@
 - Branch: `feat/desktop-shell`
 - Base commit: `2f77967d55e11b37cdb32db44b40c02220f79bf6`
 - Round 1 commit: `213f7ca` ｜ tag `desktop-r1-scaffold`
-- Round 2 commit: pending (T17 commit) ｜ tag `desktop-r2-dmg`
+- Round 2 commit: `548bf0948bf74fd3dd25d977bdfd2bd9f3d99cd6` ｜ tag `desktop-r2-dmg`
 - Plan: `docs/desktop/2026-10-18-electron-desktop-plan.md`
 - Round: 2 ✅ PASS
 - Phase: Round 3 queued
