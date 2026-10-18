@@ -10,6 +10,12 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECTS_UPLOAD_DIR = path.join(__dirname, '../../uploads/projects');
 
+// ★task-44（Phase D，A 最小方案，2026-10-18）：**legacy 项目提交扫描开关，默认关闭**。
+//   仅当 `WORKER_ENABLE_PROJECT_SCAN === 'true'`（严格字面比较，其余任何值=off）才加入主循环；
+//   原因：DSH 作业级批改接管 project 链后，worker 再扫会重复评分/双写。
+//   回滚方式：把该 env 设为 true 即恢复旧行为（scanProjectSubmissions 函数保留、未删除）。
+const WORKER_ENABLE_PROJECT_SCAN = process.env.WORKER_ENABLE_PROJECT_SCAN === 'true';
+
 // ★C2：**无字面量兜底** —— 密钥唯一来源是环境变量；未配置则不发内部回调（主进程同样拒绝启动）。
 const INTERNAL_SECRET = process.env.INTERNAL_SECRET;
 function notifyGradedViaHttp(schoolId, data) {
@@ -160,7 +166,7 @@ async function scanSubmissions() {
   await Promise.all(submissions.map(gradeOne));
 }
 
-// ==================== 实训项目提交扫描 ====================
+// ==================== 实训项目提交扫描（★task-44：默认关闭；仅 WORKER_ENABLE_PROJECT_SCAN==='true' 时由主循环调用）====================
 
 async function scanProjectSubmissions() {
   try {
@@ -254,7 +260,7 @@ async function gradeOneProject(sub) {
 
 export async function start() {
   MAX_CONCURRENT = await getConcurrency();
-  logger.info({ maxConcurrent: MAX_CONCURRENT }, '评分 Worker 已启动');
+  logger.info({ maxConcurrent: MAX_CONCURRENT, projectScan: WORKER_ENABLE_PROJECT_SCAN ? 'on' : 'off' }, '评分 Worker 已启动');
 
   while (running) {
     try {
@@ -267,10 +273,10 @@ export async function start() {
         lastConcurrencyRefresh = Date.now();
       }
 
-      await Promise.all([
-        scanSubmissions(),
-        scanProjectSubmissions(),
-      ]);
+      // ★task-44：项目扫描默认不参与主循环（保留函数便于回滚；开启只靠 env，不靠改代码）
+      const tasks = [scanSubmissions()];
+      if (WORKER_ENABLE_PROJECT_SCAN) tasks.push(scanProjectSubmissions());
+      await Promise.all(tasks);
     } catch (err) {
       logger.error({ err }, 'Worker 轮询异常');
       await sleep(5000);
