@@ -6,7 +6,7 @@
 /** ★R2-B37b 中文化映射（中文为主；英文原键放 tooltip，便于与日志/DB 对照） */
 const TYPE_LABELS = { worker: '批改运行', build: '造尺运行', ruler: '存量尺子记录' };
 /** ★D2：运行类型（自动造尺链路的 build/reuse 是作业级记录的关键口径） */
-const RUN_KIND_LABELS = { build: '造尺（build）', reuse: '复用（reuse）', worker: '普通批改', ruler: '存量尺子（ruler）' };
+const RUN_KIND_LABELS = { open: '开放评价（open）', build: '造尺（build）', reuse: '复用（reuse）', worker: '普通批改', ruler: '存量尺子（ruler）' };
 const SOURCE_LABELS = { worker: '批改 worker', build: '造尺脚本' };
 const HOME_POLICY_LABELS = { 'sessions+credentials': '会话文件 + 凭据（保留 home 骨架）' };
 const STATUS_LABELS = { done: '完成', failed: '失败', pending: '排队中', running: '运行中', needs_rerun: '需重跑', ready: '就绪（ready）' };
@@ -17,6 +17,8 @@ export function typeLabel(t) { return TYPE_LABELS[t] || (t || '—'); }
 /** ★D2：运行类型中文化 + 兜底（checker_id 仍是 __AUTO_BUILD__ 哨兵时显示「自动造尺（未对齐）」） */
 export function runKindLabel(k) { return RUN_KIND_LABELS[k] || (k || '—'); }
 export function runKindTone(k) {
+  // ★OP-1：开放题自动评价 job（无标准包/无尺子）单独一种色调，便于在批改运行页一眼区分
+  if (k === 'open') return 'brand';
   if (k === 'build' || k === 'reuse') return 'success';
   if (k === 'ruler') return 'neutral';
   return 'neutral';

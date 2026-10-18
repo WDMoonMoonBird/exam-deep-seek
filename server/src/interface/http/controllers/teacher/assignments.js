@@ -344,7 +344,9 @@ export const createAssignment = async (req, res) => {
       openProjectWarnings.push({
         questionId: q.id,
         title: q.title,
-        message: `题目「${q.title}」未上传标准工程包，将按开放性题目布置：AI 仅依据评分标准做评价式评分，不与参考答案对比`,
+        // ★OP-1（D1）：明确「截止后自动评分」——开放题由截止扫描建 __AUTO_OPEN__ job 评价式评分并回写成绩
+        autoGrade: 'on_deadline_open',
+        message: `题目「${q.title}」未上传标准工程包，将按开放性题目布置：AI 仅依据评分标准做评价式评分，不与参考答案对比；作业截止后将自动完成评价式评分并回写成绩`,
       });
     }
     if (openProjectWarnings.length && confirmWithoutStandardPackage !== true) {
@@ -352,7 +354,7 @@ export const createAssignment = async (req, res) => {
       logger.info({ questionIds: openProjectWarnings.map(w => w.questionId) }, '布置作业待教师确认：存在未上传标准工程包的题目');
       return res.status(400).json({
         code: 1007,
-        message: `以下题目未上传标准工程包，AI 将仅依据评分标准做评价式评分（不与参考答案对比）：${titles}。确认按开放性题目布置？`,
+        message: `以下题目未上传标准工程包，AI 将仅依据评分标准做评价式评分（不与参考答案对比）：${titles}。确认按开放性题目布置？（作业截止后自动评分）`,
         data: { requiresConfirmation: true, warnings: openProjectWarnings },
       });
     }

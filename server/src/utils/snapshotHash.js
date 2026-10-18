@@ -16,6 +16,9 @@ import path from 'path';
 import crypto from 'crypto';
 import { standardDir } from './projectPaths.js';
 
+/** ★OP-1：无标准工程包哨兵（目录不存在时的 digest）—— 分类/导出统一引用，禁止再写裸字面量 */
+export const STANDARD_HASH_ABSENT = 'sha256:absent';
+
 function sha256Hex(buf) {
   return crypto.createHash('sha256').update(buf).digest('hex');
 }
@@ -83,7 +86,7 @@ export function walkFiltered(root, ignore = []) {
 
 /** 目录哈希：返回 { digest, entries }；目录不存在 → digest='sha256:absent' */
 export function dirSha256(root, ignore = []) {
-  if (!root || !fs.existsSync(root) || !fs.statSync(root).isDirectory()) return { digest: 'sha256:absent', entries: 0 };
+  if (!root || !fs.existsSync(root) || !fs.statSync(root).isDirectory()) return { digest: STANDARD_HASH_ABSENT, entries: 0 };
   const h = crypto.createHash('sha256');
   let n = 0;
   for (const e of walkFiltered(root, ignore)) {
@@ -109,6 +112,6 @@ export function standardPackSha256(questionId, ignore = []) {
   try {
     return dirSha256(standardDir(questionId), ignore).digest;
   } catch {
-    return 'sha256:absent';
+    return STANDARD_HASH_ABSENT;
   }
 }

@@ -10,6 +10,7 @@
  */
 import fsBase from 'fs';
 import path from 'path';
+import { DEVICE_NAMES } from './materialsExporter.js';
 
 export const MATERIALS_ROOT_ENV = 'DSH_GRADER_MATERIALS_ROOT';
 export const EXPORT_MANIFEST_NAME = 'export-manifest.json';
@@ -40,7 +41,9 @@ export function resolveMaterialsForAssignment({ materialsRoot, assignmentId, fsI
   }
   if (submissions === null) {
     const zipCount = entries.filter((f) => String(f).toLowerCase().endsWith('.zip')).length;
-    submissions = Math.max(0, zipCount - 1);   // 减去标准工程包
+    // ★OP-1：只有存在标准工程包时才减 1（开放题导出的目录没有标准件，固定减 1 会少算一份）
+    const hasStandardZip = entries.includes(DEVICE_NAMES.standard);
+    submissions = Math.max(0, zipCount - (hasStandardZip ? 1 : 0));
     source = 'zipcount';
   }
   return { ok: true, dir, submissions, source };

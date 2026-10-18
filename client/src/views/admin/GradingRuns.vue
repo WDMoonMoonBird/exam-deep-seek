@@ -51,7 +51,7 @@
             </a-tooltip>
           </template>
           <template v-else-if="column.key === 'run_kind_col'">
-            <a-tooltip :title="'原键：run_kind=' + (record.run_kind || '—') + '（build=本次造尺 / reuse=复用量尺 / worker=普通批改 / ruler=存量尺子）'">
+            <a-tooltip :title="'原键：run_kind=' + (record.run_kind || '—') + '（open=开放题自动评价 / build=本次造尺 / reuse=复用量尺 / worker=普通批改 / ruler=存量尺子）'">
               <StatusTag :tone="runKindTone(record.run_kind)" :text="runKindLabel(record.run_kind)" dot />
             </a-tooltip>
           </template>
@@ -305,7 +305,7 @@
                       </a-collapse-panel>
                     </a-collapse>
                   </template>
-                  <span v-else class="muted">—（该运行没有关联题目/快照）</span>
+                  <span v-else class="muted">{{ detail.run && detail.run.run_kind === 'open' ? '—（开放题无标准包/无尺子）' : '—（该运行没有关联题目/快照）' }}</span>
                 </a-descriptions-item>
                 <a-descriptions-item label="题目描述" :span="2">
                   <template v-if="meta.description"><pre class="log">{{ meta.description.text || '（空）' }}</pre></template>
@@ -388,6 +388,7 @@ const lossOpen = ref(false);   // ★R2-B68：失分项分布抽屉（需 assign
 
 const typeOptions = [{ value: 'worker', label: '批改运行' }, { value: 'build', label: '造尺运行' }, { value: 'ruler', label: '存量尺子记录' }];
 const runKindOptions = [
+  { value: 'open', label: '开放评价（open）' },
   { value: 'build', label: '造尺（build）' },
   { value: 'reuse', label: '复用（reuse）' },
   { value: 'worker', label: '普通批改' },

@@ -10,7 +10,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { SUBMISSIONS_ROOT, UPLOADS_ROOT, standardDir } from '../../../utils/projectPaths.js';
+import { SUBMISSIONS_ROOT, UPLOADS_ROOT, standardDir, hasStandardPackage } from '../../../utils/projectPaths.js';
 import { readZipEntries, zipDirectory } from '../../execution/deterministic-zip.js';
 import { resolveSnapshot } from '../../../services/assignmentSnapshot.js';
 
@@ -98,7 +98,14 @@ export function buildAssignmentMd({ title, material }) {
 
 /**
  * 核心导出（可注入 prisma，便于测试）。
- * @returns {{ok:true, out:string, n:number, questionId:number, standardSha256:string, rubricLen:number, manifest:object} | {ok:false, reason:string}}
+ *
+ * ★OP-1（D1）：开放题（无标准工程包）支持 —— 不再报 standard_package_missing：
+ *   · 标准题（有包）路径与产物形状**完全不变**（缺包仍 fail-closed）；
+ *   · 开放题跳过「标准工程包.zip」与标准目录检查，其余（评分标准/题目描述/学生 zip）照常导出，
+ *     manifest 增 { mode:'open', standard:null }（snapshot.standard_hash='sha256:absent' 如实记录）。
+ *   判据：hasStandardPackage()（与 AI 实评/布置确认同源）+ 本次导出根下标准目录实际存在性
+ *   （uploadsRoot 重定位/演练夹具时允许标准包位于重定位根内，避免把标准题误判成开放题）。
+ * @returns {{ok:true, open:boolean, out:string, n:number, questionId:number, standardSha256:string|null, rubricLen:number, manifest:object} | {ok:false, reason:string}}
  */
 export async function exportMaterials({ prisma, assignmentId, outDir, uploadsRoot = null, now = new Date().toISOString() }) {
   try {
@@ -131,7 +138,12 @@ async function exportMaterialsInner({ prisma, assignmentId, outDir, uploadsRoot 
   const snapshot = resolveSnapshot(link, question);
 
   const stdDir = reroot(standardDir(question.id), uploadsRoot);
-  if (!fs.existsSync(stdDir) || countFiles(stdDir) === 0) return { ok: false, reason: 'standard_package_missing:' + stdDir };
+  let stdDirPresent = false;
+  try { stdDirPresent = fs.existsSync(stdDir) && countFiles(stdDir) > 0; } catch { stdDirPresent = false; }
+  // 开放/标准唯一判据（详见函数头）：hasStandardPackage 为 DB/真实根口径；stdDirPresent 兼容上传根重定位
+  const stdPackage = hasStandardPackage(question.id, question.attachmentUrl) === true || stdDirPresent;
+  const open = !stdPackage;
+  if (!open && !stdDirPresent) return { ok: false, reason: 'standard_package_missing:' + stdDir };
 
   const submissions = await prisma.submission.findMany({
     where: { assignmentId: Number(assignmentId), questionId: question.id },
@@ -143,8 +155,9 @@ async function exportMaterialsInner({ prisma, assignmentId, outDir, uploadsRoot 
   const userById = new Map(users.map((u) => [Number(u.id), u]));
 
   fs.mkdirSync(outDir, { recursive: true });
-  const standardZip = zipDirectory(stdDir);
-  fs.writeFileSync(path.join(outDir, DEVICE_NAMES.standard), standardZip);
+  // 开放题：没有标准工程包 ⇒ 不写标准件（其余文件照常；标准题路径逐字节不变）
+  const standardZip = open ? null : zipDirectory(stdDir);
+  if (!open) fs.writeFileSync(path.join(outDir, DEVICE_NAMES.standard), standardZip);
   const rubricBuf = Buffer.from(String(snapshot.rubric ?? ''), 'utf8');
   fs.writeFileSync(path.join(outDir, DEVICE_NAMES.rubric), rubricBuf);
   const assignmentBuf = Buffer.from(buildAssignmentMd({ title: question.title, material: snapshot.material }), 'utf8');
@@ -169,13 +182,15 @@ async function exportMaterialsInner({ prisma, assignmentId, outDir, uploadsRoot 
 
   const manifest = {
     schema_version: 'materials-export/1',
+    // 仅开放题增字段（标准题 manifest 形状逐字节不变）
+    ...(open ? { mode: 'open' } : {}),
     generated_at: now,
     assignment_id: Number(assignmentId),
     assignment_title: assignment.title,
     question_id: Number(question.id),
     question_title: question.title,
-    source: { uploads_root: uploadsRoot ? path.resolve(uploadsRoot) : UPLOADS_ROOT, standard_dir: stdDir },
-    standard: { file: DEVICE_NAMES.standard, sha256: sha256(standardZip), bytes: standardZip.length, entries: readZipEntries(standardZip).map((e) => e.name) },
+    source: { uploads_root: uploadsRoot ? path.resolve(uploadsRoot) : UPLOADS_ROOT, standard_dir: open ? null : stdDir },
+    standard: open ? null : { file: DEVICE_NAMES.standard, sha256: sha256(standardZip), bytes: standardZip.length, entries: readZipEntries(standardZip).map((e) => e.name) },
     rubric: { file: DEVICE_NAMES.rubric, sha256: sha256(rubricBuf), chars: rubricBuf.length },
     // ★R2-B35：物料来源（发布冻结快照 vs 活值）——内容指纹口径须与此一致（snapshot ?? live）
     snapshot: { from_snapshot: snapshot.fromSnapshot, origin: snapshot.origin || null, standard_hash: snapshot.standardHash || null, rubric_sha256: snapshot.rubricSha256 || null },
@@ -185,5 +200,5 @@ async function exportMaterialsInner({ prisma, assignmentId, outDir, uploadsRoot 
     skipped,
   };
   fs.writeFileSync(path.join(outDir, EXPORT_MANIFEST_NAME), JSON.stringify(manifest, null, 2) + '\n');
-  return { ok: true, out: outDir, n: items.length, questionId: Number(question.id), standardSha256: sha256(standardZip), rubricLen: rubricBuf.length, manifest };
+  return { ok: true, open, out: outDir, n: items.length, questionId: Number(question.id), standardSha256: open ? null : sha256(standardZip), rubricLen: rubricBuf.length, manifest };
 }

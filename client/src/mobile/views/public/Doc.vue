@@ -246,7 +246,7 @@ async function copyRubric() {
 
             <div class="banner banner--warning doc-tip">
               <MIcon name="alert" />
-              <div><b>注意</b>：实训题的标准工程包只能在电脑端上传；未上传时 AI 只按评分标准做评价式评分，不臆造标准答案。</div>
+              <div><b>注意</b>：实训题的标准工程包只能在电脑端上传；未上传时 AI 只按评分标准做评价式评分，不臆造标准答案（作业截止后自动执行并回写成绩）。</div>
             </div>
 
             <div class="readonly-tip doc-tip">

@@ -153,20 +153,22 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
       where: { id: submissionId },
       include: { question: { select: { id: true, title: true, material: true, scoringRubric: true, maxScore: true, type: true, attachmentUrl: true, rubricItems: true, checkerScript: true, checkerStatus: true, checkerMeta: true } } },
     });
+    // ★OP-1（D1）：所有出口返回结构化结果（{ok:true,aiScore} / {ok:false,reason}），
+    //   供「开放题自动评价」执行器区分成功/失败（既有调用方忽略返回值 ⇒ 行为兼容）。
     if (!sub) {
       logger.warn({ submissionId }, '实训题评分：提交记录不存在，跳过');
-      return;
+      return { ok: false, reason: 'submission_not_found' };
     }
     if (sub.question?.type !== 'project') {
       logger.warn({ submissionId, type: sub.question?.type }, '实训题评分：非 project 类型，跳过');
-      return;
+      return { ok: false, reason: 'not_project' };
     }
     // 幂等保护：非 pending 评分任务跳过；
     // 教师重评（regrade 置 grading.state=pending 且记录 prevStatus）时，即使 reviewed/published 也继续评分
     const gradingEnv = parseProjectAnswer(sub.answer).grading || {};
     if (gradingEnv.state !== 'pending' && (sub.status === 'reviewed' || sub.status === 'published')) {
       logger.info({ submissionId, status: sub.status }, '实训题评分：已审核/发布且无重评任务，跳过');
-      return;
+      return { ok: false, reason: 'idempotent_skip' };
     }
 
     const stdDir = standardDir(questionId);
@@ -191,7 +193,7 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
     if (!studentFiles) {
       logger.warn({ submissionId, stuDir }, '实训题评分：学生版本无可读文件，标记失败');
       await markFailed(submissionId, '学生提交无可读源文件');
-      return;
+      return { ok: false, reason: 'no_readable_files' };
     }
     if (ctx.info.mode !== 'off') {
       logger.info({ submissionId, mode: ctx.info.mode, pickedCount: ctx.info.pickedCount || 0 }, '实训题评分：上下文构建完成');
@@ -284,12 +286,12 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
         } catch (err2) {
           logger.error({ err: err2, submissionId }, '实训题评分：AI 调用失败，标记失败');
           await markFailed(submissionId, 'AI 评分服务异常');
-          return;
+          return { ok: false, reason: 'ai_failed' };
         }
       } else {
         logger.error({ err: aiErr, submissionId, gradingMode }, '实训题评分：AI 调用失败，标记失败');
         await markFailed(submissionId, 'AI 评分服务异常');
-        return;
+        return { ok: false, reason: 'ai_failed' };
       }
     }
 
@@ -354,9 +356,11 @@ export async function gradeProjectSubmission({ submissionId, questionId, student
       { submissionId, aiScore, gradingMode, elapsed: `${Date.now() - start}ms` },
       '实训题 AI 评分完成',
     );
+    return { ok: true, aiScore };
   } catch (err) {
     logger.error({ err, submissionId }, '实训题评分异常，标记失败');
     await markFailed(submissionId, '评分流程异常').catch(() => {});
+    return { ok: false, reason: 'exception' };
   } finally {
     release();
   }

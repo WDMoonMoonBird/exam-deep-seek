@@ -24,6 +24,7 @@ import logger from '../../../utils/logger.js';
 import { JOB_STATUS, DEFAULT_MAX_ATTEMPTS, claimJobAtomic, createGate, finishJob } from './claim.js';
 import { REUSE_CHECKER_MODE, absolutizeDeviceArgs, placeCheckerFiles, withBuildCheckerArgs, withReuseCheckerArgs, withWorkdirArg } from './device-args.js';
 import { AUTO_BUILD_CHECKER, isAutoBuildChecker } from './autoBuild.js';
+import { AUTO_OPEN_CHECKER, isAutoOpenChecker } from './autoOpen.js';
 import { REEXPORT_ENV, alignJobCheckerId, ensureMaterialsForAssignment, logSessionScope } from './autoBuildSession.js';
 import { errorTail, persistDeviceLogs } from './device-logs.js';
 
@@ -138,6 +139,40 @@ async function runOnceInner({
     const autoBuild = isAutoBuildChecker(job.checkerId);
     if (autoBuild) console.log('AUTO_BUILD_SESSION assignment=' + job.assignmentId + ' job=' + job.id + ' checker=' + AUTO_BUILD_CHECKER);
     await logSessionScope({ prisma, job, log: logger });
+
+    // ★OP-1（D1）：开放模式 job —— 无标准工程包的实训题，截止后走**服务端评价式评分**。
+    //   在物料/尺子/装置之前短路：不导物料、不造尺、不算 content_key、不跑装置（开放题无标准包，
+    //   装置三件套与内容指纹尺子均不适用）；复用 gradeProjectSubmission 的 open 评分链路
+    //   （hasStandardPackage=false ⇒ mode='open' ⇒ OPEN_PROJECT_ROLE，prompt 无标准答案段）。
+    //   幂等/失败可见：只评 status='submitted'（重跑只补差）；graded=0 或 failed>0 ⇒ needs_rerun + open_grade_*。
+    if (isAutoOpenChecker(job.checkerId)) {
+      console.log('OPEN_PROJECT_SESSION assignment=' + job.assignmentId + ' job=' + job.id + ' checker=' + AUTO_OPEN_CHECKER);
+      let open = null;
+      try {
+        // 动态导入：开放评分链路（services/projectGrading）只在真正消费开放 job 时加载，
+        // 不改变既有造尺/复用/量尺路径的模块加载面（w15/w31 等 fake-prisma 测试零影响）。
+        const evaluator = deps.evaluateOpenProject || (await import('./openProjectEvaluation.js')).evaluateOpenProjectAssignment;
+        open = await evaluator({ prisma, job, log: logger });
+      } catch (err) {
+        const reason = 'open_grade_exception:' + String((err && err.message) || err).slice(0, 160);
+        await finishJob({ prisma, jobId: job.id, status: JOB_STATUS.needsRerun, error: reason });
+        console.log('OPEN_PROJECT_DONE graded=0 failed=0 skipped=0 status=' + JOB_STATUS.needsRerun + ' job=' + job.id + ' error=' + reason);
+        return { consumed: true, jobId: job.id, status: JOB_STATUS.needsRerun, reason: 'open_grade_exception' };
+      }
+      const openDone = !!open && open.failed === 0 && open.graded > 0;
+      const openStatus = openDone ? JOB_STATUS.done : JOB_STATUS.needsRerun;
+      const openError = open && open.failed > 0
+        ? 'open_grade_partial:failed=' + open.failed + ':graded=' + open.graded
+        : (openDone ? null : 'open_grade_no_success:' + ((open && (open.reason || ('graded=' + open.graded))) || 'unknown'));
+      await finishJob({
+        prisma, jobId: job.id, status: openStatus,
+        written: open ? open.graded : 0, skipped: open ? open.skipped : 0, error: openError,
+      });
+      console.log('OPEN_PROJECT_DONE graded=' + ((open && open.graded) || 0) + ' failed=' + ((open && open.failed) || 0)
+        + ' skipped=' + ((open && open.skipped) || 0) + ' status=' + openStatus + ' job=' + job.id
+        + (openError ? ' error=' + openError : ''));
+      return { consumed: true, jobId: job.id, status: openStatus, written: open ? open.graded : 0, skipped: open ? open.skipped : 0, reason: 'open_project', open };
+    }
 
     const runRoot = path.join(runRootBase, 'r2b4-job-' + job.id + '-' + Date.now());
     fs.mkdirSync(runRoot, { recursive: true });

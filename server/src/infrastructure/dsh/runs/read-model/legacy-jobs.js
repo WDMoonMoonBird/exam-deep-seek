@@ -6,6 +6,7 @@
 import defaultPrisma from '../../../../utils/prisma.js';
 import defaultLogger from '../../../../utils/logger.js';
 import { isAutoBuildChecker } from '../../worker/autoBuild.js';
+import { isAutoOpenChecker } from '../../worker/autoOpen.js';
 import { normalizeRawRow } from './json-safe.js';
 
 // ===================== ★D2（t7）：自动造尺 / 存量记录（只读聚合，不新增表/迁移） =====================
@@ -13,12 +14,15 @@ const LEGACY_JOB_LIMIT = 1000;   // 旧任务索引上限（grading_jobs 最近�
 const RULER_RECORD_LIMIT = 200;  // 存量尺子记录上限（按绑定时间倒序）
 
 /**
- * 判据：job → build / reuse / worker（只读；ruler 表缺失 ⇒ 退化为 worker，不报错）
+ * 判据：job → open / build / reuse / worker（只读；ruler 表缺失 ⇒ 退化为 worker，不报错）
+ * - open：__AUTO_OPEN__ 哨兵（开放题自动评价 job；无标准包、content_key 恒 NULL、无 ruler）；
  * - build：本 job 造出的尺子（grading_rulers.source_run_id = job.id），或 checker_id 仍是 '__AUTO_BUILD__' 哨兵；
  * - reuse：job 带 content_key 且同内容尺子已存在但由别的运行造出（零 LLM 复用）；
  * - worker：无内容键的历史/普通批改 job。
  */
 export function classifyJobKind({ jobId = null, checkerId = null, contentKey = null, rulerByContent = null } = {}) {
+  // ★OP-1：开放 job 必须先判（无 content_key、无 ruler，否则会落到 worker）
+  if (isAutoOpenChecker(checkerId)) return 'open';
   if (isAutoBuildChecker(checkerId)) return 'build';
   if (!contentKey || !rulerByContent) return 'worker';
   const ruler = rulerByContent.get(String(contentKey));

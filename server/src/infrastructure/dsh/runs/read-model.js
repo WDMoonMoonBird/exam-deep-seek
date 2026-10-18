@@ -23,6 +23,7 @@
 import defaultPrisma from '../../../utils/prisma.js';
 import defaultLogger from '../../../utils/logger.js';
 import { isAutoBuildChecker } from '../worker/autoBuild.js';
+import { isAutoOpenChecker } from '../worker/autoOpen.js';
 import { maskSecrets, readArchiveFile, readJsonSafe, safeArchiveDir, runsRootDir } from './archive-fs.js';
 import { parseJsonCol } from './run-meta.js';
 import { toJsonSafe, normalizeRawRow } from './read-model/json-safe.js';
@@ -31,7 +32,7 @@ import { createGetRunDetail } from './read-model/detail-run.js';
 
 /**
  * ★D2（t7）：自动造尺/存量记录的统一行形状。
- * - run_kind：build（本次造尺）/ reuse（内容命中复用）/ worker（普通批改 job / 历史任务）/ ruler（存量尺子记录）
+ * - run_kind：open（开放题自动评价）/ build（本次造尺）/ reuse（内容命中复用）/ worker（普通批改 job / 历史任务）/ ruler（存量尺子记录）
  * - archive_present：归档目录是否真的存在（旧运行归档会被 keep_days 清理 ⇒ 页面要能提示"无归档"）
  * - checker_label：A1-R2 兜底 —— job.checker_id 仍是 '__AUTO_BUILD__'（对齐失败）时显示「自动造尺（未对齐）」
  * - teacher_name/teacher_id/classes/class_count：列表/详情统一由 attachAssignmentDisplayMeta 补齐（先置 null 占位）
@@ -46,7 +47,10 @@ function shapeRow(row, {
   const started = row && row.started_at ? new Date(row.started_at).getTime() : null;
   const finished = row && row.finished_at ? new Date(row.finished_at).getTime() : null;
   const rawChecker = row && row.checker_id ? String(row.checker_id) : null;
-  const sentinel = isAutoBuildChecker(rawChecker);
+  // ★OP-1：开放题自动评价 job 的哨兵 —— 与 __AUTO_BUILD__ 一样不把哨兵当真实 checker 展示，给出中文兜底标签
+  const sentinelOpen = isAutoOpenChecker(rawChecker);
+  const sentinelBuild = isAutoBuildChecker(rawChecker);
+  const sentinel = sentinelOpen || sentinelBuild;
   return {
     id: id || (type === 'worker' ? 'job-' + row.job_id : 'archive-' + archive),
     type,
@@ -61,7 +65,7 @@ function shapeRow(row, {
     class_count: null,
     checker_id: sentinel ? null : (rawChecker ? maskSecrets(rawChecker).slice(0, 24) : null),
     checker_id_raw: rawChecker ? maskSecrets(rawChecker).slice(0, 80) : null,
-    checker_label: sentinel ? '自动造尺（未对齐）' : null,
+    checker_label: sentinelOpen ? '开放题自动评价' : (sentinelBuild ? '自动造尺（未对齐）' : null),
     // ★D5：内容键 + 尺子（管理员页需要看到 job → 尺子 的对应关系；content_key 非机密）
     content_key: contentKey || (row && row.content_key ? String(row.content_key) : null),
     ruler_id: rulerId === null || rulerId === undefined ? null : Number(rulerId),
