@@ -491,6 +491,7 @@ body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC",
 .pill--ok { background: #f0fdf4; color: #15803d; }
 .pill--warn { background: #fffbeb; color: #b45309; }
 .pill--danger { background: #fef2f2; color: #b91c1c; }
+.pill--purple { background: #f5f3ff; color: #6d28d9; }
 .tag { font-size: 11px; color: var(--text-tertiary); border: 1px dashed var(--border-default); border-radius: 999px; padding: 1px 7px; }
 .new { margin-left: 8px; font-size: 10px; font-weight: 700; color: #fff; background: #ef4444; border-radius: 4px; padding: 1px 5px; vertical-align: 2px; }
 .item h4 { margin: 0 0 4px; font-size: 14.5px; color: var(--text-strong); line-height: 1.4; }
@@ -527,22 +528,36 @@ body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC",
   <div class="mask"></div>
   <aside class="drawer">
     <header class="dhead">
-      <div><h3>更新日志</h3><p>10 月 9 日以来 · 11 次大更新 / 459 次提交</p></div>
+      <div><h3>更新日志</h3><p>10 月 9 日以来 · 12 次大更新 / 459 次提交</p></div>
       <button class="close" aria-label="关闭">✕</button>
     </header>
-    <div class="filters"><span class="chip on">全部 11</span><span class="chip">新功能 6</span><span class="chip">体验优化 4</span><span class="chip">安全与稳定 1</span></div>
+    <div class="filters"><span class="chip on">全部 12</span><span class="chip">新功能 7</span><span class="chip">体验优化 4</span><span class="chip">安全与稳定 1</span></div>
     <div class="listwrap">
       <ol class="timeline">
+    <li class="item is-hot">
+      <span class="dot"></span>
+      <div class="meta"><b>10-12</b><span class="pill pill--brand">评分</span><span class="tag">新功能</span><span class="tag">重大</span></div>
+      <h4>实训题评分改由 DSH 装置执行<span class="new">新</span></h4>
+      <p>评分单位从「一次 LLM 调用」改为「一份作业一次造尺、N 次量」：DSH 装置在隔离环境跑标准包与判据，带锚点校验与失败即停。</p>
+      <div class="detail"><b>实测数据</b><p>同一提交重复评分命中缓存不再消耗 LLM（本次零 LLM）；分数写回平台。353 作业生产验证：62 份成绩 / 写出 59 份 / 与基线逐位一致，59 份均不低于旧分，均值 81.9 → 84.6。已上云（pm2 dsh-grader-worker）。</p></div>
+    </li>
     <li class="item">
       <span class="dot"></span>
-      <div class="meta"><b>10-18</b><span class="pill pill--brand">移动端</span><span class="tag">新功能</span></div>
-      <h4>教师端移动版上线（v1）</h4>
-      <p>工作台 / 作业 / 评分审核 / 布置作业 四页打通，手机上可完成「看进度 → 逐份审核 → 发布」。</p>
+      <div class="meta"><b>10-13</b><span class="pill pill--brand">评分</span><span class="tag">体验优化</span></div>
+      <h4>AI 给分依据可读</h4>
+      <p>分项得分带理由；新增自然语言总评；教师侧可直接看到「为什么扣分」，并支持回填。</p>
       
     </li>
     <li class="item">
       <span class="dot"></span>
-      <div class="meta"><b>10-18</b><span class="pill pill--brand">移动端</span><span class="tag">新功能</span></div>
+      <div class="meta"><b>10-18</b><span class="pill pill--purple">移动端</span><span class="tag">新功能</span></div>
+      <h4>教师端移动版上线（v1）</h4>
+      <p>工作台 / 作业 / 评分审核 / 布置作业 四页打通，手机上可完成「看进度 → 逐份审核 → 发布」；实训题审核支持文件树导航。</p>
+      
+    </li>
+    <li class="item">
+      <span class="dot"></span>
+      <div class="meta"><b>10-18</b><span class="pill pill--purple">移动端</span><span class="tag">新功能</span></div>
       <h4>安卓版 APK 可下载</h4>
       <p>欢迎页新增安卓版入口，扫码安装即可用；启动直达登录页。</p>
       
@@ -554,25 +569,18 @@ body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC",
       <p>取最高 / 取最后一次成绩、是否允许补交、答案是否可见 —— 布置作业时按题型带默认值，并给出成本提示。</p>
       
     </li>
-    <li class="item is-hot">
+    <li class="item">
       <span class="dot"></span>
       <div class="meta"><b>10-13</b><span class="pill pill--ok">手册</span><span class="tag">体验优化</span></div>
-      <h4>教师手册改为「可播放演示」<span class="new">新</span></h4>
+      <h4>教师手册改为「可播放演示」</h4>
       <p>8 段真实界面复刻替代全部截图：进章节自动播放、可暂停重播；右上角「放大演示」支持要点放大与手机 2×。</p>
-      <div class="detail"><b>包含范围</b><p>覆盖：快速入门 / 班级 / 学生 / 团队 / 题库 / 实训题 / 布置作业 / 评分审核。演示是真实 DOM 复刻，可跟随深浅色、可键盘操作，不再依赖图片。</p></div>
+      
     </li>
     <li class="item">
       <span class="dot"></span>
       <div class="meta"><b>10-13</b><span class="pill pill--warn">错误页</span><span class="tag">新功能</span></div>
       <h4>错误页体系与真状态码</h4>
       <p>404 / 403 / 500 等 16 个状态页（中文、深浅色、自动重试）；未知路径与超限上传返回真实状态码。</p>
-      
-    </li>
-    <li class="item">
-      <span class="dot"></span>
-      <div class="meta"><b>10-13</b><span class="pill pill--ok">评分</span><span class="tag">体验优化</span></div>
-      <h4>AI 评分更好读</h4>
-      <p>新增自然语言总评；按班查看失分项分布；批改记录区分「未生成 / 缓存命中 / 本次生成」三态。</p>
       
     </li>
     <li class="item">
