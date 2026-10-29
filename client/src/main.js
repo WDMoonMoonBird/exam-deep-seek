@@ -10,6 +10,9 @@ import './style.css';
 import './styles/tokens.css';
 // 全局覆盖层：只放必须作用于 teleport 元素（Modal/Drawer）的规则，禁止 !important
 import './styles/overrides.css';
+// 桌面壳 · macOS 原生窗口观感（D24）：仅在 Electron preload 写入 <html data-platform="darwin"> 时生效，
+// Web 端零匹配、零影响。必须排在 style.css/tokens.css/overrides.css 之后，才能覆盖侧栏/顶栏底色。
+import './styles/desktop-chrome.css';
 import { isLegacyBrowser } from './domain/browserCompat';
 import { installErrorRecovery } from './components/errorRecovery.js';   // ★R2-B52：chunk 失败自愈 + 全局错误可见
 import { installVersionWatcher } from './composables/appVersion.js';   // ★R2-B59：入口版本探测（有新版本 ⇒ 提示刷新）

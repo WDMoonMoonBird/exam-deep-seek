@@ -1,0 +1,207 @@
+/* ============================================================================
+ * desktop-chrome.css —— Electron 壳的 macOS 原生窗口观感（D24 第一轮：只做 Mac）
+ *
+ * 生效条件：<html data-platform="darwin">。该属性只由 desktop/src/preload/index.cjs 写入；
+ * 浏览器里没有 preload，属性不存在 ⇒ 本文件全部规则不匹配，Web 端渲染逐字节不变。
+ *
+ * 分工（对照 DeepSeek Harness，见 docs/desktop/2026-10-29-dsh-native-window-chrome.md §2）：
+ *   · 主进程（native-chrome.mjs）：titleBarStyle=hiddenInset + vibrancy=sidebar + 全透明底；
+ *   · 本文件：让出透明、给侧栏/顶栏上「染色」、划定窗口拖拽区与红绿灯安全带。
+ * 真正的模糊来自系统 vibrancy，这里**不要**再叠 backdrop-filter（叠了是二次模糊，发灰）。
+ *
+ * 为什么用属性选择器而不是媒体查询：同一份产物要同时跑 Web / Mac / Windows，
+ * 平台差异必须来自运行时标记，不能来自 CSS 能力探测。
+ * ==========================================================================*/
+
+/* ── 1. 窗口底色透明 ───────────────────────────────────────────────────────
+ * 主进程把窗口 background 设成 #00000000 后，页面自身必须也让开透明，
+ * 否则 body 的不透明底色会把 vibrancy 完整盖住（这就是「套壳浏览器味」的来源之一）。 */
+html[data-platform='darwin'],
+html[data-platform='darwin'] body {
+  background: transparent;
+}
+
+/* ── 1b. 整条祖先链都要透明（实测踩到的坑） ───────────────────────────────
+ * antd 的 .ant-layout 自带 background:#f5f5f5（浅色）/ #000（深色）。
+ * 只把侧栏改成半透明是不够的：它下面压着一层不透明灰面，55% 的染色直接和这块灰合成，
+ * 系统材质一点都透不出来 —— 观感就是「一块平灰」，这也是第一版看起来没有毛玻璃的根因。
+ * 内容列不透明由 .content 自己保证（见 §5），所以这里可以整条链放空。 */
+html[data-platform='darwin'] .app-shell,
+html[data-platform='darwin'] .app-shell .layout,
+html[data-platform='darwin'] .app-shell .ant-layout {
+  background: transparent;
+}
+
+/* ── 2. 红绿灯安全带 + 窗口拖拽条 ──────────────────────────────────────────
+ * 主进程 trafficLightPosition = (16, 18)，灯高 12px ⇒ 底部 30px；留 44px 安全带。
+ * 这条带子同时是「拖窗口」的区域（-webkit-app-region: drag）；
+ * 侧栏内容整体下移 44px，避免 logo 被红绿灯压住。 */
+html[data-platform='darwin'] .ant-layout-sider {
+  --desktop-traffic-light-strip: 44px;
+  position: relative;
+}
+
+html[data-platform='darwin'] .ant-layout-sider-children {
+  box-sizing: border-box;
+  padding-top: var(--desktop-traffic-light-strip, 44px);
+}
+
+html[data-platform='darwin'] .ant-layout-sider::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: var(--desktop-traffic-light-strip, 44px);
+  z-index: 5;
+  -webkit-app-region: drag;
+}
+
+/* 全屏：红绿灯消失，安全带和拖拽条一起收掉，否则顶部留一条 44px 空带。
+ * 属性由主进程 enter/leave-full-screen 经 preload 写到 <html data-fullscreen>。 */
+html[data-platform='darwin'][data-fullscreen] .ant-layout-sider-children {
+  padding-top: 0;
+}
+
+html[data-platform='darwin'][data-fullscreen] .ant-layout-sider::before {
+  display: none;
+}
+
+/* ── 3. 侧栏半透明染色（毛玻璃的「前景色」） ────────────────────────────────
+ * vibrancy 只负责模糊；侧栏自己必须半透明，系统材质才透得出来。
+ * 55% 是实测折中：再低菜单文字对比度掉，再高看不出材质。
+ * 选择器带 .ant-layout-sider-dark 是为了压过 style.css 的
+ * html .ant-layout-sider.ant-layout-sider-dark（0-2-1）同权重规则。 */
+html[data-platform='darwin'] {
+  /* 染色不透明度：深色 42% 已够看材质；浅色在 §7 提到 50%（浅底上文字更难压住背景）。 */
+  --desktop-sider-alpha: 42%;
+}
+
+html[data-platform='darwin'] .ant-layout-sider.ant-layout-sider-dark {
+  background: color-mix(in srgb, var(--sider-bg) var(--desktop-sider-alpha, 42%), transparent);
+  /* 不要右分隔线：macOS 侧栏靠「材质 vs 实心内容」的明度差分区，加线反而像网页。
+     分栏线由内容列左侧那条 0.5px 提供（见 §5）。 */
+  border-right: none;
+}
+
+/* antd 的菜单列表自己带一块不透明底（style.css 的 html .ant-menu-dark { background: var(--sider-bg) }）。
+ * 侧栏变半透明后，这块实心就盖住了菜单区域的材质：上半截是死灰、下半截是玻璃，中间出现一道横向接缝
+ * （D24 反馈 #4）。菜单区域本来就是侧栏的一部分，整条放空即可。 */
+html[data-platform='darwin'] .ant-layout-sider .ant-menu,
+html[data-platform='darwin'] .ant-layout-sider .ant-menu-dark,
+html[data-platform='darwin'] .ant-layout-sider .ant-menu-root {
+  background: transparent;
+}
+
+/* 折叠态宽度：按红绿灯的实际占位算，左右内边距相等（D24 反馈 #3 / #6）。
+ *
+ * 实测（截屏取像素，本机 macOS 27）：trafficLightPosition.x=16 是第 1 颗的左边沿，
+ * 三颗按钮占 16..75（每颗 14px、中心间距 23px），组宽 60px。
+ * 对称宽度 = 左 16 + 组宽 60 + 右 16 = 92px。
+ * 80px 时右侧只剩 4px，看起来右边贴边、左边空——所以固定成 92px。
+ * 令牌被 a-layout-sider 的 :collapsedWidth="var(--layout-sider-w-collapsed)" 直接消费，
+ * 改令牌即可，不动任何 Layout.vue。 */
+html[data-platform='darwin'] {
+  --layout-sider-w-collapsed: 92px;
+}
+
+/* ── 4. 顶栏：跟随系统材质的半透明条 + 可拖拽 ──────────────────────────────
+ * 原样式是不透明的 --topbar-bg + 20px backdrop-filter；换成半透明后
+ * 它下面的内容滚动时会自然「透」出来，接近 macOS 工具栏的观感。 */
+html[data-platform='darwin'] .topbar {
+  background: color-mix(in srgb, var(--topbar-bg) 72%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--topbar-bd) 55%, transparent);
+  -webkit-app-region: drag;
+}
+
+/* 拖拽区里所有可交互元素必须显式 no-drag，否则点不到（app-region 会吞掉鼠标事件）。 */
+html[data-platform='darwin'] .topbar :is(
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role='button'],
+  [role='link'],
+  .ant-dropdown-trigger,
+  .trigger,
+  .user-area
+) {
+  -webkit-app-region: no-drag;
+}
+
+/* ── 5. 内容列保持不透明 ───────────────────────────────────────────────────
+ * 透明窗格里必须有「实心」的阅读区，否则整页都在透桌面。
+ * .content 原本就是 --bg-canvas，这里只补一条左侧细线：侧栏半透明后，
+ * 0.5px 的分隔线比 1px 边框更像原生窗口的分栏。 */
+html[data-platform='darwin'] .content {
+  background: var(--bg-canvas);
+  border-left: 0.5px solid color-mix(in srgb, var(--border-default) 55%, transparent);
+}
+
+/* 侧栏完全收起（<992px 断点，宽度 0，antd 会加 .ant-layout-sider-zero-width）时
+ * 内容列顶到窗口左缘，不画分栏线。 */
+html[data-platform='darwin'] .ant-layout-sider-zero-width + .ant-layout .content {
+  border-left: none;
+}
+
+/* ── 5b. 非壳页面（登录 / 改密 / 文档 / 404）────────────────────────────────
+ * 这些页面没有 .app-shell，也就没有侧栏和顶栏 —— 隐藏标题栏后整页没有任何可拖拽区域，
+ * 窗口会变成"钉住搬不动"。补一条 44px 的固定拖拽带（与红绿灯安全带同高，正好在按钮下方）。
+ * 另外：窗口底色透明后，登录/改密页原本靠 body 底色的地方会直接透出桌面，
+ * 所以这里给非壳页面补一层不透明画布底色，观感与 Web 端一致。 */
+html[data-platform='darwin'] body:not(:has(.app-shell)) {
+  background: var(--bg-canvas);
+}
+
+/* 整页当拖拽面（比给伪元素设 drag 可靠）：卡片和所有可交互元素再单独 no-drag。 */
+html[data-platform='darwin'] :is(.login-page, .cp-page) {
+  -webkit-app-region: drag;
+}
+
+html[data-platform='darwin'] :is(.login-page, .cp-page) :is(
+  .login-card,
+  form,
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role='button'],
+  [role='link'],
+  .ant-select,
+  .ant-form
+) {
+  -webkit-app-region: no-drag;
+}
+
+/* ── 6. 无障碍：系统开了「降低透明度」就退回不透明面 ───────────────────────
+ * 与 macOS 系统偏好「辅助功能 → 显示 → 降低透明度」联动；此时系统 vibrancy 本身也会关闭，
+ * 页面若继续半透明就只剩「脏色」。这条同时兜住用户把材质关掉的场景。 */
+@media (prefers-reduced-transparency: reduce) {
+  html[data-platform='darwin'] .ant-layout-sider.ant-layout-sider-dark {
+    background: var(--sider-bg);
+  }
+
+  html[data-platform='darwin'] .topbar {
+    background: var(--topbar-bg);
+  }
+}
+
+/* ── 7. 浅色主题的可读性（D24 反馈 #5） ────────────────────────────────────
+ * 侧栏文字令牌（--sider-fg / --sider-group-fg = gray-600 #545c69）原本是按
+ * 「不透明的 gray-100」实底调的对比度。换成玻璃后背景亮度不受控：
+ * 背后的桌面一深，侧栏整体就发灰，14px 菜单文字立刻发虚。
+ * 做法（只影响浅色主题，深色主题实测已够，不动）：
+ *   ① 菜单项压到 gray-900（#141922，与 DSH 的 label-primary 同档），
+ *      分组标题压到 gray-800，保留「次级信息」的层次；
+ *   ② 染色不透明度 42% → 50%，给「背后很暗」这个最差情况留一点余量；
+ *   ③ 悬停底改成半透明，避免在玻璃上出现一块实心灰药丸。
+ * 实测（侧栏背后压着 B 站首页的深色缩略图，属于最差背景）：
+ *   菜单项 4.3:1 → 5.1:1，分组标题 4.3:1 → 4.8:1。 */
+html[data-platform='darwin'][data-theme='light'] {
+  --desktop-sider-alpha: 50%;
+  --sider-fg: var(--gray-900);
+  --sider-group-fg: var(--gray-900);   /* 12px 小字，gray-800 在最差背景上只有 4.27:1，差一点 */
+  --sider-item-hover-fg: var(--gray-900);
+  --sider-item-hover-bg: color-mix(in srgb, var(--gray-300) 55%, transparent);
+}
+

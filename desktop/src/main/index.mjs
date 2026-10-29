@@ -2,7 +2,7 @@
  * index.mjs —— Electron main 组合根：单实例、启动本地内容服务 + 固定远端反代、secure BrowserWindow、退出清理。
  *
  * 只做生命周期与装配（A 基线 §3.1：目标 ≤200 行）：配置校验/路径分类/CSP/代理头/安全决策全部在叶模块。
- * 依赖方向：index → { config, content-server, proxy, security, security-policy }，任何模块不 import 本文件。
+ * 依赖方向：index → { config, content-server, proxy, security, security-policy, native-chrome }，任何模块不 import 本文件。
  */
 import { app, BrowserWindow, dialog, session, shell } from 'electron';
 import path from 'node:path';
@@ -15,6 +15,7 @@ import { startContentServer } from './content-server.mjs';
 import { createProxy } from './proxy.mjs';
 import { createSecurityPolicy, secureWebPreferences } from './security-policy.mjs';
 import { applySecurity } from './security.mjs';
+import { applyNativeChrome, nativeWindowChrome } from './native-chrome.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESKTOP_ROOT = path.resolve(__dirname, '..', '..');
@@ -73,10 +74,11 @@ function createMainWindow() {
     minHeight: 700,
     show: false,
     title: APP_NAME,
-    backgroundColor: '#ffffff',
+    ...nativeWindowChrome(process.platform),
     webPreferences: webPreferences(),
   });
   mainWindow = win;
+  applyNativeChrome(win);
   win.once('ready-to-show', () => win.show());
   win.on('closed', () => { mainWindow = null; });
   win.webContents.on('render-process-gone', (_event, details) => log.error('render-process-gone：' + details.reason));

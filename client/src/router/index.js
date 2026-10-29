@@ -4,6 +4,7 @@ import { mobileRoutes, MOBILE_PUBLIC_PATHS, mobileHomePath } from '../mobile/rou
 const routes = [
   // 欢迎 / 介绍主页：公开路由（见下方 beforeEach 的白名单）。未登录可浏览；
   // 已登录也留在本页（主按钮由「教师登录」变为「进入控制台」，按角色进各自首页），不强制跳走。
+  // ★D24：Electron 桌面壳里本页不再是入口（守卫会把 '/' 改写到 /login），仅 Web 保留。
   { path: '/', component: () => import('../views/Landing.vue') },
   { path: '/login', component: () => import('../views/Login.vue') },
   // ★R3-R5：首登/管理员重置后的强制改密页（只要求已登录；被 403/1005 闸门拦住的用户必须能进入，否则死循环）
@@ -89,6 +90,20 @@ function readAuthState() {
 }
 
 /**
+ * 是否运行在 Electron 桌面壳里（D24）。
+ *
+ * 判定依据是 preload 写在 <html> 上的 data-platform（与 desktop-chrome.css 同源），
+ * 兜底用 window.__DESKTOP__.isDesktop。Web 端两者都没有 ⇒ 返回 false ⇒ 路由行为不变。
+ * @returns {boolean} 桌面壳内为 true。
+ */
+function isDesktopShell() {
+  try {
+    if (typeof document !== 'undefined' && document.documentElement && document.documentElement.dataset.platform) return true;
+    return typeof window !== 'undefined' && !!(window.__DESKTOP__ && window.__DESKTOP__.isDesktop);
+  } catch { return false; }
+}
+
+/**
  * /m 移动端守卫（只对 /m 路径生效；桌面路由/守卫行为不变）。
  *
  * 契约（10-v1-implementation-contract.md §3）：
@@ -142,6 +157,11 @@ router.beforeEach((to) => {
   if (to.path === '/m' || to.path.indexOf('/m/') === 0) {
     return resolveMobileNavigation(to);
   }
+
+  // ★D24：桌面壳的首页是登录页，不是官网欢迎页。
+  // 已登录的情况不用特殊处理：这里只改写到 /login，紧接着下面的 /login 分支
+  // 会按角色送回各自首页 —— 既不会停在营销页，也不会让有会话的用户重看登录表单。
+  if (to.path === '/' && isDesktopShell()) return { path: '/login' };
 
   let token = null;
   let user = null;
