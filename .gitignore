@@ -40,7 +40,8 @@ server/test/qrcode.svg
 # 实验数据与注入测试集（87M，可由生成器复现）
 实验/
 # 验证用临时脚本与探针（2888 文件 / 198M，用户约定「测试不入库」）
-tests/
+# 锚定仓库根：未锚定的 tests/ 会在大小写不敏感文件系统上吞掉 windows/tests 等子目录
+/tests/
 # 本地工具状态
 .VSCodeCounter/
 .agent-teams/
