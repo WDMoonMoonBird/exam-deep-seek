@@ -11,8 +11,8 @@ export const DOWNLOADS = Object.freeze([
     label: 'macOS',
     title: 'macOS（Apple 芯片）',
     note: 'macOS 13 或更高版本',
-    file: 'Deadpan-0.2.0-arm64.dmg',
-    version: '0.2.0',
+    file: 'Deadpan-0.2.1-arm64.dmg',
+    version: '0.2.1',
     kind: 'DMG',
   },
   {
