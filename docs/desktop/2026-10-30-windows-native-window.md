@@ -105,6 +105,13 @@ preload 只暴露只读平台信息，不把 `ipcRenderer` 交给页面；主题
 - `reports/desktop/windows-native/win11-max.png`（最大化：材质/圆角/WCO 按钮都在）
 - `reports/desktop/windows-native/win10-fallback-dark.png`（Win10 注入：侧栏实心回退）
 
+真实前端实跑（`client/dist` 构建产物 + 教师布局，Windows 11 26H2 + Electron 44.10）：
+
+- `reports/desktop/windows-native/run-real-teacher-overlap.png`（窗口压在壁纸上：侧栏左缘可见壁纸模糊，右上角是 WCO 原生按钮）
+- `reports/desktop/windows-native/run-real-teacher.png`（同一次运行，窗口居中）
+
+> 实跑说明：本机没有生产账号，教师会话用 localStorage + 本地 mock API（`/teacher/classes` 等）注入，因此列表数据是演示数据；窗口、亚克力、WCO 按钮、布局与主题都是真实代码。
+
 **待办**：Windows 10 真机（19045）复验——本机只有 Win11，Win10 分支是通过 `DESKTOP_TEST_VERSION=10.0.19045` 注入版本号验证的 CSS/参数路径，真实 DWM 行为需在 Win10 机器上跑一遍。
 
 ## 5. 变更清单
