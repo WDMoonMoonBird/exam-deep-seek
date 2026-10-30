@@ -21,6 +21,14 @@ function warn(log, message) {
   }
 }
 
+function info(log, message) {
+  try {
+    if (log && typeof log.info === 'function') log.info(message);
+  } catch {
+    /* 日志失败不影响安全装配 */
+  }
+}
+
 function safeCall(fn) {
   try {
     if (typeof fn === 'function') fn();
@@ -87,9 +95,18 @@ export function applySessionSecurity(electronSession, { policy, log = null } = {
   safeCall(() => electronSession.on('will-download', (event, item) => {
     const url = item && typeof item.getURL === 'function' ? item.getURL() : '';
     const result = evaluateDownload(url, policy);
-    if (result.allow) return;
-    try { event.preventDefault(); } catch { /* ignore */ }
-    warn(log, '[security] 已拦截下载（' + result.reason + '）');
+    if (!result.allow) {
+      try { event.preventDefault(); } catch { /* ignore */ }
+      warn(log, '[security] 已拦截下载（' + result.reason + '）');
+      return;
+    }
+    // 放行后 Chromium 默认弹系统保存对话框；这里只留痕，便于以后排查「点了没反应」类问题。
+    info(log, '[download] 放行（' + result.reason + '）：' + redactUrl(url).slice(0, MAX_URL_LOG));
+    try {
+      item.once('done', (_doneEvent, state) => {
+        info(log, '[download] ' + state + '：' + String(item.getFilename ? item.getFilename() : '').slice(0, MAX_URL_LOG));
+      });
+    } catch { /* 某些平台/版本可能不支持，忽略 */ }
   }));
 
   return electronSession;

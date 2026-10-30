@@ -112,9 +112,45 @@ export function permissionDecision(permission) {
   return { allow: false, reason: '默认拒绝权限请求：' + String(permission || 'unknown').slice(0, 40) };
 }
 
-/** 下载决策：只允许本站 /exam 下的资源（导出 xlsx/zip 等由本地服务反代） */
+/**
+ * 取 blob: 下载地址的内层 origin：`blob:http://127.0.0.1:47821/<uuid>` → `http://127.0.0.1:47821`。
+ * 非 blob 地址返回 null。blob URL 的 origin 前缀由浏览器在创建时写入，页面无法伪造，
+ * 因此可以当作「发起下载的页面所属 origin」使用。
+ * @param {string} rawUrl 下载项 URL（DownloadItem.getURL()）
+ * @returns {string|null} 内层 origin，非 blob 时 null
+ */
+function blobUrlOrigin(rawUrl) {
+  if (!rawUrl.startsWith('blob:')) return null;
+  const inner = rawUrl.slice(5);
+  // 注意：origin 自带 "scheme://"，不能直接找第一个 '/'（否则会把 "http:" 当成 origin）
+  const schemeEnd = inner.indexOf('://');
+  const from = schemeEnd === -1 ? 0 : schemeEnd + 3;
+  const slash = inner.indexOf('/', from);
+  const origin = slash === -1 ? inner : inner.slice(0, slash);
+  return origin === '' ? null : origin;
+}
+
+/**
+ * 下载决策：本站 /exam 下的资源 + **本站页面生成的 blob**。
+ *
+ * 为什么必须放行 blob（D25）：前端导出 xlsx / 下载日志都是渲染层先造 Blob 再 `<a download>`，
+ * 浏览器把这类下载的 URL 报成 `blob:http://127.0.0.1:47821/<uuid>`。旧实现只认 http(s)，
+ * 于是 will-download 里被静默 preventDefault —— 用户看到的现象就是「点导出没反应」。
+ * 安全边界不变：blob 的内层 origin 必须等于本地内容服务 origin；data:/filesystem: 等仍然拒绝，
+ * 站外 blob 也拒绝。
+ *
+ * @param {string} rawUrl 下载项 URL
+ * @param {{ appOrigin: string }} policy 安全策略
+ * @returns {{ allow: boolean, reason: string }}
+ */
 export function evaluateDownload(rawUrl, policy) {
-  const url = parseHttpUrl(rawUrl);
+  const raw = typeof rawUrl === 'string' ? rawUrl.trim() : '';
+  const blobOrigin = blobUrlOrigin(raw);
+  if (blobOrigin !== null) {
+    if (!policy || blobOrigin !== policy.appOrigin) return { allow: false, reason: '不可信来源的 blob 下载' };
+    return { allow: true, reason: '本站页面生成的 blob 下载' };
+  }
+  const url = parseHttpUrl(raw);
   if (!url) return { allow: false, reason: '非 http(s) 下载地址' };
   if (!policy || url.origin !== policy.appOrigin) return { allow: false, reason: '站外下载地址' };
   if (!url.pathname.startsWith('/exam')) return { allow: false, reason: '下载路径不在 /exam 下' };
@@ -123,7 +159,10 @@ export function evaluateDownload(rawUrl, policy) {
 
 /** 日志脱敏：只保留 origin + pathname（丢弃查询串/凭证），供 guard 告警使用 */
 export function redactUrl(rawUrl) {
-  const url = parseHttpUrl(rawUrl);
+  const raw = typeof rawUrl === 'string' ? rawUrl.trim() : '';
+  const blobOrigin = blobUrlOrigin(raw);
+  if (blobOrigin !== null) return 'blob:' + blobOrigin;
+  const url = parseHttpUrl(raw);
   if (!url) return '(invalid-url)';
   return url.origin + url.pathname;
 }

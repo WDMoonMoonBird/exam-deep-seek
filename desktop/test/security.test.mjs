@@ -105,6 +105,37 @@ test('applySessionSecurity：will-download 只放行本站 /exam 资源', () => 
   assert.equal(internalEvent.defaultPrevented, false);
 });
 
+test('D25：will-download 放行本站 blob（Excel/日志导出），拦截站外 blob 并留痕', () => {
+  const session = createFakeSession();
+  const log = createFakeLog();
+  applySessionSecurity(session, { policy, log });
+
+  // 假 DownloadItem：导出走 blob，需要 getURL / getFilename / once('done')
+  const item = (url) => {
+    const handlers = [];
+    return {
+      getURL: () => url,
+      getFilename: () => 'a.xlsx',
+      once: (event, fn) => { if (event === 'done') handlers.push(fn); },
+      emitDone: (state) => handlers.forEach((fn) => fn({}, state)),
+    };
+  };
+
+  const okItem = item('blob:' + APP_ORIGIN + '/1b2c3d4e');
+  const okEvent = createFakeEvent();
+  session.emit('will-download', okEvent, okItem);
+  assert.equal(okEvent.defaultPrevented, false, '本站 blob 下载应放行');
+  assert.ok(log.entries.info.some((m) => /\[download\] 放行/.test(m)), '放行需留痕');
+
+  okItem.emitDone('completed');
+  assert.ok(log.entries.info.some((m) => /\[download\] completed/.test(m)), '完成需留痕');
+
+  const evilEvent = createFakeEvent();
+  session.emit('will-download', evilEvent, item('blob:https://evil.example.com/1b2c3d4e'));
+  assert.equal(evilEvent.defaultPrevented, true, '站外 blob 下载应拦截');
+  assert.ok(log.entries.warn.some((m) => /不可信来源的 blob 下载/.test(m)), '拦截需留痕');
+});
+
 test('applySecurity：组合装配 session + webContents；缺 policy 抛 TypeError', () => {
   const session = createFakeSession();
   const webContents = createFakeWebContents();

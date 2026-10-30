@@ -99,9 +99,21 @@ test('evaluateDownload：只允许本站 /exam 资源', () => {
   assert.equal(evaluateDownload('file:///etc/passwd', policy).allow, false);
 });
 
+test('evaluateDownload（D25）：放行本站页面生成的 blob，拒绝站外/opaque blob 与 data:', () => {
+  // SheetJS 的 XLSX.writeFile / 导出日志都走 <a download> + blob:，URL 形如 blob:<origin>/<uuid>
+  assert.equal(evaluateDownload('blob:' + APP_ORIGIN + '/1b2c3d4e', policy).allow, true);
+  // 站外 origin 生成的 blob 不允许
+  assert.equal(evaluateDownload('blob:https://evil.example.com/1b2c3d4e', policy).allow, false);
+  // opaque origin（sandbox / 跨源文档）的 blob 形如 blob:null/<uuid>
+  assert.equal(evaluateDownload('blob:null/1b2c3d4e', policy).allow, false);
+  // 其他 scheme 仍拒绝
+  assert.equal(evaluateDownload('data:application/vnd.ms-excel;base64,AAAA', policy).allow, false);
+});
+
 test('redactUrl：保留 origin+path，丢弃查询串/凭证', () => {
   assert.equal(redactUrl('https://x.example.com/a/b?token=secret#frag'), 'https://x.example.com/a/b');
   assert.equal(redactUrl('https://u:p@x.example.com/a'), '(invalid-url)');
+  assert.equal(redactUrl('blob:' + APP_ORIGIN + '/1b2c3d4e'), 'blob:' + APP_ORIGIN);
   assert.equal(redactUrl('not-a-url'), '(invalid-url)');
   assert.equal(redactUrl(''), '(invalid-url)');
 });
