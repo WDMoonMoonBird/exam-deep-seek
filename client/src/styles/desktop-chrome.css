@@ -1,13 +1,17 @@
 /* ============================================================================
- * desktop-chrome.css —— Electron 壳的 macOS 原生窗口观感（D24 第一轮：只做 Mac）
+ * desktop-chrome.css —— Electron 壳的原生窗口观感（macOS 第一轮 / Windows 第二轮）
  *
- * 生效条件：<html data-platform="darwin">。该属性只由 desktop/src/preload/index.cjs 写入；
- * 浏览器里没有 preload，属性不存在 ⇒ 本文件全部规则不匹配，Web 端渲染逐字节不变。
+ * 生效条件：<html data-platform="darwin"> 或 <html data-platform="win32">。
+ * 该属性只由 desktop/src/preload/index.cjs 写入；浏览器里没有 preload，属性不存在
+ * ⇒ 本文件全部规则不匹配，Web 端渲染逐字节不变。
  *
- * 分工（对照 DeepSeek Harness，见 docs/desktop/2026-10-29-dsh-native-window-chrome.md §2）：
- *   · 主进程（native-chrome.mjs）：titleBarStyle=hiddenInset + vibrancy=sidebar + 全透明底；
- *   · 本文件：让出透明、给侧栏/顶栏上「染色」、划定窗口拖拽区与红绿灯安全带。
- * 真正的模糊来自系统 vibrancy，这里**不要**再叠 backdrop-filter（叠了是二次模糊，发灰）。
+ * 分工（对照 DeepSeek Harness，见 docs/desktop/2026-10-29-dsh-native-window-chrome.md §2、
+ * docs/desktop/2026-10-30-windows-native-window.md）：
+ *   · macOS 主进程：titleBarStyle=hiddenInset + vibrancy=sidebar + 全透明底；
+ *   · Windows 主进程：titleBarStyle=hidden + titleBarOverlay（WCO 三个系统按钮）；
+ *     Win11 22H2+ 再给 backgroundMaterial=acrylic，Win10 没有系统材质 → 不透明回退；
+ *   · 本文件：让出透明、给侧栏/顶栏上「染色」、划定窗口拖拽区与标题栏留白。
+ * 真正的模糊来自系统材质，这里**不要**再叠 backdrop-filter（叠了是二次模糊，发灰）。
  *
  * 为什么用属性选择器而不是媒体查询：同一份产物要同时跑 Web / Mac / Windows，
  * 平台差异必须来自运行时标记，不能来自 CSS 能力探测。
@@ -201,6 +205,182 @@ html[data-platform='darwin'][data-theme='light'] {
   --desktop-sider-alpha: 50%;
   --sider-fg: var(--gray-900);
   --sider-group-fg: var(--gray-900);   /* 12px 小字，gray-800 在最差背景上只有 4.27:1，差一点 */
+  --sider-item-hover-fg: var(--gray-900);
+  --sider-item-hover-bg: color-mix(in srgb, var(--gray-300) 55%, transparent);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * 8. Windows 10 / 11 —— WCO 系统按钮 + Win11 系统亚克力
+ *
+ * 主进程（platform-chrome.mjs）：
+ *   · titleBarStyle='hidden' + titleBarOverlay：去掉系统标题栏，但最小化/最大化/关闭
+ *     三个按钮由 Chromium 以 WCO 形式画在右上角 —— 命令、命中测试、悬停与 Win11
+ *     Snap Layouts 都是系统的，不是网页自绘；
+ *   · Win11 22H2+（build ≥ 22621）加 backgroundMaterial='acrylic'：DWM 真亚克力，
+ *     透明区域（侧栏）透出来的就是它；Win10 没有公开的系统材质 API → 不透明回退。
+ *
+ * 渲染层靠 preload 写的两个属性分支：
+ *   html[data-platform='win32']                 —— 两个 Windows 版本都命中（按钮/拖拽/留白）；
+ *   html[data-windows-backdrop='acrylic'|'none'] —— 只决定「要不要让出透明做玻璃」。
+ * Win10 若也把 html/body 设透明，露出来的是白底，侧栏会发灰 —— 所以透明规则只挂在 acrylic 上。
+ * ════════════════════════════════════════════════════════════════════════════*/
+
+/* ── 8.0 公共：标题栏高度 / 右上角按钮留白 ────────────────────────────────
+ * Windows 10/11 的 caption 按钮组 = 3 × 46 DIP = 138px（100%~175% 缩放都是 CSS px）。
+ * 顶栏内容（主题/用户区）必须停在按钮左侧，否则会被系统按钮压住。
+ * 全屏时按钮消失，留白收回（由 <html data-fullscreen> 控制）。 */
+html[data-platform='win32'] {
+  --desktop-titlebar-height: 40px;
+  --desktop-caption-reserve: 138px;
+}
+
+/* ── 8.1 Win11 亚克力：整条祖先链让开透明，露出 DWM 材质 ─────────────────
+ * 与 mac 同样的坑：antd 的 .ant-layout 自带不透明底，只把侧栏改半透明是不够的，
+ * 下面压着一层实心灰，材质一点都透不出来。内容列由 §8.4 自己保证不透明。 */
+html[data-platform='win32'][data-windows-backdrop='acrylic'],
+html[data-platform='win32'][data-windows-backdrop='acrylic'] body {
+  background: transparent;
+}
+
+html[data-platform='win32'][data-windows-backdrop='acrylic'] .app-shell,
+html[data-platform='win32'][data-windows-backdrop='acrylic'] .app-shell .layout,
+html[data-platform='win32'][data-windows-backdrop='acrylic'] .app-shell .ant-layout {
+  background: transparent;
+}
+
+/* ── 8.2 侧栏染色 ─────────────────────────────────────────────────────────
+ * 亚克力本身比 mac vibrancy 更亮、更「透」，染色给到 58%：
+ * 既看得出模糊，又压得住 14px 菜单文字（低于 55% 在亮色壁纸下会发虚）。 */
+html[data-platform='win32'][data-windows-backdrop='acrylic'] {
+  --desktop-sider-alpha: 58%;
+}
+
+html[data-platform='win32'][data-windows-backdrop='acrylic'] .ant-layout-sider.ant-layout-sider-dark {
+  background: color-mix(in srgb, var(--sider-bg) var(--desktop-sider-alpha, 58%), transparent);
+  border-right: none;
+}
+
+html[data-platform='win32'][data-windows-backdrop='acrylic'] .ant-layout-sider .ant-menu,
+html[data-platform='win32'][data-windows-backdrop='acrylic'] .ant-layout-sider .ant-menu-dark,
+html[data-platform='win32'][data-windows-backdrop='acrylic'] .ant-layout-sider .ant-menu-root {
+  background: transparent;
+}
+
+/* ── 8.3 顶栏与侧栏顶部：整条标题栏都可拖 ─────────────────────────────────
+ * 顶栏（.topbar）横跨内容列，是主要拖拽面；右上角给三个自绘按钮留 138px。
+ * 侧栏顶部再补一条 40px 透明拖拽条（不占布局），让「抓左上角拖窗口」也成立——
+ * 这是 Windows 用户的肌肉记忆；mac 上对应红绿灯安全带。 */
+html[data-platform='win32'] .topbar {
+  -webkit-app-region: drag;
+  padding-right: calc(var(--space-6) + var(--desktop-caption-reserve));
+}
+
+html[data-platform='win32'] .topbar :is(
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role='button'],
+  [role='link'],
+  .ant-dropdown-trigger,
+  .trigger,
+  .user-area,
+  .ant-select
+) {
+  -webkit-app-region: no-drag;
+}
+
+html[data-platform='win32'] .ant-layout-sider {
+  position: relative;
+}
+
+html[data-platform='win32'] .ant-layout-sider::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: var(--desktop-titlebar-height, 40px);
+  z-index: 5;
+  -webkit-app-region: drag;
+}
+
+/* 窄屏时顶栏内边距收到 12px，但系统按钮留白不能省。 */
+@media (max-width: 992px) {
+  html[data-platform='win32'] .topbar {
+    padding-right: calc(var(--space-3) + var(--desktop-caption-reserve));
+  }
+}
+
+/* 全屏：按钮隐藏，右侧留白收回。 */
+html[data-platform='win32'][data-fullscreen] .topbar {
+  padding-right: var(--space-6);
+}
+
+/* ── 8.4 内容列保持不透明 ─────────────────────────────────────────────────
+ * 透明窗格里必须有实心阅读区；侧栏玻璃与内容之间的 0.5px 细线负责分栏。 */
+html[data-platform='win32'][data-windows-backdrop='acrylic'] .content {
+  background: var(--bg-canvas);
+  border-left: 0.5px solid color-mix(in srgb, var(--border-default) 55%, transparent);
+}
+
+html[data-platform='win32'][data-windows-backdrop='acrylic'] .ant-layout-sider-zero-width + .ant-layout .content {
+  border-left: none;
+}
+
+/* ── 8.5 非壳页面（登录 / 改密 / 文档 / 404）──────────────────────────────
+ * 没有侧栏和顶栏 ⇒ 隐藏标题栏后整页没有可拖拽区域，补一层拖拽 + 不透明画布；
+ * 否则透明窗口会把桌面直接透到表单底下。 */
+html[data-platform='win32'] body:not(:has(.app-shell)) {
+  background: var(--bg-canvas);
+}
+
+html[data-platform='win32'] :is(.login-page, .cp-page) {
+  -webkit-app-region: drag;
+}
+
+html[data-platform='win32'] :is(.login-page, .cp-page) :is(
+  .login-card,
+  form,
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role='button'],
+  [role='link'],
+  .ant-select,
+  .ant-form
+) {
+  -webkit-app-region: no-drag;
+}
+
+/* ── 8.6 无障碍 / 省电：不要玻璃时退回不透明面 ───────────────────────────
+ * Windows 11 的「透明效果」关闭、或系统开高对比度/降低透明度时，
+ * DWM 会画成实色；页面若继续半透明就只剩「脏色」，这里同步退回实心侧栏。 */
+@media (prefers-reduced-transparency: reduce) {
+  html[data-platform='win32'][data-windows-backdrop='acrylic'] .ant-layout-sider.ant-layout-sider-dark {
+    background: var(--sider-bg);
+  }
+}
+
+@media (forced-colors: active) {
+  html[data-platform='win32'][data-windows-backdrop='acrylic'],
+  html[data-platform='win32'][data-windows-backdrop='acrylic'] body {
+    background: var(--bg-canvas);
+  }
+
+  html[data-platform='win32'][data-windows-backdrop='acrylic'] .ant-layout-sider.ant-layout-sider-dark {
+    background: var(--sider-bg);
+    border-right: 1px solid var(--border-default);
+  }
+}
+
+/* ── 8.7 浅色主题：玻璃上的文字压深一档（与 mac §7 同口径）───────────────
+ * 浅色侧栏（--sider-bg = gray-100）叠在亮色亚克力上对比度只有 4.3:1 左右，
+ * 菜单项压到 gray-900、分组标题 gray-900，悬停底改半透明。 */
+html[data-platform='win32'][data-windows-backdrop='acrylic'][data-theme='light'] {
+  --sider-fg: var(--gray-900);
+  --sider-group-fg: var(--gray-900);
   --sider-item-hover-fg: var(--gray-900);
   --sider-item-hover-bg: color-mix(in srgb, var(--gray-300) 55%, transparent);
 }

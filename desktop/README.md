@@ -16,6 +16,8 @@
 | `src/main/static-assets.mjs` | MIME / 缓存策略 / 流式文件响应（纯 IO 封装） | node:fs/path（可注入） |
 | `src/main/proxy.mjs` | 固定远端 HTTP/WS 反代（流式） | http/https/stream + proxy-headers |
 | `src/main/security.mjs` | 把安全决策装配到 session/webContents（无算法） | security-policy |
+| `src/main/platform-chrome.mjs` | 平台窗口外观纯决策（mac vibrancy / Win11 亚克力 / Win10 回退） | 无 |
+| `src/main/native-chrome.mjs` | 把窗口外观装配到 BrowserWindow（vibrancy/WCO/主题同步） | electron + platform-chrome |
 | `src/main/index.mjs` | 组合根：单实例/窗口/启停/崩溃处理（≤200 行） | 以上全部 |
 | `src/preload/index.cjs` | 极窄桥（只读平台信息，不暴露 fs/ipc） | electron contextBridge |
 | `scripts/build-dist.mjs` | `client/dist` → `dist-desktop` 裁剪 legacy | node:fs/path |
@@ -25,12 +27,14 @@
 
 - **macOS**：13.0 Ventura 或更高（Electron 44 基线；打包配置 `mac.minimumSystemVersion=13.0`），仅 Apple Silicon（arm64）。
 - **Windows**：**Windows 10 或更高**（x64；Electron 44 支持范围；NSIS 安装包无额外最低系统字段）。
+  - Windows 11 **22H2（build 22621）及以上**：无系统标题栏 + WCO 系统按钮 + DWM 亚克力（`backgroundMaterial: 'acrylic'`），侧栏毛玻璃。
+  - Windows 10（build < 22621）：同样去掉标题栏、保留系统按钮，但 DWM 没有公开的毛玻璃 API，侧栏走**不透明回退**（不伪造玻璃）。详见 `docs/desktop/2026-10-30-windows-native-window.md`。
 - **Linux**：v0 不提供产物（未验证）。
 - 启动时按平台检查（`config.mjs` 的 `isPlatformSupported(platform, version)`）：
   - `darwin` → 校验 macOS 主版本（低于 13 才提示「需要 macOS 13+」）；
   - `win32` / `linux` → 放行（不再把 Windows 10.x 误当 macOS 版本比较）；
   - 未知平台 → 拒绝启动（fail-closed）。
-- 启动日志会记录 `platform/version/Electron`，诊断时先看这一行。
+- 启动日志会记录 `platform/version/Electron`；Windows 另记一行窗口外观（亚克力 / 不透明回退），诊断时先看这两行。
 
 ## 开发
 

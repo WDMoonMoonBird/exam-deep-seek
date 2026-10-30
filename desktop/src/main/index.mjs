@@ -4,7 +4,7 @@
  * 只做生命周期与装配（A 基线 §3.1：目标 ≤200 行）：配置校验/路径分类/CSP/代理头/安全决策全部在叶模块。
  * 依赖方向：index → { config, content-server, proxy, security, security-policy, native-chrome }，任何模块不 import 本文件。
  */
-import { app, BrowserWindow, dialog, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -15,7 +15,8 @@ import { startContentServer } from './content-server.mjs';
 import { createProxy } from './proxy.mjs';
 import { createSecurityPolicy, secureWebPreferences } from './security-policy.mjs';
 import { applySecurity } from './security.mjs';
-import { applyNativeChrome, nativeWindowChrome } from './native-chrome.mjs';
+import { applyNativeChrome, attachTitleBarThemeSync, hasSystemBackdrop, nativeWindowChrome } from './native-chrome.mjs';
+import { rendererChromeArgs } from './platform-chrome.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESKTOP_ROOT = path.resolve(__dirname, '..', '..');
@@ -42,9 +43,14 @@ function createLogger() {
 const log = createLogger();
 
 /** 安全基线（显式）：contextIsolation:true、sandbox:true、nodeIntegration:false、webSecurity:true。
- *  具体值由 security-policy.WEB_PREFERENCES 单一持有，经 secureWebPreferences 装配（F7：无死 import/重复逻辑）。 */
-function webPreferences() {
-  return secureWebPreferences({ preload: PRELOAD_PATH, devTools: !app.isPackaged });
+ *  具体值由 security-policy.WEB_PREFERENCES 单一持有，经 secureWebPreferences 装配（F7：无死 import/重复逻辑）。
+ *  additionalArguments 只用于把「本机有没有系统毛玻璃」这一只读标记交给 preload（Windows 用）。 */
+function webPreferences(systemVersion) {
+  return secureWebPreferences({
+    preload: PRELOAD_PATH,
+    devTools: !app.isPackaged,
+    additionalArguments: rendererChromeArgs(process.platform, systemVersion),
+  });
 }
 
 function resolveContentRoot() {
@@ -66,7 +72,7 @@ function fail(title, detail) {
   app.quit();
 }
 
-function createMainWindow() {
+function createMainWindow(systemVersion) {
   const win = new BrowserWindow({
     width: 1280,
     height: 860,
@@ -74,8 +80,8 @@ function createMainWindow() {
     minHeight: 700,
     show: false,
     title: APP_NAME,
-    ...nativeWindowChrome(process.platform),
-    webPreferences: webPreferences(),
+    ...nativeWindowChrome(process.platform, { systemVersion }),
+    webPreferences: webPreferences(systemVersion),
   });
   mainWindow = win;
   applyNativeChrome(win);
@@ -90,6 +96,11 @@ async function bootstrap() {
   const platform = process.platform;
   const systemVersion = process.getSystemVersion();
   log.info('平台：' + platform + ' ' + systemVersion + '（Electron ' + process.versions.electron + '）');
+  if (platform === 'win32') {
+    log.info('窗口外观：' + (hasSystemBackdrop(platform, systemVersion)
+      ? 'Win11 系统亚克力（backgroundMaterial=acrylic）'
+      : 'Windows 10 不透明回退（系统无公开毛玻璃 API）'));
+  }
 
   // 平台感知检查（HOTFIX-2）：只有 macOS 才做 macOS 版本判断；Windows/Linux 直接放行
   if (!isPlatformSupported(platform, systemVersion)) {
@@ -151,9 +162,10 @@ async function bootstrap() {
     });
   });
 
-  createMainWindow();
+  createMainWindow(systemVersion);
+  attachTitleBarThemeSync({ ipcMain, getWindow: () => mainWindow });
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+    if (BrowserWindow.getAllWindows().length === 0) createMainWindow(systemVersion);
   });
   log.info('桌面壳已启动：' + services.content.url + ' → ' + config.serverUrl);
 }

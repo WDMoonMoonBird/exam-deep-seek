@@ -36,10 +36,22 @@ function parseHttpUrl(rawUrl) {
   }
 }
 
-/** 构造 webPreferences：显式基线 + 可选 preload/devTools（生产由调用方传 devTools:false） */
-export function secureWebPreferences({ preload = null, devTools = false } = {}) {
+/** additionalArguments 只允许本项目自己的只读标记，避免调用方顺手把任意参数灌进渲染进程。 */
+const ALLOWED_ADDITIONAL_ARG_PREFIX = '--desktop-';
+
+function sanitizeAdditionalArguments(values) {
+  if (!Array.isArray(values)) return [];
+  return values
+    .filter((value) => typeof value === 'string' && value.startsWith(ALLOWED_ADDITIONAL_ARG_PREFIX))
+    .slice(0, 8);
+}
+
+/** 构造 webPreferences：显式基线 + 可选 preload/devTools/additionalArguments（生产由调用方传 devTools:false） */
+export function secureWebPreferences({ preload = null, devTools = false, additionalArguments = [] } = {}) {
   const preferences = { ...WEB_PREFERENCES, devTools: devTools === true };
   if (preload) preferences.preload = preload;
+  const args = sanitizeAdditionalArguments(additionalArguments);
+  if (args.length > 0) preferences.additionalArguments = args;
   return preferences;
 }
 
