@@ -20,8 +20,8 @@ export const DOWNLOADS = Object.freeze([
     label: 'Windows',
     title: 'Windows（64 位）',
     note: 'Windows 10 或更高版本',
-    file: 'Deadpan-0.1.2-x64.exe',
-    version: '0.1.2',
+    file: 'Deadpan-0.2.0-x64.exe',
+    version: '0.2.0',
     kind: 'EXE',
   },
   {
