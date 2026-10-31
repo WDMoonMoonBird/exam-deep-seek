@@ -89,6 +89,7 @@ IP_RULE='regex:(?<![0-9.])(?!10\.|127\.|192\.168\.|172\.(?:1[6-9]|2[0-9]|3[01])\
   printf '%s==>/Users/you\n' "$HOME_PATH"
   printf 'regex:/Users/[A-Za-z0-9._-]+==>/Users/you\n'
   printf '%s\n' "$IP_RULE"
+  printf '***REDACTED***==>***REDACTED***\n***REDACTED***==>***REDACTED***\n'
   for m in $AUTHOR_MAILS; do printf '%s==>%s\n' "$m" "$NOREPLY"; done
 } > "$TMP/replace-message.txt"
 
