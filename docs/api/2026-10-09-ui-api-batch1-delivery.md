@@ -120,6 +120,7 @@ GET /api/teacher/pending-summary?schoolId=&classId=
 | 3 | `review-questions` 不传 classId | **全局**返回（含跨校教师题目） | 仅该教师可见范围 |
 | 4 | 题目级提示词预览 | 任一教师可预览任一题目 | **owner-only**（题库/编辑页本就 owner-only） |
 | 5 | 跨教师访问他人提交详情/改分/审核/发布 | 允许 | **403**（响应体零内容） |
+| 6 | 评分审核类接口 `studentNo` 出口（2026-11-02） | `学号@院校代码` | **纯学号**（展示投影；`users.username`/登录/唯一性不变，导出 Excel 学号列可直接对接教务系统） |
 
 > 第 1 项已核对：client 端所有调用均传 `classId`，**无即时破坏**。
 

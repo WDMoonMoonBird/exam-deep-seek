@@ -8,6 +8,7 @@ import prisma from '../../../../utils/prisma.js';
 import logger from '../../../../utils/logger.js';
 import { resolveVisibleClassScope } from './class-scope.js';
 import { pickCountedScore } from '../../../../domain/services/scorePolicy.js';
+import { toDisplayStudentNo } from '../../../../utils/studentNo.js';
 
 export const exportReviewData = async (req, res) => {
   try {
@@ -150,7 +151,9 @@ export const exportReviewData = async (req, res) => {
 
       return {
         studentName: sc.student.realName,
-        studentNo: sc.student.username,
+        // ★展示投影：导出 Excel 的「学号」列只出纯学号（教务系统按纯学号匹配学生）；
+        //   账号真值 users.username 仍为「学号@院校代码」。
+        studentNo: toDisplayStudentNo(sc.student.username),
         schoolName: sc.class.school?.name || '',
         className: sc.class.name,
         submitted: cellScores.some(c => c.submitted),

@@ -13,6 +13,8 @@ import { request } from './helpers.js';
 const PREFIX = 'qa3_';
 const CODE1 = '29971';
 const CODE2 = '29972';
+/** 展示学号：评分审核接口出口已去「@院校代码」后缀（教务系统只认纯学号） */
+const displayNo = (username) => String(username).split('@')[0];
 const ANS_SECRET = PREFIX + '学生答案-绝密';
 const REF_SECRET = PREFIX + '参考答案-绝密';
 const AIFB_SECRET = PREFIX + 'AI评语-绝密';
@@ -187,9 +189,9 @@ describe('t7 独立复核 · t6 classId/questionId 越权收敛与导出面', ()
 
   it('T1a: 导出审核数据——同校不可见 / 跨校 classId → 403 且不含姓名/学号/答案/分数', async () => {
     const hidden = await get(tokenA, '/api/teacher/export-review?classId=' + id.clsP + '&assignmentId=' + id.asgP);
-    expectRejected(hidden, { secrets: [ANS_SECRET, REF_SECRET, '复核生P1'], labels: [id.uP1], keys: ['rows', 'headerCells'] });
+    expectRejected(hidden, { secrets: [ANS_SECRET, REF_SECRET, '复核生P1'], labels: [id.uP1, displayNo(id.uP1)], keys: ['rows', 'headerCells'] });
     const cross = await get(tokenA, '/api/teacher/export-review?classId=' + id.clsB + '&assignmentId=' + id.asgB);
-    expectRejected(cross, { secrets: ['复核生B1'], labels: [id.uB1], keys: ['rows', 'headerCells'] });
+    expectRejected(cross, { secrets: ['复核生B1'], labels: [id.uB1, displayNo(id.uB1)], keys: ['rows', 'headerCells'] });
   });
 
   it('T1b: 导出审核数据——schoolId 收窄把可见班级也挡在外面（schoolId=他校 + 自己的 classId）→ 403', async () => {
@@ -207,23 +209,39 @@ describe('t7 独立复核 · t6 classId/questionId 越权收敛与导出面', ()
     expect(res.status).toBe(200);
     expect(res.body.code).toBe(0);
     const rows = res.body.data.rows;
-    expect(rows.map(r => r.studentNo)).toEqual([id.uA1, id.uA2]);      // 按 username 升序，恰为本班 2 人
+    const sa1 = displayNo(id.uA1);
+    const sa2 = displayNo(id.uA2);
+    expect(rows.map(r => r.studentNo)).toEqual([sa1, sa2]);            // 展示投影：纯学号（按 username 升序，恰为本班 2 人）
+    expect(rows.every(r => !String(r.studentNo).includes('@'))).toBe(true);   // 导出 Excel 学号列不得含 @院校代码（教务系统匹配前提）
     const byNo = new Map(rows.map(r => [r.studentNo, r]));
-    expect(byNo.get(id.uA1).totalScore).toBe(80);                       // published finalScore=80（qA2 未提交不计）
-    expect(byNo.get(id.uA2).totalScore).toBe(30);                       // ai_graded aiScore=30
-    expect(byNo.get(id.uA1).cellScores[0].score).toBe(80);
-    expect(byNo.get(id.uA2).cellScores[0].score).toBe(30);
+    expect(byNo.get(sa1).totalScore).toBe(80);                          // published finalScore=80（qA2 未提交不计）
+    expect(byNo.get(sa2).totalScore).toBe(30);                          // ai_graded aiScore=30
+    expect(byNo.get(sa1).cellScores[0].score).toBe(80);
+    expect(byNo.get(sa2).cellScores[0].score).toBe(30);
     expect(JSON.stringify(res.body)).not.toContain(id.uP1);             // 不可见班级学生绝不出现
     expect(JSON.stringify(res.body)).not.toContain(id.uB1);
+    expect(JSON.stringify(res.body)).not.toContain(displayNo(id.uP1));  // 归一化后也不得泄漏不可见学生的纯学号
+  });
+
+  it('T1e: 提交详情——student.username 输出展示用纯学号（批改页头部口径），schoolName 单独保留', async () => {
+    // 批改页头部的学号唯一来源是 GET /teacher/submissions/:id（useReviewData.js:77），
+    // 故详情出口必须同步归一化，否则列表纯、详情仍带 @学校名。
+    const res = await get(tokenP, '/api/teacher/submissions/' + id.subP1);
+    expect(res.status).toBe(200);
+    expect(res.body.code).toBe(0);
+    expect(res.body.data.student.username).toBe(displayNo(id.uP1));
+    expect(res.body.data.student.username).not.toContain('@');
+    expect(res.body.data.student.realName).toBe('复核生P1');
+    expect(res.body.data.schoolName).toBe(PREFIX + 'school1');   // 学校名仍单独下发（导出「学校」列用）
   });
 
   // ================= T2. review-class =================
 
   it('T2: 花名册——同校不可见 / 跨校 → 403 零内容；可见班正常且分数正确', async () => {
     const hidden = await get(tokenA, '/api/teacher/review-class/' + id.clsP + '?assignmentId=' + id.asgP);
-    expectRejected(hidden, { secrets: ['复核生P1'], labels: [id.uP1], keys: ['list', 'total'] });
+    expectRejected(hidden, { secrets: ['复核生P1'], labels: [id.uP1, displayNo(id.uP1)], keys: ['list', 'total'] });
     const cross = await get(tokenA, '/api/teacher/review-class/' + id.clsB + '?assignmentId=' + id.asgB);
-    expectRejected(cross, { labels: [id.uB1], keys: ['list'] });
+    expectRejected(cross, { labels: [id.uB1, displayNo(id.uB1)], keys: ['list'] });
     const narrowed = await get(tokenA, '/api/teacher/review-class/' + id.clsA + '?assignmentId=' + id.asgA + '&schoolId=' + id.s2);
     expectRejected(narrowed, { keys: ['list'] });
 
@@ -231,10 +249,13 @@ describe('t7 独立复核 · t6 classId/questionId 越权收敛与导出面', ()
     expect(own.status).toBe(200);
     expect(own.body.code).toBe(0);
     const rows = own.body.data.list;
-    expect(rows.map(r => r.studentNo)).toEqual([id.uA1, id.uA2]);
+    const sa1 = displayNo(id.uA1);
+    const sa2 = displayNo(id.uA2);
+    expect(rows.map(r => r.studentNo)).toEqual([sa1, sa2]);
+    expect(rows.every(r => !String(r.studentNo).includes('@'))).toBe(true);   // 页面学号列只显示纯学号
     const byNo = new Map(rows.map(r => [r.studentNo, r]));
-    expect(byNo.get(id.uA1)).toMatchObject({ status: 'published', finalScore: 80, submitted: true });
-    expect(byNo.get(id.uA2)).toMatchObject({ status: 'ai_graded', finalScore: null, submitted: true });
+    expect(byNo.get(sa1)).toMatchObject({ status: 'published', finalScore: 80, submitted: true });
+    expect(byNo.get(sa2)).toMatchObject({ status: 'ai_graded', finalScore: null, submitted: true });
   });
 
   // ================= T3. review-questions =================

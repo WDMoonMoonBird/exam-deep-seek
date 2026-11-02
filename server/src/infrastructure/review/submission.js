@@ -8,6 +8,7 @@ import prisma from '../../utils/prisma.js';
 import logger from '../../utils/logger.js';
 import { loadVisibleSubmission, sendScopeError } from './scope.js';
 import { DomainError } from '../../domain/errors.js';
+import { toDisplayStudentNo } from '../../utils/studentNo.js';
 
 /**
  * R3-D5（G2）：领域校验错误（如分值非法 INVALID_SCORE）映射为 **400 + 可读文案**，
@@ -56,7 +57,12 @@ export const getSubmissionDetail = async (req, res) => {
       schoolName = sc?.class?.school?.name || '';
     }
 
-    res.json({ code: 0, message: 'ok', data: { ...s, allSubmissions: allSubs, schoolName } });
+    // ★展示投影（教务系统按纯学号匹配）：批改页头部/导出只用纯学号；账号真值
+    //   users.username「学号@院校代码」不动，登录/唯一性判定不受影响。只投影响应，不回写库。
+    const studentView = s.student
+      ? { ...s.student, username: toDisplayStudentNo(s.student.username) }
+      : s.student;
+    res.json({ code: 0, message: 'ok', data: { ...s, student: studentView, allSubmissions: allSubs, schoolName } });
   } catch (err) {
     logger.error({ err }, '获取提交详情失败');
     res.status(500).json({ code: 2001, message: '服务器内部错误', data: null });

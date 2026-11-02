@@ -268,7 +268,7 @@
 ### B20. `views/teacher/ReviewClass.vue` — 班级成绩明细 ｜ LOC 341（tpl 88 / scr 192 / sty 58，scoped）
 
 - **用途**：一个班一次作业的学生明细：行内改分、筛选、批量审核/发布、导出。
-- **template**：`.top-row`（返回 + 作业名 + 班级 tag + 练习模式 tag）→ `DataTable`（`@change` 接排序、`:total` 服务端分页）→ `toolbar-left`（姓名搜索 + 5 个 `a-radio-button` 状态筛选）→ `toolbar-right`（一键审核全班 / 一键发布全班（练习模式隐藏）+ 导出 Excel）→ 单元格：学号（带学校后缀格式化）、AI 评分、最终分（**行内编辑**：点击变原生 `<input>`，blur/Enter 保存、Esc 取消）、状态 tag、审核入口。
+- **template**：`.top-row`（返回 + 作业名 + 班级 tag + 练习模式 tag）→ `DataTable`（`@change` 接排序、`:total` 服务端分页）→ `toolbar-left`（姓名搜索 + 5 个 `a-radio-button` 状态筛选）→ `toolbar-right`（一键审核全班 / 一键发布全班（练习模式隐藏）+ 导出 Excel）→ 单元格：学号（纯学号：评分审核接口出口已去 `@院校代码` 后缀）、AI 评分、最终分（**行内编辑**：点击变原生 `<input>`，blur/Enter 保存、Esc 取消）、状态 tag、审核入口。
 - **AntDV 组件**：`a-button×5/a-input-search/a-radio-button×5/a-radio-group/a-tag×4`。
 - **关键交互**：`score-input` 原生输入框行内编辑（非 antd Input）；排序字段与页码存 `reviewStore`（跨页返回保留）；socket 实时刷新；`batchPublish` 走 `Modal.confirm`；搜索 300ms 防抖。
 - **数据密度**：表格 6 列（姓名 120 / 学号 140 / AI 评分 90 / 最终分 90 / 状态 120 / 操作 80）；工具栏 2 组筛选 + 3 按钮。

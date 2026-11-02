@@ -181,10 +181,11 @@
 - 已交行（388-396）：`id`、`studentId`、`studentName`、`studentNo`、`schoolName`、`className`、`assignmentTitle`、`mode`、`aiScore`、`finalScore`、`status`、`submitted`、`projectSubmissionId`
 - 未交行（398-404）：`id`（值形如 `ns-{studentId}`）、`studentId`、`studentName`、`studentNo`、`schoolName`、`className`、`assignmentTitle`（空串）、`mode`（`'exam'`）、`aiScore`（null）、`finalScore`（null）、`status`（`'not_submitted'`）、`submitted`（false）
 - `status` 可能取值：`draft` / `submitted` / `ai_graded` / `reviewed` / `published` / `abnormal`（382-384 行合成）/ `not_submitted`
+- `studentNo` 为**展示用纯学号**（评分审核接口出口已去 `@院校代码` 后缀）；账号真值仍是 `users.username`，登录/唯一性不受影响
 
 **⑧ 提交详情（通用题）`GET /api/teacher/submissions/:id`**（`reviewController.js:95-127`）
 - data = `Submission` 全字段：`id`、`assignmentId`、`studentId`、`questionId`、`subQuestionId`、`answer`、`aiScore`、`aiFeedback`、`finalScore`、`teacherFeedback`、`status`、`submittedAt`、`reviewedAt`、`attemptCount`、`bestScore`
-- `student`：`id`、`username`、`realName`
+- `student`：`id`、`username`（**展示用纯学号**，已去 `@院校代码` 后缀；账号真值仍存于 `users.username`）、`realName`
 - `question`：`Question` 全字段 + `subQuestions[]`（`SubQuestion` 全字段：`id`、`questionId`、`sortOrder`、`title`、`type`、`score`、`content`、`referenceAnswer`、`language`、`objectiveItems`、`scoringCriteria`）
 - `subQuestion`：`SubQuestion` 或 null
 - `assignment`：`id`、`title`、`mode`
@@ -384,6 +385,7 @@ Socket.IO 初始化：`initSocket(server)`（`socket.js:6`，在 `app.js:146` �
 
 ### F9. 导出 Excel / 成绩的接口有哪些？—— **服务端仅 1 个，且不产出 xlsx**
 - `GET /api/teacher/export-review`（`reviewController.js:432-577`，路由 `routes/teacher.js:59`）：入参 `classId` + `assignmentId`（缺一 400，435 行），返回 **JSON**：`data.rows[]`（`studentName`、`studentNo`、`schoolName`、`className`、`submitted`、`cellScores[{ label, maxScore, score, submitted }]`、`totalScore`）+ `data.headerCells[{ label, maxScore }]`（566-572 行）。客观题小问得分在服务端用 `scoreItem` 重新比对答案算出（496-519 行）。
+- `rows[].studentNo` 为**展示用纯学号**（不含 `@院校代码` 后缀）；前端 xlsx 的「学号」列直接写入该值，供上传学校教务系统按纯学号匹配学生。
 - xlsx 文件由**前端**生成：`client/src/infrastructure/export.js:3-48`（`xlsx` 库 `json_to_sheet` → `writeFile`，文件名 `${className}-${assignmentTitle}.xlsx`），调用点 `views/teacher/Review.vue:126-129`。
 - 其余导出/导入均为前端本地处理，无对应后端接口：学生导入模板 `views/teacher/Students.vue:279-286`（`XLSX.writeFile`）；测试卷解析走 `POST /api/teacher/parse-exam` / `parse-exam-stream`（`teacherController.js:313/334`），前端也可本地解析 docx/xlsx（`views/teacher/QuestionEdit.vue:310, 531-535`）。
 - 服务端无任何 xlsx 生成依赖（`server/src` 检索 `exceljs|sheetjs|xlsx` 仅命中文件后缀白名单 `utils/fileTree.js:42`、`utils/projectFiles.js:21`）。

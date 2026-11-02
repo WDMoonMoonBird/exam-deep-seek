@@ -9,6 +9,7 @@ import logger from '../../../../utils/logger.js';
 import { ABNORMAL_FEEDBACK } from '../../../../constants.js';
 import { getVisibleClassIds } from '../../../../controllers/teamController.js';
 import { resolveVisibleClassScope } from './class-scope.js';
+import { toDisplayStudentNo } from '../../../../utils/studentNo.js';
 
 export const getReviewSummary = async (req, res) => {
   try {
@@ -115,6 +116,8 @@ export const getReviewByClass = async (req, res) => {
     }
 
     const statusOrder = { draft: 0, submitted: 1, ai_graded: 2, reviewed: 3, published: 4 };
+    // ★展示投影（教务系统按纯学号匹配）：studentNo 只出纯学号；账号真值仍是
+    //   users.username「学号@院校代码」，登录/唯一性/默认排序键一概不动（utils/studentNo.js）。
     let rows = filtered.map(sc => {
       const subs = studentSubsMap.get(sc.studentId);
       // 过滤掉草稿记录 — draft 不算正式提交
@@ -130,7 +133,7 @@ export const getReviewByClass = async (req, res) => {
         const projectSub = realSubs.find(s => s.question?.type === 'project');
         return {
           id: realSubs[0].id, studentId: sc.studentId,
-          studentName: sc.student.realName, studentNo: sc.student.username,
+          studentName: sc.student.realName, studentNo: toDisplayStudentNo(sc.student.username),
           schoolName: sc.class?.school?.name || '',
           className: sc.class?.name || '', assignmentTitle: realSubs[0].assignment?.title || '',
           mode: realSubs[0].assignment?.mode || 'exam',
@@ -141,7 +144,7 @@ export const getReviewByClass = async (req, res) => {
       }
       return {
         id: `ns-${sc.studentId}`, studentId: sc.studentId,
-        studentName: sc.student.realName, studentNo: sc.student.username,
+        studentName: sc.student.realName, studentNo: toDisplayStudentNo(sc.student.username),
         schoolName: sc.class?.school?.name || '',
         className: sc.class?.name || '', assignmentTitle: '', mode: 'exam',
         aiScore: null, finalScore: null, status: 'not_submitted', submitted: false,
